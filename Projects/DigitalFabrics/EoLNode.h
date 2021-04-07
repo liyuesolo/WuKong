@@ -3,17 +3,20 @@
 
 #include "VecMatDef.h"
 
+
+
 template<class T>
 class EoLNode
 {
-    
+    using TV3 = Vector<T, 3>;
+    using TV2 = Vector<T, 2>;
 private:
     TV3 x;
     TV2 u;
     int idx;
     bool is_crossing;
     T radius;
-    std::vector<EoLNode*> neighbors;
+    std::vector<EoLNode<T>*> neighbors;
 
 public:
 
@@ -22,7 +25,8 @@ public:
         neighbors.push_back(neighbor);
     }
 
-    EoLNode(TV3 pos3d, TV3 pos2d, int _idx, bool _is_crossing, T _radius) : x(pos3d), u(pos2d), idx(_idx), is_crossing(_is_crossing), radius(_radius) {}
+    EoLNode(TV3 pos3d, TV3 pos2d, int _idx, bool _is_crossing, T _radius) : 
+        x(pos3d), u(pos2d), idx(_idx), is_crossing(_is_crossing), radius(_radius) {}
     
     EoLNode() {}
     ~EoLNode() {}
