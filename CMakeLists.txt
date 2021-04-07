@@ -1,0 +1,42 @@
+cmake_minimum_required(VERSION 3.2)
+
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+  message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
+endif()
+
+project(WuKong CXX)
+
+message(STATUS "${CMAKE_BUILD_TYPE} Build")
+
+set(CMAKE_BUILD_TYPE Release)
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libigl/cmake)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
+set(CMAKE_CXX_STANDARD 17)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0 -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable")
+
+# libigl
+option(LIBIGL_WITH_OPENGL            "Use OpenGL"         ON)
+option(LIBIGL_WITH_TRIANGLE          "Use Triangle"                 ON)
+option(LIBIGL_WITH_TETGEN            "Use Tetgen"         ON)
+option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"           ON)
+option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    ON)
+option(LIBIGL_WITH_XML               "Use XML"                      ON)
+
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package (SuiteSparse REQUIRED)
+find_package (OpenMP REQUIRED)
+find_package(LIBIGL REQUIRED)
+find_package(CGAL REQUIRED COMPONENTS Core)
+
+# add_subdirectory(Libs)
+add_subdirectory(Projects)
+
+
+message("**************************************************")
+message("C++ Cmake Flags: ${CMAKE_CXX_FLAGS}")
+message("**************************************************")
