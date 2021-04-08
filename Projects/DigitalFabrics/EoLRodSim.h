@@ -1,80 +1,122 @@
 #ifndef EOL_ROD_SIM_H
 #define EOL_ROD_SIM_H
 
-#include "EoLNode.h"
+#include <utility>
+#include <Eigen/Geometry>
+#include <Eigen/Core>
+#include <Eigen/Sparse>
+#include <Eigen/Dense>
+#include <tbb/tbb.h>
 
-template<class T>
-class RodNetwork
-{
-public:
-    int width, height;
-    std::vector<EoLNode<T>*> nodes;
-    std::vector<std::pair<Vector<int, 2>, bool>> rods;
-    
-public:
-    RodNetwork(int w, int h) : width(w), height(h) {}
-    RodNetwork() : width(5), height(5) {}
-    ~RodNetwork() {}
-};
+#include "VecMatDef.h"
 
+enum YarnType {
+        WARP=0, WEFT=1, ABANDON=2
+    };
 
 template<class T>
 class EoLRodSim
 {
-    using TV3 = Vector<T, 3>;
+public:
     using TV2 = Vector<T, 2>;
+    using TV3 = Vector<T, 3>;
+    using TV5 = Vector<T, 5>;
+    
+    using TM3 = Matrix<T, 3, 3>;
+
+    using TV3Stack = Matrix<T, 3, Eigen::Dynamic>;
+    using IV3Stack = Matrix<int, 3, Eigen::Dynamic>;
+    using TV2Stack = Matrix<T, 3, Eigen::Dynamic>;
+    using TV5Stack = Matrix<T, 5, Eigen::Dynamic>;
+
+    
     using IV2 = Vector<int, 2>;
+    using IV3 = Vector<int, 3>;
+
+    int dof = 5;
+    
+    TV5Stack q, dq;
+    IV3Stack rods;
+    int n_nodes;
+    int n_rods;
+    IV2 n_rod_uv;
+
+    T dt = 1e-3;
+    T newton_tol = 1e-4;
+    T E = 100;
+    T R = 0.001;
+
+    TV3 gravity = TV3::Zero();
 
 public:
-    RodNetwork<T> rod_net;
-
-public:
-    EoLRodSim() {}
-    ~EoLRodSim() {}
-
-    void buildRodNetwork(int width, int height)
+    EoLRodSim() 
     {
-        rod_net = RodNetwork<T>(width, height);
-        int cnt = 0;
-        for(int i = 0; i < height; i++)
-        {
-            if(i < height - 1)
-            {
-                rod_net.rods.push_back(std::make_pair(IV2(i*width, (i + 1)*width + 1), true));
-            }
-            for(int j = 0; j < width; j++)
-            {
-                EoLNode<T>* node = new EoLNode<T>(
-                    TV3(i/T(width), j/T(height), 0),
-                    TV2(i/T(width), j/T(height)),
-                    cnt++, false, 0.01
-                );
-                rod_net.nodes.push_back(node);
-                if(j < width - 1)
-                    rod_net.rods.push_back(std::make_pair(IV2(i*width + j, i*width + j + 1), false));
-            }
-        }
-        std::cout << "# node " << rod_net.nodes.size() << " " << rod_net.rods.size() << std::endl;
+        gravity[1] = -9.8;
     }
 
-    void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+    ~EoLRodSim() {}
+    
+    //  
+    T computeTotalEnergy()
     {
-        V.resize(4, 3);
-        V.row(0) = Eigen::Vector3d(0, 0, 0);
-        V.row(1) = Eigen::Vector3d(1, 0, 0);
-        V.row(2) = Eigen::Vector3d(1, 1, 0);
-        V.row(3) = Eigen::Vector3d(0, 1, 0);
-        F.resize(2, 3);
-        F.row(0) = Eigen::Vector3i(0, 1, 2);
-        F.row(1) = Eigen::Vector3i(0, 2, 3);
+        return 0;
+    }
+
+    // T computeResidual(TV5Stack& residual)
+    // {
+
+    //     return residual.norm();
+    // }
+
+    // void addMassMatrix(std::vector<Eigen::Triplet<T>>& entryK)
+    // {
+    //     // tbb::parallel_for(0, n_rods, [&](int rod_idx){
+    //     //     TV2 delta_u = rod_net.rods[rod_idx];
+    //     // });
+        
+    // }
+
+    void addStiffnessMatrix()
+    {
+
+    }
+
+    void addConstraintMatrix()
+    {
+
+    }
+
+    // void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entryK)
+    // {
+
+    // }
+
+    void implicitUpdate()
+    {
+        // T E0 = computeTotalEnergy();
+        // TV5Stack residual(dof, n_nodes);
+        // residual.setZero();
+        // while(true)
+        // {
+        //     T norm = computeResidual(residual);
+        //     if (norm < newton_tol)
+        //         break;
+            
+        //     T E1 = computeTotalEnergy();
+
+        // }
     }
 
     void advanceOneStep()
     {
-
+        implicitUpdate();
+        q += dt * dq;
     }
 
-
+public:
+    // IO.cpp
+    void buildRodNetwork(int width, int height);
+    void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
 };
 
 #endif

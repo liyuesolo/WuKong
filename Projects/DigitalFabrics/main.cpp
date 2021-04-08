@@ -2,7 +2,7 @@
 
 #include "EoLRodSim.h"
 
-EoLRodSim<float> eol_sim;
+EoLRodSim<double> eol_sim;
 
 
 
@@ -20,7 +20,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 
 int main()
 {
-    eol_sim.buildRodNetwork(2, 2);
+    eol_sim.buildRodNetwork(4, 4);
 
     igl::opengl::glfw::Viewer viewer;
 
