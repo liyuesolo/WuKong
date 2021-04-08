@@ -6,8 +6,14 @@ void EoLRodSim<T>::buildRodNetwork(int width, int height)
         
         n_nodes = width * height;
         n_rods = (width - 1) * height + (height - 1) * width;
+        
         q = TV5Stack(5, n_nodes);
+        dq = TV5Stack(5, n_nodes);
         rods = IV3Stack(3, n_rods);
+        
+        q.setZero();
+        dq.setZero();
+        rods.setZero();
 
         int cnt = 0;
         for(int i = 0; i < height; i++)
