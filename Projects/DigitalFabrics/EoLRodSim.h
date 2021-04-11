@@ -8,21 +8,53 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
-
 #include "VecMatDef.h"
 
 
 #define WARP 0
 #define WEFT 1
 
+
+template <int dim>
+struct VectorHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const IV& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a(d)) + 0x9e3779b9 + (h << 6) + (h >> 2); 
+        }
+        return h;
+    }
+};
+
+template <int dim>
+struct VectorPairHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const std::pair<IV, IV>& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a.first(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(a.second(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+};
+
+
 template<class T, int dim = 3>
 class EoLRodSim
 {
 public:
+    using Simulation = EoLRodSim<T, dim>;
+    
+
     using TV2 = Vector<T, 2>;
     using TV3 = Vector<T, 3>;
     using TV = Vector<T, dim>;
     using TV5 = Vector<T, 5>;
+    using TVDOF = Vector<T, dim+2>;
     
     using TM3 = Matrix<T, 3, 3>;
     using TM5 = Matrix<T, 5, 5>;
@@ -39,6 +71,7 @@ public:
 
     using IV2 = Vector<int, 2>;
     using IV3 = Vector<int, 3>;
+
 
     int dof = dim + 2;
     
@@ -57,10 +90,15 @@ public:
 
     T rho = 1;
     T ks = 1.0;
+    T kc = 1e5;
     TV3 gravity = TV3::Zero();
 
+    std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
+
 public:
-    EoLRodSim() 
+    
+
+    EoLRodSim()
     {
         gravity[1] = -9.8;
     }
@@ -72,6 +110,8 @@ public:
     {
 
     }
+
+
 
     //  
     // T computeTotalEnergy(const TV5Stack& qi)
@@ -104,6 +144,7 @@ public:
 
     T computeTotalEnergy(const DOFStack& qi)
     {
+        T total_energy = 0;
         VectorXT rod_energy(n_rods);
         rod_energy.setZero();
 
@@ -124,12 +165,21 @@ public:
             TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
             rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
            
-            // add constraint term here 1/2 kc (q - q')^T (q - q')
-
-
         });
 
-        return rod_energy.sum();
+        total_energy += rod_energy.sum();
+         // add constraint term here 1/2 kc (q - q')^T (q - q')
+
+        for(auto node_target : dirichlet_data)
+        {
+            int node_id = node_target.first;
+            TVDOF target = node_target.second.first;
+            TVDOF mask = node_target.second.second;
+            TVDOF delta_dis = (target - qi.col(node_id)).array() * mask.array();
+            total_energy += 0.5 * kc * (delta_dis).dot(delta_dis);
+        }
+
+        return total_energy;
     }
 
 
@@ -232,6 +282,15 @@ public:
             residual.col(node1)[node1 * dof + dim + uv_offset] = 0.5 * ks * std::pow(w.norm() - 1.0, 2);
         }
 
+        for(auto node_target : dirichlet_data)
+        {
+            int node_id = node_target.first;
+            TVDOF target = node_target.second.first;
+            TVDOF mask = node_target.second.second;
+            TVDOF delta_dis = (qi.col(node_id) - target).array() * mask.array();
+
+            residual.col(node_id) += kc * delta_dis;
+        }
         return residual.norm();
     }
 
@@ -275,7 +334,6 @@ public:
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, const DOFStack& qi)
     {
         
-
         // 
         for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
         {
@@ -350,6 +408,18 @@ public:
 
             
         }
+
+        // penalty term
+        for(auto node_target : dirichlet_data)
+        {
+            int node_id = node_target.first;
+            TVDOF mask = node_target.second.second;
+            for(int dof_id = 0; dof_id < dof; dof_id++)
+            {
+                if(std::abs(mask[dof_id] - 1) < 1e-6)
+                    entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dof_id, node_id * dof + dof_id, kc));
+            }
+        }
     }
 
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, const DOFStack& qi)
@@ -367,7 +437,16 @@ public:
     bool linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
         const DOFStack& residual, DOFStack& delta_dof)
     {
-
+        Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
+        int nz_stretching = 16 * n_rods;
+        int nz_penalty = dof * dirichlet_data.size();
+        A.reserve(nz_stretching + nz_penalty);
+        A.setFromTriplets(entry_K.begin(), entry_K.end());
+        Eigen::SparseLU<Eigen::SparseMatrix<T>> solver;
+        solver.compute(A);
+        
+        const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
+        Eigen::Map<VectorXT>(delta_dof.data(), delta_dof.size()) = solver.solve(rhs);
         return true;
     }
 
@@ -395,6 +474,8 @@ public:
             buildSystemMatrix(entry_K, qi);
             // solve delta dof
             bool succeed = linearSolve(entry_K, residual, delta_dof);
+            std::cout << "solve one step" << std::endl;
+            std::exit(0);
             T alpha = 1.0;
             DOFStack qi_ls = qi + alpha * delta_dof;
             T E1 = computeTotalEnergy(qi_ls);
@@ -408,18 +489,6 @@ public:
         }
     }
 
-    void updatedqExplicit()
-    {
-        //M(dqn+1 - dqn)/dt = dT/ddq -dV/ddq
-        //dqn+1 = dqn + inv(M) * (dT/ddq - dV/ddq) * dt
-    }
-
-    void symplecticUpdate()
-    {
-        updatedqExplicit();
-        q += dt * dq;
-    }
-
     void advanceOneStep()
     {
         implicitUpdate();
@@ -429,6 +498,9 @@ public:
     // IO.cpp
     void buildRodNetwork(int width, int height);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+
+    // BoundaryCondtion.cpp
+    void addBCStretchingTest();
 };
 
 #endif

@@ -1,4 +1,4 @@
 mkdir build
 cd build
-cmake -D -DCMAKE_BUILD_TYPE=Release ..
-make -j8
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j8 DigitalFabrics

@@ -2,7 +2,14 @@
 
 #include "EoLRodSim.h"
 
-EoLRodSim<double, 3> eol_sim;
+
+#define T double
+#define dim 3
+
+
+
+EoLRodSim<T, dim> eol_sim;
+
 
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
@@ -24,6 +31,8 @@ int main()
 {
     eol_sim.buildRodNetwork(10, 10);
     eol_sim.buildMeshFromRodNetwork(V, F);
+    
+    eol_sim.addBCStretchingTest();
 
     igl::opengl::glfw::Viewer viewer;
 
