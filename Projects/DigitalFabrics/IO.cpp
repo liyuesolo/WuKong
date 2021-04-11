@@ -7,8 +7,8 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
         n_nodes = width * height;
         n_rods = (width - 1) * height + (height - 1) * width;
         
-        q = TV5Stack(5, n_nodes);
-        dq = TV5Stack(5, n_nodes);
+        q = DOFStack(dof, n_nodes);
+        dq = DOFStack(dof, n_nodes);
         rods = IV3Stack(3, n_rods);
         normal = TV3Stack(3, n_rods);
         q.setZero();
@@ -24,8 +24,13 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
                 int idx = i * width + j;
 
                 // q.col(idx) = TV5(i/T(width), T(0), j/T(height), i/T(width), j/T(height));
-                q.col(idx).segment(0, 3) = TV3(i/T(width), T(0), j/T(height));
-                q.col(idx).segment(3, 5) = TV2(i/T(width), j/T(height));
+                
+                if constexpr (dim == 3)
+                    q.col(idx).template segment<dim>(0) = TV3(i/T(width), T(0), j/T(height));
+                else if constexpr (dim == 2)
+                    q.col(idx).template segment<dim>(0) = TV2(i/T(width), j/T(height));
+
+                q.col(idx).template segment<2>(dim) = TV2(i/T(width), j/T(height));
                 if (i < height - 1)
                 {
                     normal.col(cnt) = TV3(0, 1, 0);
@@ -66,27 +71,41 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
     F.resize(n_rods * rod_offset_f, 3);
     F.setZero();
     int rod_cnt = 0;
+    
     tbb::parallel_for(0, n_rods, [&](int rod_cnt){
         int rov = rod_cnt * rod_offset_v;
         int rof = rod_cnt * rod_offset_f;
 
-        TV3 vtx_from = q.col(rods.col(rod_cnt)[0]).segment(0, 3);
-        TV3 vtx_to = q.col(rods.col(rod_cnt)[1]).segment(0, 3);
+        TV vtx_from_TV = q.col(rods.col(rod_cnt)[0]).template segment<dim>(0);
+        TV vtx_to_TV = q.col(rods.col(rod_cnt)[1]).template segment<dim>(0);
+
+        TV3 vtx_from = TV3::Zero();
+        TV3 vtx_to = TV3::Zero();
+        if constexpr (dim == 3)
+        {
+            vtx_from = vtx_from_TV;
+            vtx_to = vtx_from_TV;
+        }
+        else
+        {
+            vtx_from = TV3(vtx_from_TV[0], 0, vtx_from_TV[1]);
+            vtx_to = TV3(vtx_to_TV[0], 0, vtx_to_TV[1]);
+        }
+
         
         TV3 normal_offset = TV3::Zero();
         if (rods.col(rod_cnt)[2] == WARP)
             normal_offset = normal.col(rod_cnt);
         else
             normal_offset = normal.col(rod_cnt);
-        // TV3 normal_offset = normal.col(rod_cnt) ? (rods.col(rod_cnt)[2] == WARP) : (-1.0 * normal.col(rod_cnt));
-        // std::cout << normal_offset * R * 0.5 << std::endl; 
+
         vtx_from += normal_offset * R;
         vtx_to += normal_offset * R;
         
         TV3 axis_world = vtx_to - vtx_from;
         TV3 axis_local(0, axis_world.norm(), 0);
 
-        // rotate local (0, 1, 0) aligned cyliner to world
+        
         TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_local, axis_world).toRotationMatrix();
         
         V(rov + n_div*2+1, 1) = axis_world.norm();
