@@ -2,7 +2,7 @@
 
 #include "EoLRodSim.h"
 
-EoLRodSim<double> eol_sim;
+EoLRodSim<double, 3> eol_sim;
 
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;

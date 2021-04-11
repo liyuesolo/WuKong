@@ -1,7 +1,7 @@
 #include "EoLRodSim.h"
 
-template<class T>
-void EoLRodSim<T>::buildRodNetwork(int width, int height)
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
     {
         
         n_nodes = width * height;
@@ -10,7 +10,7 @@ void EoLRodSim<T>::buildRodNetwork(int width, int height)
         q = TV5Stack(5, n_nodes);
         dq = TV5Stack(5, n_nodes);
         rods = IV3Stack(3, n_rods);
-        
+        normal = TV3Stack(3, n_rods);
         q.setZero();
         dq.setZero();
         rods.setZero();
@@ -27,10 +27,16 @@ void EoLRodSim<T>::buildRodNetwork(int width, int height)
                 q.col(idx).segment(0, 3) = TV3(i/T(width), T(0), j/T(height));
                 q.col(idx).segment(3, 5) = TV2(i/T(width), j/T(height));
                 if (i < height - 1)
+                {
+                    normal.col(cnt) = TV3(0, 1, 0);
                     rods.col(cnt++) = IV3(i*width + j, (i + 1)*width + j, WARP);
+                }
                 if (j < width - 1)
+                {
+                    normal.col(cnt) = TV3(0, -1, 0);
                     rods.col(cnt++) = IV3(i*width + j, i*width + j + 1, WEFT);
-
+                }
+                
                 // rod_net.nodes.push_back(node);
                 // if(i < height - 1 &&  j != 0 && j != width-1)
                 //     rod_net.rods.push_back(Rod(i*width + j, (i + 1)*width + j, 1));
@@ -41,8 +47,8 @@ void EoLRodSim<T>::buildRodNetwork(int width, int height)
         
     }
 
-template<class T>
-void EoLRodSim<T>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
 {
     int n_div = 10;
     
@@ -66,6 +72,16 @@ void EoLRodSim<T>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& 
 
         TV3 vtx_from = q.col(rods.col(rod_cnt)[0]).segment(0, 3);
         TV3 vtx_to = q.col(rods.col(rod_cnt)[1]).segment(0, 3);
+        
+        TV3 normal_offset = TV3::Zero();
+        if (rods.col(rod_cnt)[2] == WARP)
+            normal_offset = normal.col(rod_cnt);
+        else
+            normal_offset = normal.col(rod_cnt);
+        // TV3 normal_offset = normal.col(rod_cnt) ? (rods.col(rod_cnt)[2] == WARP) : (-1.0 * normal.col(rod_cnt));
+        // std::cout << normal_offset * R * 0.5 << std::endl; 
+        vtx_from += normal_offset * R;
+        vtx_to += normal_offset * R;
         
         TV3 axis_world = vtx_to - vtx_from;
         TV3 axis_local(0, axis_world.norm(), 0);
@@ -106,7 +122,8 @@ void EoLRodSim<T>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& 
 }
 
 
-template class EoLRodSim<double>;
+template class EoLRodSim<double, 3>;
+// template class EoLRodSim<double, 2>;
 
 //not working for float yet
 // template class EoLRodSim<float>;

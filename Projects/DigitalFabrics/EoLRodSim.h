@@ -2,6 +2,7 @@
 #define EOL_ROD_SIM_H
 
 #include <utility>
+#include <iostream>
 #include <Eigen/Geometry>
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -14,7 +15,7 @@ enum YarnType {
         WARP=0, WEFT=1, ABANDON=2
     };
 
-template<class T>
+template<class T, int dim>
 class EoLRodSim
 {
 public:
@@ -23,6 +24,7 @@ public:
     using TV5 = Vector<T, 5>;
     
     using TM3 = Matrix<T, 3, 3>;
+    using TM5 = Matrix<T, 5, 5>;
 
     using TV3Stack = Matrix<T, 3, Eigen::Dynamic>;
     using IV3Stack = Matrix<int, 3, Eigen::Dynamic>;
@@ -39,9 +41,11 @@ public:
     
     TV5Stack q, dq;
     IV3Stack rods;
+    TV3Stack normal;
     int n_nodes;
     int n_rods;
     IV2 n_rod_uv;
+    
 
     T dt = 1e-3;
     T newton_tol = 1e-4;
@@ -84,16 +88,22 @@ public:
             T coeff = rho * delta_l;
 
             // add graviational energy
+
             rod_energy[rod_idx] += coeff * 0.5 * (x0 + x1).dot(gravity);
 
             // add kinetic energy
+            // 1/2 * qTMq
 
-            
+
         });
 
         return rod_energy.sum();
     }
 
+
+    // M ((qn+1 - qn)/dt - qdotn)/dt = dT/dq - dV/dq
+    // Residual = M(qn+1 - qn - dq*dt) - dt*2 (dTdq-dVdq)
+    
     T computeResidual(TV5Stack& residual, const TV5Stack& qi)
     {
         residual.resize(dof, n_nodes);
@@ -113,22 +123,47 @@ public:
             T delta_l = (u0 - u1)[0] ? rods.col(rod_idx)[2] == WARP : (u0 - u1)[1];
 
             //fg = -dVg/dx
-            residual.col(node0).segment(0, 3) -= 0.5 * delta_l * rho * gravity;
-            residual.col(node1).segment(0, 3) -= 0.5 * delta_l * rho * gravity;
+            residual.col(node0).segment(0, 3) -= 0.5 * delta_l * rho * gravity * dt * dt;
+            residual.col(node1).segment(0, 3) -= 0.5 * delta_l * rho * gravity * dt * dt;
             
             //fg = -dVg/du
             if(rods.col(rod_idx)[2] == WARP)
             {
-                residual.col(node0)[4] -= 0.5 * delta_l * rho * gravity.dot(x1-x0);
-                residual.col(node1)[4] -= -0.5 * delta_l * rho * gravity.dot(x1-x0);
+                residual.col(node0)[4] -= 0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
+                residual.col(node1)[4] -= -0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
             }
             else if(rods.col(rod_idx)[2] == WEFT)
             {
-                residual.col(node0)[5] -= 0.5 * delta_l * rho * gravity.dot(x1-x0);
-                residual.col(node1)[5] -= -0.5 * delta_l * rho * gravity.dot(x1-x0);
+                residual.col(node0)[5] -= 0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
+                residual.col(node1)[5] -= -0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
             }
 
-            // compute Mq
+            // // compute M(qn+1 - qn) - dq*dt
+            // T coeff = T(1) / 6 * rho * delta_l;
+
+            // TV3 delta_q0 = qi.col(node0).segment<3>(0) - q.col(node0).segment<3>(0);
+            // TV3 delta_q1 = qi.col(node1).segment<3>(0) - q.col(node1).segment<3>(0);
+            // TV2 delta_u0 = qi.col(node0).segment<2>(3) - q.col(node0).segment<2>(3);
+            // TV2 delta_u1 = qi.col(node1).segment<2>(3) - q.col(node1).segment<2>(3);
+            // // 2I3 * x0
+            // residual.col(node0).segment(0, 3) += 
+            //     coeff * 2.0 * delta_q0 - dq.col(node0).segment<3>(0) * dt;
+            // // I3 x0
+            // residual.col(node0).segment(0, 3) += 
+            //     coeff * 2.0 * delta_q0 - dq.col(node0).segment<3>(0) * dt;
+            // // -2w u0
+            // if(rods.col(rod_idx)[2] == WARP)
+            // {
+            //     residual.col(node0)[4] -= 
+            //         coeff * 2.0 * delta_u0[0] - dq.col(node0)[4] * dt;
+            // }
+
+            // // I3 * x1
+            // residual.col(node1).segment(0, 3) += 
+            //     coeff * 1.0 * delta_q1 - dq.col(node1).segment<3>(0) * dt;
+            // // 2I3 * x1
+            // residual.col(node1).segment(0, 3) += 
+            //     coeff * 2.0 * delta_q1 - dq.col(node1).segment<3>(0) * dt;
 
 
         }
@@ -143,31 +178,31 @@ public:
         TM3 I = TM3::Identity();
 
         // tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        // for (int rod_idx = 0; i < n_rods; i++){
-        //     int node0 = rods.col(rod_idx)[0];
-        //     int node1 = rods.col(rod_idx)[1];
-        //     TV2 u0 = q.col(node0).segment(3, 5);
-        //     TV2 u1 = q.col(node1).segment(3, 5);
-        //     TV3 x0 = q.col(node0).segment(0, 3);
-        //     TV3 x1 = q.col(node1).segment(0, 3);
+        for (int rod_idx = 0; i < n_rods; i++){
+            int node0 = rods.col(rod_idx)[0];
+            int node1 = rods.col(rod_idx)[1];
+            TV2 u0 = q.col(node0).segment(3, 5);
+            TV2 u1 = q.col(node1).segment(3, 5);
+            TV3 x0 = q.col(node0).segment(0, 3);
+            TV3 x1 = q.col(node1).segment(0, 3);
 
-        //     T delta_u = (u0 - u1).norm();
-        //     T coeff = T(1)/6 * rho * delta_u;    
-        //     TV3 w = (x1 - x0) / delta_u;
-        //     TM3 wTw = w.transpose() * w;
+            T delta_u = (u0 - u1).norm();
+            T coeff = T(1)/6 * rho * delta_u;    
+            TV3 w = (x1 - x0) / delta_u;
+            TM3 wTw = w.transpose() * w;
             
-        //     for(int i = 0; i < 3; i++)
-        //     {
-        //         // push 2I
-        //         if (i == j)
-        //         {
-        //             entryK.push_back(node0 * dof * 2 + i, node0 * dof * 2 + j, T(2) * coeff);
-        //             entryK.push_back(node0 * dof * 2 + i, node0 * dof * 2 + j, T(2) * coeff);
-        //         }
+            for(int i = 0; i < 3; i++)
+            {
+                // push 2I
+                if (i == j)
+                {
+                    entryK.push_back(node0 * dof * 2 + i, node0 * dof * 2 + j, T(2) * coeff);
+                    entryK.push_back(node0 * dof * 2 + i, node0 * dof * 2 + j, T(2) * coeff);
+                }
                 
-        //     }
+            }
 
-        // }
+        }
         // });
         
     }
@@ -231,6 +266,18 @@ public:
                 E1 = computeTotalEnergy(qi_ls);
             }
         }
+    }
+
+    void updatedqExplicit()
+    {
+        //M(dqn+1 - dqn)/dt = dT/ddq -dV/ddq
+        //dqn+1 = dqn + inv(M) * (dT/ddq - dV/ddq) * dt
+    }
+
+    void symplecticUpdate()
+    {
+        updatedqExplicit();
+        q += dt * dq;
     }
 
     void advanceOneStep()
