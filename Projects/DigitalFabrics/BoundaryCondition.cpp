@@ -9,21 +9,22 @@ void EoLRodSim<T, dim>::addBCStretchingTest()
         if (std::abs(uv[0]) < 1e-6)
         {
             TVDOF target, mask;
-            target.setZero();
+            target = q.col(node_id);
             mask.setZero();
             mask.template segment<dim>(0).setOnes();
             dirichlet_data[node_id] = std::make_pair(target, mask);
         }
-        if (std::abs(uv[1] - 1) < 1e-6)
+        if (std::abs(uv[0] - 1) < 1e-6)
         {
             TVDOF target, mask;
-            target.setZero();
-            target[dim - 1] = 0.2;
+            target = q.col(node_id);
+            target[dim - 1] += 0.2;
             mask.setZero();
-            mask.template segment<dim>(0).setOnes();
+            mask.template segment<dim>(0) = TV::Ones();
             dirichlet_data[node_id] = std::make_pair(target, mask);
         }
     }
+    std::cout << "# Dirichlet constraint: " << dirichlet_data.size() << std::endl;
 }
 
 template class EoLRodSim<double, 3>;

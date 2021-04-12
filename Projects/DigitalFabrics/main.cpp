@@ -4,7 +4,7 @@
 
 
 #define T double
-#define dim 3
+#define dim 2
 
 
 
@@ -29,10 +29,18 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 
 int main()
 {
-    eol_sim.buildRodNetwork(10, 10);
-    eol_sim.buildMeshFromRodNetwork(V, F);
+    int test = 0;
+    if(test == 0)
+    {
+        eol_sim.build5NodeTestScene();
+    }
+    else if (test == 1)
+    {
+        eol_sim.buildRodNetwork(10, 10);    
+        eol_sim.addBCStretchingTest();
+    }
     
-    eol_sim.addBCStretchingTest();
+    eol_sim.buildMeshFromRodNetwork(V, F);
 
     igl::opengl::glfw::Viewer viewer;
 

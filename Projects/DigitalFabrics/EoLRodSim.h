@@ -43,7 +43,7 @@ struct VectorPairHash
 };
 
 
-template<class T, int dim = 3>
+template<class T, int dim>
 class EoLRodSim
 {
 public:
@@ -60,6 +60,7 @@ public:
     using TM5 = Matrix<T, 5, 5>;
 
     using TM = Matrix<T, dim, dim>;
+    using TMDOF = Matrix<T, dim + 2, dim + 2>;
 
     using TV3Stack = Matrix<T, 3, Eigen::Dynamic>;
     using TVStack = Matrix<T, dim, Eigen::Dynamic>;
@@ -75,7 +76,7 @@ public:
 
     int dof = dim + 2;
     
-    DOFStack q, dq;
+    DOFStack q;
     IV3Stack rods;
     TV3Stack normal;
     int n_nodes;
@@ -84,221 +85,132 @@ public:
     
 
     T dt = 1;
-    T newton_tol = 1e-4;
+    T newton_tol = 1e-5;
     T E = 1e7;
     T R = 0.01;
 
     T rho = 1;
     T ks = 1.0;
-    T kc = 1e5;
+    T kc = 1e1;
+    T kn = 1e-3;
     TV3 gravity = TV3::Zero();
 
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
 
 public:
-    
 
     EoLRodSim()
     {
         gravity[1] = -9.8;
     }
-
     ~EoLRodSim() {}
     
     //https://math.stackexchange.com/questions/99299/best-fitting-plane-given-a-set-of-points
-    void computeCrossingNormal()
-    {
+    void computeCrossingNormal() {}
 
+
+    template <class OP>
+    void iterateDirichletData(const OP& f) {
+        for (auto dirichlet: dirichlet_data){
+            f(dirichlet.first, dirichlet.second.first, dirichlet.second.second);
+        } 
     }
 
 
-
-    //  
-    // T computeTotalEnergy(const TV5Stack& qi)
-    // {
-    //     VectorXT rod_energy(n_rods);
-    //     rod_energy.setZero();
-
-    //     tbb::parallel_for(0, n_rods, [&](int rod_idx){
-    //         int node0 = rods.col(rod_idx)[0];
-    //         int node1 = rods.col(rod_idx)[1];
-    //         TV3 x0 = qi.col(node0).segment(0, 3);
-    //         TV3 x1 = qi.col(node1).segment(0, 3);
-    //         TV2 u0 = qi.col(node0).segment(3, 5);
-    //         TV2 u1 = qi.col(node1).segment(3, 5);
-            
-    //         // T delta_l = (u0 - u1)[0] ? rods.col(rod_idx)[2] == WARP : (u0 - u1)[1];
-    //         T coeff = rho * delta_l;
-
-    //         // add graviational energy
-    //         rod_energy[rod_idx] += coeff * 0.5 * (x0 + x1).dot(gravity);
-
-    //         // add kinetic energy
-    //         // 1/2 * qTMq
-
-
-    //     });
-
-    //     return rod_energy.sum();
-    // }
-
-    T computeTotalEnergy(const DOFStack& qi)
+    T computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
     {
+        // advect q to compute internal energy
+        DOFStack q_temp = q + dq;
+
         T total_energy = 0;
         VectorXT rod_energy(n_rods);
         rod_energy.setZero();
 
         tbb::parallel_for(0, n_rods, [&](int rod_idx){
+        // for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
             int node0 = rods.col(rod_idx)[0];
             int node1 = rods.col(rod_idx)[1];
-            TV x0 = qi.col(node0).template segment<dim>(0);
-            TV x1 = qi.col(node1).template segment<dim>(0);
-            TV2 u0 = qi.col(node0).template segment<2>(dim);
-            TV2 u1 = qi.col(node1).template segment<2>(dim);
+            TV x0 = q_temp.col(node0).template segment<dim>(0);
+            TV x1 = q_temp.col(node1).template segment<dim>(0);
+            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
+            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
             TV2 delta_u = u1 - u0;
 
             int yarn_type = rods.col(rod_idx)[2];
 
-            int uv_offset = 0 ? yarn_type == WARP : 1;
-
+            int uv_offset = yarn_type == WARP ? 0 : 1;
+        
             // add elastic potential here 1/2 ks delta_u * (||w|| - 1)^2
             TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
             rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
-           
+            // std::cout << std::abs(delta_u[uv_offset]) << " " << w.norm() << std::endl;
+        // }
         });
-
         total_energy += rod_energy.sum();
-         // add constraint term here 1/2 kc (q - q')^T (q - q')
-
-        for(auto node_target : dirichlet_data)
+        // std::cout << rod_energy.sum() << std::endl;
+        
+        // add constraint term here 1/2 kc (q - q')^T (q - q')
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
-            int node_id = node_target.first;
-            TVDOF target = node_target.second.first;
-            TVDOF mask = node_target.second.second;
-            TVDOF delta_dis = (target - qi.col(node_id)).array() * mask.array();
-            total_energy += 0.5 * kc * (delta_dis).dot(delta_dis);
-        }
-
+            for(int d = 0; d < dof; d++)
+                if (std::abs(target(d)) <= 1e10 && mask(d))
+                    total_energy += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
+        });
         return total_energy;
     }
 
 
-    // M ((qn+1 - qn)/dt - qdotn)/dt = dT/dq - dV/dq
-    // Residual = M(qn+1 - qn - dq*dt) - dt*2 (dTdq-dVdq)
-    
-    // T computeResidual(TV5Stack& residual, const TV5Stack& qi)
-    // {
-    //     residual.resize(dof, n_nodes);
-    //     residual.setZero();
 
-    //     for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
-    //     {
-    //         int node0 = rods.col(rod_idx)[0];
-    //         int node1 = rods.col(rod_idx)[1];
-    //         TV3 x0 = qi.col(node0).segment(0, 3);
-    //         TV3 x1 = qi.col(node1).segment(0, 3);
-    //         TV2 u0 = qi.col(node0).segment(3, 5);
-    //         TV2 u1 = qi.col(node1).segment(3, 5);
-
-
-    //         // compute gravity                
-    //         T delta_l = (u0 - u1)[0] ? rods.col(rod_idx)[2] == WARP : (u0 - u1)[1];
-
-    //         //fg = -dVg/dx
-    //         residual.col(node0).segment(0, 3) -= 0.5 * delta_l * rho * gravity * dt * dt;
-    //         residual.col(node1).segment(0, 3) -= 0.5 * delta_l * rho * gravity * dt * dt;
-            
-    //         //fg = -dVg/du
-    //         if(rods.col(rod_idx)[2] == WARP)
-    //         {
-    //             residual.col(node0)[4] -= 0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
-    //             residual.col(node1)[4] -= -0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
-    //         }
-    //         else if(rods.col(rod_idx)[2] == WEFT)
-    //         {
-    //             residual.col(node0)[5] -= 0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
-    //             residual.col(node1)[5] -= -0.5 * delta_l * rho * gravity.dot(x1-x0) * dt * dt;
-    //         }
-
-    //         // // compute M(qn+1 - qn) - dq*dt
-    //         // T coeff = T(1) / 6 * rho * delta_l;
-
-    //         // TV3 delta_q0 = qi.col(node0).segment<3>(0) - q.col(node0).segment<3>(0);
-    //         // TV3 delta_q1 = qi.col(node1).segment<3>(0) - q.col(node1).segment<3>(0);
-    //         // TV2 delta_u0 = qi.col(node0).segment<2>(3) - q.col(node0).segment<2>(3);
-    //         // TV2 delta_u1 = qi.col(node1).segment<2>(3) - q.col(node1).segment<2>(3);
-    //         // // 2I3 * x0
-    //         // residual.col(node0).segment(0, 3) += 
-    //         //     coeff * 2.0 * delta_q0 - dq.col(node0).segment<3>(0) * dt;
-    //         // // I3 x0
-    //         // residual.col(node0).segment(0, 3) += 
-    //         //     coeff * 2.0 * delta_q0 - dq.col(node0).segment<3>(0) * dt;
-    //         // // -2w u0
-    //         // if(rods.col(rod_idx)[2] == WARP)
-    //         // {
-    //         //     residual.col(node0)[4] -= 
-    //         //         coeff * 2.0 * delta_u0[0] - dq.col(node0)[4] * dt;
-    //         // }
-
-    //         // // I3 * x1
-    //         // residual.col(node1).segment(0, 3) += 
-    //         //     coeff * 1.0 * delta_q1 - dq.col(node1).segment<3>(0) * dt;
-    //         // // 2I3 * x1
-    //         // residual.col(node1).segment(0, 3) += 
-    //         //     coeff * 2.0 * delta_q1 - dq.col(node1).segment<3>(0) * dt;
-
-
-    //     }
-
-    //     return residual.norm();
-    // }
-
-    T computeResidual(DOFStack& residual, const DOFStack& qi)
+    T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq)
     {
-        residual.resize(dof, n_nodes);
-        residual.setZero();
-
+        const DOFStack q_temp = q + dq;
         for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
         {
             int node0 = rods.col(rod_idx)[0];
             int node1 = rods.col(rod_idx)[1];
-            TV x0 = qi.col(node0).template segment<dim>(0);
-            TV x1 = qi.col(node1).template segment<dim>(0);
-            TV2 u0 = qi.col(node0).template segment<2>(dim);
-            TV2 u1 = qi.col(node1).template segment<2>(dim);
+            TV x0 = q_temp.col(node0).template segment<dim>(0);
+            TV x1 = q_temp.col(node1).template segment<dim>(0);
+            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
+            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
             TV2 delta_u = u1 - u0;
-
+            
             T l = (x1 - x0).norm();
             TV d = (x1 - x0).normalized();
 
             int yarn_type = rods.col(rod_idx)[2];
 
-            int uv_offset = 0 ? yarn_type == WARP : 1;
+            int uv_offset = yarn_type == WARP ? 0 : 1;
 
             TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-            residual.col(node0).template segment<dim>(0) = ks * (w.norm() - 1.0) * d;
-            residual.col(node1).template segment<dim>(0) = -ks * (w.norm() - 1.0) * d;
-            residual.col(node0)[node0 * dof + dim + uv_offset] = -0.5 * ks * std::pow(w.norm() - 1.0, 2);
-            residual.col(node1)[node1 * dof + dim + uv_offset] = 0.5 * ks * std::pow(w.norm() - 1.0, 2);
+            //fx
+            residual.col(node0).template segment<dim>(0) += ks * (w.norm() - 1.0) * d;
+            residual.col(node1).template segment<dim>(0) += -ks * (w.norm() - 1.0) * d;
+            //fu
+            residual.col(node0)[dim + uv_offset] += -0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
+            residual.col(node1)[dim + uv_offset] += 0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
         }
 
-        for(auto node_target : dirichlet_data)
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
-            int node_id = node_target.first;
-            TVDOF target = node_target.second.first;
-            TVDOF mask = node_target.second.second;
-            TVDOF delta_dis = (qi.col(node_id) - target).array() * mask.array();
-
-            residual.col(node_id) += kc * delta_dis;
-        }
+            for(int d = 0; d < dof; d++)
+                if (std::abs(target(d)) <= 1e10 && mask(d))
+                    residual(d, node_id) -= kc * (dq(d, node_id) - target(d));
+        });
         return residual.norm();
     }
 
-    
+    void initializeSystemMatrix(Eigen::Ref<const TVStack> dq, 
+        std::vector<int> &entryCol, 
+        std::vector<TMDOF> &entryVal)
+    {
+
+    }
 
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
     {
-        return;
+        for(int i = 0; i < n_nodes * dof; i++)
+            entry_K.push_back(Eigen::Triplet<T>(i, i, 1e-4));
+        
         // TM3 I = TM3::Identity();
 
         // // tbb::parallel_for(0, n_rods, [&](int rod_idx){
@@ -331,37 +243,35 @@ public:
         
     }
 
-    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, const DOFStack& qi)
+    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
     {
-        
-        // 
+        DOFStack q_temp = q + dq;
         for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
         {
             int node0 = rods.col(rod_idx)[0];
             int node1 = rods.col(rod_idx)[1];
-            TV x0 = qi.col(node0).template segment<dim>(0);
-            TV x1 = qi.col(node1).template segment<dim>(0);
-            TV2 u0 = qi.col(node0).template segment<2>(dim);
-            TV2 u1 = qi.col(node1).template segment<2>(dim);
+            TV x0 = q_temp.col(node0).template segment<dim>(0);
+            TV x1 = q_temp.col(node1).template segment<dim>(0);
+            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
+            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
             TV2 delta_u = u1 - u0;
 
             T l = (x1 - x0).norm();
             TV d = (x1 - x0).normalized();
 
             TM P = TM::Identity() - d * d.transpose();
-
             int yarn_type = rods.col(rod_idx)[2];
-            int uv_offset = 0 ? yarn_type == WARP : 1;
+
+            int uv_offset = yarn_type == WARP ? 0 : 1;
 
             TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-
-
+            
             // add streching K here
             {
-                TM dfxdx = ks/l * P - ks / std::abs(delta_u[uv_offset]) * TM::Identity();
-                TV dfxdu = ks * w.norm() / std::abs(delta_u[uv_offset]) * d;
-                T dfudu = -ks * std::pow(w.norm(), 2) / std::abs(delta_u[uv_offset]);
-                TV dfudx = ks / std::abs(delta_u[uv_offset]) * w;
+                TM dfxdx = -1.0 * (ks/l * P - ks / std::abs(delta_u[uv_offset]) * TM::Identity());
+                TV dfxdu = -1.0 * (ks * w.norm() / std::abs(delta_u[uv_offset]) * d);
+                T dfudu = -1.0 * (-ks * w.squaredNorm() / std::abs(delta_u[uv_offset]));
+                TV dfudx = -1.0 * (ks / std::abs(delta_u[uv_offset]) * w);
 
                 for(int i = 0; i < dim; i++)
                 {
@@ -395,7 +305,7 @@ public:
                     // dfu0/dx1
                     entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + i, -dfudx(i)));
                 }
-
+                
                 //dfu0/du0
                 entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, dfudu));
                 //dfu1/du1
@@ -404,103 +314,130 @@ public:
                 entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, -dfudu));
                 //dfu0/du1
                 entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + dim + uv_offset, -dfudu));
-            }
-
-            
+            }   
         }
+        
+        
+    }
 
+    void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
+    {
         // penalty term
-        for(auto node_target : dirichlet_data)
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
-            int node_id = node_target.first;
-            TVDOF mask = node_target.second.second;
-            for(int dof_id = 0; dof_id < dof; dof_id++)
-            {
-                if(std::abs(mask[dof_id] - 1) < 1e-6)
-                    entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dof_id, node_id * dof + dof_id, kc));
-            }
-        }
+            for(int d = 0; d < dof; d++)
+                if (std::abs(target(d)) <= 1e10 && mask(d))
+                    entry_K.push_back(Eigen::Triplet<T>(node_id * dof + d, node_id * dof + d, kc));
+        });
     }
 
-    void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, const DOFStack& qi)
+    void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
     {
-
-    }
-
-    void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_K, const DOFStack& qi)
-    {
-        // addMassMatrix(entry_K);
-        addStiffnessMatrix(entry_K, qi);
-        addConstraintMatrix(entry_K, qi);
+        addMassMatrix(entry_K);
+        addStiffnessMatrix(entry_K, dq);
+        addConstraintMatrix(entry_K, dq);
     }
 
     bool linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
-        const DOFStack& residual, DOFStack& delta_dof)
+        Eigen::Ref<const DOFStack> residual, Eigen::Ref<DOFStack> ddq)
     {
+        ddq.setZero();
         Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
-        int nz_stretching = 16 * n_rods;
-        int nz_penalty = dof * dirichlet_data.size();
-        A.reserve(nz_stretching + nz_penalty);
-        A.setFromTriplets(entry_K.begin(), entry_K.end());
+        A.setFromTriplets(entry_K.begin(), entry_K.end()); 
         Eigen::SparseLU<Eigen::SparseMatrix<T>> solver;
         solver.compute(A);
-        
         const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
-        Eigen::Map<VectorXT>(delta_dof.data(), delta_dof.size()) = solver.solve(rhs);
+        Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
         return true;
     }
 
-    void implicitUpdate()
+    T newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const DOFStack> residual, int line_search_max = 100)
     {
-        T E0 = computeTotalEnergy(q);
-        DOFStack residual(dof, n_nodes);
-        residual.setZero();
+        int nz_stretching = 16 * n_rods;
+        int nz_penalty = dof * dirichlet_data.size();
 
-        // delta_dof is the delta at each newton step
-        DOFStack delta_dof(dof, n_nodes);
-        
-        // qi is the temporary q_n+1 during newton loop
-        DOFStack qi = q;
+        DOFStack ddq(dof, n_nodes);
+        ddq.setZero();
 
+        std::vector<Eigen::Triplet<T>> entry_K;
+        buildSystemMatrix(entry_K, dq);
+        linearSolve(entry_K, residual, ddq);
+        T norm = ddq.norm();
+        if (norm < 1e-5) return norm;
+        T alpha = 1;
+        T E0 = computeTotalEnergy(dq);
+        std::cout << "E0: " << E0 << std::endl;
+        int cnt = 0;
         while(true)
         {
-            delta_dof.setZero();
+            DOFStack dq_ls = dq + alpha * ddq;
+            T E1 = computeTotalEnergy(dq_ls);
+            std::cout << "E1: " << E1 << std::endl;
+            if (E1 - E0 < 0) {
+                dq = dq_ls;
+                break;
+            }
+            alpha *= T(0.5);
+            cnt += 1;
+            if (cnt == line_search_max) 
+                return 1e30;
+        }
+        return norm;    
+    }
 
-            T norm = computeResidual(residual, qi);
+    void implicitUpdate(Eigen::Ref<DOFStack> dq)
+    {
+        int cnt = 0;
+        T norm = 1e10;
+        while (true)
+        {
+            // set Dirichlet boundary condition
+            // iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            // {
+            //     for(int d = 0; d < dof; d++)
+            //         if (std::abs(target(d)) <= 1e10 && mask(d))
+            //             dq(d, node_id) = target(d);
+            // });
+            
+            DOFStack residual(dof, n_nodes);
+            residual.setZero();
+            // q(0, 3) += 0.1;
+            // q(2, 3) += 0.1;
+            // q(3, 5) += 0.1;
+            // q(1, 4) += 0.1;
+            // q(2, 1) += 0.1;
+            T residual_norm = computeResidual(residual, dq);
+            // checkGradient(dq);
+            // checkHessian(dq);
+            std::cout << "|g|: " << residual_norm << std::endl;
+            norm = newtonLineSearch(dq, residual);
             if (norm < newton_tol)
                 break;
-            std::vector<Eigen::Triplet<T>> entry_K;
-            // assemble system matrix: mass, stiffness, penalty
-            buildSystemMatrix(entry_K, qi);
-            // solve delta dof
-            bool succeed = linearSolve(entry_K, residual, delta_dof);
-            std::cout << "solve one step" << std::endl;
-            std::exit(0);
-            T alpha = 1.0;
-            DOFStack qi_ls = qi + alpha * delta_dof;
-            T E1 = computeTotalEnergy(qi_ls);
-            int ls_cnt = 0;
-            while(E0 <= E1)
-            {
-                alpha *= 0.5;
-                qi_ls = qi + alpha * delta_dof;
-                E1 = computeTotalEnergy(qi_ls);
-            }
+            cnt++;
         }
+        std::cout << "# of newton solve: " << cnt << "exit with |g|: " << norm << std::endl;
     }
 
     void advanceOneStep()
     {
-        implicitUpdate();
+        DOFStack dq(dof, n_nodes);
+        dq.setZero();
+        implicitUpdate(dq);
+        q += dq;
     }
 
 public:
-    // IO.cpp
+    // Scene.cpp
+    void build5NodeTestScene();
     void buildRodNetwork(int width, int height);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
 
     // BoundaryCondtion.cpp
     void addBCStretchingTest();
+
+    // DerivativeTest.cpp
+    void checkGradient(Eigen::Ref<DOFStack> dq);
+    void checkHessian(Eigen::Ref<DOFStack> dq);
 };
 
 #endif
