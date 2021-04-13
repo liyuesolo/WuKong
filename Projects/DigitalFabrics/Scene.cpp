@@ -51,12 +51,15 @@ void EoLRodSim<T, dim>::build5NodeTestScene()
         target.template segment<dim>(0) = TV2(-0.1, 0);
         dirichlet_data[3] = std::make_pair(target, mask);
 
-
+        // uncomment this to fix uv of the middle node
+        // target.setZero();
+        // mask.template segment<dim>(0) = TV::Zero();
         // dirichlet_data[4] = std::make_pair(target, mask);
     }
     else
     {
         std::cout << "3D version this is not implemented" << std::endl;
+        std::exit(0);
     }
 }
 
@@ -73,6 +76,8 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
     normal = TV3Stack(3, n_rods);
     q.setZero();
     rods.setZero();
+
+    connections = IV4Stack(4, n_nodes);
 
     int cnt = 0;
     for(int i = 0; i < height+1; i++)
@@ -98,12 +103,12 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
                 normal.col(cnt) = TV3(0, -1, 0);
                 rods.col(cnt++) = IV3(i*(width+1) + j, i*(width+1) + j + 1, WEFT);
             }
-            
-            // rod_net.nodes.push_back(node);
-            // if(i < height - 1 &&  j != 0 && j != width-1)
-            //     rod_net.rods.push_back(Rod(i*width + j, (i + 1)*width + j, 1));
-            // if(j < width - 1 && i != 0 && i != height-1)
-            //     rod_net.rods.push_back(Rod(i*width + j, i*width + j + 1, 0));
+            IV4 neighbor = IV4::Zero();
+            neighbor[2] = (j - 1) < 0 ? -1 : j - 1;
+            neighbor[3] = (j + 1) > height + 1 ? -1 : j + 1;
+            neighbor[0] = (i - 1) < 0 ? -1 : i - 1;
+            neighbor[1] = (i + 1) > width + 1 ? -1 : i + 1;
+            connections.col(idx) = neighbor;
         }
     }
     

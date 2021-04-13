@@ -57,7 +57,6 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
         }
         
     }
-
 }
 
 template class EoLRodSim<double, 3>;
