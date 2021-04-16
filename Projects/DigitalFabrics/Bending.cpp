@@ -4,6 +4,7 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::entryHelperBending(std::vector<TV>& x, T u1, T u2, 
     std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset)
 {
+    // cout3Nodes(n1, n0, n2);
     T J[8][8];
     memset(J, 0, sizeof(J));
     #include "Maple/YarnBendJ.mcg"
@@ -65,8 +66,8 @@ void EoLRodSim<T, dim>::entryHelperBending(std::vector<TV>& x, T u1, T u2,
     
     entry_K.push_back(Eigen::Triplet<T>(n2 * dof + uv_offset, n2 * dof + uv_offset, -J[7][7]));
     entry_K.push_back(Eigen::Triplet<T>(n1 * dof + uv_offset, n1 * dof + uv_offset, -J[2*dim][2*dim]));
-    entry_K.push_back(Eigen::Triplet<T>(n2 * dof + uv_offset, n1 * dof + uv_offset, -J[2*dim][7]));
-    entry_K.push_back(Eigen::Triplet<T>(n1 * dof + uv_offset, n2 * dof + uv_offset, -J[7][2*dim]));
+    entry_K.push_back(Eigen::Triplet<T>(n1 * dof + uv_offset, n2 * dof + uv_offset, -J[2*dim][7]));
+    entry_K.push_back(Eigen::Triplet<T>(n2 * dof + uv_offset, n1 * dof + uv_offset, -J[7][2*dim]));
 }
 
 
@@ -76,17 +77,22 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
         {
+            
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(right).template segment<dim>(0);
             TV x2 = q_temp.col(left).template segment<dim>(0);
 
             T u1 = q_temp(dim + 1, right);
             T u2 = q_temp(dim + 1, left);
-            T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));
+            // cout3Nodes(left, middle, right);
+            // std::cout << theta << std::endl;
             if(std::abs(theta) > 1e-6)
             {
+                
+                assert(u1-u2);
+                assert(std::sin(theta));
                 std::vector<TV> x(3);
                 x[0] = x0; x[1] = x1; x[2] = x2;
                 entryHelperBending(x, u1, u2, entry_K, middle, right, left, dim + 1);
@@ -94,18 +100,19 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
         }
         if (top != -1 && bottom != -1)
         {
+            // cout3Nodes(left, middle, right);
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(top).template segment<dim>(0);
             TV x2 = q_temp.col(bottom).template segment<dim>(0);
             T u1 = q_temp(dim, top);
             T u2 = q_temp(dim, bottom);
-
-            T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));   
             
             if(std::abs(theta) > 1e-6)
             {
+                assert(u1-u2);
+                assert(std::sin(theta));
                 std::vector<TV> x(3);
                 x[0] = x0; x[1] = x1; x[2] = x2;
                 entryHelperBending(x, u1, u2, entry_K, middle, top, bottom, dim);
@@ -122,6 +129,7 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
         {
+            // cout3Nodes(left, middle, right);
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(right).template segment<dim>(0);
             TV x2 = q_temp.col(left).template segment<dim>(0);
@@ -149,6 +157,7 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
         }
         if (top != -1 && bottom != -1)
         {
+            // cout3Nodes(bottom, middle, top);
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(top).template segment<dim>(0);
             TV x2 = q_temp.col(bottom).template segment<dim>(0);

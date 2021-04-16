@@ -96,11 +96,16 @@ public:
 
     T rho = 1;
     T ks = 1.0;  // stretching term
-    T kc = 1e1;  //constraint term
+    T kc = 1e2;  //constraint term
     T kn = 1e-3; //
     T kb = 1.0;
-    T km = 1e-2; //mass term
+    T km = 1e-3; //mass term
     TV3 gravity = TV3::Zero();
+
+    bool add_stretching = true;
+    bool add_bending = false;
+    bool add_penalty = true;
+    bool add_regularizor = true;
 
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
 
@@ -114,7 +119,13 @@ public:
     
     //https://math.stackexchange.com/questions/99299/best-fitting-plane-given-a-set-of-points
     void computeCrossingNormal() {}
+    
 
+    
+    void cout3Nodes(int n0, int n1, int n2)
+    {
+        std::cout << n0 << " " << n1 << " " << n2 << std::endl;
+    } 
 
     template <class OP>
     void iterateDirichletData(const OP& f) {
@@ -143,16 +154,17 @@ public:
         DOFStack q_temp = q + dq;
 
         T total_energy = 0;
-        
-        total_energy += addStretchingEnergy(q_temp);
-        total_energy += addBendingEnergy(q_temp);
-        
-        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        {
-            for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    total_energy += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
-        });
+        if (add_stretching)
+            total_energy += addStretchingEnergy(q_temp);
+        if (add_bending)
+            total_energy += addBendingEnergy(q_temp);
+        if (add_penalty)
+            iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            {
+                for(int d = 0; d < dof; d++)
+                    if (std::abs(target(d)) <= 1e10 && mask(d))
+                        total_energy += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
+            });
 
         return total_energy;
     }
@@ -162,17 +174,17 @@ public:
     T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq)
     {
         const DOFStack q_temp = q + dq;
-
-        addStretchingForce(q_temp, residual);
-        addBendingForce(q_temp, residual);
-
-        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        {
-            for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    residual(d, node_id) -= kc * (dq(d, node_id) - target(d));
-        });
-
+        if (add_stretching)
+            addStretchingForce(q_temp, residual);
+        if (add_bending)
+            addBendingForce(q_temp, residual);
+        if (add_penalty)
+            iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            {
+                for(int d = 0; d < dof; d++)
+                    if (std::abs(target(d)) <= 1e10 && mask(d))
+                        residual(d, node_id) -= kc * (dq(d, node_id) - target(d));
+            });
         return residual.norm();
     }
 
@@ -201,8 +213,10 @@ public:
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
     {
         const DOFStack q_temp = q + dq;
-        addStretchingK(q_temp, entry_K);
-        addBendingK(q_temp, entry_K);
+        if (add_stretching)
+            addStretchingK(q_temp, entry_K);
+        if (add_bending)
+            addBendingK(q_temp, entry_K);
     }
 
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
@@ -218,9 +232,11 @@ public:
 
     void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
     {
-        addMassMatrix(entry_K);
+        if (add_regularizor)
+            addMassMatrix(entry_K);
         addStiffnessMatrix(entry_K, dq);
-        addConstraintMatrix(entry_K, dq);
+        if (add_penalty)
+            addConstraintMatrix(entry_K, dq);
     }
 
     bool linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
@@ -229,6 +245,7 @@ public:
         ddq.setZero();
         Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
         A.setFromTriplets(entry_K.begin(), entry_K.end()); 
+        // A.setIdentity();
         Eigen::SparseLU<Eigen::SparseMatrix<T>> solver;
         solver.compute(A);
         const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
@@ -252,19 +269,23 @@ public:
         if (norm < 1e-5) return norm;
         T alpha = 1;
         T E0 = computeTotalEnergy(dq);
-        std::cout << "E0: " << E0 << std::endl;
+        // std::cout << "E0: " << E0 << std::endl;
         int cnt = 0;
         while(true)
         {
             DOFStack dq_ls = dq + alpha * ddq;
             T E1 = computeTotalEnergy(dq_ls);
-            std::cout << "E1: " << E1 << std::endl;
+            // std::cout << "E1: " << E1 << std::endl;
             if (E1 - E0 < 0) {
                 dq = dq_ls;
                 break;
             }
             alpha *= T(0.5);
             cnt += 1;
+            // if (cnt > 30 && cnt % 30 == 0)
+            // {
+            //     std::cout << "line search count: " << cnt << std::endl;
+            // }
             if (cnt == line_search_max) 
                 return 1e30;
         }
@@ -287,17 +308,7 @@ public:
             
             DOFStack residual(dof, n_nodes);
             residual.setZero();
-            // q(0, 3) += 0.1;
-            // q(2, 3) += 0.1;
-            // q(3, 1) += 0.1;
-            // q(1, 4) += 0.1;
-            // q(2, 2) += 0.1;
-            // q(1, 3) += 0.1;
-            // q(1, 0) += 0.1;
             T residual_norm = computeResidual(residual, dq);
-            // checkGradient(dq);
-            // checkHessian(dq);
-            // std::cout << "|g|: " << residual_norm << std::endl;
             norm = newtonLineSearch(dq, residual);
             if (norm < newton_tol)
                 break;
@@ -316,7 +327,10 @@ public:
 
 public:
     // Scene.cpp
+    
     void build5NodeTestScene();
+    void buildLongRodForBendingTest();
+
     void buildRodNetwork(int width, int height);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
 
@@ -325,6 +339,7 @@ public:
     void addBCShearingTest();
     
     // DerivativeTest.cpp
+    void runDerivativeTest();
     void checkGradient(Eigen::Ref<DOFStack> dq);
     void checkHessian(Eigen::Ref<DOFStack> dq);
 

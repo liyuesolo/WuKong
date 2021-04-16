@@ -70,6 +70,97 @@ void EoLRodSim<T, dim>::build5NodeTestScene()
     }
 }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildLongRodForBendingTest()
+{
+    int n_row = 4;
+    T offset_u = 1.0 / T(n_row + 1);
+    T offset_v = 1.0 / 2.0;
+    n_nodes = n_row * 3 + 2;
+    n_rods = 2 * n_row + n_row + 1;
+
+    q = DOFStack(dof, n_nodes); q.setZero();
+    rods = IV3Stack(3, n_rods); rods.setZero();
+    connections = IV4Stack(4, n_nodes);
+
+    normal = TV3Stack(3, n_rods);
+
+    TVDOF target, mask, fix_eulerian, fix_lagrangian;
+    mask.setOnes();
+    fix_eulerian.setOnes();
+    fix_lagrangian.setOnes();
+    fix_lagrangian.template segment<2>(dim).setZero();
+    fix_eulerian.template segment<dim>(0).setZero();
+    
+    target.setZero();
+
+    if constexpr (dim == 2)
+    {
+        q.col(0).template segment<dim>(0) = TV2(0.5, 0);
+        q.col(0).template segment<2>(dim) = TV2(0.5, 0);
+
+        rods.col(0) = IV3(0, 2, WEFT);
+
+        q.col(n_nodes-1).template segment<dim>(0) = TV2(0.5, 1);
+        q.col(n_nodes-1).template segment<2>(dim) = TV2(0.5, 1);
+
+        target[0] = -0.1;
+        dirichlet_data[0] = std::make_pair(target, TVDOF::Ones());
+        dirichlet_data[n_nodes-1] = std::make_pair(target, TVDOF::Ones());
+
+        rods.col(n_rods - 1) = IV3(n_nodes-3, n_nodes-1, WEFT);
+
+        connections(0, 0) = -1; connections(1, 0) = -1; connections(2, 0) = -1; connections(3, 0) = 2;
+        connections(0, n_nodes-1) = -1; connections(1, n_nodes-1) = -1; 
+        connections(2, n_nodes-1) = n_nodes-3; connections(3, n_nodes-1) = -1;
+
+        int rod_cnt = 1;
+        for(int i = 0; i < n_nodes - 2; i++)
+        {
+            q.col(i+1).template segment<dim>(0) = TV2((i%3) * offset_v, (std::ceil(i/3) + 1) * offset_u);
+            q.col(i+1).template segment<2>(dim) = TV2((i%3) * offset_v, (std::ceil(i/3) + 1) * offset_u); 
+            if(i%3 == 0)
+            {
+                dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), TVDOF::Ones());
+                rods.col(rod_cnt++) = IV3(i + 1, i + 2, WARP);
+                connections(0, i+1) = -1; connections(1, i+1) = i+2; 
+                connections(2, i+1) = i == 0 ? -1 : i - 2; 
+                connections(3, i+1) = i == n_nodes - 5 ? -1 : i+4;
+            }
+            if (i%3 == 1)
+            {
+                // dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), uv_mask);
+                // if (i == 1 || i == 10)
+                //     dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+                if (i == 1 || i == 10)
+                    dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), TVDOF::Ones());
+                else
+                    dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+                rods.col(rod_cnt++) = IV3(i + 1, i + 2, WARP);
+                if (i < n_rods - 5)
+                    rods.col(rod_cnt++) = IV3(i + 1, i + 4, WEFT);
+                connections(0, i+1) = i; connections(1, i+1) = i+2; 
+                connections(2, i+1) = i+1 == 2 ? 0 : i-2; 
+                connections(3, i+1) = i+1 == n_nodes - 3? n_nodes -1 : i+4;
+            }
+            if (i%3 == 2)
+            {
+                dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), TVDOF::Ones());
+                connections(0, i+1) = i; connections(1, i+1) = -1; 
+                connections(2, i+1) = i == 2 ? -1 : i - 2; 
+                connections(3, i+1) = i == n_nodes - 3 ? -1 : i+4;
+            }
+        }
+        assert(rod_cnt == n_rods-2);
+        std::cout << connections << std::endl;
+        // std::exit(0);
+    }
+    else
+    {
+        std::cout << "3D version this is not implemented" << std::endl;
+        std::exit(0);
+    }
+}
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)

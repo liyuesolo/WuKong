@@ -1,5 +1,26 @@
 #include "EoLRodSim.h"
 
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::runDerivativeTest()
+{
+    add_regularizor = false;
+    add_stretching=false;
+    add_penalty =false;
+    DOFStack dq(dof, n_nodes);
+    dq.setZero();
+    q(0, 3) += 0.1;
+    q(2, 3) += 0.1;
+    q(3, 1) += 0.1;
+    q(1, 4) += 0.1;
+    q(2, 2) += 0.1;
+    q(1, 3) += 0.1;
+    q(1, 0) += 0.1;
+
+    // checkGradient(dq);
+    checkHessian(dq);
+}
+
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 {
@@ -23,8 +44,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
             gradient_FD(d, n_node) = (E1 - E0) / (2*epsilon);
             std::cout << n_node << " " << gradient_FD(d, n_node) << " " << gradient(d, n_node) << std::endl;
             std::getchar();
-        }
-        
+        }   
     }
 }
 
@@ -51,6 +71,8 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
             DOFStack row_FD = (g1 - g0) / (2 * epsilon);
             for(int i = 0; i < n_nodes; i++)
             {
+                if(A.coeff(n_node * dof + d, i * dof + d) == 0 && row_FD(d, i) == 0)
+                    continue;
                 std::cout << "node i: " << n_node << " node j: " << i << " dof: " << d << " " << row_FD(d, i) << " " << A.coeff(n_node * dof + d, i * dof + d) << std::endl;
                 std::getchar();
             }
