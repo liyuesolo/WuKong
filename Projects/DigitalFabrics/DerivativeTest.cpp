@@ -3,7 +3,7 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 {
-    T epsilon = 1e-4;
+    T epsilon = 1e-5;
     DOFStack gradient(dof, n_nodes);
     gradient.setZero();
     std::cout << "checkGradient computeResidual" << std::endl;
@@ -31,7 +31,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
 {
-    T epsilon = 1e-4;
+    T epsilon = 1e-7;
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
     Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
@@ -51,7 +51,7 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
             DOFStack row_FD = (g1 - g0) / (2 * epsilon);
             for(int i = 0; i < n_nodes; i++)
             {
-                std::cout << n_node << " " << row_FD(d, i) << " " << A.coeff(i * dof + d, n_node * dof + d) << std::endl;
+                std::cout << "node i: " << n_node << " node j: " << i << " dof: " << d << " " << row_FD(d, i) << " " << A.coeff(n_node * dof + d, i * dof + d) << std::endl;
                 std::getchar();
             }
         }

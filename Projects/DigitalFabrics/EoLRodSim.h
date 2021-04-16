@@ -124,9 +124,17 @@ public:
     }
 
     template <class OP>
-    void iterateYarnCrossings(const OP& f) {
+    void iterateYarnCrossingsSerial(const OP& f) {
         for (int i = 0; i < n_nodes; i++)
             f(i, connections(0, i), connections(1, i), connections(2, i), connections(3, i));
+    }
+
+    template <class OP>
+    void iterateYarnCrossingsParallel(const OP& f) {
+        tbb::parallel_for(0, n_nodes, [&](int i)
+        {
+            f(i, connections(0, i), connections(1, i), connections(2, i), connections(3, i));
+        }); 
     }
 
     T computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
@@ -135,69 +143,17 @@ public:
         DOFStack q_temp = q + dq;
 
         T total_energy = 0;
-        VectorXT rod_energy(n_rods);
-        rod_energy.setZero();
-
-        tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        // for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
-            int node0 = rods.col(rod_idx)[0];
-            int node1 = rods.col(rod_idx)[1];
-            TV x0 = q_temp.col(node0).template segment<dim>(0);
-            TV x1 = q_temp.col(node1).template segment<dim>(0);
-            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-            TV2 delta_u = u1 - u0;
-
-            int yarn_type = rods.col(rod_idx)[2];
-
-            int uv_offset = yarn_type == WARP ? 0 : 1;
         
-            // add elastic potential here 1/2 ks delta_u * (||w|| - 1)^2
-            TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-            rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
-            
-        // }
-        });
-        total_energy += rod_energy.sum();
-
-        iterateYarnCrossings([&](int middle, int bottom, int top, int left, int right){
-            if (left != -1 && right != -1)
-            {
-                TV x2 = q_temp.col(left).template segment<dim>(0);
-                TV x1 = q_temp.col(right).template segment<dim>(0);
-                TV x0 = q_temp.col(middle).template segment<dim>(0);
-                T u2 = q_temp(dim, left);
-                T u0 = q_temp(dim, right);
-                T u1 = q_temp(dim, middle);
-                T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
-                TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
-                T theta = std::acos(-d1.dot(d2));
-                total_energy += kb * theta * theta / (u1 - u2);
-                // std::cout << theta << " " << middle << " " << (u1 - u2) << std::endl;
-            }
-            if (top != -1 && bottom != -1)
-            {
-                TV x2 = q_temp.col(bottom).template segment<dim>(0);
-                TV x1 = q_temp.col(top).template segment<dim>(0);
-                TV x0 = q_temp.col(middle).template segment<dim>(0);
-                T v2 = q_temp(dim + 1, bottom);
-                T v0 = q_temp(dim + 1, top);
-                T v1 = q_temp(dim + 1, middle);
-                T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
-                TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
-                T theta = std::acos(-d1.dot(d2));
-                total_energy += kb * theta * theta / (v1 - v2);
-                // std::cout << theta << " " << middle << " " << (v1 - v2) << std::endl;
-            }
-        });
+        total_energy += addStretchingEnergy(q_temp);
+        total_energy += addBendingEnergy(q_temp);
         
-        // add constraint term here 1/2 kc (q - q')^T (q - q')
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
                 if (std::abs(target(d)) <= 1e10 && mask(d))
                     total_energy += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
         });
+
         return total_energy;
     }
 
@@ -206,81 +162,9 @@ public:
     T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq)
     {
         const DOFStack q_temp = q + dq;
-        for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
-        {
-            int node0 = rods.col(rod_idx)[0];
-            int node1 = rods.col(rod_idx)[1];
-            TV x0 = q_temp.col(node0).template segment<dim>(0);
-            TV x1 = q_temp.col(node1).template segment<dim>(0);
-            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-            TV2 delta_u = u1 - u0;
-            
-            T l = (x1 - x0).norm();
-            TV d = (x1 - x0).normalized();
 
-            int yarn_type = rods.col(rod_idx)[2];
-
-            int uv_offset = yarn_type == WARP ? 0 : 1;
-
-            TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-            //fx
-            residual.col(node0).template segment<dim>(0) += ks * (w.norm() - 1.0) * d;
-            residual.col(node1).template segment<dim>(0) += -ks * (w.norm() - 1.0) * d;
-            //fu
-            residual.col(node0)[dim + uv_offset] += -0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
-            residual.col(node1)[dim + uv_offset] += 0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
-        }
-        
-        iterateYarnCrossings([&](int middle, int bottom, int top, int left, int right){
-            if (left != -1 && right != -1)
-            {
-                TV x2 = q_temp.col(left).template segment<dim>(0);
-                TV x1 = q_temp.col(right).template segment<dim>(0);
-                TV x0 = q_temp.col(middle).template segment<dim>(0);
-                T u2 = q_temp(dim, left);
-                T u0 = q_temp(dim, middle);
-                T u1 = q_temp(dim, right);
-                T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
-                TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
-                TM P1 = TM::Identity() - d1 * d1.transpose();
-                TM P2 = TM::Identity() - d2 * d2.transpose();
-                T theta = std::acos(-d1.dot(d2));
-
-                std::cout << theta << " " << middle << " u1 - u2 " << (u1 - u2) << std::endl;
-                TV Fx1 = -(2.0 * kb * theta) / (l1 * (u1 - u2) * std::sin(theta)) * P1 * d2;
-                TV Fx2 = -(2.0 * kb * theta) / (l2 * (u1 - u2) * std::sin(theta)) * P2 * d1;
-                residual.col(right).template segment<dim>(0) += Fx1;
-                residual.col(left).template segment<dim>(0) += Fx2;
-                residual.col(middle).template segment<dim>(0) += -(Fx1 + Fx2);
-                residual(dim, right) += kb * theta * theta / std::pow(u1-u2, 2);
-                residual(dim, left) += -kb * theta * theta / std::pow(u1-u2, 2);
-                
-            }
-            if (top != -1 && bottom != -1)
-            {
-                TV x2 = q_temp.col(bottom).template segment<dim>(0);
-                TV x1 = q_temp.col(top).template segment<dim>(0);
-                TV x0 = q_temp.col(middle).template segment<dim>(0);
-                T v2 = q_temp(dim + 1, bottom);
-                T v0 = q_temp(dim + 1, middle);
-                T v1 = q_temp(dim + 1, top);
-                T l1 = (x1 - x0).norm(), l2 = (x2 - x0).norm();
-                TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
-                TM P1 = TM::Identity() - d1 * d1.transpose();
-                TM P2 = TM::Identity() - d2 * d2.transpose();
-                T theta = std::acos(-d1.dot(d2));   
-                std::cout << theta << " " << middle << " v1 - v2 " << (v1 - v2) << std::endl;
-            
-                TV Fx1 = -(2.0 * kb * theta) / (l1 * (v1 - v2) * std::sin(theta)) * P1 * d2;
-                TV Fx2 = -(2.0 * kb * theta) / (l2 * (v1 - v2) * std::sin(theta)) * P2 * d1;
-                residual.col(top).template segment<dim>(0) += Fx1;
-                residual.col(bottom).template segment<dim>(0) += Fx2;
-                residual.col(middle).template segment<dim>(0) += -(Fx1 + Fx2);
-                residual(dim + 1, top) += kb * theta * theta / std::pow(v1-v2, 2);
-                residual(dim + 1, bottom) += -kb * theta * theta / std::pow(v1-v2, 2);
-            }
-        });
+        addStretchingForce(q_temp, residual);
+        addBendingForce(q_temp, residual);
 
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
@@ -288,6 +172,7 @@ public:
                 if (std::abs(target(d)) <= 1e10 && mask(d))
                     residual(d, node_id) -= kc * (dq(d, node_id) - target(d));
         });
+
         return residual.norm();
     }
 
@@ -315,79 +200,9 @@ public:
 
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
     {
-        DOFStack q_temp = q + dq;
-        for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
-        {
-            int node0 = rods.col(rod_idx)[0];
-            int node1 = rods.col(rod_idx)[1];
-            TV x0 = q_temp.col(node0).template segment<dim>(0);
-            TV x1 = q_temp.col(node1).template segment<dim>(0);
-            TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-            TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-            TV2 delta_u = u1 - u0;
-
-            T l = (x1 - x0).norm();
-            TV d = (x1 - x0).normalized();
-
-            TM P = TM::Identity() - d * d.transpose();
-            int yarn_type = rods.col(rod_idx)[2];
-
-            int uv_offset = yarn_type == WARP ? 0 : 1;
-
-            TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-            
-            // add streching K here
-            {
-                TM dfxdx = -1.0 * (ks/l * P - ks / std::abs(delta_u[uv_offset]) * TM::Identity());
-                TV dfxdu = -1.0 * (ks * w.norm() / std::abs(delta_u[uv_offset]) * d);
-                T dfudu = -1.0 * (-ks * w.squaredNorm() / std::abs(delta_u[uv_offset]));
-                TV dfudx = -1.0 * (ks / std::abs(delta_u[uv_offset]) * w);
-
-                for(int i = 0; i < dim; i++)
-                {
-                    //dfx/dx
-                    for(int j = 0; j < dim; j++)
-                    {
-                        //dfx0/dx0
-                        entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node0 * dof + j, dfxdx(i, j)));
-                        //dfx1/dx1
-                        entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node1 * dof + j, dfxdx(i, j)));
-                        //dfx0/dx1
-                        entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node1 * dof + j, -dfxdx(i, j)));
-                        //dfx1/dx0
-                        entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node0 * dof + j, -dfxdx(i, j)));
-                    }
-                    // dfx1/du1
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node1 * dof + dim + uv_offset, dfxdu(i)));
-                    // dfx1/du0
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node0 * dof + dim + uv_offset, -dfxdu(i)));
-                    // dfx0/du1
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node1 * dof + dim + uv_offset, -dfxdu(i)));
-                    // dfx0/du0
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node0 * dof + dim + uv_offset, dfxdu(i)));
-
-                    // dfu0/dx0
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node0 * dof + i, dfudx(i)));
-                    // dfu1/dx1
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node1 * dof + i, dfudx(i)));
-                    // dfu1/dx0
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node0 * dof + i, -dfudx(i)));
-                    // dfu0/dx1
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + i, -dfudx(i)));
-                }
-                
-                //dfu0/du0
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, dfudu));
-                //dfu1/du1
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node1 * dof + dim + uv_offset, dfudu));
-                //dfu1/du0
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, -dfudu));
-                //dfu0/du1
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + dim + uv_offset, -dfudu));
-            }   
-        }
-        
-        
+        const DOFStack q_temp = q + dq;
+        addStretchingK(q_temp, entry_K);
+        addBendingK(q_temp, entry_K);
     }
 
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
@@ -472,13 +287,15 @@ public:
             
             DOFStack residual(dof, n_nodes);
             residual.setZero();
-            q(0, 3) += 0.1;
-            q(2, 3) += 0.1;
-            q(3, 5) += 0.1;
-            q(1, 4) += 0.1;
-            q(2, 1) += 0.1;
+            // q(0, 3) += 0.1;
+            // q(2, 3) += 0.1;
+            // q(3, 1) += 0.1;
+            // q(1, 4) += 0.1;
+            // q(2, 2) += 0.1;
+            // q(1, 3) += 0.1;
+            // q(1, 0) += 0.1;
             T residual_norm = computeResidual(residual, dq);
-            checkGradient(dq);
+            // checkGradient(dq);
             // checkHessian(dq);
             // std::cout << "|g|: " << residual_norm << std::endl;
             norm = newtonLineSearch(dq, residual);
@@ -506,10 +323,22 @@ public:
     // BoundaryCondtion.cpp
     void addBCStretchingTest();
     void addBCShearingTest();
-
+    
     // DerivativeTest.cpp
     void checkGradient(Eigen::Ref<DOFStack> dq);
     void checkHessian(Eigen::Ref<DOFStack> dq);
+
+    // Bending.cpp
+    void entryHelperBending(std::vector<TV>& x, T u1, T u2, 
+        std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset);
+    void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
+    void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);
+
+    // Stretching.cpp
+    void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
+    void addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    T addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp);
 };
 
 #endif

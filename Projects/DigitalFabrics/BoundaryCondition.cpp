@@ -84,7 +84,10 @@ void EoLRodSim<T, dim>::addBCShearingTest()
         else if (std::abs(uv[0] - 1) < 1e-6)
         {
             target.setZero();
-            target[2] = 0.2;
+            if constexpr (dim == 3)
+                target[2] = 0.2;
+            else
+                target[0] = -0.1;
             mask.setOnes();
             dirichlet_data[node_id] = std::make_pair(target, mask);
         }

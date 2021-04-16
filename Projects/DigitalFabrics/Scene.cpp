@@ -8,6 +8,7 @@ void EoLRodSim<T, dim>::build5NodeTestScene()
 
     q = DOFStack(dof, n_nodes); q.setZero();
     rods = IV3Stack(3, n_rods); rods.setZero();
+    connections = IV4Stack(4, n_nodes);
 
     normal = TV3Stack(3, n_rods);
     
@@ -55,6 +56,12 @@ void EoLRodSim<T, dim>::build5NodeTestScene()
         // target.setZero();
         // mask.template segment<dim>(0) = TV::Zero();
         // dirichlet_data[4] = std::make_pair(target, mask);
+
+        connections(2, 0) = -1; connections(3, 0) = -1; connections(0, 0) = -1; connections(1, 0) = 4; 
+        connections(2, 1) = -1; connections(3, 1) = -1; connections(0, 1) = 4; connections(1, 1) = -1; 
+        connections(2, 2) = -1; connections(3, 2) = 4; connections(0, 2) = -1; connections(1, 2) = -1; 
+        connections(2, 3) = 4; connections(3, 3) = -1; connections(0, 3) = -1; connections(1, 3) = -1; 
+        connections(2, 4) = 2; connections(3, 4) = 3; connections(0, 4) = 0; connections(1, 4) = 1; 
     }
     else
     {
@@ -104,10 +111,11 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
                 rods.col(cnt++) = IV3(i*(width+1) + j, i*(width+1) + j + 1, WEFT);
             }
             IV4 neighbor = IV4::Zero();
-            neighbor[2] = (j - 1) < 0 ? -1 : j - 1;
-            neighbor[3] = (j + 1) > height + 1 ? -1 : j + 1;
-            neighbor[0] = (i - 1) < 0 ? -1 : i - 1;
-            neighbor[1] = (i + 1) > width + 1 ? -1 : i + 1;
+            neighbor[2] = (j - 1) < 0 ? -1 : i*(width+1) + j - 1;
+            neighbor[3] = (j + 1) > width  ? -1 : i*(width+1) + j + 1;
+
+            neighbor[0] = (i - 1) < 0 ? -1 : (i - 1)*(width+1) + j;
+            neighbor[1] = (i + 1) > height  ? -1 : (i + 1)*(width+1) + j;
             connections.col(idx) = neighbor;
         }
     }
