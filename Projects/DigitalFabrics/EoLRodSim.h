@@ -75,7 +75,6 @@ public:
     using IV4 = Vector<int, 4>;
     
 
-
     int dof = dim + 2;
     
     DOFStack q;
@@ -100,10 +99,16 @@ public:
     T kn = 1e-3; //
     T kb = 1.0;
     T km = 1e-3; //mass term
-    TV3 gravity = TV3::Zero();
+    T kx = 1.0; // shearing term
+
+    T L = 1;
+    
+
+    TV gravity = TV::Zero();
 
     bool add_stretching = true;
-    bool add_bending = false;
+    bool add_bending = true;
+    bool add_shearing = true;
     bool add_penalty = true;
     bool add_regularizor = true;
 
@@ -116,11 +121,6 @@ public:
         gravity[1] = -9.8;
     }
     ~EoLRodSim() {}
-    
-    //https://math.stackexchange.com/questions/99299/best-fitting-plane-given-a-set-of-points
-    void computeCrossingNormal() {}
-    
-
     
     void cout3Nodes(int n0, int n1, int n2)
     {
@@ -158,6 +158,11 @@ public:
             total_energy += addStretchingEnergy(q_temp);
         if (add_bending)
             total_energy += addBendingEnergy(q_temp);
+        if (add_shearing)
+        {
+            total_energy += addShearingEnergy(q_temp, true);
+            total_energy += addShearingEnergy(q_temp, false);
+        }
         if (add_penalty)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
             {
@@ -178,6 +183,11 @@ public:
             addStretchingForce(q_temp, residual);
         if (add_bending)
             addBendingForce(q_temp, residual);
+        if (add_shearing)
+        {
+            addShearingForce(q_temp, residual, true);
+            addShearingForce(q_temp, residual, false);
+        }
         if (add_penalty)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
             {
@@ -217,6 +227,11 @@ public:
             addStretchingK(q_temp, entry_K);
         if (add_bending)
             addBendingK(q_temp, entry_K);
+        if (add_shearing)
+        {
+            addShearingK(q_temp, entry_K, true);
+            addShearingK(q_temp, entry_K, false);
+        }
     }
 
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
@@ -282,10 +297,10 @@ public:
             }
             alpha *= T(0.5);
             cnt += 1;
-            // if (cnt > 30 && cnt % 30 == 0)
-            // {
-            //     std::cout << "line search count: " << cnt << std::endl;
-            // }
+            if (cnt > 100)
+            {
+                std::cout << "line search count: " << cnt << std::endl;
+            }
             if (cnt == line_search_max) 
                 return 1e30;
         }
@@ -330,7 +345,7 @@ public:
     
     void build5NodeTestScene();
     void buildLongRodForBendingTest();
-
+    void buildShearingTest();
     void buildRodNetwork(int width, int height);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
 
@@ -354,6 +369,11 @@ public:
     void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp);
+
+    // Shearing.cpp
+    void addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, bool top_right);  
+    void addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, bool top_right);
+    T addShearingEnergy(Eigen::Ref<const DOFStack> q_temp, bool top_right);
 };
 
 #endif

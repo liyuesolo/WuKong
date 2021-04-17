@@ -25,27 +25,39 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
     return false;
 }
 
+enum TestCase{
+    FiveNodes, Bending, Stretching, Shearing, GridScene, DerivativeCheck
+};
+
 int main()
 {
-    int test = 2;
-    if(test == 0)
+    TestCase test = Shearing;
+    if(test == FiveNodes)
     {
         assert(dim == 2);
         eol_sim.build5NodeTestScene();
     }
-    else if (test == 1)
+    else if (test == GridScene)
     {
         assert(dim == 3);
         eol_sim.buildRodNetwork(2, 2);    
         // eol_sim.addBCStretchingTest();
         eol_sim.addBCShearingTest();    
     }
-    else if (test == 2)
+    else if (test == Bending)
     {
         assert(dim == 2);
         eol_sim.buildLongRodForBendingTest();
     }
-    // eol_sim.runDerivativeTest();
+    else if (test == DerivativeCheck)
+    {
+        eol_sim.build5NodeTestScene();
+        eol_sim.runDerivativeTest();
+    } 
+    else if (test == Shearing)
+    {
+        eol_sim.buildShearingTest();
+    }
     // eol_sim.advanceOneStep();
     eol_sim.buildMeshFromRodNetwork(V, F);
 
