@@ -38,14 +38,21 @@ enum TestCase{
     PlanePBC
 };
 
+const char* test_case_names[] = {
+    "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene", "DerivativeCheck",
+    "PlanePBC"
+};
+
+
 int main()
 {
+    int n_test_case = sizeof(test_case_names)/sizeof(const char*);
+
     static TestCase test = Shearing;
     TestCase test_current = Shearing;
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {
-        std::cout << test << std::endl;
         if(test == FiveNodes)
         {
             assert(dim == 2);
@@ -72,7 +79,10 @@ int main()
         {
             eol_sim.buildShearingTest();
         }
-        
+        else if (test == PlanePBC)
+        {
+
+        }
         eol_sim.buildMeshFromRodNetwork(V, F);
         viewer.data().clear();
         viewer.data().set_mesh(V, F);
@@ -87,7 +97,13 @@ int main()
     {
         if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::Combo("TestCase", (int *)(&test_current), "FiveNodes\0Bending\0Stretching\0Shearing\0GridScene\0DerivativeCheck\0PlanePBC\0\0");
+            // std::string display_options = "";
+            // for (auto name : test_case_names)
+            //     display_options += name + "\0";
+            // display_options += "\0";
+            // std::cout << display_options << std::endl;
+            
+            ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);
             if(test != test_current)
             {
                 test = test_current;
