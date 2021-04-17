@@ -3,6 +3,12 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::build5NodeTestScene()
 {
+    add_shearing = true;
+    add_stretching = true;
+    add_bending = true;
+    add_penalty = true;
+    add_regularizor = true;
+
     n_nodes = 5;
     n_rods = 4;
 
@@ -68,11 +74,101 @@ void EoLRodSim<T, dim>::build5NodeTestScene()
         std::cout << "3D version this is not implemented" << std::endl;
         std::exit(0);
     }
+    q0 = q;
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildShearingTest()
+{
+    add_shearing = true;
+    add_stretching = true;
+    add_bending = false;
+    add_penalty = true;
+    add_regularizor = true;
+    km = 1e-1;
+    kc = 1e3;
+    kx = 1;
+
+    n_nodes = 5;
+    n_rods = 4;
+
+    q = DOFStack(dof, n_nodes); q.setZero();
+    rods = IV3Stack(3, n_rods); rods.setZero();
+    connections = IV4Stack(4, n_nodes);
+
+    normal = TV3Stack(3, n_rods);
+
+    TVDOF fix_eulerian, fix_lagrangian;
+    fix_eulerian.setOnes();
+    fix_lagrangian.setOnes();
+    fix_lagrangian.template segment<2>(dim).setZero();
+    fix_eulerian.template segment<dim>(0).setZero();
+
+    if constexpr (dim == 2)
+    {
+        q.col(0).template segment<dim>(0) = TV2(0, 0.5);
+        q.col(0).template segment<2>(dim) = TV2(0, 0.5);
+
+        q.col(1).template segment<dim>(0) = TV2(1, 0.5);
+        q.col(1).template segment<2>(dim) = TV2(1, 0.5);
+
+        q.col(2).template segment<dim>(0) = TV2(0.75, 0);
+        q.col(2).template segment<2>(dim) = TV2(0.75, 0);
+
+        q.col(3).template segment<dim>(0) = TV2(0.25, 1);
+        q.col(3).template segment<2>(dim) = TV2(0.25, 1);
+
+        q.col(4).template segment<dim>(0) = TV2(0.5, 0.5);
+        q.col(4).template segment<2>(dim) = TV2(0.5, 0.5);
+
+        rods.col(0) = IV3(0, 4, WARP);
+        rods.col(1) = IV3(4, 1, WARP);
+        rods.col(2) = IV3(2, 4, WEFT);
+        rods.col(3) = IV3(4, 3, WEFT);
+
+        normal.col(0) = TV3(0, 1, 0);
+        normal.col(1) = TV3(0, 1, 0);
+        normal.col(2) = TV3(0, -1, 0);
+        normal.col(3) = TV3(0, -1, 0);
+
+        TVDOF target, mask;
+        mask.setOnes();
+        target.setZero();
+        
+        
+        dirichlet_data[0] = std::make_pair(target, mask);
+        dirichlet_data[1] = std::make_pair(target, mask);
+        dirichlet_data[4] = std::make_pair(target, mask);
+        dirichlet_data[2] = std::make_pair(target, fix_eulerian);
+        dirichlet_data[3] = std::make_pair(target, fix_eulerian);
+
+
+        connections(2, 0) = -1; connections(3, 0) = -1; connections(0, 0) = -1; connections(1, 0) = 4; 
+        connections(2, 1) = -1; connections(3, 1) = -1; connections(0, 1) = 4; connections(1, 1) = -1; 
+        connections(2, 2) = -1; connections(3, 2) = 4; connections(0, 2) = -1; connections(1, 2) = -1; 
+        connections(2, 3) = 4; connections(3, 3) = -1; connections(0, 3) = -1; connections(1, 3) = -1; 
+        connections(2, 4) = 2; connections(3, 4) = 3; connections(0, 4) = 0; connections(1, 4) = 1; 
+    }
+    else
+    {
+        std::cout << "3D version this is not implemented" << std::endl;
+        std::exit(0);
+    }
+    q0 = q;
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildLongRodForBendingTest()
 {
+    add_shearing = false;
+    add_stretching = true;
+    add_bending = true;
+    add_penalty = true;
+    add_regularizor = true;
+
+    km = 1e-2;
+    kc = 1e2;
+
     int n_row = 4;
     T offset_u = 1.0 / T(n_row + 1);
     T offset_v = 1.0 / 2.0;
@@ -134,8 +230,8 @@ void EoLRodSim<T, dim>::buildLongRodForBendingTest()
                 //     dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
                 if (i == 1 || i == 10)
                     dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), TVDOF::Ones());
-                else
-                    dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+                // else
+                    // dirichlet_data[i+1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
                 rods.col(rod_cnt++) = IV3(i + 1, i + 2, WARP);
                 if (i < n_rods - 5)
                     rods.col(rod_cnt++) = IV3(i + 1, i + 4, WEFT);
@@ -160,6 +256,7 @@ void EoLRodSim<T, dim>::buildLongRodForBendingTest()
         std::cout << "3D version this is not implemented" << std::endl;
         std::exit(0);
     }
+    q0 = q;
 }
 
 template<class T, int dim>
@@ -210,7 +307,7 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
             connections.col(idx) = neighbor;
         }
     }
-    
+    q0 = q;
 }
 
 

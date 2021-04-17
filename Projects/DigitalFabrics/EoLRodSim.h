@@ -77,7 +77,7 @@ public:
 
     int dof = dim + 2;
     
-    DOFStack q;
+    DOFStack q, q0;
     IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
@@ -173,8 +173,6 @@ public:
 
         return total_energy;
     }
-
-
 
     T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq)
     {
@@ -339,7 +337,7 @@ public:
         implicitUpdate(dq);
         q += dq;
     }
-
+    void resetScene() { q = q0; }
 public:
     // Scene.cpp
     
