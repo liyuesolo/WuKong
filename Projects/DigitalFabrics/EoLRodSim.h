@@ -100,7 +100,7 @@ public:
     T kb = 1.0;
     T km = 1e-3; //mass term
     T kx = 1.0; // shearing term
-
+    T k_pbc = 1.0; // perodic BC term
     T L = 1;
     
 
@@ -111,17 +111,38 @@ public:
     bool add_shearing = true;
     bool add_penalty = true;
     bool add_regularizor = true;
+    bool add_pbc = false;
 
+    TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
+    
+    std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
+    // pbc_ref[direction] = (node_i, node_j)
+    std::unordered_map<int, IV2> pbc_ref;
 
 public:
 
     EoLRodSim()
     {
         gravity[1] = -9.8;
+        fix_eulerian.setOnes();
+        fix_lagrangian.setOnes();
+        fix_all.setOnes();
+        fix_u.setZero();
+        fix_v.setZero();
+        fix_v[dof-1] = 1.0;
+        fix_u[dof-2] = 1.0;
+        fix_lagrangian.template segment<2>(dim).setZero();
+        fix_eulerian.template segment<dim>(0).setZero();
     }
     ~EoLRodSim() {}
     
+    // TODO: use ... operation
+    void cout4Nodes(int n0, int n1, int n2, int n3)
+    {
+        std::cout << n0 << " " << n1 << " " << n2 << " " << n3 << std::endl;
+    }
+
     void cout3Nodes(int n0, int n1, int n2)
     {
         std::cout << n0 << " " << n1 << " " << n2 << std::endl;
@@ -131,6 +152,13 @@ public:
     void iterateDirichletData(const OP& f) {
         for (auto dirichlet: dirichlet_data){
             f(dirichlet.first, dirichlet.second.first, dirichlet.second.second);
+        } 
+    }
+
+    template <class OP>
+    void iteratePBCPairs(const OP& f) {
+        for (auto pbc_pair : pbc_pairs){
+            f(pbc_pair.first(0), pbc_pair.first(1), pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1));
         } 
     }
 
@@ -163,6 +191,8 @@ public:
             total_energy += addShearingEnergy(q_temp, true);
             total_energy += addShearingEnergy(q_temp, false);
         }
+        if (add_pbc)
+            total_energy += addPBCEnergy(q_temp);
         if (add_penalty)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
             {
@@ -186,6 +216,8 @@ public:
             addShearingForce(q_temp, residual, true);
             addShearingForce(q_temp, residual, false);
         }
+        if (add_pbc)
+            addPBCForce(q_temp, residual);
         if (add_penalty)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
             {
@@ -230,6 +262,8 @@ public:
             addShearingK(q_temp, entry_K, true);
             addShearingK(q_temp, entry_K, false);
         }
+        if (add_pbc)
+            addPBCK(q_temp, entry_K);
     }
 
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
@@ -338,14 +372,19 @@ public:
         q += dq;
     }
     void resetScene() { q = q0; }
+    
 public:
     // Scene.cpp
-    
+    void checkConnections();
     void build5NodeTestScene();
     void buildLongRodForBendingTest();
     void buildShearingTest();
+    void buildPlanePeriodicBCScene();
     void buildRodNetwork(int width, int height);
-    void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+    void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+    void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
+        Eigen::Ref<const TV3Stack> normal_tile);
 
     // BoundaryCondtion.cpp
     void addBCStretchingTest();
@@ -372,6 +411,11 @@ public:
     void addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, bool top_right);  
     void addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, bool top_right);
     T addShearingEnergy(Eigen::Ref<const DOFStack> q_temp, bool top_right);
+
+    //PeriodicBC.cpp
+    T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
+    void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
 };
 
 #endif

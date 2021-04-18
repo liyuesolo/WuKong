@@ -9,17 +9,28 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_stretching=false;
     add_penalty =false;
     add_bending = false;
-    add_shearing = true;
+    add_shearing = false;
+    add_pbc = true;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();
-    q(0, 3) += 0.1;
-    q(2, 3) += 0.1;
-    q(3, 1) += 0.1;
-    q(1, 4) += 0.1;
-    q(2, 2) += 0.1;
-    q(1, 3) += 0.1;
-    q(1, 0) += 0.1;
+    if (add_pbc)
+    {
+        q(1, 8) += 0.1;
+        q(1, 14) -= 0.1;
+        q(0, 9) -= 0.1;
+        q(0, 10) += 0.1;
+    }
+    else
+    {
+        q(0, 3) += 0.1;
+        q(2, 3) += 0.1;
+        q(3, 1) += 0.1;
+        q(1, 4) += 0.1;
+        q(2, 2) += 0.1;
+        q(1, 3) += 0.1;
+        q(1, 0) += 0.1;
+    }
 
     checkGradient(dq);
     checkHessian(dq);

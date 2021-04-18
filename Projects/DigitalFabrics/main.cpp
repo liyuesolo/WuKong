@@ -19,13 +19,17 @@ Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 
 
+static bool tileUnit = false;
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)
 {
     if (key == ' ')
     {
         eol_sim.advanceOneStep();
-        eol_sim.buildMeshFromRodNetwork(V, F);
+        if(tileUnit)
+            eol_sim.buildPeriodicNetwork(V, F);
+        else
+            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
     }
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -34,12 +38,12 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 }
 
 enum TestCase{
-    FiveNodes, Bending, Stretching, Shearing, GridScene, DerivativeCheck,
+    FiveNodes, Bending, Stretching, Shearing, GridScene,
     PlanePBC
 };
 
 const char* test_case_names[] = {
-    "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene", "DerivativeCheck",
+    "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene",
     "PlanePBC"
 };
 
@@ -47,9 +51,10 @@ const char* test_case_names[] = {
 int main()
 {
     int n_test_case = sizeof(test_case_names)/sizeof(const char*);
+    
 
-    static TestCase test = Shearing;
-    TestCase test_current = Shearing;
+    static TestCase test = FiveNodes;
+    TestCase test_current = PlanePBC;
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {
@@ -70,20 +75,15 @@ int main()
             assert(dim == 2);
             eol_sim.buildLongRodForBendingTest();
         }
-        else if (test == DerivativeCheck)
-        {
-            eol_sim.build5NodeTestScene();
-            eol_sim.runDerivativeTest();
-        } 
         else if (test == Shearing)
         {
             eol_sim.buildShearingTest();
         }
         else if (test == PlanePBC)
         {
-
+            eol_sim.buildPlanePeriodicBCScene();
         }
-        eol_sim.buildMeshFromRodNetwork(V, F);
+        eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
         viewer.data().clear();
         viewer.data().set_mesh(V, F);
     };
@@ -96,13 +96,7 @@ int main()
     menu.callback_draw_viewer_menu = [&]()
     {
         if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            // std::string display_options = "";
-            // for (auto name : test_case_names)
-            //     display_options += name + "\0";
-            // display_options += "\0";
-            // std::cout << display_options << std::endl;
-            
+        {   
             ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);
             if(test != test_current)
             {
@@ -110,17 +104,32 @@ int main()
                 setupScene(viewer);
             }
         }
+        if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
+        {   
+            if (ImGui::Checkbox("tileUnit", &tileUnit))
+            {
+                if(tileUnit)
+                    eol_sim.buildPeriodicNetwork(V, F);
+                else
+                    eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+                viewer.data().clear();
+                viewer.data().set_mesh(V, F);
+            }
+        }
         if (ImGui::Button("Solve", ImVec2(-1,0)))
         {
             eol_sim.advanceOneStep();
-            eol_sim.buildMeshFromRodNetwork(V, F);
+            if(tileUnit)
+                eol_sim.buildPeriodicNetwork(V, F);
+            else
+                eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
             viewer.data().clear();
             viewer.data().set_mesh(V, F);
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
             eol_sim.resetScene();
-            eol_sim.buildMeshFromRodNetwork(V, F);
+            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
             viewer.data().clear();
             viewer.data().set_mesh(V, F);
         }
@@ -131,5 +140,9 @@ int main()
     viewer.callback_key_down = &key_down;
     key_down(viewer,'0',0);
     viewer.launch();
+
+    //================== Run Diff Test ==================
+    // eol_sim.buildPlanePeriodicBCScene();
+    // eol_sim.runDerivativeTest();
     return 0;
 }

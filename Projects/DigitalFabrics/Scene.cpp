@@ -1,5 +1,7 @@
 #include "EoLRodSim.h"
 
+
+
 template<class T, int dim>
 void EoLRodSim<T, dim>::build5NodeTestScene()
 {
@@ -181,12 +183,8 @@ void EoLRodSim<T, dim>::buildLongRodForBendingTest()
 
     normal = TV3Stack(3, n_rods);
 
-    TVDOF target, mask, fix_eulerian, fix_lagrangian;
+    TVDOF target, mask;
     mask.setOnes();
-    fix_eulerian.setOnes();
-    fix_lagrangian.setOnes();
-    fix_lagrangian.template segment<2>(dim).setZero();
-    fix_eulerian.template segment<dim>(0).setZero();
     
     target.setZero();
 
@@ -311,9 +309,82 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
 }
 
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+{
+    auto shift_xy = [&](Eigen::Ref<DOFStack> q_shift, TV shift, int offset)
+    {
+        tbb::parallel_for(0, n_nodes, [&](int i){
+            q_shift.col(i + offset).template segment<dim>(0) += shift;
+        });
+    };
+
+    auto shift_rod = [&](Eigen::Ref<IV3Stack> rod_shift, int shift, int tile_id)
+    {
+        tbb::parallel_for(0, n_rods, [&](int i){
+            rod_shift.col(i + n_rods * tile_id).segment<2>(0) += IV2(shift, shift);
+        });
+    };
+    
+    DOFStack q_tile = q;
+    IV3Stack rods_tile = rods;
+    TV3Stack normal_tile = normal;
+
+    int n_tile = 9;
+    q_tile.conservativeResize(dof, n_nodes * n_tile);
+    rods_tile.conservativeResize(3, n_rods * n_tile);
+    normal_tile.conservativeResize(dof, n_nodes * n_tile);
+
+    tbb::parallel_for(0, n_nodes, [&](int node_idx){
+        for(int i = 1; i < n_tile; i++)
+        {
+            q_tile.col(node_idx + i * n_nodes) = q.col(node_idx);
+            normal_tile.col(node_idx + i * n_nodes) = normal.col(node_idx);
+        }
+    });
+
+    tbb::parallel_for(0, n_rods, [&](int rod_idx){
+        for(int i = 1; i < n_tile; i++)
+            rods_tile.col(rod_idx + i * n_rods) = rods.col(rod_idx);
+    });
+    
+    if constexpr (dim == 2)
+    {
+        shift_xy(q_tile, TV(-1, 0), n_nodes);
+        shift_rod(rods_tile, n_nodes, 1);
+
+        shift_xy(q_tile, TV(1, 0), 2 * n_nodes);
+        shift_rod(rods_tile, 2 * n_nodes, 2);
+
+        shift_xy(q_tile, TV(0, 1), 3 * n_nodes);
+        shift_rod(rods_tile, 3 * n_nodes, 3);
+
+        shift_xy(q_tile, TV(0, -1), 4 * n_nodes);
+        shift_rod(rods_tile, 4 * n_nodes, 4);
+
+        shift_xy(q_tile, TV(-1, 1), 5 * n_nodes);
+        shift_rod(rods_tile, 5 * n_nodes, 5);
+
+        shift_xy(q_tile, TV(-1, -1), 6 * n_nodes);
+        shift_rod(rods_tile, 6 * n_nodes, 6);
+
+        shift_xy(q_tile, TV(1, -1), 7 * n_nodes);
+        shift_rod(rods_tile, 7 * n_nodes, 7);
+
+        shift_xy(q_tile, TV(1, 1), 8 * n_nodes);
+        shift_rod(rods_tile, 8 * n_nodes, 8);
+        
+    }
+
+    buildMeshFromRodNetwork(V, F, q_tile, rods_tile, normal_tile);
+    
+    
+}
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+    Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display, 
+    Eigen::Ref<const TV3Stack> normal_tile)
 {
     int n_div = 10;
     
@@ -324,20 +395,23 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
     for(int i = 0; i < n_div; i++)
         points.col(i) = TV3(R * std::cos(theta * T(i)), 0.0, R*std::sin(theta*T(i)));
     
+    int n_ros_draw = rods_display.cols();
+    
+
     int rod_offset_v = n_div * 2 + 2;
     int rod_offset_f = n_div * 4;
-    V.resize(n_rods * rod_offset_v, 3);
+    V.resize(n_ros_draw * rod_offset_v, 3);
     V.setZero();
-    F.resize(n_rods * rod_offset_f, 3);
+    F.resize(n_ros_draw * rod_offset_f, 3);
     F.setZero();
     int rod_cnt = 0;
     
-    tbb::parallel_for(0, n_rods, [&](int rod_cnt){
+    tbb::parallel_for(0, n_ros_draw, [&](int rod_cnt){
         int rov = rod_cnt * rod_offset_v;
         int rof = rod_cnt * rod_offset_f;
 
-        TV vtx_from_TV = q.col(rods.col(rod_cnt)[0]).template segment<dim>(0);
-        TV vtx_to_TV = q.col(rods.col(rod_cnt)[1]).template segment<dim>(0);
+        TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0);
+        TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0);
 
         TV3 vtx_from = TV3::Zero();
         TV3 vtx_to = TV3::Zero();
@@ -354,10 +428,10 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
 
         
         TV3 normal_offset = TV3::Zero();
-        if (rods.col(rod_cnt)[2] == WARP)
-            normal_offset = normal.col(rod_cnt);
+        if (rods_display.col(rod_cnt)[2] == WARP)
+            normal_offset = normal_tile.col(rod_cnt);
         else
-            normal_offset = normal.col(rod_cnt);
+            normal_offset = normal_tile.col(rod_cnt);
 
         vtx_from += normal_offset * R;
         vtx_to += normal_offset * R;
@@ -400,7 +474,157 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
     });
 }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
+{
+    add_shearing = false;
+    add_stretching = true;
+    add_bending = false;
+    add_penalty = true;
+    add_regularizor = true;
+    add_pbc = true;
 
+    km = 1e-2;
+    kc = 1e3;
+    kx = 1;
+    k_pbc = 1e2;
+
+
+    n_nodes = 21;
+    n_rods = 24;
+
+    q = DOFStack(dof, n_nodes); q.setZero();
+    rods = IV3Stack(3, n_rods); rods.setZero();
+    connections = IV4Stack(4, n_nodes).setOnes() * -1;
+    
+    normal = TV3Stack(3, n_rods);
+
+    T u_delta = 1.0 / 3.0, v_delta = 1.0 / 3.0;
+    int cnt = 0;
+
+    if constexpr (dim == 2)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            q.col(cnt).template segment<dim>(0) = TV2(0, 0.5 * v_delta + i * v_delta );
+            q.col(cnt++).template segment<2>(dim) = TV2(0, 0.5 * v_delta + i * v_delta);
+
+            q.col(cnt).template segment<dim>(0) = TV2(1, 0.5 * v_delta + i * v_delta );
+            q.col(cnt++).template segment<2>(dim) = TV2(1,0.5 * v_delta + i * v_delta);
+
+            q.col(cnt).template segment<dim>(0) = TV2(0.5 * u_delta + i * u_delta, 0);
+            q.col(cnt++).template segment<2>(dim) = TV2(0.5 * u_delta + i * u_delta, 0);
+
+            q.col(cnt).template segment<dim>(0) = TV2(0.5 * u_delta + i * u_delta, 1);
+            q.col(cnt++).template segment<2>(dim) = TV2(0.5 * u_delta + i * u_delta, 1);
+
+            for (int j = 0; j < 3; j++)
+            {
+                q.col(cnt).template segment<dim>(0) = TV2(0.5 * u_delta + i * u_delta, 0.5 * v_delta + j * v_delta);
+                q.col(cnt++).template segment<2>(dim) = TV2(0.5 * u_delta + i * u_delta, 0.5 * v_delta + j * v_delta);
+            }
+        }
+        assert(cnt == n_nodes);
+        cnt = 0;
+        // rods.col(cnt++) = IV3(0, 4, WEFT); rods.col(cnt++) = IV3(4, 11, WEFT); rods.col(cnt++) = IV3(11, 18, WEFT);rods.col(cnt++) = IV3(18, 1, WEFT);
+        // rods.col(cnt++) = IV3(7, 5, WEFT); rods.col(cnt++) = IV3(5, 12, WEFT); rods.col(cnt++) = IV3(12, 19, WEFT); rods.col(cnt++) = IV3(19, 8, WEFT); 
+        // rods.col(cnt++) = IV3(14, 6, WEFT); rods.col(cnt++) = IV3(6, 13, WEFT); rods.col(cnt++) = IV3(13, 20, WEFT); rods.col(cnt++) = IV3(20, 15, WEFT); 
+
+        // rods.col(cnt++) = IV3(2, 4, WARP); rods.col(cnt++) = IV3(4, 5, WARP); rods.col(cnt++) = IV3(5, 6, WARP); rods.col(cnt++) = IV3(6, 3, WARP); 
+        // rods.col(cnt++) = IV3(9, 11, WARP); rods.col(cnt++) = IV3(11, 12, WARP); rods.col(cnt++) = IV3(19, 20, WARP); rods.col(cnt++) = IV3(20, 17, WARP); 
+        // rods.col(cnt++) = IV3(16, 18, WARP); rods.col(cnt++) = IV3(18, 19, WARP); rods.col(cnt++) = IV3(12, 13, WARP); rods.col(cnt++) = IV3(13, 10, WARP); 
+        rods.col(cnt++) = IV3(0, 4, WARP); rods.col(cnt++) = IV3(4, 11, WARP); rods.col(cnt++) = IV3(11, 18, WARP);rods.col(cnt++) = IV3(18, 1, WARP);
+        rods.col(cnt++) = IV3(7, 5, WARP); rods.col(cnt++) = IV3(5, 12, WARP); rods.col(cnt++) = IV3(12, 19, WARP); rods.col(cnt++) = IV3(19, 8, WARP); 
+        rods.col(cnt++) = IV3(14, 6, WARP); rods.col(cnt++) = IV3(6, 13, WARP); rods.col(cnt++) = IV3(13, 20, WARP); rods.col(cnt++) = IV3(20, 15, WARP); 
+
+        rods.col(cnt++) = IV3(2, 4, WEFT); rods.col(cnt++) = IV3(4, 5, WEFT); rods.col(cnt++) = IV3(5, 6, WEFT); rods.col(cnt++) = IV3(6, 3, WEFT); 
+        rods.col(cnt++) = IV3(9, 11, WEFT); rods.col(cnt++) = IV3(11, 12, WEFT); rods.col(cnt++) = IV3(19, 20, WEFT); rods.col(cnt++) = IV3(20, 17, WEFT); 
+        rods.col(cnt++) = IV3(16, 18, WEFT); rods.col(cnt++) = IV3(18, 19, WEFT); rods.col(cnt++) = IV3(12, 13, WEFT); rods.col(cnt++) = IV3(13, 10, WEFT); 
+        assert(cnt == n_rods);
+
+        auto set_left_right = [&](Eigen::Ref<IV4Stack> connections, int idx, int left){
+            connections(0, idx) = left;
+            connections(1, left) = idx;
+        };
+        auto set_top_bottom = [&](Eigen::Ref<IV4Stack> connections, int idx, int top){
+            connections(3, idx) = top;
+            connections(2, top) = idx;
+        };
+        
+
+        set_top_bottom(connections, 18, 1); set_top_bottom(connections, 19, 8); set_top_bottom(connections, 20, 15);
+        set_top_bottom(connections, 11, 18); set_top_bottom(connections, 12, 19); set_top_bottom(connections, 13, 20);
+        set_top_bottom(connections, 4, 11); set_top_bottom(connections, 5, 12); set_top_bottom(connections, 6, 13);
+        set_top_bottom(connections, 0, 4); set_top_bottom(connections, 7, 5); set_top_bottom(connections, 14, 6);
+
+        set_left_right(connections, 4, 2); set_left_right(connections, 11, 9); set_left_right(connections, 18, 16);
+        set_left_right(connections, 5, 4); set_left_right(connections, 12, 11); set_left_right(connections, 19, 18);
+        set_left_right(connections, 6, 5); set_left_right(connections, 13, 12); set_left_right(connections, 20, 19);
+        set_left_right(connections, 3, 6); set_left_right(connections, 10, 13); set_left_right(connections, 17, 20);
+
+        checkConnections();
+
+        
+        TVDOF shift_left = TVDOF::Zero(), shift_right = TVDOF::Zero();
+        shift_left[0] = -0.1;
+        shift_right[0] = 0.1;
+        dirichlet_data[4] = std::make_pair(shift_left, fix_all);
+        dirichlet_data[11] = std::make_pair(shift_left, fix_all);
+        dirichlet_data[18] = std::make_pair(shift_left, fix_all);
+
+        dirichlet_data[6] = std::make_pair(shift_right, fix_all);
+        dirichlet_data[13] = std::make_pair(shift_right, fix_all);
+        dirichlet_data[20] = std::make_pair(shift_right, fix_all);
+
+        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_v);
+        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_v);
+        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_v);
+        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_v);
+        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_v);
+        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_v);
+
+        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_u);
+
+        
+        pbc_ref[0] = IV2(0, 1);
+        pbc_ref[1] = IV2(2, 3);
+
+        pbc_pairs[IV2(7, 8)] = 0;
+        pbc_pairs[IV2(14, 15)] = 0;
+        pbc_pairs[IV2(9, 10)] = 1;
+        pbc_pairs[IV2(16, 17)] = 1;
+        
+
+    }
+    else
+    {
+        std::cout << "3D version this is not implemented" << std::endl;
+        std::exit(0);
+    }
+    q0 = q;
+
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::checkConnections()
+{
+    for(int i = 0; i < n_nodes; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (connections(j, i) >= n_nodes)
+            {
+                std::cout << "connections(" << j << ", " << i << ") is larger than " << n_nodes - 1 << std::endl;
+            }
+        }
+    }
+    std::cout << "no connection violation" << std::endl;
+}
 template class EoLRodSim<double, 3>;
 template class EoLRodSim<double, 2>;
 
