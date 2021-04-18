@@ -119,6 +119,7 @@ public:
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
     std::unordered_map<int, IV2> pbc_ref;
+    std::unordered_map<int, TVDOF> pbc_translation;
 
 public:
 
@@ -158,7 +159,9 @@ public:
     template <class OP>
     void iteratePBCPairs(const OP& f) {
         for (auto pbc_pair : pbc_pairs){
-            f(pbc_pair.first(0), pbc_pair.first(1), pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1));
+            f(pbc_pair.first(0), pbc_pair.first(1), 
+            pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
+            pbc_translation[pbc_pair.second]);
         } 
     }
 
@@ -381,7 +384,7 @@ public:
     void buildShearingTest();
     void buildPlanePeriodicBCScene();
     void buildRodNetwork(int width, int height);
-    void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+    void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);

@@ -310,7 +310,7 @@ void EoLRodSim<T, dim>::buildRodNetwork(int width, int height)
 
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
     auto shift_xy = [&](Eigen::Ref<DOFStack> q_shift, TV shift, int offset)
     {
@@ -350,35 +350,48 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
     
     if constexpr (dim == 2)
     {
-        shift_xy(q_tile, TV(-1, 0), n_nodes);
+        TV ref0_shift = q.col(pbc_ref[0](0)).template segment<dim>(0) - q.col(pbc_ref[0](1)).template segment<dim>(0);// - pbc_translation[0].template segment<dim>(0);
+        TV ref1_shift = q.col(pbc_ref[1](0)).template segment<dim>(0) - q.col(pbc_ref[1](1)).template segment<dim>(0);// - pbc_translation[1].template segment<dim>(0);
+
+        shift_xy(q_tile, ref0_shift, n_nodes);
         shift_rod(rods_tile, n_nodes, 1);
 
-        shift_xy(q_tile, TV(1, 0), 2 * n_nodes);
+        shift_xy(q_tile, ref1_shift, 2 * n_nodes);
         shift_rod(rods_tile, 2 * n_nodes, 2);
 
-        shift_xy(q_tile, TV(0, 1), 3 * n_nodes);
+        shift_xy(q_tile, -ref0_shift, 3 * n_nodes);
         shift_rod(rods_tile, 3 * n_nodes, 3);
 
-        shift_xy(q_tile, TV(0, -1), 4 * n_nodes);
+        shift_xy(q_tile, -ref1_shift, 4 * n_nodes);
         shift_rod(rods_tile, 4 * n_nodes, 4);
 
-        shift_xy(q_tile, TV(-1, 1), 5 * n_nodes);
+        shift_xy(q_tile, -ref0_shift, 5 * n_nodes);
+        shift_xy(q_tile, ref1_shift, 5 * n_nodes);
         shift_rod(rods_tile, 5 * n_nodes, 5);
 
-        shift_xy(q_tile, TV(-1, -1), 6 * n_nodes);
+        shift_xy(q_tile, -ref0_shift, 6 * n_nodes);
+        shift_xy(q_tile, -ref1_shift, 6 * n_nodes);
         shift_rod(rods_tile, 6 * n_nodes, 6);
 
-        shift_xy(q_tile, TV(1, -1), 7 * n_nodes);
+        shift_xy(q_tile, -ref1_shift, 7 * n_nodes);
+        shift_xy(q_tile, ref0_shift, 7 * n_nodes);
         shift_rod(rods_tile, 7 * n_nodes, 7);
 
-        shift_xy(q_tile, TV(1, 1), 8 * n_nodes);
+        shift_xy(q_tile, ref0_shift, 8 * n_nodes);
+        shift_xy(q_tile, ref1_shift, 8 * n_nodes);
         shift_rod(rods_tile, 8 * n_nodes, 8);
         
     }
 
     buildMeshFromRodNetwork(V, F, q_tile, rods_tile, normal_tile);
     
-    
+    C.resize(F.rows(), F.cols());
+    tbb::parallel_for(0, int(F.rows()), [&](int i){
+        if (i < n_rods * (40))
+            C.row(i) = TV3(0, 1, 0);
+        else
+            C.row(i) = TV3(1, 1, 0);
+    });
 }
 
 template<class T, int dim>
@@ -477,16 +490,17 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 {
-    add_shearing = false;
+    add_shearing = true;
     add_stretching = true;
     add_bending = false;
     add_penalty = true;
     add_regularizor = true;
     add_pbc = true;
 
-    km = 1e-2;
+    km = 1e-3;
     kc = 1e3;
-    kx = 1;
+    kx = 10.0;
+    ks = 1.0;
     k_pbc = 1e2;
 
 
@@ -526,13 +540,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         }
         assert(cnt == n_nodes);
         cnt = 0;
-        // rods.col(cnt++) = IV3(0, 4, WEFT); rods.col(cnt++) = IV3(4, 11, WEFT); rods.col(cnt++) = IV3(11, 18, WEFT);rods.col(cnt++) = IV3(18, 1, WEFT);
-        // rods.col(cnt++) = IV3(7, 5, WEFT); rods.col(cnt++) = IV3(5, 12, WEFT); rods.col(cnt++) = IV3(12, 19, WEFT); rods.col(cnt++) = IV3(19, 8, WEFT); 
-        // rods.col(cnt++) = IV3(14, 6, WEFT); rods.col(cnt++) = IV3(6, 13, WEFT); rods.col(cnt++) = IV3(13, 20, WEFT); rods.col(cnt++) = IV3(20, 15, WEFT); 
-
-        // rods.col(cnt++) = IV3(2, 4, WARP); rods.col(cnt++) = IV3(4, 5, WARP); rods.col(cnt++) = IV3(5, 6, WARP); rods.col(cnt++) = IV3(6, 3, WARP); 
-        // rods.col(cnt++) = IV3(9, 11, WARP); rods.col(cnt++) = IV3(11, 12, WARP); rods.col(cnt++) = IV3(19, 20, WARP); rods.col(cnt++) = IV3(20, 17, WARP); 
-        // rods.col(cnt++) = IV3(16, 18, WARP); rods.col(cnt++) = IV3(18, 19, WARP); rods.col(cnt++) = IV3(12, 13, WARP); rods.col(cnt++) = IV3(13, 10, WARP); 
+        
         rods.col(cnt++) = IV3(0, 4, WARP); rods.col(cnt++) = IV3(4, 11, WARP); rods.col(cnt++) = IV3(11, 18, WARP);rods.col(cnt++) = IV3(18, 1, WARP);
         rods.col(cnt++) = IV3(7, 5, WARP); rods.col(cnt++) = IV3(5, 12, WARP); rods.col(cnt++) = IV3(12, 19, WARP); rods.col(cnt++) = IV3(19, 8, WARP); 
         rods.col(cnt++) = IV3(14, 6, WARP); rods.col(cnt++) = IV3(6, 13, WARP); rods.col(cnt++) = IV3(13, 20, WARP); rods.col(cnt++) = IV3(20, 15, WARP); 
@@ -566,15 +574,20 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 
         
         TVDOF shift_left = TVDOF::Zero(), shift_right = TVDOF::Zero();
-        shift_left[0] = -0.1;
-        shift_right[0] = 0.1;
-        dirichlet_data[4] = std::make_pair(shift_left, fix_all);
-        dirichlet_data[11] = std::make_pair(shift_left, fix_all);
-        dirichlet_data[18] = std::make_pair(shift_left, fix_all);
+        // shift_left[0] = -0.1;
+        // shift_right[0] = 0.1;
+        // dirichlet_data[4] = std::make_pair(shift_left, fix_all);
+        // dirichlet_data[11] = std::make_pair(shift_left, fix_all);
+        // dirichlet_data[18] = std::make_pair(shift_left, fix_all);
 
-        dirichlet_data[6] = std::make_pair(shift_right, fix_all);
-        dirichlet_data[13] = std::make_pair(shift_right, fix_all);
-        dirichlet_data[20] = std::make_pair(shift_right, fix_all);
+        // dirichlet_data[6] = std::make_pair(shift_right, fix_all);
+        // dirichlet_data[13] = std::make_pair(shift_right, fix_all);
+        // dirichlet_data[20] = std::make_pair(shift_right, fix_all);
+        for(int i = 0; i < n_nodes; i++)
+            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
+        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
+        dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
 
         // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_v);
         // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_v);
@@ -583,19 +596,41 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_v);
         // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_v);
 
-        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_u);
+        // dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_u);
+
+        
+
+        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+        // dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
 
         
         pbc_ref[0] = IV2(0, 1);
         pbc_ref[1] = IV2(2, 3);
+        pbc_translation[0] = TVDOF::Zero();
+        pbc_translation[0][0] = -1.2;
+        pbc_translation[1] = TVDOF::Zero();
+        pbc_translation[1][1] = -1.0;
 
+        pbc_pairs[IV2(0, 1)] = 0;
         pbc_pairs[IV2(7, 8)] = 0;
         pbc_pairs[IV2(14, 15)] = 0;
+        pbc_pairs[IV2(2, 3)] = 1;
         pbc_pairs[IV2(9, 10)] = 1;
         pbc_pairs[IV2(16, 17)] = 1;
         

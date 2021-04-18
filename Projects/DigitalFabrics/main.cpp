@@ -11,15 +11,17 @@
 
 
 bool USE_VIEWER = true;
+bool SHOW_UNIT = true;
 
 EoLRodSim<T, dim> eol_sim;
 
 
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
-
+Eigen::MatrixXd C;
 
 static bool tileUnit = false;
+static bool showUnit = false;
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)
 {
@@ -27,13 +29,15 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
     {
         eol_sim.advanceOneStep();
         if(tileUnit)
-            eol_sim.buildPeriodicNetwork(V, F);
+            eol_sim.buildPeriodicNetwork(V, F, C);
         else
             eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+        viewer.data().clear();
+        viewer.data().set_mesh(V, F);
+        if (showUnit)
+            viewer.data().set_colors(C);
     }
-    viewer.data().clear();
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_face_based(true);
+    // viewer.data().set_face_based(true);
     return false;
 }
 
@@ -109,29 +113,46 @@ int main()
             if (ImGui::Checkbox("tileUnit", &tileUnit))
             {
                 if(tileUnit)
-                    eol_sim.buildPeriodicNetwork(V, F);
+                    eol_sim.buildPeriodicNetwork(V, F, C);
                 else
                     eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
                 viewer.data().clear();
                 viewer.data().set_mesh(V, F);
+                if(showUnit)
+                    viewer.data().set_colors(C);
             }
+            if (ImGui::Checkbox("showUnit", &showUnit))
+            {
+                viewer.data().clear();
+                viewer.data().set_mesh(V, F);
+                if(showUnit)
+                    viewer.data().set_colors(C);
+            }
+
         }
         if (ImGui::Button("Solve", ImVec2(-1,0)))
         {
             eol_sim.advanceOneStep();
             if(tileUnit)
-                eol_sim.buildPeriodicNetwork(V, F);
+                eol_sim.buildPeriodicNetwork(V, F, C);
             else
                 eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
             viewer.data().clear();
             viewer.data().set_mesh(V, F);
+            if(showUnit)
+                viewer.data().set_colors(C);
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
             eol_sim.resetScene();
-            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+            if(tileUnit)
+                eol_sim.buildPeriodicNetwork(V, F, C);
+            else
+                eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
             viewer.data().clear();
             viewer.data().set_mesh(V, F);
+            if(showUnit)
+                viewer.data().set_colors(C);
         }
     };
     
