@@ -82,8 +82,8 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
             TV x1 = q_temp.col(right).template segment<dim>(0);
             TV x2 = q_temp.col(left).template segment<dim>(0);
 
-            T u1 = q_temp(dim + 1, right);
-            T u2 = q_temp(dim + 1, left);
+            T u1 = q_temp(dim, right);
+            T u2 = q_temp(dim, left);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));
             // cout3Nodes(left, middle, right);
@@ -95,7 +95,7 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
                 assert(std::sin(theta));
                 std::vector<TV> x(3);
                 x[0] = x0; x[1] = x1; x[2] = x2;
-                entryHelperBending(x, u1, u2, entry_K, middle, right, left, dim + 1);
+                entryHelperBending(x, u1, u2, entry_K, middle, right, left, dim);
             }
         }
         if (top != -1 && bottom != -1)
@@ -104,8 +104,8 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(top).template segment<dim>(0);
             TV x2 = q_temp.col(bottom).template segment<dim>(0);
-            T u1 = q_temp(dim, top);
-            T u2 = q_temp(dim, bottom);
+            T u1 = q_temp(dim + 1, top);
+            T u2 = q_temp(dim + 1, bottom);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));   
             
@@ -115,7 +115,7 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
                 assert(std::sin(theta));
                 std::vector<TV> x(3);
                 x[0] = x0; x[1] = x1; x[2] = x2;
-                entryHelperBending(x, u1, u2, entry_K, middle, top, bottom, dim);
+                entryHelperBending(x, u1, u2, entry_K, middle, top, bottom, dim + 1);
             }
         }
             
@@ -133,8 +133,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(right).template segment<dim>(0);
             TV x2 = q_temp.col(left).template segment<dim>(0);
-            T u1 = q_temp(dim + 1, right);
-            T u2 = q_temp(dim + 1, left);
+            T u1 = q_temp(dim, right);
+            T u2 = q_temp(dim, left);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             
             T theta = std::acos(-d1.dot(d2));
@@ -151,8 +151,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
                 residual.col(right).template segment<dim>(0) += F.template segment<dim>(dim);
                 residual.col(left).template segment<dim>(0) += F.template segment<dim>(dim*2+1);
 
-                residual(dim + 1, right) += F[4];                    
-                residual(dim + 1, left) += F[7];
+                residual(dim, right) += F[4];                    
+                residual(dim, left) += F[7];
             }    
         }
         if (top != -1 && bottom != -1)
@@ -161,8 +161,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(top).template segment<dim>(0);
             TV x2 = q_temp.col(bottom).template segment<dim>(0);
-            T u1 = q_temp(dim, top);
-            T u2 = q_temp(dim, bottom);
+            T u1 = q_temp(dim + 1, top);
+            T u2 = q_temp(dim + 1, bottom);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             
             T theta = std::acos(-d1.dot(d2));   
@@ -179,8 +179,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
                 residual.col(top).template segment<dim>(0) += F.template segment<dim>(dim);
                 residual.col(bottom).template segment<dim>(0) += F.template segment<dim>(dim*2+1);
 
-                residual(dim, top) += F[4];                    
-                residual(dim, bottom) += F[7];
+                residual(dim + 1, top) += F[4];                    
+                residual(dim + 1, bottom) += F[7];
             }              
         }
     });
@@ -191,16 +191,17 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
     VectorXT crossing_energy(n_nodes);
     crossing_energy.setZero();
-    iterateYarnCrossingsParallel([&](int middle, int bottom, int top, int left, int right){
+    iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
         {
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(right).template segment<dim>(0);
             TV x2 = q_temp.col(left).template segment<dim>(0);
-            T u1 = q_temp(dim + 1, right);
-            T u2 = q_temp(dim + 1, left);
+            T u1 = q_temp(dim, right);
+            T u2 = q_temp(dim, left);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));
+            assert(u1 - u2);
             if(std::abs(theta) > 1e-6)
             {
                 std::vector<TV> x(3);
@@ -210,6 +211,9 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
                 T V[1];
                 #include "Maple/YarnBendV.mcg"
                 crossing_energy[middle] += V[0];
+                // cout3Nodes(left, middle, right);
+                // std::cout << "left right V[0]: " << V[0] << " std::abs(theta) " <<  std::abs(theta) << std::endl;
+                
             }
         }
         if (top != -1 && bottom != -1)
@@ -217,10 +221,11 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
             TV x0 = q_temp.col(middle).template segment<dim>(0);
             TV x1 = q_temp.col(top).template segment<dim>(0);
             TV x2 = q_temp.col(bottom).template segment<dim>(0);
-            T u1 = q_temp(dim, top);
-            T u2 = q_temp(dim, bottom);
+            T u1 = q_temp(dim + 1, top);
+            T u2 = q_temp(dim + 1, bottom);
             TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
             T theta = std::acos(-d1.dot(d2));
+            assert(u1 - u2);
             if(std::abs(theta) > 1e-6)
             {
                 std::vector<TV> x(3);
@@ -230,9 +235,13 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
                 T V[1];
                 #include "Maple/YarnBendV.mcg"
                 crossing_energy[middle] += V[0];
+                // std::cout << "top bottom V[0]: " << V[0] << std::endl;
             }
         }
     });
+    
+    // std::cout << crossing_energy.sum() << std::endl;
+    // std::cout << "crossing_energy: " << crossing_energy << std::endl;
     return crossing_energy.sum();
 }
 

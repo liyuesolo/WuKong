@@ -58,7 +58,7 @@ int main()
     
 
     static TestCase test = FiveNodes;
-    TestCase test_current = PlanePBC;
+    TestCase test_current = PlanePBC; // set to be a different from above or change the above one to be a random one
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {

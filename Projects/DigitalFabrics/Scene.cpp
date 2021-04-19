@@ -497,11 +497,11 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
     add_regularizor = true;
     add_pbc = true;
 
-    km = 1e-1;
+    km = 1e-2;
     kc = 1e3;
     kx = 1.0;
     ks = 1.0;
-    kb = 0.1;
+    kb = 1e-1;
     k_pbc = 1e4;
 
 
@@ -585,28 +585,12 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         // dirichlet_data[13] = std::make_pair(shift_right, fix_all);
         // dirichlet_data[20] = std::make_pair(shift_right, fix_all);
         
-        for(int i = 0; i < n_nodes; i++)
-            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        // for(int i = 0; i < n_nodes; i++)
+        //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             
         // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
         // dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
         // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
-
-        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_v);
-        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_v);
-        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_v);
-        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_v);
-        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_v);
-        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_v);
-
-        // dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_u);
-        // dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_u);
-
-        
 
         dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
         dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
@@ -628,8 +612,8 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 
         // define BC distance if required
         pbc_translation[0] = TVDOF::Zero();
-        pbc_translation[0][0] = -0.8;
-        // pbc_translation[0][1] = 0.5;
+        pbc_translation[0][0] = -1.2;
+        pbc_translation[0][1] = 0.5;
         pbc_translation[0][2] = -1.;
 
         // pbc_translation[1] = TVDOF::Zero();
@@ -651,6 +635,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         std::cout << "3D version this is not implemented" << std::endl;
         std::exit(0);
     }
+    
     q0 = q;
 
 }
