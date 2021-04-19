@@ -11,7 +11,6 @@
 
 
 bool USE_VIEWER = true;
-bool SHOW_UNIT = true;
 
 EoLRodSim<T, dim> eol_sim;
 
@@ -22,6 +21,7 @@ Eigen::MatrixXd C;
 
 static bool tileUnit = false;
 static bool showUnit = false;
+static bool showStretching = false;
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)
 {
@@ -129,6 +129,22 @@ int main()
                     viewer.data().set_colors(C);
             }
 
+        }
+        if (ImGui::CollapsingHeader("Deformation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("showStretching", &showStretching))
+            {
+                
+                viewer.data().clear();
+                viewer.data().set_mesh(V, F);
+                if (showStretching)
+                {
+                    eol_sim.getColorFromStretching(C);
+                    viewer.data().set_colors(C);
+                }
+                
+            }
+            
         }
         if (ImGui::Button("Solve", ImVec2(-1,0)))
         {

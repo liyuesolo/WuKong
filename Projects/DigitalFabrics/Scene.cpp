@@ -490,18 +490,19 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 {
-    add_shearing = true;
+    add_shearing = false;
     add_stretching = true;
     add_bending = false;
     add_penalty = true;
     add_regularizor = true;
     add_pbc = true;
 
-    km = 1e-3;
+    km = 1e-1;
     kc = 1e3;
-    kx = 10.0;
+    kx = 1.0;
     ks = 1.0;
-    k_pbc = 1e2;
+    kb = 0.1;
+    k_pbc = 1e4;
 
 
     n_nodes = 21;
@@ -583,11 +584,13 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         // dirichlet_data[6] = std::make_pair(shift_right, fix_all);
         // dirichlet_data[13] = std::make_pair(shift_right, fix_all);
         // dirichlet_data[20] = std::make_pair(shift_right, fix_all);
+        
         for(int i = 0; i < n_nodes; i++)
             dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
-        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
-        dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
+            
+        // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
+        // dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
+        // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
 
         // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_v);
         // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_v);
@@ -605,36 +608,43 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 
         
 
-        // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
 
-        // dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        // dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
 
-        
+        // define BC pairs
         pbc_ref[0] = IV2(0, 1);
         pbc_ref[1] = IV2(2, 3);
+
+        // define BC distance if required
         pbc_translation[0] = TVDOF::Zero();
-        pbc_translation[0][0] = -1.2;
-        pbc_translation[1] = TVDOF::Zero();
-        pbc_translation[1][1] = -1.0;
+        pbc_translation[0][0] = -0.8;
+        // pbc_translation[0][1] = 0.5;
+        pbc_translation[0][2] = -1.;
+
+        // pbc_translation[1] = TVDOF::Zero();
+        // pbc_translation[1][1] = -1.2;
+        // pbc_translation[1][3] = -1;
 
         pbc_pairs[IV2(0, 1)] = 0;
         pbc_pairs[IV2(7, 8)] = 0;
         pbc_pairs[IV2(14, 15)] = 0;
-        pbc_pairs[IV2(2, 3)] = 1;
+
+
+        // pbc_pairs[IV2(2, 3)] = 1;
         pbc_pairs[IV2(9, 10)] = 1;
         pbc_pairs[IV2(16, 17)] = 1;
         
-
     }
     else
     {

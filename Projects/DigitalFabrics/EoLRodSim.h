@@ -159,9 +159,14 @@ public:
     template <class OP>
     void iteratePBCPairs(const OP& f) {
         for (auto pbc_pair : pbc_pairs){
-            f(pbc_pair.first(0), pbc_pair.first(1), 
-            pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
-            pbc_translation[pbc_pair.second]);
+            if (pbc_translation.find(pbc_pair.second) == pbc_translation.end())
+                f(pbc_pair.first(0), pbc_pair.first(1), 
+                    pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
+                    TVDOF::Zero());
+            else
+                f(pbc_pair.first(0), pbc_pair.first(1), 
+                    pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
+                    pbc_translation[pbc_pair.second]);
         } 
     }
 
@@ -406,6 +411,7 @@ public:
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);
 
     // Stretching.cpp
+    void getColorFromStretching(Eigen::MatrixXd& C);
     void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp);
@@ -419,6 +425,8 @@ public:
     T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
     void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
+
+    
 };
 
 #endif
