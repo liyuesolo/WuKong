@@ -99,6 +99,7 @@ int main()
 
     menu.callback_draw_viewer_menu = [&]()
     {
+        menu.draw_viewer_menu();
         if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
         {   
             ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);

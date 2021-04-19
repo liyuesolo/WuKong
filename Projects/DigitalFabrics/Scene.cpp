@@ -492,12 +492,12 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 {
     add_shearing = false;
     add_stretching = true;
-    add_bending = false;
+    add_bending = true;
     add_penalty = true;
     add_regularizor = true;
     add_pbc = true;
 
-    km = 1e-2;
+    km = 1e1;
     kc = 1e3;
     kx = 1.0;
     ks = 1.0;
