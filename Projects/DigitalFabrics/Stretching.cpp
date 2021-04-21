@@ -131,45 +131,5 @@ T EoLRodSim<T, dim>::addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp)
     return rod_energy.sum();
 }
 
-template<class T, int dim>
-void EoLRodSim<T, dim>::getColorFromStretching(
-    Eigen::MatrixXd& C)
-{
-    C.resize(n_rods * 40, 3);
-    DOFStack q_temp = q - q0;
-    VectorXT rod_energy(n_rods);
-    rod_energy.setZero();
-    // tbb::parallel_for(0, n_rods, [&](int rod_idx){
-    for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
-        int node0 = rods.col(rod_idx)[0];
-        int node1 = rods.col(rod_idx)[1];
-        TV x0 = q.col(node0).template segment<dim>(0);
-        TV x1 = q.col(node1).template segment<dim>(0);
-        TV2 u0 = q.col(node0).template segment<2>(dim);
-        TV2 u1 = q.col(node1).template segment<2>(dim);
-        TV2 delta_u = u1 - u0;
-
-        int yarn_type = rods.col(rod_idx)[2];
-
-        int uv_offset = yarn_type == WARP ? 0 : 1;
-    
-        // add elastic potential here 1/2 ks delta_u * (||w|| - 1)^2
-        TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-        // rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
-        rod_energy[rod_idx] += std::abs(w.norm() - 1);
-        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
-
-    }
-    // });
-
-    if(rod_energy.maxCoeff())
-        rod_energy /= rod_energy.maxCoeff();
-    
-    tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        for(int i = 0; i < 40; i++)
-            C.row(rod_idx * 40 + i) = Eigen::Vector3d(rod_energy[rod_idx], rod_energy[rod_idx], rod_energy[rod_idx]);
-    });
-
-}
 template class EoLRodSim<double, 3>;
 template class EoLRodSim<double, 2>;
