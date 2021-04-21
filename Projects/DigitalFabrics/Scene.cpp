@@ -403,7 +403,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     add_stretching = true;
     add_bending = true;
     add_penalty = true;
-    add_regularizor = true;
+    add_regularizor = false;
     add_pbc = true;
     add_eularian_reg = true;
 
@@ -411,10 +411,10 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     km = 1e-3;
     kx = 1e-3;
     kc = 1e3;
-    ks = 1.0;
-    kb = 1e-2;
-    k_pbc = 1e8;
-    ke = 1e1;
+    ks = 1e0;
+    kb = 1e0;
+    k_pbc = 1e5;
+    ke = 1e-3;
 
 
     n_nodes = 21;
@@ -492,7 +492,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             
         // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
-        // dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
+        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
         // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
 
         dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
@@ -519,9 +519,9 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         pbc_translation[0][1] = 0.5;
         pbc_translation[0][2] = -1.;
 
-        // pbc_translation[1] = TVDOF::Zero();
-        // pbc_translation[1][1] = -1.;
-        // pbc_translation[1][3] = -1;
+        pbc_translation[1] = TVDOF::Zero();
+        pbc_translation[1][1] = -1.;
+        pbc_translation[1][3] = -1;
 
         pbc_pairs[IV2(0, 1)] = 0;
         pbc_pairs[IV2(7, 8)] = 0;

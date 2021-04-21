@@ -108,12 +108,33 @@ template<class T, int dim>
 bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
     Eigen::Ref<const DOFStack> residual, Eigen::Ref<DOFStack> ddq)
 {
+    using StiffnessMatrix = Eigen::SparseMatrix<T>;
     ddq.setZero();
-    Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
+    StiffnessMatrix A(n_nodes * dof, n_nodes * dof);
+    
+    StiffnessMatrix I(n_nodes * dof, n_nodes * dof);
+    I.setIdentity();
+
     A.setFromTriplets(entry_K.begin(), entry_K.end()); 
-    // A.setIdentity();
-    Eigen::SparseLU<Eigen::SparseMatrix<T>> solver;
-    solver.compute(A);
+
+    StiffnessMatrix H = A;
+    // Eigen::SparseLU<Eigen::SparseMatrix<T>> solver;
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<T>> solver;
+    
+    T mu = 10e-6;
+    while(true)
+    {
+        solver.compute(A);
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            // std::cout<< "indefinite" << std::endl;
+            A = H + mu * I;
+            mu *= 10;
+        }
+        else
+            break;
+    }
+    
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
     Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
     return true;

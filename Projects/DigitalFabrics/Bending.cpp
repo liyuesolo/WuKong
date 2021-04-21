@@ -14,7 +14,8 @@ void EoLRodSim<T, dim>::entryHelperBending(Eigen::Ref<const DOFStack> q_temp,
     
     TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
     T theta = std::acos(-d1.dot(d2));
-    
+
+
     if(std::abs(theta) > 1e-6)
     {
         
@@ -108,8 +109,10 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
     // ****************************** HACK ALERT ****************************** 
     T kb0 = kb;
     iteratePBCBendingPairs([&](int n0, int n1, int n2, int n3, int n4, int direction){
+        // cout5Nodes(n0, n1, n2, n3, n4);
         q_temp_hack.col(n3) -= -pbc_translation[direction+ 100];
         kb = kb * 0.5;
+        // cout3Nodes(n0, n1, n3);
         entryHelperBending(q_temp_hack, entry_K, n0, n1, n3, dim+direction);
         kb = kb0;
         entryHelperBending(q_temp_hack, entry_K, n1, n2, n3, dim+direction);

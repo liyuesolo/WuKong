@@ -15,15 +15,23 @@ class Homogenization
     using TV = Vector<T, dim>;
 
 public:
-    EoLRodSim<T, dim>& eol_sim;
+    EoLRodSim<T, dim>& sim;
 public:
-    Homogenization(EoLRodSim<T, dim>& sim) : eol_sim(sim) {}
+    Homogenization(EoLRodSim<T, dim>& eol_sim) : sim(eol_sim) {}
     ~Homogenization() {}
 
+    void initalizeSim()
+    {
+        sim.buildPlanePeriodicBCScene3x3();
+    }
 
     T YoungsModulusFromUniaxialStrain()
     {
-        
+        TV displacement = TV::Zero();
+        displacement[0] = -1.2;
+        displacement[1] = 0.5;
+        sim.setUniaxialStrain(displacement);
+        return 1.0;
     }
 };
 
