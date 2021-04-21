@@ -8,9 +8,9 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_regularizor = false;
     add_stretching=false;
     add_penalty =false;
-    add_bending = false;
+    add_bending = true;
     add_shearing = false;
-    add_pbc = true;
+    add_pbc = false;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();

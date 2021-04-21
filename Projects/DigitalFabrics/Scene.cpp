@@ -488,7 +488,7 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
+void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 {
     add_shearing = false;
     add_stretching = true;
@@ -497,12 +497,12 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
     add_regularizor = true;
     add_pbc = true;
 
-    km = 1e1;
+    km = 1e2;
+    kx = 1e-3;
     kc = 1e3;
-    kx = 1.0;
     ks = 1.0;
-    kb = 1e-1;
-    k_pbc = 1e4;
+    kb = 1e-2;
+    k_pbc = 1e8;
 
 
     n_nodes = 21;
@@ -513,9 +513,11 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
     connections = IV4Stack(4, n_nodes).setOnes() * -1;
     
     normal = TV3Stack(3, n_rods);
+    normal.setZero();
 
     T u_delta = 1.0 / 3.0, v_delta = 1.0 / 3.0;
     int cnt = 0;
+    is_end_nodes.resize(n_nodes, true);
 
     if constexpr (dim == 2)
     {
@@ -535,6 +537,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
 
             for (int j = 0; j < 3; j++)
             {
+                is_end_nodes[cnt] = false;
                 q.col(cnt).template segment<dim>(0) = TV2(0.5 * u_delta + i * u_delta, 0.5 * v_delta + j * v_delta);
                 q.col(cnt++).template segment<2>(dim) = TV2(0.5 * u_delta + i * u_delta, 0.5 * v_delta + j * v_delta);
             }
@@ -547,8 +550,8 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         rods.col(cnt++) = IV3(14, 6, WARP); rods.col(cnt++) = IV3(6, 13, WARP); rods.col(cnt++) = IV3(13, 20, WARP); rods.col(cnt++) = IV3(20, 15, WARP); 
 
         rods.col(cnt++) = IV3(2, 4, WEFT); rods.col(cnt++) = IV3(4, 5, WEFT); rods.col(cnt++) = IV3(5, 6, WEFT); rods.col(cnt++) = IV3(6, 3, WEFT); 
-        rods.col(cnt++) = IV3(9, 11, WEFT); rods.col(cnt++) = IV3(11, 12, WEFT); rods.col(cnt++) = IV3(19, 20, WEFT); rods.col(cnt++) = IV3(20, 17, WEFT); 
-        rods.col(cnt++) = IV3(16, 18, WEFT); rods.col(cnt++) = IV3(18, 19, WEFT); rods.col(cnt++) = IV3(12, 13, WEFT); rods.col(cnt++) = IV3(13, 10, WEFT); 
+        rods.col(cnt++) = IV3(9, 11, WEFT); rods.col(cnt++) = IV3(11, 12, WEFT);  rods.col(cnt++) = IV3(12, 13, WEFT); rods.col(cnt++) = IV3(13, 10, WEFT); 
+        rods.col(cnt++) = IV3(16, 18, WEFT); rods.col(cnt++) = IV3(18, 19, WEFT); rods.col(cnt++) = IV3(19, 20, WEFT); rods.col(cnt++) = IV3(20, 17, WEFT);
         assert(cnt == n_rods);
 
         auto set_left_right = [&](Eigen::Ref<IV4Stack> connections, int idx, int left){
@@ -572,18 +575,6 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         set_left_right(connections, 3, 6); set_left_right(connections, 10, 13); set_left_right(connections, 17, 20);
 
         checkConnections();
-
-        
-        TVDOF shift_left = TVDOF::Zero(), shift_right = TVDOF::Zero();
-        // shift_left[0] = -0.1;
-        // shift_right[0] = 0.1;
-        // dirichlet_data[4] = std::make_pair(shift_left, fix_all);
-        // dirichlet_data[11] = std::make_pair(shift_left, fix_all);
-        // dirichlet_data[18] = std::make_pair(shift_left, fix_all);
-
-        // dirichlet_data[6] = std::make_pair(shift_right, fix_all);
-        // dirichlet_data[13] = std::make_pair(shift_right, fix_all);
-        // dirichlet_data[20] = std::make_pair(shift_right, fix_all);
         
         // for(int i = 0; i < n_nodes; i++)
         //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
@@ -616,19 +607,52 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
         pbc_translation[0][1] = 0.5;
         pbc_translation[0][2] = -1.;
 
-        // pbc_translation[1] = TVDOF::Zero();
-        // pbc_translation[1][1] = -1.2;
-        // pbc_translation[1][3] = -1;
+        pbc_translation[1] = TVDOF::Zero();
+        pbc_translation[1][1] = -1.;
+        pbc_translation[1][3] = -1;
 
         pbc_pairs[IV2(0, 1)] = 0;
         pbc_pairs[IV2(7, 8)] = 0;
         pbc_pairs[IV2(14, 15)] = 0;
 
 
-        // pbc_pairs[IV2(2, 3)] = 1;
+        pbc_pairs[IV2(2, 3)] = 1;
         pbc_pairs[IV2(9, 10)] = 1;
         pbc_pairs[IV2(16, 17)] = 1;
         
+
+
+        // ****************************** HACK ALERT ****************************** 
+        // offset 100 to not be duplicate with the translation of PBC constraint pairs
+        pbc_translation[100] = TVDOF::Zero();
+        pbc_translation[100][0] = -1.2;
+        pbc_translation[100][1] = 0.5;
+        pbc_translation[100][2] = -1.;
+
+        pbc_translation[101] = TVDOF::Zero();
+        pbc_translation[101][1] = -1;
+        pbc_translation[101][3] = -1;
+
+        // // pbc_bending_pairs.push_back({16, 18, 19, 20, 17, 100});
+
+        pbc_bending_pairs.push_back({0, 4, 11, 18, 1, 100});
+        pbc_bending_pairs.push_back({7, 5, 12, 19, 8, 100});
+        pbc_bending_pairs.push_back({14, 6, 13, 20, 15, 100});
+
+        pbc_bending_pairs.push_back({16, 18, 19, 20, 17, 101});
+        pbc_bending_pairs.push_back({9, 11, 12, 13, 10, 101});
+        pbc_bending_pairs.push_back({2, 4, 5, 6, 3, 101});
+        for(int i = 0; i < 6; i++)
+            yarn_group.push_back({i * 4 + 0, i * 4 + 1, i * 4 + 2, i * 4 + 3});    
+        
+        
+        yarns.push_back({0, 4, 11, 18, 1, WARP});
+        yarns.push_back({7, 5, 12, 19, 8, WARP});
+        yarns.push_back({14, 6, 13, 20, 15, WARP});
+
+        yarns.push_back({16, 18, 19, 20, 17, WEFT});
+        yarns.push_back({9, 11, 12, 13, 10, WEFT});
+        yarns.push_back({2, 4, 5, 6, 3, WEFT});
     }
     else
     {
@@ -638,6 +662,120 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene()
     
     q0 = q;
 
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildPlanePeriodicBCScene1x1()
+{
+    add_shearing = false;
+    add_stretching = true;
+    add_bending = true;
+    add_penalty = true;
+    add_regularizor = true;
+    add_pbc = true;
+
+    km = 1e-1;
+    kc = 1e3;
+    kx = 1e0;
+    ks = 1.0;
+    kb = 1e-1;
+    k_pbc = 1e4;
+
+
+    n_nodes = 5;
+    n_rods = 4;
+
+    q = DOFStack(dof, n_nodes); q.setZero();
+    rods = IV3Stack(3, n_rods); rods.setZero();
+    connections = IV4Stack(4, n_nodes).setOnes() * -1;
+    
+    normal = TV3Stack(3, n_rods);
+    normal.setZero();
+    
+    int cnt = 0;
+    is_end_nodes.resize(n_nodes, false);
+
+    if constexpr (dim == 2)
+    {
+        q.col(cnt).template segment<dim>(0) = TV2(0, 0.5);
+        q.col(cnt++).template segment<2>(dim) = TV2(0, 0.5);
+        q.col(cnt).template segment<dim>(0) = TV2(1, 0.5);
+        q.col(cnt++).template segment<2>(dim) = TV2(1, 0.5);
+        q.col(cnt).template segment<dim>(0) = TV2(0.5, 0.5);
+        q.col(cnt++).template segment<2>(dim) = TV2(0.5, 0.5);
+        q.col(cnt).template segment<dim>(0) = TV2(0.5, 0);
+        q.col(cnt++).template segment<2>(dim) = TV2(0.5, 0);
+        q.col(cnt).template segment<dim>(0) = TV2(0.5, 1);
+        q.col(cnt++).template segment<2>(dim) = TV2(0.5, 1);
+
+        assert(cnt == n_nodes);
+        cnt = 0;
+        rods.col(cnt++) = IV3(3, 2, WEFT);rods.col(cnt++) = IV3(2, 4, WEFT);
+        rods.col(cnt++) = IV3(0, 2, WARP);rods.col(cnt++) = IV3(2, 1, WARP);
+
+        assert(cnt == n_rods);
+
+        auto set_left_right = [&](Eigen::Ref<IV4Stack> connections, int idx, int left){
+            connections(0, idx) = left;
+            connections(1, left) = idx;
+        };
+        auto set_top_bottom = [&](Eigen::Ref<IV4Stack> connections, int idx, int top){
+            connections(3, idx) = top;
+            connections(2, top) = idx;
+        };
+        
+        set_top_bottom(connections, 3, 2);set_top_bottom(connections, 2, 4); 
+        set_left_right(connections, 2, 0); set_left_right(connections, 1, 2);
+
+
+        checkConnections();
+
+        // for(int i = 0; i < n_nodes; i++)
+            // dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            
+        
+
+        dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[4] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        
+
+        // define BC pairs
+        pbc_ref[0] = IV2(0, 1);
+        pbc_ref[1] = IV2(3, 4);
+
+        // // define BC distance if required
+        pbc_translation[0] = TVDOF::Zero();
+        pbc_translation[0][0] = -1.5;
+        pbc_translation[0][1] = 0.5;
+        pbc_translation[0][2] = -1.;
+
+        pbc_pairs[IV2(0, 1)] = 0;
+        
+    }
+    else
+    {
+        std::cout << "3D version this is not implemented" << std::endl;
+        std::exit(0);
+    }
+    q0 = q;
+}
+
+
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
+{
+    C.resize(n_rods * 40, 3);
+    std::vector<Eigen::Vector3d> colors = {
+        Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(1, 1, 0), Eigen::Vector3d(0, 1, 0), 
+        Eigen::Vector3d(0, 1, 1), Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(1, 0, 1)};
+    
+    tbb::parallel_for(0, n_rods, [&](int rod_idx){
+        for(int i = 0; i < 40; i++)
+            C.row(rod_idx * 40 + i) = colors[std::floor(rod_idx/T(n_rod_per_yarn))];
+    });
 }
 
 template<class T, int dim>
@@ -655,6 +793,41 @@ void EoLRodSim<T, dim>::checkConnections()
     }
     std::cout << "no connection violation" << std::endl;
 }
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x)
+{
+    int n_vtx = yarns.size() * (yarns[0].size() - 1);
+    int cnt = 0;
+    X.resize(n_vtx, 3); x.resize(n_vtx, 3);
+    // tbb::parallel_for(0, (int)yarns.size(), [&](int i){
+    for (int i = 0; i < (int)yarns.size(); i++){
+        TV from = q.col(yarns[i][0]).template segment<dim>(0);
+        TV to = q.col(yarns[i][yarns[i].size()-2]).template segment<dim>(0);
+
+        int yarn_type = yarns[i][yarns[i].size()-1];
+
+        for(int j = 0; j < yarns[i].size() - 1; j++)
+        {
+            int node = yarns[i][j];
+            T u, u0;
+            u = yarn_type == WARP ? q(dim + 0, node) : q(dim + 1, node);
+            u0 = yarn_type == WARP ? q0(dim + 0, node) : q0(dim + 1, node);
+            
+            TV x_lag = from + u * (to - from);
+            TV x_eul = from + u0 * (to - from);
+            if constexpr (dim == 2)
+            {
+                X.row(cnt) = Eigen::RowVector3d(x_eul[0] - 1, 0, x_eul[1] - 1);
+                x.row(cnt) = Eigen::RowVector3d(x_lag[0] - 1, 0, x_lag[1] - 1);
+                cnt++;
+            }
+        }
+    }
+    // });
+    assert(cnt == n_vtx);
+}
+
 template class EoLRodSim<double, 3>;
 template class EoLRodSim<double, 2>;
 

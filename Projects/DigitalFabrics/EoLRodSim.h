@@ -73,6 +73,7 @@ public:
     using IV2 = Vector<int, 2>;
     using IV3 = Vector<int, 3>;
     using IV4 = Vector<int, 4>;
+    using IV5 = Vector<int, 5>;
     
 
     int dof = dim + 2;
@@ -115,11 +116,15 @@ public:
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
-    
+    std::vector<std::vector<int>> pbc_bending_pairs;
+    std::vector<std::vector<int>> yarns;
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
     std::unordered_map<int, IV2> pbc_ref;
     std::unordered_map<int, TVDOF> pbc_translation;
+
+    std::vector<std::vector<int>> yarn_group;
+    std::vector<bool> is_end_nodes;
 
 public:
 
@@ -150,11 +155,20 @@ public:
     } 
 
     template <class OP>
+    void iteratePBCBendingPairs(const OP& f) {
+        for (auto pair : pbc_bending_pairs){
+            f(pair[0], pair[1], pair[2], pair[3], pair[4], pair[5] - 100);
+        } 
+    }
+
+    template <class OP>
     void iterateDirichletData(const OP& f) {
         for (auto dirichlet: dirichlet_data){
             f(dirichlet.first, dirichlet.second.first, dirichlet.second.second);
         } 
     }
+
+    
 
     template <class OP>
     void iteratePBCPairs(const OP& f) {
@@ -309,7 +323,7 @@ public:
     }
 
 
-    T newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const DOFStack> residual, int line_search_max = 100)
+    T newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const DOFStack> residual, int line_search_max = 1000)
     {
         int nz_stretching = 16 * n_rods;
         int nz_penalty = dof * dirichlet_data.size();
@@ -320,6 +334,7 @@ public:
         std::vector<Eigen::Triplet<T>> entry_K;
         buildSystemMatrix(entry_K, dq);
         linearSolve(entry_K, residual, ddq);
+        // T norm = ddq.cwiseAbs().maxCoeff();
         T norm = ddq.norm();
         if (norm < 1e-5) return norm;
         T alpha = 1;
@@ -337,12 +352,13 @@ public:
             }
             alpha *= T(0.5);
             cnt += 1;
-            if (cnt > 100)
+            if (cnt > 500)
             {
                 std::cout << "line search count: " << cnt << std::endl;
             }
             if (cnt == line_search_max) 
                 return 1e30;
+                
         }
         return norm;    
     }
@@ -365,8 +381,10 @@ public:
             residual.setZero();
             T residual_norm = computeResidual(residual, dq);
             norm = newtonLineSearch(dq, residual);
+            // std::cout << "|g|: " << norm << std::endl;
             if (norm < newton_tol)
                 break;
+            
             cnt++;
         }
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << norm << std::endl;
@@ -383,16 +401,19 @@ public:
     
 public:
     // Scene.cpp
+    void getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x);
     void checkConnections();
     void build5NodeTestScene();
     void buildLongRodForBendingTest();
     void buildShearingTest();
-    void buildPlanePeriodicBCScene();
+    void buildPlanePeriodicBCScene3x3();
+    void buildPlanePeriodicBCScene1x1();
     void buildRodNetwork(int width, int height);
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);
+    void getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn = 4);
 
     // BoundaryCondtion.cpp
     void addBCStretchingTest();
@@ -404,11 +425,14 @@ public:
     void checkHessian(Eigen::Ref<DOFStack> dq);
 
     // Bending.cpp
-    void entryHelperBending(std::vector<TV>& x, T u1, T u2, 
+    void entryHelperBending(Eigen::Ref<const DOFStack> q_temp, 
         std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset);
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);
+    T bendingEnergySingleDirection(Eigen::Ref<const DOFStack> q_temp, int n0, int n1, int n2, int uv_offset);
+    void addBendingForceSingleDirection(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
+        int n0, int n1, int n2, int uv_offset);
 
     // Stretching.cpp
     void getColorFromStretching(Eigen::MatrixXd& C);
@@ -426,6 +450,7 @@ public:
     void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
 
+    
     
 };
 
