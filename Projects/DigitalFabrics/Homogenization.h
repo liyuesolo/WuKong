@@ -29,7 +29,7 @@ public:
     {
         TV displacement = TV::Zero();
         displacement[0] = -1.2;
-        displacement[1] = 0.5;
+        displacement[1] = -0.1;
         sim.setUniaxialStrain(displacement);
         return 1.0;
     }

@@ -405,16 +405,16 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     add_penalty = true;
     add_regularizor = false;
     add_pbc = true;
-    add_eularian_reg = true;
+    add_eularian_reg = false;
 
 
     km = 1e-3;
     kx = 1e-3;
     kc = 1e3;
-    ks = 1e0;
-    kb = 1e0;
+    ks = 1e1;
+    kb = 1e2;
     k_pbc = 1e5;
-    ke = 1e-3;
+    ke = 1e-2;
 
 
     n_nodes = 21;
@@ -516,7 +516,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         // define BC distance if required
         pbc_translation[0] = TVDOF::Zero();
         pbc_translation[0][0] = -1.2;
-        pbc_translation[0][1] = 0.5;
+        pbc_translation[0][1] = 0.0;
         pbc_translation[0][2] = -1.;
 
         pbc_translation[1] = TVDOF::Zero();
@@ -538,7 +538,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         // offset 100 to not be duplicate with the translation of PBC constraint pairs
         pbc_translation[100] = TVDOF::Zero();
         pbc_translation[100][0] = -1.2;
-        pbc_translation[100][1] = 0.5;
+        pbc_translation[100][1] = 0.0;
         pbc_translation[100][2] = -1.;
 
         pbc_translation[101] = TVDOF::Zero();

@@ -149,8 +149,8 @@ void EoLRodSim<T, dim>::getColorFromStretching(
     DOFStack q_temp = q - q0;
     VectorXT rod_energy(n_rods);
     rod_energy.setZero();
-    tbb::parallel_for(0, n_rods, [&](int rod_idx){
-    // for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
+    // tbb::parallel_for(0, n_rods, [&](int rod_idx){
+    for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
         int node0 = rods.col(rod_idx)[0];
         int node1 = rods.col(rod_idx)[1];
         TV x0 = q.col(node0).template segment<dim>(0);
@@ -167,10 +167,10 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
         // rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
         rod_energy[rod_idx] += std::abs(w.norm() - 1);
-        // std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
+        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
 
-    // }
-    });
+    }
+    // });
 
     if(rod_energy.maxCoeff())
         rod_energy /= rod_energy.maxCoeff();

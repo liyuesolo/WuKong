@@ -230,7 +230,7 @@ public:
     bool linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
         Eigen::Ref<const DOFStack> residual, Eigen::Ref<DOFStack> ddq);
     T newtonLineSearch(Eigen::Ref<DOFStack> dq, 
-        Eigen::Ref<const DOFStack> residual, int line_search_max = 1000);
+        Eigen::Ref<const DOFStack> residual, int line_search_max = 10000);
     void implicitUpdate(Eigen::Ref<DOFStack> dq);
     void advanceOneStep();
 

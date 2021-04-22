@@ -83,12 +83,12 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 
 enum TestCase{
     FiveNodes, Bending, Stretching, Shearing, GridScene,
-    PlanePBC
+    PlanePBC, FitE
 };
 
 const char* test_case_names[] = {
     "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene",
-    "PlanePBC"
+    "PlanePBC", "FitE"
 };
 
 
@@ -98,7 +98,7 @@ int main()
     
 
     static TestCase test = FiveNodes;
-    TestCase test_current = PlanePBC; // set to be a different from above or change the above one to be a random one
+    TestCase test_current = FitE; // set to be a different from above or change the above one to be a random one
 
     
 
@@ -129,14 +129,20 @@ int main()
         {
             eol_sim.buildPlanePeriodicBCScene3x3();
         }
-        eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
-        viewer.data().clear();
-        viewer.data().set_mesh(V, F);
-        if (per_yarn)
+        else if (test == FitE)
         {
-            eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            viewer.data().set_colors(C);
-        } 
+            homogenizer.initalizeSim();
+            homogenizer.YoungsModulusFromUniaxialStrain();
+        }
+        updateScreen(viewer);
+        // eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+        // viewer.data().clear();
+        // viewer.data().set_mesh(V, F);
+        // if (per_yarn)
+        // {
+        //     eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+        //     viewer.data().set_colors(C);
+        // } 
         
     };
 
