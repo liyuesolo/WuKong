@@ -118,7 +118,6 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     A.setFromTriplets(entry_K.begin(), entry_K.end()); 
 
     StiffnessMatrix H = A;
-    Eigen::SparseLU<Eigen::SparseMatrix<T>> solver_LU;
     Eigen::SimplicialLLT<Eigen::SparseMatrix<T>> solver;
 
     T mu = 10e-6;
@@ -134,7 +133,6 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
         else
             break;
     }
-    solver_LU.compute(A);
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
     Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
     return true;
@@ -152,8 +150,8 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
     linearSolve(entry_K, residual, ddq);
-    // T norm = ddq.cwiseAbs().maxCoeff();
-    T norm = ddq.norm();
+    T norm = ddq.cwiseAbs().maxCoeff();
+    // T norm = ddq.norm();
     if (norm < 1e-5) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq);

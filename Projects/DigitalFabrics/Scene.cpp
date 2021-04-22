@@ -407,16 +407,23 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     add_pbc = true;
     add_eularian_reg = false;
 
-
+    if (add_eularian_reg)
+    {
+        ks = 1e0;
+        kb = 1e0;
+        ke = 1e-2;
+    }
+    else
+    {
+        ks = 1e1;
+        kb = 1e1;
+    }
+    
     km = 1e-3;
     kx = 1e-3;
     kc = 1e3;
-    ks = 1e1;
-    kb = 1e2;
     k_pbc = 1e5;
-    ke = 1e-2;
-
-
+    
     n_nodes = 21;
     n_rods = 24;
 
@@ -492,7 +499,8 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             
         // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
-        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
+        if (!add_eularian_reg)
+            dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
         // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
 
         dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
