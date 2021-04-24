@@ -33,7 +33,7 @@ public:
         // {
         //     T E_theta = YoungsModulusFromUniaxialStrain(theta, s);
         // }
-        YoungsModulusFromUniaxialStrain(M_PI*0.8, s);
+        YoungsModulusFromUniaxialStrain(M_PI*0.2, s);
     }
 
     T YoungsModulusFromUniaxialStrain(T theta, T s)
@@ -46,7 +46,6 @@ public:
             if constexpr (dim == 2)
             {
                 strain_dir = TV(std::cos(theta), std::sin(theta));
-                // strain_dir += Xi;
                 T Dij = (Xj - Xi).dot(strain_dir);
                 T dij = Dij * s;
                 sim.pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));

@@ -8,26 +8,30 @@ end:
 
 #For initially straight rods without twisting
 
-x := matrix(3,2):
+x := matrix(3,3):
 
 
+x0 := vector(3, [x[1,1], x[1,2], 0]):
+x1 := vector(3, [x[2,1], x[2,2], 0]):
+x2 := vector(3, [x[3,1], x[3,2], 0]):
 
-x0 := vector(2, [x[1,1], x[1,2]]):
-x1 := vector(2, [x[2,1], x[2,2]]):
-x2 := vector(2, [x[3,1], x[3,2]]):
+u0 := x[1, 3]:
+u1 := x[2, 3]:
+u2 := x[3, 3]:
 
 d1 := matadd(x1,-x0):
-nrm_d1 := sqrt(dotprod(d1, d1, 'orthogonal')):
-d2 := matadd(x2,-x0):
-nrm_d2 := sqrt(dotprod(d2, d2, 'orthogonal')):
+d1N := d1 / sqrt(dotprod(d1, d1, 'orthogonal')):
+d2 := matadd(x0,-x2):
+d2N := d2 / sqrt(dotprod(d2, d2, 'orthogonal')):
 
-theta := arccos(-dotprod(d1/nrm_d1, d2/nrm_d2, 'orthogonal')):
+cos_theta := dotprod(d1N, d2N, 'orthogonal'):
+sin_theta := crossprod(d1N, d2N)[3]:
+theta := 2 * arctan(sin_theta, (1.0 + cos_theta)):
 
 W := kb * theta * theta / (u1 - u2):
 
 
-
-vx := vector(8,[x0[1],x0[2],x1[1],x1[2],u1, x2[1],x2[2],u2]):
+vx := vector(9,[x0[1],x0[2], u0, x1[1],x1[2],u1, x2[1],x2[2],u2]):
 
 F := grad(-W,vx):
 J := jacobian(F,vx):
@@ -38,4 +42,7 @@ V[1] := W:
 toC(V,"YarnBendV.mcg"):
 toC(F,"YarnBendF.mcg"):
 toC(J,"YarnBendJ.mcg"):
+
+
+NULL;
 

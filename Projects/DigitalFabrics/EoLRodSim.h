@@ -302,7 +302,7 @@ public:
     // ======================== Energy Forces and Hessian Entries ========================
     //                                             so -df/dx
     // Bending.cpp
-    void toMapleVector5Nodes(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
+    void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
         std::vector<int>& nodes, int yarn_type);
     void entryHelperBending(Eigen::Ref<const DOFStack> q_temp, 
         std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset);

@@ -16,6 +16,9 @@ def mcgToCpp(filename):
     os.system("rm " + filename)
     os.system("mv " + filename + ".tmp " + filename)
     
-mcgToCpp("YarnBendPBCV.mcg")
-mcgToCpp("YarnBendPBCF.mcg")
-mcgToCpp("YarnBendPBCJ.mcg")
+# mcgToCpp("YarnBendPBCV.mcg")
+# mcgToCpp("YarnBendPBCF.mcg")
+# mcgToCpp("YarnBendPBCJ.mcg")
+mcgToCpp("YarnBendV.mcg")
+mcgToCpp("YarnBendF.mcg")
+mcgToCpp("YarnBendJ.mcg")
