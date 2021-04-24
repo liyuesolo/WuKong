@@ -10,19 +10,19 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_penalty =false;
     add_bending = true;
     add_shearing = false;
-    add_pbc = true;
+    add_pbc = false;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();
     if (add_pbc)
     {
-        // q(1, 0) += 0.1;
-        // q(0, 0) += 0.1;
-        // q(0, 1) -= 0.1;
-        // q(0, 1) -= 0.1;
-        // q(0, 15) += 0.1;
-        // q(1, 8) += 0.1;
+        q(1, 0) += 0.1;
+        q(0, 0) += 0.1;
+        q(0, 1) -= 0.1;
+        q(0, 1) -= 0.1;
+        q(0, 15) += 0.1;
+        q(1, 8) += 0.1;
         // q(1, 14) -= 0.1;
         q(0, 9) += 0.1;
         q(1, 9) += 0.1;
@@ -40,6 +40,16 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         q(2, 2) += 0.1;
         q(1, 3) += 0.1;
         q(1, 0) += 0.1;
+
+        q(1, 0) += 0.1;
+        q(0, 0) += 0.1;
+        q(0, 1) -= 0.1;
+        q(1, 1) -= 0.1;
+        q(0, 15) += 0.1;
+        q(1, 8) += 0.1;
+        // q(1, 14) -= 0.1;
+        q(0, 9) += 0.1;
+        q(1, 9) += 0.1;
     }
 
     checkGradient(dq);
@@ -52,7 +62,8 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
     T epsilon = 1e-5;
     DOFStack gradient(dof, n_nodes);
     gradient.setZero();
-    std::cout << "checkGradient computeResidual" << std::endl;
+    std::cout << "===================== checkGradient =====================" << std::endl;
+    std::cout << "current state vector delta " << (dq).transpose() << std::endl;
     computeResidual(gradient, dq);
     DOFStack gradient_FD(dof, n_nodes);
     gradient_FD.setZero();
@@ -86,7 +97,7 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
     buildSystemMatrix(entry_K, dq);
     Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);
     A.setFromTriplets(entry_K.begin(), entry_K.end());      
-
+    // std::cout << A << std::endl;
     for(int n_node = 0; n_node < n_nodes; n_node++)
     {
         for (int d = 0; d < dof; ++d)

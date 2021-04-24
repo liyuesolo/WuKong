@@ -118,7 +118,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     A.setFromTriplets(entry_K.begin(), entry_K.end()); 
 
     StiffnessMatrix H = A;
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<T>> solver;
+    Eigen::SimplicialLLT<StiffnessMatrix> solver;
 
     T mu = 10e-6;
     while(true)
@@ -150,8 +150,8 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
     linearSolve(entry_K, residual, ddq);
-    T norm = ddq.cwiseAbs().maxCoeff();
-    // T norm = ddq.norm();
+    // T norm = ddq.cwiseAbs().maxCoeff();
+    T norm = ddq.norm();
     if (norm < 1e-5) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq);
@@ -168,9 +168,12 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         }
         alpha *= T(0.5);
         cnt += 1;
-        if (cnt > 500)
+        if (cnt > 100)
         {
-            std::cout << "line search count: " << cnt << std::endl;
+            std::cout << "!!!!!!!!!!!!!!!!!! line count: " << cnt << std::endl;
+            std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
+            checkGradient(dq_ls);
+            checkHessian(dq_ls);
         }
         if (cnt == line_search_max) 
             return 1e30;

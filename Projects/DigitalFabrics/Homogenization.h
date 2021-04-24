@@ -25,12 +25,33 @@ public:
         sim.buildPlanePeriodicBCScene3x3();
     }
 
-    T YoungsModulusFromUniaxialStrain()
+    void marcoYoungsModulusFitting()
     {
-        TV displacement = TV::Zero();
-        displacement[0] = -1.2;
-        displacement[1] = -0.1;
-        sim.setUniaxialStrain(displacement);
+        T s = 1.1;
+        int n_angles = 20;
+        // for (T theta = 0; theta < M_PI/2.0; theta += (M_PI/2.0)/(T)n_angles)
+        // {
+        //     T E_theta = YoungsModulusFromUniaxialStrain(theta, s);
+        // }
+        YoungsModulusFromUniaxialStrain(M_PI*0.8, s);
+    }
+
+    T YoungsModulusFromUniaxialStrain(T theta, T s)
+    {
+        sim.iteratePBCReferencePairs([&](int node_i, int node_j){
+            TV Xj = sim.q0.col(node_j).template segment<dim>(0);
+            TV Xi = sim.q0.col(node_i).template segment<dim>(0);
+
+            TV strain_dir = TV::Zero();
+            if constexpr (dim == 2)
+            {
+                strain_dir = TV(std::cos(theta), std::sin(theta));
+                // strain_dir += Xi;
+                T Dij = (Xj - Xi).dot(strain_dir);
+                T dij = Dij * s;
+                sim.pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
+            }
+        });
         return 1.0;
     }
 };

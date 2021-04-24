@@ -132,7 +132,7 @@ int main()
         else if (test == FitE)
         {
             homogenizer.initalizeSim();
-            homogenizer.YoungsModulusFromUniaxialStrain();
+            homogenizer.marcoYoungsModulusFitting();
         }
         updateScreen(viewer);
         // eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
@@ -238,6 +238,8 @@ int main()
 
     //================== Run Diff Test ==================
     // eol_sim.buildPlanePeriodicBCScene3x3();
+    // homogenizer.initalizeSim();
+    // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
     return 0;
 }

@@ -40,7 +40,7 @@ struct VectorPairHash
         }
         return h;
     }
-};
+};  
 
 
 template<class T, int dim>
@@ -99,6 +99,7 @@ public:
     T kc = 1e2;  //constraint term
     T kn = 1e-3; //
     T kb = 1.0;
+    T kb_penalty = 1.0;
     T km = 1e-3; //mass term
     T kx = 1.0; // shearing term
     T k_pbc = 1.0; // perodic BC term
@@ -122,8 +123,11 @@ public:
     std::vector<std::vector<int>> yarns;
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
-    std::unordered_map<int, IV2> pbc_ref;
+    // std::unordered_map<int, IV2> pbc_ref;
+    std::vector<std::pair<int, IV2>> pbc_ref;
     std::unordered_map<int, TVDOF> pbc_translation;
+
+    std::vector<std::pair<IV2, std::pair<TV, T>>> pbc_strain_data;
 
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
@@ -161,10 +165,20 @@ public:
         std::cout << n0 << " " << n1 << " " << n2 << std::endl;
     } 
 
+    // template <class OP>
+    // void iteratePBCBendingPairs(const OP& f) {
+    //     for (auto pair : pbc_bending_pairs){
+    //         f(pair[0], pair[1], pair[2], pair[3], pair[4], pair[5] - 100);
+    //     } 
+    // }
+
     template <class OP>
     void iteratePBCBendingPairs(const OP& f) {
         for (auto pair : pbc_bending_pairs){
-            f(pair[0], pair[1], pair[2], pair[3], pair[4], pair[5] - 100);
+            std::vector<int> node_ids;
+            for(int i = 0; i < pair.size() - 1; i++)
+                node_ids.push_back(pair[i]);
+            f(node_ids, pair[pair.size() - 1]);
         } 
     }
 
@@ -175,19 +189,36 @@ public:
         } 
     }
 
+    // template <class OP>
+    // void iteratePBCPairs(const OP& f) {
+    //     for (auto pbc_pair : pbc_pairs){
+    //         if (pbc_translation.find(pbc_pair.second) == pbc_translation.end())
+    //             f(pbc_pair.first(0), pbc_pair.first(1), 
+    //                 pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
+    //                 TVDOF::Zero());
+    //         else
+    //             f(pbc_pair.first(0), pbc_pair.first(1), 
+    //                 pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
+    //                 pbc_translation[pbc_pair.second]);
+    //     } 
+    // }
+
     template <class OP>
-    void iteratePBCPairs(const OP& f) {
-        for (auto pbc_pair : pbc_pairs){
-            if (pbc_translation.find(pbc_pair.second) == pbc_translation.end())
-                f(pbc_pair.first(0), pbc_pair.first(1), 
-                    pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
-                    TVDOF::Zero());
-            else
-                f(pbc_pair.first(0), pbc_pair.first(1), 
-                    pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
-                    pbc_translation[pbc_pair.second]);
+    void iteratePBCReferencePairs(const OP& f) {
+        for (auto data : pbc_ref){
+            f(data.second(0), data.second(1));
         } 
     }
+
+    template <class OP>
+    void iteratePBCStrainData(const OP& f) {
+        for (auto data : pbc_strain_data){
+            f(data.first(0), data.first(1), data.second.first, data.second.second);
+        } 
+    }
+
+    
+    
 
     template <class OP>
     void iterateYarnCrossingsSerial(const OP& f) {
@@ -271,6 +302,8 @@ public:
     // ======================== Energy Forces and Hessian Entries ========================
     //                                             so -df/dx
     // Bending.cpp
+    void toMapleVector5Nodes(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes, int yarn_type);
     void entryHelperBending(Eigen::Ref<const DOFStack> q_temp, 
         std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset);
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  

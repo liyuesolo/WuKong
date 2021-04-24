@@ -103,29 +103,26 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
                 entryHelperBending(q_temp, entry_K, middle, top, bottom, dim+1);
     });
-
-    DOFStack q_temp_hack = q_temp;
-
-    // ****************************** HACK ALERT ****************************** 
-    T kb0 = kb;
-    iteratePBCBendingPairs([&](int n0, int n1, int n2, int n3, int n4, int direction){
-        // cout5Nodes(n0, n1, n2, n3, n4);
-        q_temp_hack.col(n3) -= -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        // cout3Nodes(n0, n1, n3);
-        entryHelperBending(q_temp_hack, entry_K, n0, n1, n3, dim+direction);
-        kb = kb0;
-        entryHelperBending(q_temp_hack, entry_K, n1, n2, n3, dim+direction);
-        q_temp_hack.col(n3) += -pbc_translation[direction+ 100];
-        q_temp_hack.col(n1) += -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        entryHelperBending(q_temp_hack, entry_K, n4, n1, n3, dim+direction);
-        kb = kb0;
-        entryHelperBending(q_temp_hack, entry_K, n3, n1, n2, dim+direction);
-        q_temp_hack.col(n1) -= -pbc_translation[direction+ 100];
+    
+    iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
+        int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;
+        std::vector<Vector<T, dim + 1>> x(nodes.size());
+        toMapleVector5Nodes(x, q_temp, nodes, yarn_type);
+        T J[15][15];
+        memset(J, 0, sizeof(J));
+        #include "Maple/YarnBendPBCJ.mcg"
+        for(int k = 0; k < nodes.size(); k++)
+            for(int l = 0; l < nodes.size(); l++)
+                for(int i = 0; i < dim + 1; i++)
+                    for (int j = 0; j < dim + 1; j++)
+                        {
+                            int u_offset = i == dim ? dim + yarn_type : i;
+                            int v_offset = j == dim ? dim + yarn_type : j;
+    
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + u_offset, nodes[l] * dof + v_offset, -J[k*(dim + 1) + i][l * (dim + 1) + j]));
+                        }
     });
     
-    // std::cout << "K done" << std::endl;
 }
 
 template<class T, int dim>
@@ -141,7 +138,6 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
     TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
     
     T theta = std::acos(-d1.dot(d2));
-    // std::cout << theta << std::endl;
     if(std::abs(theta) > 1e-6)
     {
         std::vector<TV> x(3);
@@ -172,23 +168,24 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
                 addBendingForceSingleDirection(q_temp, residual, middle, top, bottom, 1);
     });   
 
-    DOFStack q_temp_hack = q_temp;
-    T kb0 = kb;
-    // ****************************** HACK ALERT ****************************** 
-    iteratePBCBendingPairs([&](int n0, int n1, int n2, int n3, int n4, int direction){
-        q_temp_hack.col(n3) -= -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        addBendingForceSingleDirection(q_temp_hack, residual, n0, n1, n3, direction);
-        kb = kb0;
-        addBendingForceSingleDirection(q_temp_hack, residual, n1, n2, n3, direction);
-        q_temp_hack.col(n3) += -pbc_translation[direction+ 100];
-        q_temp_hack.col(n1) += -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        addBendingForceSingleDirection(q_temp_hack, residual, n4, n1, n3, direction);
-        kb = kb0;
-        addBendingForceSingleDirection(q_temp_hack, residual, n3, n1, n2, direction);
-        q_temp_hack.col(n1) -= -pbc_translation[direction+ 100];
+    iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
+        int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;
+        std::vector<Vector<T, dim + 1>> x(nodes.size());
+        toMapleVector5Nodes(x, q_temp, nodes, yarn_type);
+        Vector<T, 15> F;
+        F.setZero();
+        #include "Maple/YarnBendPBCF.mcg"
+        
+        int cnt = 0;
+        for (int node : nodes)
+        {
+            
+            residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*(dim+1));
+            residual(dim + yarn_type, node) += F[cnt*(dim+1)+dim];
+            cnt++;
+        }
     });
+
 }
 
 template<class T, int dim>
@@ -200,10 +197,9 @@ T EoLRodSim<T, dim>::bendingEnergySingleDirection(Eigen::Ref<const DOFStack> q_t
     T u1 = q_temp(dim + uv_offset, n1);
     T u2 = q_temp(dim + uv_offset, n2);
     TV d1 = (x1 - x0).normalized(), d2 = (x2 - x0).normalized();
+    
     T theta = std::acos(-d1.dot(d2));
-    
     assert(u1 - u2);
-    
     if(std::abs(theta) > 1e-6)
     {
         std::vector<TV> x(3);
@@ -218,12 +214,30 @@ T EoLRodSim<T, dim>::bendingEnergySingleDirection(Eigen::Ref<const DOFStack> q_t
     return 0;
 }
 
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::toMapleVector5Nodes(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
+    std::vector<int>& nodes, int yarn_type)
+{
+    int cnt = 0;
+    for (int node : nodes)
+    {
+        Vector<T, dim + 1> xu;
+        xu.template segment<dim>(0) = q_temp.col(node).template segment<dim>(0);
+        xu[dim] = q_temp(dim + yarn_type, node);
+        x[cnt++] = xu;
+    }
+}
+
+
 template<class T, int dim>
 T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
+    T energy = 0.0;
     
     VectorXT crossing_energy(n_nodes);
     crossing_energy.setZero();
+     
     iterateYarnCrossingsParallel([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
         {
@@ -235,30 +249,18 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
                 crossing_energy[middle] += bendingEnergySingleDirection(q_temp, middle, top, bottom, 1);
     });
-    T before = crossing_energy.sum();
-    DOFStack q_temp_hack = q_temp;
-
-    // ****************************** HACK ALERT ****************************** 
-    T kb0 = kb;
-    iteratePBCBendingPairs([&](int n0, int n1, int n2, int n3, int n4, int direction){
-        q_temp_hack.col(n3) -= -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        crossing_energy[n0] += bendingEnergySingleDirection(q_temp_hack, n0, n1, n3, direction);
-        kb = kb0;
-        crossing_energy[n1] += bendingEnergySingleDirection(q_temp_hack, n1, n2, n3, direction);
-        q_temp_hack.col(n3) += -pbc_translation[direction+ 100];
-        q_temp_hack.col(n1) += -pbc_translation[direction+ 100];
-        kb = kb * 0.5;
-        crossing_energy[n4] += bendingEnergySingleDirection(q_temp_hack, n4, n1, n3, direction);
-        kb = kb0;
-        crossing_energy[n3] += bendingEnergySingleDirection(q_temp_hack, n3, n1, n2, direction);
-        q_temp_hack.col(n1) -= -pbc_translation[direction+ 100];
+    energy += crossing_energy.sum();
+    T before = energy;
+    iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
+        int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;
+        std::vector<Vector<T, dim + 1>> x(nodes.size());
+        toMapleVector5Nodes(x, q_temp, nodes, yarn_type);
+        T V[1];
+        #include "Maple/YarnBendPBCV.mcg"
+        energy += V[0];
     });
-    
-    // std::cout << "middle rod: " << crossing_energy.sum() - before << std::endl;
-    // std::cout << crossing_energy.sum() << std::endl;
-    // std::cout << "crossing_energy: " << crossing_energy << std::endl;
-    return crossing_energy.sum();
+    // std::cout << energy - before << std::endl;
+    return energy;
 }
 
 template class EoLRodSim<double, 3>;
