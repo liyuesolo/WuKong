@@ -350,8 +350,8 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
     
     if constexpr (dim == 2)
     {
-        TV ref0_shift = q.col(pbc_ref[0].second(0)).template segment<dim>(0) - q.col(pbc_ref[0].second(1)).template segment<dim>(0);// - pbc_translation[0].template segment<dim>(0);
-        TV ref1_shift = q.col(pbc_ref[3].second(0)).template segment<dim>(0) - q.col(pbc_ref[3].second(1)).template segment<dim>(0);// - pbc_translation[1].template segment<dim>(0);
+        TV ref0_shift = q.col(pbc_ref_unique[0](0)).template segment<dim>(0) - q.col(pbc_ref_unique[0](1)).template segment<dim>(0);
+        TV ref1_shift = q.col(pbc_ref_unique[1](0)).template segment<dim>(0) - q.col(pbc_ref_unique[1](1)).template segment<dim>(0);
 
         shift_xy(q_tile, ref0_shift, n_nodes);
         shift_rod(rods_tile, n_nodes, 1);
@@ -488,6 +488,9 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 
         checkConnections();
         
+        pbc_ref_unique.push_back(IV2(0, 1));
+        pbc_ref_unique.push_back(IV2(2, 3));
+
         // for(int i = 0; i < n_nodes; i++)
         //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             

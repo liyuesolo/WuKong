@@ -13,6 +13,7 @@ class Homogenization
     using DOFStack = Matrix<T, dim + 2, Eigen::Dynamic>;
     using IV2 = Vector<int, 2>;
     using TV = Vector<T, dim>;
+    using TM = Matrix<T, dim, dim>;
 
 public:
     EoLRodSim<T, dim>& sim;
@@ -23,35 +24,43 @@ public:
     void initalizeSim()
     {
         sim.buildPlanePeriodicBCScene3x3();
+        TV strain_dir;
+        sim.setUniaxialStrain(0.94, 1.1, strain_dir);
     }
+
+    
 
     void marcoYoungsModulusFitting()
     {
         T s = 1.1;
         int n_angles = 20;
-        // for (T theta = 0; theta < M_PI/2.0; theta += (M_PI/2.0)/(T)n_angles)
-        // {
-        //     T E_theta = YoungsModulusFromUniaxialStrain(theta, s);
-        // }
-        YoungsModulusFromUniaxialStrain(M_PI*0.2, s);
+        T cycle = 2.0 * M_PI;
+        std::vector<T> thetas, youngs_moduli;
+        for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+        {
+            thetas.push_back(theta);
+            T youngs_modulus = YoungsModulusFromUniaxialStrain(theta, s);
+            // std::cout << youngs_modulus << std::endl;
+            youngs_moduli.push_back(youngs_modulus);
+        }
+        for(T theta : thetas)
+            std::cout << theta << " ";
+        std::cout << std::endl;
+        for(T youngs_modulus : youngs_moduli)
+            std::cout << youngs_modulus << " ";
+        std::cout << std::endl;
     }
 
     T YoungsModulusFromUniaxialStrain(T theta, T s)
     {
-        sim.iteratePBCReferencePairs([&](int node_i, int node_j){
-            TV Xj = sim.q0.col(node_j).template segment<dim>(0);
-            TV Xi = sim.q0.col(node_i).template segment<dim>(0);
-
-            TV strain_dir = TV::Zero();
-            if constexpr (dim == 2)
-            {
-                strain_dir = TV(std::cos(theta), std::sin(theta));
-                T Dij = (Xj - Xi).dot(strain_dir);
-                T dij = Dij * s;
-                sim.pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
-            }
-        });
-        return 1.0;
+        TV strain_dir;
+        sim.setUniaxialStrain(theta, s, strain_dir);
+        sim.advanceOneStep();
+        TM sigma;
+        sim.computeMacroStress(sigma);
+        T youngs_modulus = strain_dir.dot(sigma * strain_dir);
+        sim.resetScene();
+        return youngs_modulus;
     }
 };
 

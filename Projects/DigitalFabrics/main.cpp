@@ -132,18 +132,9 @@ int main()
         else if (test == FitE)
         {
             homogenizer.initalizeSim();
-            homogenizer.marcoYoungsModulusFitting();
+            // homogenizer.marcoYoungsModulusFitting();
         }
         updateScreen(viewer);
-        // eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
-        // viewer.data().clear();
-        // viewer.data().set_mesh(V, F);
-        // if (per_yarn)
-        // {
-        //     eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-        //     viewer.data().set_colors(C);
-        // } 
-        
     };
 
     igl::opengl::glfw::Viewer viewer;
@@ -241,5 +232,8 @@ int main()
     // homogenizer.initalizeSim();
     // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
+
+    // homogenizer.initalizeSim();
+    // homogenizer.marcoYoungsModulusFitting();
     return 0;
 }

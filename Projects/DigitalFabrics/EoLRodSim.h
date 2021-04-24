@@ -123,9 +123,9 @@ public:
     std::vector<std::vector<int>> yarns;
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
-    // std::unordered_map<int, IV2> pbc_ref;
     std::vector<std::pair<int, IV2>> pbc_ref;
-    std::unordered_map<int, TVDOF> pbc_translation;
+
+    std::vector<IV2> pbc_ref_unique;
 
     std::vector<std::pair<IV2, std::pair<TV, T>>> pbc_strain_data;
 
@@ -206,7 +206,7 @@ public:
     template <class OP>
     void iteratePBCReferencePairs(const OP& f) {
         for (auto data : pbc_ref){
-            f(data.second(0), data.second(1));
+            f(data.first, data.second(0), data.second(1));
         } 
     }
 
@@ -268,8 +268,10 @@ public:
     void resetScene() { q = q0; }
     
 public:
-    // Config.cpp
-    void setUniaxialStrain(TV displacement);
+    // Elasticity.cpp
+    void setUniaxialStrain(T theta, T s, TV& strain_dir);
+    void computeMacroStress(TM& sigma);
+    
 
     // Scene.cpp 
     void checkConnections();
