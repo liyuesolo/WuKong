@@ -42,8 +42,8 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma)
 
     TM F_macro = x * X.inverse();
 
-    TM strain_marco = 0.5 * (F_macro.transpose() * F_macro) - TM::Identity();
-    // std::cout << strain_marco << std::endl;
+    TM strain_marco = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+    std::cout << "macro green strain " << strain_marco << std::endl;
     
 
     TM R90 = TM::Zero();
@@ -54,6 +54,8 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma)
     }
 
     TV n0 = (R90 * (xj - xi)).normalized(), n1 = (R90 * (xl - xk)).normalized();
+
+    // std::cout << n0.dot(xj - xi) << " " << n1.dot(xl - xk) << std::endl;
 
     DOFStack f(dof, n_nodes);
     f.setZero();

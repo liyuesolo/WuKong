@@ -25,10 +25,8 @@ public:
     {
         sim.buildPlanePeriodicBCScene3x3();
         TV strain_dir;
-        sim.setUniaxialStrain(0.94, 1.1, strain_dir);
+        sim.setUniaxialStrain(0.628319, 1.1, strain_dir);
     }
-
-    
 
     void marcoYoungsModulusFitting()
     {
@@ -56,6 +54,7 @@ public:
         TV strain_dir;
         sim.setUniaxialStrain(theta, s, strain_dir);
         sim.advanceOneStep();
+        strain_dir.normalize(); 
         TM sigma;
         sim.computeMacroStress(sigma);
         T youngs_modulus = strain_dir.dot(sigma * strain_dir);

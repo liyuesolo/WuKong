@@ -25,6 +25,7 @@ option(LIBIGL_WITH_TRIANGLE          "Use Triangle"                 OFF)
 option(LIBIGL_WITH_TETGEN            "Use Tetgen"         OFF)
 option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"           ON)
 option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    ON)
+option(LIBIGL_WITH_PNG               "Use PNG"                      ON)
 option(LIBIGL_WITH_XML               "Use XML"                      ON)
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)

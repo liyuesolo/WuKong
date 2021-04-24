@@ -2,7 +2,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
-
+#include <igl/png/writePNG.h>
 #include "EoLRodSim.h"
 #include "Homogenization.h"
 
@@ -83,12 +83,12 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 
 enum TestCase{
     FiveNodes, Bending, Stretching, Shearing, GridScene,
-    PlanePBC, FitE
+    PlanePBC, FitE, FitEBatch
 };
 
 const char* test_case_names[] = {
     "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene",
-    "PlanePBC", "FitE"
+    "PlanePBC", "FitE", "FitEBatch"
 };
 
 
@@ -129,6 +129,11 @@ int main()
         {
             eol_sim.buildPlanePeriodicBCScene3x3();
         }
+        else if (test == FitEBatch)
+        {
+            homogenizer.initalizeSim();
+            // homogenizer.marcoYoungsModulusFitting();
+        }
         else if (test == FitE)
         {
             homogenizer.initalizeSim();
@@ -140,92 +145,152 @@ int main()
     igl::opengl::glfw::Viewer viewer;
     
     igl::opengl::glfw::imgui::ImGuiMenu menu;
-    viewer.plugins.push_back(&menu);
-
-    menu.callback_draw_viewer_menu = [&]()
+    
+    if (test_current == FitEBatch)
     {
-        // menu.draw_viewer_menu();
-        if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
-        {   
-            ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);
-            if(test != test_current)
-            {
-                test = test_current;
-                setupScene(viewer);
-            }
-        }
-        if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
-        {   
-            if (ImGui::Checkbox("TileUnit", &tileUnit))
-            {
-                updateScreen(viewer);
-            }
-            // if (ImGui::Checkbox("ShowUnit", &showUnit))
-            // {
-            //     viewer.data().clear();
-            //     viewer.data().set_mesh(V, F);
-            //     if(showUnit)
-            //         viewer.data().set_colors(C);
-            //     if (per_yarn)
-            //     {
-            //         eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            //         viewer.data().set_colors(C);
-            //     } 
-            // }
-            if (ImGui::Checkbox("ShowIndex", &show_index))
-            {
-                if(show_index)
+        menu.callback_draw_viewer_menu = [&](){};
+    }
+    else
+    {
+        viewer.plugins.push_back(&menu);
+        menu.callback_draw_viewer_menu = [&]()
+        {
+            
+            // menu.draw_viewer_menu();
+            if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
+            {   
+                ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);
+                if(test != test_current)
                 {
-                    for (int i = 0; i < eol_sim.n_nodes; i++)
-                        viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i)-1, 0, eol_sim.q(1, i)-1), std::to_string(i));
-                    viewer.data().show_custom_labels = true;
+                    test = test_current;
+                    setupScene(viewer);
                 }
             }
-            if (ImGui::Checkbox("ShowEulerianRest", &show_original))
-            {
-                
-                updateScreen(viewer);
-            }
-        }
-        if (ImGui::CollapsingHeader("ColorScheme", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            if (ImGui::Checkbox("ShowStretching", &showStretching))
-            {
-                viewer.data().clear();
-                viewer.data().set_mesh(V, F);
-                if (showStretching)
+            if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
+            {   
+                if (ImGui::Checkbox("TileUnit", &tileUnit))
                 {
-                    eol_sim.getColorFromStretching(C);
-                    viewer.data().set_colors(C);
+                    updateScreen(viewer);
+                }
+                // if (ImGui::Checkbox("ShowUnit", &showUnit))
+                // {
+                //     viewer.data().clear();
+                //     viewer.data().set_mesh(V, F);
+                //     if(showUnit)
+                //         viewer.data().set_colors(C);
+                //     if (per_yarn)
+                //     {
+                //         eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+                //         viewer.data().set_colors(C);
+                //     } 
+                // }
+                if (ImGui::Checkbox("ShowIndex", &show_index))
+                {
+                    if(show_index)
+                    {
+                        for (int i = 0; i < eol_sim.n_nodes; i++)
+                            viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i)-1, 0, eol_sim.q(1, i)-1), std::to_string(i));
+                        viewer.data().show_custom_labels = true;
+                    }
+                }
+                if (ImGui::Checkbox("ShowEulerianRest", &show_original))
+                {
+                    
+                    updateScreen(viewer);
+                }
+            }
+            if (ImGui::CollapsingHeader("ColorScheme", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                if (ImGui::Checkbox("ShowStretching", &showStretching))
+                {
+                    viewer.data().clear();
+                    viewer.data().set_mesh(V, F);
+                    if (showStretching)
+                    {
+                        eol_sim.getColorFromStretching(C);
+                        viewer.data().set_colors(C);
+                    }   
+                }
+                if (ImGui::Checkbox("PerYarn", &per_yarn))
+                {
+                    updateScreen(viewer);
                 }   
             }
-            if (ImGui::Checkbox("PerYarn", &per_yarn))
+            if (ImGui::Button("Solve", ImVec2(-1,0)))
             {
+                eol_sim.advanceOneStep();
                 updateScreen(viewer);
-            }   
-        }
-        if (ImGui::Button("Solve", ImVec2(-1,0)))
-        {
-            eol_sim.advanceOneStep();
-            updateScreen(viewer);
-        }
-        if (ImGui::Button("Reset", ImVec2(-1,0)))
-        {
-            eol_sim.resetScene();
-            updateScreen(viewer);
-        }
-    };
+            }
+            if (ImGui::Button("Reset", ImVec2(-1,0)))
+            {
+                eol_sim.resetScene();
+                updateScreen(viewer);
+            }
+        };
+    }
+    
     
     //================== Run GUI ==================
-    viewer.data().set_face_based(true);
-    viewer.data().shininess = 1.0;
-    viewer.data().point_size = 25.0;
     
     
-    setupScene(viewer);
-    viewer.callback_key_down = &key_down;
-    key_down(viewer,'0',0);
-    viewer.launch();
+    
+    
+    int width = 800, height = 800;
+    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> R(width,height);
+            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> G(width,height);
+            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> B(width,height);
+            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> A(width,height);
+    if (test_current == FitEBatch)
+    {
+        viewer.launch_init(true, false, "", width, height);
+        
+
+        eol_sim.buildPlanePeriodicBCScene3x3();
+        per_yarn = false;
+        T s = 1.1;
+        int n_angles = 1;
+        T cycle = M_PI / 2.0;
+        int cnt = 0;
+        // viewer.core().camera_eye += Eigen::Vector3f(1, 1, 0);
+        // std::cout << viewer.core().camera_eye.transpose() << std::endl;
+        for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+        {
+            std::cout << theta << std::endl;
+            Vector<T, dim> strain_dir;
+            eol_sim.setUniaxialStrain(theta, s, strain_dir);
+            eol_sim.advanceOneStep();
+            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+            viewer.data().set_face_based(true);
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);
+            eol_sim.getColorFromStretching(C);
+            viewer.data().set_colors(C);   
+            
+            viewer.data().shininess = 1.0;
+            
+            // viewer.draw();
+            
+            
+            viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+            // Save it to a PNG
+            igl::png::writePNG(R,G,B,A,"output/strain_"+std::to_string(cnt)+".png");
+            
+            eol_sim.resetScene();
+            cnt++;
+        }
+        viewer.launch_shut();
+        
+    }
+    else
+    {
+        viewer.data().set_face_based(true);
+        viewer.data().shininess = 1.0;
+        viewer.data().point_size = 25.0;
+        setupScene(viewer);
+        viewer.callback_key_down = &key_down;
+        key_down(viewer,'0',0);
+        viewer.launch();
+    }
 
     //================== Run Diff Test ==================
     // eol_sim.buildPlanePeriodicBCScene3x3();
