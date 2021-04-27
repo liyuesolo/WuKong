@@ -49,23 +49,21 @@ class EoLRodSim
 public:
     using Simulation = EoLRodSim<T, dim>;
     
+    using TV = Vector<T, dim>;
+
     using TV2 = Vector<T, 2>;
     using TV3 = Vector<T, 3>;
-    using TV = Vector<T, dim>;
-    using TV5 = Vector<T, 5>;
     using TVDOF = Vector<T, dim+2>;
+    using TVStack = Matrix<T, dim, Eigen::Dynamic>;
     
-    using TM3 = Matrix<T, 3, 3>;
-    using TM5 = Matrix<T, 5, 5>;
 
     using TM = Matrix<T, dim, dim>;
+    using TM3 = Matrix<T, 3, 3>;
     using TMDOF = Matrix<T, dim + 2, dim + 2>;
 
     using TV3Stack = Matrix<T, 3, Eigen::Dynamic>;
-    using TVStack = Matrix<T, dim, Eigen::Dynamic>;
     using IV3Stack = Matrix<int, 3, Eigen::Dynamic>;
     using IV4Stack = Matrix<int, 4, Eigen::Dynamic>;
-    using TV2Stack = Matrix<T, 3, Eigen::Dynamic>;
     using DOFStack = Matrix<T, dim + 2, Eigen::Dynamic>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
@@ -75,6 +73,7 @@ public:
     using IV4 = Vector<int, 4>;
     using IV5 = Vector<int, 5>;
     
+    using StiffnessMatrix = Eigen::SparseMatrix<T>;
 
     int dof = dim + 2;
     
@@ -90,7 +89,7 @@ public:
     int final_dim;
 
     T dt = 1;
-    T newton_tol = 1e-5;
+    T newton_tol = 1e-4;
     T E = 1e7;
     T R = 0.01;
 
@@ -105,6 +104,7 @@ public:
     T k_pbc = 1.0; // perodic BC term
     T L = 1;
     T ke = 1e-2; // Eulerian DoF penalty
+    T kr = 1e3;
     
 
     TV gravity = TV::Zero();
@@ -189,20 +189,6 @@ public:
         } 
     }
 
-    // template <class OP>
-    // void iteratePBCPairs(const OP& f) {
-    //     for (auto pbc_pair : pbc_pairs){
-    //         if (pbc_translation.find(pbc_pair.second) == pbc_translation.end())
-    //             f(pbc_pair.first(0), pbc_pair.first(1), 
-    //                 pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
-    //                 TVDOF::Zero());
-    //         else
-    //             f(pbc_pair.first(0), pbc_pair.first(1), 
-    //                 pbc_ref[pbc_pair.second](0), pbc_ref[pbc_pair.second](1),
-    //                 pbc_translation[pbc_pair.second]);
-    //     } 
-    // }
-
     template <class OP>
     void iteratePBCReferencePairs(const OP& f) {
         for (auto data : pbc_ref){
@@ -216,9 +202,6 @@ public:
             f(data.first(0), data.first(1), data.second.first, data.second.second);
         } 
     }
-
-    
-    
 
     template <class OP>
     void iterateYarnCrossingsSerial(const OP& f) {
@@ -251,10 +234,37 @@ public:
         });
     }
 
+    void fixEulerian()
+    {
+        for(int i = 0; i < n_nodes; i++)
+            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+    }
+    void freeEulerian()
+    {
+        dirichlet_data.clear();
+        dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+        dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+    }
+
     // EoLSim.cpp
     T computeTotalEnergy(Eigen::Ref<const DOFStack> dq);
     T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq);
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
+    bool projectDirichletEntrySystemMatrix(StiffnessMatrix& A);
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
     void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
@@ -270,7 +280,9 @@ public:
 public:
     // Elasticity.cpp
     void setUniaxialStrain(T theta, T s, TV& strain_dir);
-    void computeMacroStress(TM& sigma);
+    void computeMacroStress(TM& sigma, TV strain_dir);
+    void computeDeformationGradientUnitCell();
+    void fitDeformationGradientUnitCell();
     
 
     // Scene.cpp 
@@ -329,11 +341,16 @@ public:
     T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
     void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
+    void buildMapleRotationPenaltyData(Eigen::Ref<const DOFStack> q_temp, 
+        std::vector<TV>& data, std::vector<int>& nodes);
 
     // EulerianConstraints.cpp
     T addEulerianRegEnergy(Eigen::Ref<const DOFStack> q_temp);
     void addEulerianRegForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     void addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K);  
+
+    // ParallelContact.cpp
+    T addParallelContactEnergy(Eigen::Ref<const DOFStack> q_temp);
 };
 
 #endif

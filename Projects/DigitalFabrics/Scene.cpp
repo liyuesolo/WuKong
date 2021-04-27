@@ -1,7 +1,5 @@
 #include "EoLRodSim.h"
 
-
-
 template<class T, int dim>
 void EoLRodSim<T, dim>::build5NodeTestScene()
 {
@@ -399,23 +397,24 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 {
-    add_shearing = false;
+    add_shearing = true;
     add_stretching = true;
     add_bending = true;
-    add_penalty = true;
+    add_penalty = false;
     add_regularizor = false;
     add_pbc = true;
-    add_eularian_reg = true;
+    add_eularian_reg = false;
 
-    ks = 1e1;
-    kb = 1e-1;
-    kb_penalty = 1e-1;
-    ke = 1e-4;
+    ks = 1e0;
+    kb = 1e0;
+    kb_penalty = 1e0;
+    ke = 1e-3;
     
-    km = 1e-3;
-    kx = 1e-3;
+    km = 1e-4;
+    kx = 1e-2;
     kc = 1e3;
-    k_pbc = 1e5;
+    k_pbc = 1e0;
+    kr = 1e3;
     
     n_nodes = 21;
     n_rods = 24;
@@ -491,13 +490,11 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         pbc_ref_unique.push_back(IV2(0, 1));
         pbc_ref_unique.push_back(IV2(2, 3));
 
-        // for(int i = 0; i < n_nodes; i++)
-        //     dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        for(int i = 0; i < n_nodes; i++)
+            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             
-        // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_all);
-        
         dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
-        // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_all);
+        
 
         dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
         dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);

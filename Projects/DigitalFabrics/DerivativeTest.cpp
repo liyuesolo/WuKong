@@ -8,27 +8,32 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_regularizor = false;
     add_stretching=false;
     add_penalty =false;
-    add_bending = true;
+    add_bending = false;
     add_shearing = false;
-    add_pbc = false;
+    add_pbc = true;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();
     if (add_pbc)
     {
+        q(0, 3) += 0.1;
+        q(2, 3) += 0.1;
+        q(3, 1) += 0.1;
+        q(1, 4) += 0.1;
+        q(2, 2) += 0.1;
+        q(1, 3) += 0.1;
+        q(1, 0) += 0.1;
+
         q(1, 0) += 0.1;
         q(0, 0) += 0.1;
         q(0, 1) -= 0.1;
-        q(0, 1) -= 0.1;
+        q(1, 1) -= 0.1;
         q(0, 15) += 0.1;
         q(1, 8) += 0.1;
         // q(1, 14) -= 0.1;
         q(0, 9) += 0.1;
         q(1, 9) += 0.1;
-        // q(0, 10) += 0.1;
-        // q(0, 6) += 0.1;
-        // q(1, 6) -= 0.1;
         
     }
     else
@@ -59,7 +64,15 @@ void EoLRodSim<T, dim>::runDerivativeTest()
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 {
-    T epsilon = 1e-5;
+    add_regularizor = false;
+    add_stretching=false;
+    add_penalty =false;
+    add_bending = true;
+    add_shearing = false;
+    add_pbc = true;
+    add_eularian_reg = false;
+
+    T epsilon = 1e-6;
     DOFStack gradient(dof, n_nodes);
     gradient.setZero();
     std::cout << "===================== checkGradient =====================" << std::endl;
@@ -80,7 +93,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
             gradient_FD(d, n_node) = (E1 - E0) / (2*epsilon);
             if( gradient_FD(d, n_node) == 0 && gradient(d, n_node) == 0)
                 continue;
-            std::cout << n_node << " " << gradient_FD(d, n_node) << " " << gradient(d, n_node) << std::endl;
+            std::cout << n_node << " dof " << d << " " << gradient_FD(d, n_node) << " " << gradient(d, n_node) << std::endl;
             std::getchar();
             cnt++;
         }   

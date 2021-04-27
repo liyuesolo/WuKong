@@ -76,6 +76,7 @@ void EoLRodSim<T, dim>::addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::v
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
+    // DOFStack residual_cp = residual;
     for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
     {
         int node0 = rods.col(rod_idx)[0];
@@ -101,6 +102,7 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Ei
         residual.col(node0)[dim + uv_offset] += -0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
         residual.col(node1)[dim + uv_offset] += 0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
     }
+    // std::cout << "stretching norm: " << (residual - residual_cp).norm() << std::endl;
 }
 template<class T, int dim>
 T EoLRodSim<T, dim>::addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp)

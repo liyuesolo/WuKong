@@ -19,6 +19,11 @@ def mcgToCpp(filename):
 # mcgToCpp("YarnBendPBCV.mcg")
 # mcgToCpp("YarnBendPBCF.mcg")
 # mcgToCpp("YarnBendPBCJ.mcg")
-mcgToCpp("YarnBendV.mcg")
-mcgToCpp("YarnBendF.mcg")
-mcgToCpp("YarnBendJ.mcg")
+# mcgToCpp("YarnBendV.mcg")
+# mcgToCpp("YarnBendF.mcg")
+# mcgToCpp("YarnBendJ.mcg")
+
+
+mcgToCpp("UniAxialStrainV.mcg")
+mcgToCpp("UniAxialStrainF.mcg")
+mcgToCpp("UniAxialStrainJ.mcg")

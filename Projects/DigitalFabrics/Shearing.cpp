@@ -69,6 +69,7 @@ void EoLRodSim<T, dim>::addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vec
 template<class T, int dim>
 void EoLRodSim<T, dim>::addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, bool top_right)
 {
+    DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left == -1 || bottom == -1 || top == -1 && right == -1)
             return;
@@ -99,6 +100,7 @@ void EoLRodSim<T, dim>::addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eige
             residual.col(n1).template segment<dim>(0) += Fx1;   
         }
     });
+    // std::cout << "shearing norm: " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>

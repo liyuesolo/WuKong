@@ -1,5 +1,5 @@
 #include "EoLRodSim.h"
-
+using std::abs;
 template<class T, int dim>
 void EoLRodSim<T, dim>::toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
     std::vector<int>& nodes, int yarn_type)
@@ -92,6 +92,7 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
 template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
+    DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left])
@@ -116,7 +117,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             cnt++;
         }
     });
-
+    // std::cout << "bending force " << (residual - residual_cp).transpose() << std::endl;
+    // std::cout << "bending force " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>

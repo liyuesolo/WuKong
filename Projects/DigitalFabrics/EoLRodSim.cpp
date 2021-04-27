@@ -1,4 +1,6 @@
 #include "EoLRodSim.h"
+#include <Eigen/SparseCore>
+
 template<class T, int dim>
 T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
 {
@@ -105,20 +107,57 @@ void EoLRodSim<T, dim>::buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_
 }
 
 template<class T, int dim>
+bool EoLRodSim<T, dim>::projectDirichletEntrySystemMatrix(StiffnessMatrix& A)
+{
+    // project Dirichlet data, set the row and col of Dirichlet nodal dof to be zero first
+    for (int k=0; k<A.outerSize(); ++k)
+        for (typename StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+        {
+            int node_i = std::floor(it.row() / dof);
+            int dof_i = it.row() % dof;
+            int node_j = std::floor(it.col() / dof);
+            int dof_j = it.col() % dof;            
+            if(dirichlet_data.find(node_i) != dirichlet_data.end())
+            {
+                TVDOF mask = dirichlet_data[node_i].second;
+                if(mask(dof_i))
+                    it.valueRef() = 0.0;
+            }
+            if(dirichlet_data.find(node_j) != dirichlet_data.end())
+            {
+                TVDOF mask = dirichlet_data[node_j].second;
+                if(mask(dof_j))
+                    it.valueRef() = 0.0;
+            }
+        }
+    // project Dirichlet data, set Dirichlet nodal index to be 1
+    iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+    {
+        for(int d = 0; d < dof; d++)
+            if (std::abs(target(d)) <= 1e10 && mask(d))
+                A.coeffRef(node_id * dof + d, node_id * dof + d) = 1.0;
+    });
+    A.makeCompressed();
+}
+
+template<class T, int dim>
 bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
     Eigen::Ref<const DOFStack> residual, Eigen::Ref<DOFStack> ddq)
 {
-    using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    
     ddq.setZero();
     StiffnessMatrix A(n_nodes * dof, n_nodes * dof);
     
     StiffnessMatrix I(n_nodes * dof, n_nodes * dof);
     I.setIdentity();
 
-    A.setFromTriplets(entry_K.begin(), entry_K.end()); 
+    A.setFromTriplets(entry_K.begin(), entry_K.end());
 
+    projectDirichletEntrySystemMatrix(A);
+    
     StiffnessMatrix H = A;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
+    Eigen::SparseLU<StiffnessMatrix> solver_lu;
 
     T mu = 10e-6;
     while(true)
@@ -127,14 +166,15 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
         if (solver.info() == Eigen::NumericalIssue)
         {
             // std::cout<< "indefinite" << std::endl;
-            A = H + mu * I;
+            A = H + mu * I;        
             mu *= 10;
         }
         else
             break;
     }
+    solver_lu.compute(A);
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
-    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
+    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver_lu.solve(rhs);
     return true;
 }
 
@@ -152,7 +192,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     linearSolve(entry_K, residual, ddq);
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
-    if (norm < 1e-5) return norm;
+    // if (norm < 1e-6) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq);
     // std::cout << "E0: " << E0 << std::endl;
@@ -168,9 +208,9 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         }
         alpha *= T(0.5);
         cnt += 1;
-        if (cnt > 100)
+        if (cnt > 500)
         {
-            std::cout << "!!!!!!!!!!!!!!!!!! line count: " << cnt << std::endl;
+            std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
             std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
             checkGradient(dq_ls);
             checkHessian(dq_ls);
@@ -179,6 +219,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
             return 1e30;
             
     }
+    // std::cout << "#ls: " << cnt << std::endl;
     return norm;    
 }
 
@@ -186,28 +227,52 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
 {
     int cnt = 0;
-    T norm = 1e10;
+    T residual_norm = 1e10;
+    // this is not a hack, just used to debug intermediate results
+    int hard_set_exit_number = INT_MAX;
     while (true)
     {
-        // set Dirichlet boundary condition
-        // iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        // {
-        //     for(int d = 0; d < dof; d++)
-        //         if (std::abs(target(d)) <= 1e10 && mask(d))
-        //             dq(d, node_id) = target(d);
-        // });
-        
+    
         DOFStack residual(dof, n_nodes);
         residual.setZero();
-        T residual_norm = computeResidual(residual, dq);
-        norm = newtonLineSearch(dq, residual);
-        // std::cout << "|g|: " << norm << std::endl;
-        if (norm < newton_tol)
+        computeResidual(residual, dq);
+        // set Dirichlet boundary condition
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+        {
+            for(int d = 0; d < dof; d++)
+                if (std::abs(target(d)) <= 1e10 && mask(d))
+                {
+                    residual(d, node_id) = 0.0;
+                    dq(d, node_id) = target(d);
+                }
+        });
+        residual_norm = residual.norm();
+        T dq_norm = newtonLineSearch(dq, residual);
+        // std::cout << "|g|: " << residual_norm << std::endl;
+        // DOFStack temp(dof, n_nodes);
+        // temp.setZero();
+        
+        // addStretchingForce(dq, temp);
+        // std::cout << "stretching " << temp.norm() << std::endl; 
+        // std::cout << temp.transpose() << std::endl;
+        // std::cout << residual.transpose() << std::endl;
+        // std::cout << residual.norm() << std::endl;
+        // std::getchar();
+        if (residual_norm < newton_tol)
             break;
         
+        if(cnt == hard_set_exit_number)
+            break;
         cnt++;
     }
-    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << norm << std::endl;
+    // add_regularizor = false;
+    // add_stretching = false;
+    // add_pbc = false;
+    // add_bending = true;
+    // add_eularian_reg = false;
+    // T e_sum = computeTotalEnergy(dq);
+    // std::cout << "other energy term" << e_sum << std::endl;
+    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
 
 template<class T, int dim>
@@ -217,6 +282,8 @@ void EoLRodSim<T, dim>::advanceOneStep()
     dq.setZero();
     implicitUpdate(dq);
     q += dq;
+    // computeDeformationGradientUnitCell();
+    // fitDeformationGradientUnitCell();
 }
 
 template class EoLRodSim<double, 3>;

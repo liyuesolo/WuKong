@@ -28,6 +28,9 @@ static bool showStretching = false;
 static bool show_index = false;
 static bool show_original = false;
 static bool per_yarn = true;
+static bool slide = false;
+
+static float theta_pbc = 0;
 
 static int n_rod_per_yarn = 4;
 
@@ -64,7 +67,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
         eol_sim.getEulerianDisplacement(X, x);
         for (int i = 0; i < X.rows(); i++)
         {
-            viewer.data().add_edges(X.row(i), x.row(i), Eigen::RowVector3d(1, 1, 1));
+            // viewer.data().add_edges(X.row(i), x.row(i), Eigen::RowVector3d(1, 1, 1));
         }
         viewer.data().add_points(X, Eigen::RowVector3d(1,1,1));
         viewer.data().add_points(x, Eigen::RowVector3d(0,0,0));  
@@ -92,15 +95,13 @@ const char* test_case_names[] = {
 };
 
 
-int main()
+int main(int argc, char *argv[])
 {
     int n_test_case = sizeof(test_case_names)/sizeof(const char*);
     
 
     static TestCase test = FiveNodes;
     TestCase test_current = FitE; // set to be a different from above or change the above one to be a random one
-
-    
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {
@@ -148,7 +149,9 @@ int main()
     
     if (test_current == FitEBatch)
     {
-        menu.callback_draw_viewer_menu = [&](){};
+        menu.callback_draw_viewer_menu = [&](){
+            viewer.core().align_camera_center(viewer.data().V, viewer.data().F);
+        };
     }
     else
     {
@@ -168,6 +171,49 @@ int main()
             }
             if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
             {   
+                if (ImGui::DragFloat("Angle", &(theta_pbc), 0.f, 0.1f, M_PI * 2.f))
+                {
+                    eol_sim.resetScene();
+                    Vector<T, dim> strain_dir;
+                    eol_sim.setUniaxialStrain(theta_pbc, 1.1, strain_dir);
+                    eol_sim.advanceOneStep();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("FixEulerian", &slide))
+                {
+                    if(!slide)
+                    {
+                        eol_sim.freeEulerian();
+                        eol_sim.resetScene();
+                        updateScreen(viewer);
+                    }
+                    else
+                    {
+                        eol_sim.fixEulerian();
+                        eol_sim.resetScene();
+                        updateScreen(viewer);
+                    }
+                }
+                if (ImGui::Checkbox("RegularizeEulerian", &eol_sim.add_eularian_reg))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Shearing", &eol_sim.add_shearing))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Stretching", &eol_sim.add_stretching))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Bending", &eol_sim.add_bending))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
                 if (ImGui::Checkbox("TileUnit", &tileUnit))
                 {
                     updateScreen(viewer);
@@ -189,7 +235,7 @@ int main()
                     if(show_index)
                     {
                         for (int i = 0; i < eol_sim.n_nodes; i++)
-                            viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i)-1, 0, eol_sim.q(1, i)-1), std::to_string(i));
+                            viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i), eol_sim.q(1, i), 0), std::to_string(i));
                         viewer.data().show_custom_labels = true;
                     }
                 }
@@ -219,6 +265,7 @@ int main()
             if (ImGui::Button("Solve", ImVec2(-1,0)))
             {
                 eol_sim.advanceOneStep();
+                
                 updateScreen(viewer);
             }
             if (ImGui::Button("Reset", ImVec2(-1,0)))
@@ -237,48 +284,53 @@ int main()
     
     int width = 800, height = 800;
     Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> R(width,height);
-            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> G(width,height);
-            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> B(width,height);
-            Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> A(width,height);
+    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> G(width,height);
+    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> B(width,height);
+    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> A(width,height);
     if (test_current == FitEBatch)
     {
-        viewer.launch_init(true, false, "", width, height);
         
-
-        eol_sim.buildPlanePeriodicBCScene3x3();
-        per_yarn = false;
+        
         T s = 1.1;
-        int n_angles = 1;
-        T cycle = M_PI / 2.0;
+        int n_angles = 40;
+        T cycle = 2.0 * M_PI;
         int cnt = 0;
         // viewer.core().camera_eye += Eigen::Vector3f(1, 1, 0);
         // std::cout << viewer.core().camera_eye.transpose() << std::endl;
-        for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+        // for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+        T theta = strtod(argv[1], NULL);
         {
-            std::cout << theta << std::endl;
+            eol_sim.buildPlanePeriodicBCScene3x3();
+            // viewer.data().set_mesh(V, F);
+            viewer.data().set_face_based(true);
+            viewer.data().clear();
+            viewer.launch_init();
+            // viewer.draw();
+            per_yarn = false;
             Vector<T, dim> strain_dir;
             eol_sim.setUniaxialStrain(theta, s, strain_dir);
             eol_sim.advanceOneStep();
             eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
-            viewer.data().set_face_based(true);
+            
             viewer.data().clear();
             viewer.data().set_mesh(V, F);
-            eol_sim.getColorFromStretching(C);
+            eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+            // eol_sim.getColorFromStretching(C);
             viewer.data().set_colors(C);   
             
             viewer.data().shininess = 1.0;
             
             // viewer.draw();
             
-            
             viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
             // Save it to a PNG
-            igl::png::writePNG(R,G,B,A,"output/strain_"+std::to_string(cnt)+".png");
+            igl::png::writePNG(R,G,B,A,"output/strain_"+std::to_string(theta)+".png");
             
             eol_sim.resetScene();
             cnt++;
+            viewer.launch_shut();
         }
-        viewer.launch_shut();
+        
         
     }
     else
@@ -289,7 +341,7 @@ int main()
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);
-        viewer.launch();
+        // viewer.launch();
     }
 
     //================== Run Diff Test ==================
@@ -298,7 +350,7 @@ int main()
     // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
 
-    // homogenizer.initalizeSim();
-    // homogenizer.marcoYoungsModulusFitting();
+    homogenizer.initalizeSim();
+    homogenizer.marcoYoungsModulusFitting();
     return 0;
 }

@@ -127,6 +127,13 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
         TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0);
         TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0);
 
+        // int yarn_type = rods_display.col(rod_cnt)[2];
+        // T u_from = q_display(dim + yarn_type, rods_display.col(rod_cnt)[0]);
+        // T u_to = q_display(dim + yarn_type, rods_display.col(rod_cnt)[1]);
+
+        // vtx_from_TV = vtx_from_TV + u_from * (vtx_to_TV - vtx_from_TV);
+        // vtx_from_TV = vtx_from_TV + u_to * (vtx_to_TV - vtx_from_TV);
+
         TV3 vtx_from = TV3::Zero();
         TV3 vtx_to = TV3::Zero();
         if constexpr (dim == 3)
@@ -214,8 +221,8 @@ void EoLRodSim<T, dim>::getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::Matri
             TV x_eul = from + u0 * (to - from);
             if constexpr (dim == 2)
             {
-                X.row(cnt) = Eigen::RowVector3d(x_eul[0] - 1, 0, x_eul[1] - 1);
-                x.row(cnt) = Eigen::RowVector3d(x_lag[0] - 1, 0, x_lag[1] - 1);
+                X.row(cnt) = Eigen::RowVector3d(x_eul[0], x_eul[1], 0);
+                x.row(cnt) = Eigen::RowVector3d(x_lag[0] + 1.0, x_lag[1], 0);
                 cnt++;
             }
         }
@@ -255,8 +262,11 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV2 u0 = q.col(node0).template segment<2>(dim);
         TV2 u1 = q.col(node1).template segment<2>(dim);
         TV2 delta_u = u1 - u0;
-
         int yarn_type = rods.col(rod_idx)[2];
+        if(u0[yarn_type] < 0 || u0[yarn_type]>1)
+            std::cout << "u0: " << u0 << std::endl;
+        if(u1[yarn_type] < 0 || u1[yarn_type]>1)
+            std::cout << "u1: " << u1 << std::endl;
 
         int uv_offset = yarn_type == WARP ? 0 : 1;
     
@@ -267,6 +277,19 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         // std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
 
     }
+    // });
+
+    // iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
+    //     TV xj = q.col(node_j).template segment<dim>(0);
+    //     TV xi = q.col(node_i).template segment<dim>(0);
+    //     if constexpr (dim == 2)
+    //     {
+    //         T theta = 0.285;
+    //         TV strain_dir = TV(std::cos(theta), std::sin(theta));
+    //         T dij = (xj - xi).dot(strain_dir);
+    //         std::cout  << dij << std::endl;
+    //         // pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
+    //     }
     // });
 
     if(rod_energy.maxCoeff())
