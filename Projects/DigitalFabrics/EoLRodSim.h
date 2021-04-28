@@ -166,13 +166,6 @@ public:
         std::cout << n0 << " " << n1 << " " << n2 << std::endl;
     } 
 
-    // template <class OP>
-    // void iteratePBCBendingPairs(const OP& f) {
-    //     for (auto pair : pbc_bending_pairs){
-    //         f(pair[0], pair[1], pair[2], pair[3], pair[4], pair[5] - 100);
-    //     } 
-    // }
-
     template <class OP>
     void iteratePBCBendingPairs(const OP& f) {
         for (auto pair : pbc_bending_pairs){

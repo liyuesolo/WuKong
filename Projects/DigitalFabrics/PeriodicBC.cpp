@@ -3,23 +3,23 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K)
 {
-    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
+    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+        TV xi = q_temp.col(node_i).template segment<dim>(0);
+        TV xj = q_temp.col(node_j).template segment<dim>(0);
 
-    //     T dij = (xj - xi).dot(strain_dir);
-    //     TM Hessian = strain_dir * strain_dir.transpose();
-    //     for(int i = 0; i < dim; i++)
-    //     {
-    //         for(int j = 0; j < dim; j++)
-    //         {
-    //             entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_pbc * Hessian(i, j)));
-    //             entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_pbc * Hessian(i, j)));
-    //             entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_pbc * Hessian(i, j)));
-    //             entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_pbc * Hessian(i, j)));
-    //         }
-    //     }
-    // });
+        T dij = (xj - xi).dot(strain_dir);
+        TM Hessian = strain_dir * strain_dir.transpose();
+        for(int i = 0; i < dim; i++)
+        {
+            for(int j = 0; j < dim; j++)
+            {
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, kr * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -kr * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -kr * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, kr * Hessian(i, j)));
+            }
+        }
+    });
     if constexpr (dim == 2)
     {
         std::vector<TV> data;
@@ -34,25 +34,25 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
                     for (int l = 0; l < dim; l++)
                         entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -J[i*dim + k][j*dim+l]));
 
-        iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-            TV xi = q_temp.col(node_i).template segment<dim>(0);
-            TV xj = q_temp.col(node_j).template segment<dim>(0);
+        // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+        //     TV xi = q_temp.col(node_i).template segment<dim>(0);
+        //     TV xj = q_temp.col(node_j).template segment<dim>(0);
 
-            Vector<T, 12> dedx;
-            nodes.push_back(node_i); nodes.push_back(node_j);
-            data.push_back(xi); data.push_back(xj);
+        //     Vector<T, 12> dedx;
+        //     nodes.push_back(node_i); nodes.push_back(node_j);
+        //     data.push_back(xi); data.push_back(xj);
 
-            T J[12][12];
-            memset(J, 0, sizeof(J));
-            #include "Maple/UniAxialStrainJ.mcg"
-            for (int i = 0; i < 6; i++)
-                for (int j = 0; j < 6; j++)
-                    for (int k = 0; k < dim; k++)
-                        for (int l = 0; l < dim; l++)
-                            entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -kr * J[i*dim + k][j*dim+l]));
-            data.pop_back(); data.pop_back();
-            nodes.pop_back(); nodes.pop_back();
-        });
+        //     T J[12][12];
+        //     memset(J, 0, sizeof(J));
+        //     #include "Maple/UniAxialStrainJ.mcg"
+        //     for (int i = 0; i < 6; i++)
+        //         for (int j = 0; j < 6; j++)
+        //             for (int k = 0; k < dim; k++)
+        //                 for (int l = 0; l < dim; l++)
+        //                     entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -kr * J[i*dim + k][j*dim+l]));
+        //     data.pop_back(); data.pop_back();
+        //     nodes.pop_back(); nodes.pop_back();
+        // });
         // return;
         iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
             int ref_i = pbc_ref_unique[yarn_type](0);
@@ -76,29 +76,6 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
                         for(int j = 0; j < dim + 2; j++)
                             entry_K.push_back(Eigen::Triplet<T>(nodes[k]*dof + i, nodes[l] * dof + j, -k_pbc *sign_F[k]*sign_J[l]));
 
-            // TV xi = q_temp.col(node_i).template segment<dim>(0);
-            // TV xj = q_temp.col(node_j).template segment<dim>(0);
-
-            // int ref_i = pbc_ref_unique[yarn_type](0);
-            // int ref_j = pbc_ref_unique[yarn_type](1);
-
-            // if (ref_i == node_i && ref_j == node_j)
-            //     return;
-
-            // TV x0 = q_temp.col(ref_i).template segment<dim>(0);
-            // TV x1 = q_temp.col(ref_j).template segment<dim>(0);
-            // TV pair_dis_vec = xj - xi - (x1 - x0);
-
-            // std::vector<int> nodes = {node_i, node_j, ref_i, ref_j};
-            // std::vector<T> sign_J = {-1, 1, 1, -1};
-            // std::vector<T> sign_F = {1, -1, -1, 1};
-
-            // for(int k = 0; k < 4; k++)
-            //     for(int l = 0; l < 4; l++)
-            //         for(int i = 0; i < dim; i++)
-            //             for(int j = 0; j < dim; j++)
-            //                 entry_K.push_back(Eigen::Triplet<T>(nodes[k]*dof + i, nodes[l] * dof + j, -k_pbc*sign_F[k]*sign_J[l]));
-            
         });
     }
     
@@ -109,15 +86,15 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
     
-    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
+    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+        TV xi = q_temp.col(node_i).template segment<dim>(0);
+        TV xj = q_temp.col(node_j).template segment<dim>(0);
 
-    //     T dij = (xj - xi).dot(strain_dir);
+        T dij = (xj - xi).dot(strain_dir);
         
-    //     residual.col(node_i).template segment<dim>(0) += k_pbc * strain_dir * (dij - Dij);
-    //     residual.col(node_j).template segment<dim>(0) += -k_pbc * strain_dir * (dij - Dij);
-    // });
+        residual.col(node_i).template segment<dim>(0) += kr * strain_dir * (dij - Dij);
+        residual.col(node_j).template segment<dim>(0) += -kr * strain_dir * (dij - Dij);
+    });
 
     std::vector<TV> data;
     std::vector<int> nodes(4);
@@ -127,21 +104,21 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Re
     for (int i = 0; i < 4; i++)
         residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
 
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
+    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
+    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
 
-        Vector<T, 12> dedx;
-        dedx.setZero();
-        nodes.push_back(node_i);
-        nodes.push_back(node_j);
-        data.push_back(xi); data.push_back(xj);
-        #include "Maple/UniAxialStrainF.mcg"
-        for (int i = 0; i < 6; i++)
-            residual.col(nodes[i]).template segment<dim>(0) += kr * dedx.template segment<dim>(i*dim);
-        data.pop_back(); data.pop_back();
-        nodes.pop_back(); nodes.pop_back();
-    });
+    //     Vector<T, 12> dedx;
+    //     dedx.setZero();
+    //     nodes.push_back(node_i);
+    //     nodes.push_back(node_j);
+    //     data.push_back(xi); data.push_back(xj);
+    //     #include "Maple/UniAxialStrainF.mcg"
+    //     for (int i = 0; i < 6; i++)
+    //         residual.col(nodes[i]).template segment<dim>(0) += kr * dedx.template segment<dim>(i*dim);
+    //     data.pop_back(); data.pop_back();
+    //     nodes.pop_back(); nodes.pop_back();
+    // });
     // return;
     iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
         int ref_i = pbc_ref_unique[yarn_type](0);
@@ -193,12 +170,12 @@ template<class T, int dim>
 T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
     T energy_pbc = 0.0;
-    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
-    //     T dij = (xj - xi).dot(strain_dir);
-    //     energy_pbc += 0.5 * k_pbc * (dij - Dij) * (dij - Dij);
-    // });
+    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+        TV xi = q_temp.col(node_i).template segment<dim>(0);
+        TV xj = q_temp.col(node_j).template segment<dim>(0);
+        T dij = (xj - xi).dot(strain_dir);
+        energy_pbc += 0.5 * kr * (dij - Dij) * (dij - Dij);
+    });
     std::vector<TV> data;
     std::vector<int> nodes(4);
     buildMapleRotationPenaltyData(q_temp, data, nodes);
@@ -206,14 +183,14 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
     #include "Maple/RotationPenaltyV.mcg"
     energy_pbc += V[0];
 
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
-        data.push_back(xi); data.push_back(xj);
-        #include "Maple/UniAxialStrainV.mcg"
-        energy_pbc+= kr * V[0];
-        data.pop_back(); data.pop_back();
-    });
+    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
+    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
+    //     data.push_back(xi); data.push_back(xj);
+    //     #include "Maple/UniAxialStrainV.mcg"
+    //     energy_pbc+= kr * V[0];
+    //     data.pop_back(); data.pop_back();
+    // });
 
     
 // return energy_pbc;

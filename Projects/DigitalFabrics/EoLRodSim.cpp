@@ -157,7 +157,6 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     
     StiffnessMatrix H = A;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    Eigen::SparseLU<StiffnessMatrix> solver_lu;
 
     T mu = 10e-6;
     while(true)
@@ -172,7 +171,6 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
         else
             break;
     }
-    solver_lu.compute(A);
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
     Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
     return true;

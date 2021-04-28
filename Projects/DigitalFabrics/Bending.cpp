@@ -92,7 +92,7 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
 template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
-    DOFStack residual_cp = residual;
+    // DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left])
