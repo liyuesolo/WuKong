@@ -3,6 +3,7 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K)
 {
+    
     iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
         TV xi = q_temp.col(node_i).template segment<dim>(0);
         TV xj = q_temp.col(node_j).template segment<dim>(0);
@@ -193,7 +194,7 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
     // });
 
     
-// return energy_pbc;
+
     iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
         
         int ref_i = pbc_ref_unique[yarn_type](0);

@@ -122,6 +122,7 @@ public:
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
     std::vector<std::vector<int>> pbc_bending_pairs;
     std::vector<std::vector<int>> yarns;
+    std::unordered_map<int, int> yarn_map;
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
     std::vector<std::pair<int, IV2>> pbc_ref;
@@ -150,7 +151,7 @@ public:
     }
     ~EoLRodSim() {}
     
-    // TODO: use ... operation
+    // TODO: use ... operator
     void cout5Nodes(int n0, int n1, int n2, int n3, int n4)
     {
         std::cout << n0 << " " << n1 << " " << n2 << " " << n3 << " " << n4 << std::endl;
@@ -285,6 +286,8 @@ public:
     void buildLongRodForBendingTest();
     void buildShearingTest();
     void buildPlanePeriodicBCScene3x3();
+    void buildPlanePeriodicBCScene3x3Subnodes(int sub_div = 1);
+    void subdivideRods(int sub_div);
     void buildPlanePeriodicBCScene1x1();
     void buildRodNetwork(int width, int height);
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);

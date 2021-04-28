@@ -393,6 +393,120 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
 }
 
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3Subnodes(int sub_div)
+{
+    buildPlanePeriodicBCScene3x3();
+    if (sub_div > 1)
+        subdivideRods(sub_div);
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::subdivideRods(int sub_div)
+{
+    auto setConnection = [&](Eigen::Ref<IV4Stack> connections, int node_i, int node_j, int yarn_type){
+            if (yarn_type == WARP)
+            {
+                connections(0, node_i) = node_j;
+                connections(1, node_j) = node_i;
+            }
+            else
+            {
+                connections(3, node_i) = node_j;
+                connections(2, node_j) = node_i;
+            }
+        };
+
+    std::vector<IV3> rods_sub;
+    // std::cout << "#nodes " << n_nodes << std::endl;
+    int new_node_cnt = n_nodes;
+    n_nodes = n_nodes + (sub_div-1) * n_rods;
+    q.conservativeResize(dof, n_nodes);
+
+    normal.resize(3, n_nodes);
+    normal.setZero();
+    IV4Stack new_connections(4, n_nodes);
+    new_connections.setConstant(-1);
+
+    for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
+    {
+        IV2 end_points = rods.col(rod_idx).template segment<2>(0);
+        int node_i = end_points[0];
+        int node_j = end_points[1];
+        
+        int yarn_type = rods(2, rod_idx);
+        
+        bool sign0 = connections.col(node_i).prod();
+        int sign1 = connections.col(node_j).prod();
+        
+        // std::cout << "xi: " << q.col(node_i).template segment<dim>(0).transpose() << std::endl;
+        // std::cout << "xj: "<< q.col(node_j).template segment<dim>(0).transpose() << std::endl;
+        T fraction = T(1) / sub_div;
+        bool new_node_added = false;
+        bool left_or_bottom_bd = (connections(0, node_i) < 0 || connections(2, node_i) < 0);
+        bool right_or_top_bd = (connections(1, node_j) < 0 || connections(3, node_j) < 0);
+        int cnt = 0;
+        for (int sub_cnt = 1; sub_cnt < sub_div; sub_cnt++)
+        {
+            T alpha = sub_cnt * fraction;
+
+            // left or bottom boundary
+            if (left_or_bottom_bd && alpha <= 0.5)
+                continue;
+            // right or top boundary
+            if (right_or_top_bd && alpha >= 0.5)
+                continue;
+            
+            if (left_or_bottom_bd)
+                alpha = (alpha - 0.5) / 0.5;
+            if (right_or_top_bd)
+                alpha = alpha / 0.5;
+            
+            q.col(new_node_cnt).template segment<dim>(0) = 
+                q.col(node_i).template segment<dim>(0) * alpha + 
+                q.col(node_j).template segment<dim>(0) * (1 - alpha);
+            q(yarn_type, new_node_cnt) = q(yarn_type, node_i) * alpha + 
+                q(yarn_type, node_j) * (1 - alpha);
+            // std::cout << "x sub: "<< q.col(new_node_cnt).template segment<dim>(0).transpose() << std::endl;
+            int n0, n1;
+            if (cnt == 0)
+            {
+                n0 = node_i; n1 = new_node_cnt;
+            }
+            else
+            {
+                n0 = new_node_cnt-1; n1 = new_node_cnt;
+            }
+            rods_sub.push_back(IV3(n0, n1, yarn_type));
+            yarn_map[rods_sub.size()-1] = rod_idx;
+            setConnection(new_connections, n0, n1, yarn_type);
+            new_node_cnt++;
+            new_node_added = true;
+            cnt++;
+        }
+        if (new_node_added)
+        {
+            rods_sub.push_back(IV3(new_node_cnt-1, node_j, yarn_type));
+            setConnection(new_connections, new_node_cnt-1, node_j, yarn_type);
+        }
+        else
+        {
+            rods_sub.push_back(IV3(node_i, node_j, yarn_type));
+            setConnection(new_connections, node_i, node_j, yarn_type);   
+        }
+        yarn_map[rods_sub.size()-1] = rod_idx;
+        
+    }
+    n_rods = rods_sub.size();
+    rods.resize(3, n_rods);
+    tbb::parallel_for(0, n_rods, [&](int i){
+        rods.col(i) = rods_sub[i];
+    });
+    connections = new_connections;
+    // std::cout << "new # rods: " << n_rods << std::endl;
+    // std::cout << rods.transpose() << std::endl;
+    q0 = q;
+}
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
@@ -404,7 +518,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     yarns.clear();
 
 
-    add_shearing = true;
+    add_shearing = false;
     add_stretching = true;
     add_bending = true;
     add_penalty = false;
@@ -418,7 +532,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     ke = 1e-3;
     
     km = 1e-4;
-    kx = 1e-1;
+    kx = 1e0;
     kc = 1e3;
     k_pbc = 1e2;
     kr = 1e0;
@@ -548,6 +662,9 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         yarns.push_back({16, 18, 19, 20, 17, WEFT});
         yarns.push_back({9, 11, 12, 13, 10, WEFT});
         yarns.push_back({2, 4, 5, 6, 3, WEFT});
+
+        for (int i = 0; i < n_rods; i++)
+            yarn_map[i] = i;
     }
     else
     {

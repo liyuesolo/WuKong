@@ -241,7 +241,7 @@ void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
     
     tbb::parallel_for(0, n_rods, [&](int rod_idx){
         for(int i = 0; i < 40; i++)
-            C.row(rod_idx * 40 + i) = colors[std::floor(rod_idx/T(n_rod_per_yarn))];
+            C.row(rod_idx * 40 + i) = colors[std::floor(yarn_map[rod_idx]/T(n_rod_per_yarn))];
     });
 }
 

@@ -91,19 +91,20 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
 
 
 
-    // if(COUT_ALL)
-    // {
-    //     std::cout << "------------------------------- f -------------------------------" << std::endl;
-    //     std::cout << temp.transpose() << std::endl;
-    //     std::cout << "------------------------------- f -------------------------------" << std::endl;
-    // }
+    if(COUT_ALL)
+    {
+        std::cout << "------------------------------- f -------------------------------" << std::endl;
+        std::cout << f.transpose() << std::endl;
+        std::cout << "------------------------------- f -------------------------------" << std::endl;
+    }
     
     std::vector<TV> f_bc(2, TV::Zero());
 
     iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
-        f_bc[dir_id].template segment<dim>(0) += f.col(node_j).template segment<dim>(0) / length;
-        // std::cout << "node j "<< node_j << " " << f.col(node_j).template segment<dim>(0) << std::endl;
+        int bc_node = dir_id == 0 ? node_j : node_i;
+        f_bc[dir_id].template segment<dim>(0) += f.col(bc_node).template segment<dim>(0) / length;
+        // std::cout << "node j "<< node_j << " " << f.col(node_j).template segment<dim>(0).transpose() << std::endl;
     });
 
     TM F_bc = TM::Zero(), n_bc = TM::Zero();

@@ -128,7 +128,7 @@ int main(int argc, char *argv[])
         }
         else if (test == PlanePBC)
         {
-            eol_sim.buildPlanePeriodicBCScene3x3();
+            eol_sim.buildPlanePeriodicBCScene3x3Subnodes();
         }
         else if (test == FitEBatch)
         {
@@ -300,7 +300,7 @@ int main(int argc, char *argv[])
         // for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
         T theta = strtod(argv[1], NULL);
         {
-            eol_sim.buildPlanePeriodicBCScene3x3();
+            eol_sim.buildPlanePeriodicBCScene3x3Subnodes();
             // viewer.data().set_mesh(V, F);
             viewer.data().set_face_based(true);
             viewer.data().clear();
