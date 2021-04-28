@@ -32,18 +32,18 @@ public:
 
     void marcoYoungsModulusFitting()
     {
-        
-        
+        sim.disable_sliding = true;
+        sim.buildPlanePeriodicBCScene3x3();
         T s = 1.1;
-        int n_angles = 1;
-        T cycle = M_PI/4.0;
+        int n_angles = 400;
+        T cycle = 2. * M_PI;
         std::vector<T> thetas, youngs_moduli;
         for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
         {
             thetas.push_back(theta);
-            std::cout << theta << std::endl;
+            // std::cout << theta << std::endl;
             T youngs_modulus = YoungsModulusFromUniaxialStrain(theta, s);
-            // std::cout << youngs_modulus << std::endl;
+            std::cout << "theta: " << theta << " youngs_modulus " << youngs_modulus << std::endl;
             youngs_moduli.push_back(youngs_modulus);
         }
         for(T theta : thetas)

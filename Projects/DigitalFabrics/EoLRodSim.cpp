@@ -174,7 +174,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     }
     solver_lu.compute(A);
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
-    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver_lu.solve(rhs);
+    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
     return true;
 }
 
@@ -192,7 +192,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     linearSolve(entry_K, residual, ddq);
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
-    // if (norm < 1e-6) return norm;
+    if (norm < 1e-6) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq);
     // std::cout << "E0: " << E0 << std::endl;
@@ -248,31 +248,14 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
         });
         residual_norm = residual.norm();
         T dq_norm = newtonLineSearch(dq, residual);
-        // std::cout << "|g|: " << residual_norm << std::endl;
-        // DOFStack temp(dof, n_nodes);
-        // temp.setZero();
-        
-        // addStretchingForce(dq, temp);
-        // std::cout << "stretching " << temp.norm() << std::endl; 
-        // std::cout << temp.transpose() << std::endl;
-        // std::cout << residual.transpose() << std::endl;
-        // std::cout << residual.norm() << std::endl;
-        // std::getchar();
-        if (residual_norm < newton_tol)
+        if (residual_norm < newton_tol || dq_norm < 1e-6)
             break;
         
         if(cnt == hard_set_exit_number)
             break;
         cnt++;
     }
-    // add_regularizor = false;
-    // add_stretching = false;
-    // add_pbc = false;
-    // add_bending = true;
-    // add_eularian_reg = false;
-    // T e_sum = computeTotalEnergy(dq);
-    // std::cout << "other energy term" << e_sum << std::endl;
-    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
+    // std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
 
 template<class T, int dim>

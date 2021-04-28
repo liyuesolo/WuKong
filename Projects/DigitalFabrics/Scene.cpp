@@ -397,6 +397,13 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 {
+    pbc_ref_unique.clear();
+    dirichlet_data.clear();
+    pbc_ref.clear();
+    pbc_bending_pairs.clear();
+    yarns.clear();
+
+
     add_shearing = true;
     add_stretching = true;
     add_bending = true;
@@ -411,10 +418,10 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     ke = 1e-3;
     
     km = 1e-4;
-    kx = 1e-2;
+    kx = 1e-1;
     kc = 1e3;
-    k_pbc = 1e0;
-    kr = 1e3;
+    k_pbc = 1e2;
+    kr = 1e0;
     
     n_nodes = 21;
     n_rods = 24;
@@ -490,25 +497,29 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         pbc_ref_unique.push_back(IV2(0, 1));
         pbc_ref_unique.push_back(IV2(2, 3));
 
-        for(int i = 0; i < n_nodes; i++)
-            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        if (disable_sliding)
+        {
+            for(int i = 0; i < n_nodes; i++)
+                dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        }
+        else
+        {
+            dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+            dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        }
             
         dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
-        
-
-        dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-
-        dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
         
         // add reference pairs
         pbc_ref.push_back(std::make_pair(WARP, IV2(0, 1)));

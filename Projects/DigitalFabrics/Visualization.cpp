@@ -274,7 +274,7 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
         // rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
         rod_energy[rod_idx] += std::abs(w.norm() - 1);
-        // std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
+        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
 
     }
     // });

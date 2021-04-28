@@ -179,9 +179,9 @@ int main(int argc, char *argv[])
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
                 }
-                if (ImGui::Checkbox("FixEulerian", &slide))
+                if (ImGui::Checkbox("FixEulerian", &eol_sim.disable_sliding))
                 {
-                    if(!slide)
+                    if(!eol_sim.disable_sliding)
                     {
                         eol_sim.freeEulerian();
                         eol_sim.resetScene();
@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);
-        // viewer.launch();
+        viewer.launch();
     }
 
     //================== Run Diff Test ==================
@@ -350,7 +350,7 @@ int main(int argc, char *argv[])
     // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
 
-    homogenizer.initalizeSim();
+    eol_sim.resetScene();
     homogenizer.marcoYoungsModulusFitting();
     return 0;
 }

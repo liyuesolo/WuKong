@@ -25,7 +25,7 @@ void EoLRodSim<T, dim>::setUniaxialStrain(T theta, T s, TV& strain_dir)
 template<class T, int dim>
 void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
 {
-    bool COUT_ALL = true;
+    bool COUT_ALL = false;
 
     TV xj = q.col(pbc_ref_unique[0](1)).template segment<dim>(0);
     TV xi = q.col(pbc_ref_unique[0](0)).template segment<dim>(0);
@@ -46,7 +46,8 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
 
     TM F_macro = x * X.inverse();
     
-    std::cout << "Fd dot d: " << strain_dir.dot((F_macro * strain_dir).normalized()) << std::endl;
+    // if (COUT_ALL)
+        // std::cout << "Fd dot d: " << strain_dir.dot((F_macro * strain_dir).normalized()) << std::endl;
 
     TM strain_marco = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
 
@@ -71,26 +72,38 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
     computeResidual(f, zero_delta);
     add_pbc = true;
 
-    DOFStack temp(dof, n_nodes);
-    temp.setZero();
-    addStretchingForce(q, temp);
+    // DOFStack temp(dof, n_nodes);
+    // temp.setZero();
+    // addStretchingForce(q, temp);
+    // std::cout << "------------------------------- stretching -------------------------------" << std::endl;
+    // std::cout << temp.transpose() << std::endl;
+    // std::cout << "------------------------------- stretching -------------------------------" << std::endl;
+    // std::cout << "stretching norm: " << temp.norm() << std::endl;
+    // temp.setZero();
+    // addShearingForce(q, temp, true);
+    // addShearingForce(q, temp, false);
+    // std::cout << "------------------------------- shearing -------------------------------" << std::endl;
+    // std::cout << temp.transpose() << std::endl;
+    // std::cout << "------------------------------- shearing -------------------------------" << std::endl;
+    // std::cout << "shearing norm: " << temp.norm() << std::endl;
     
-    std::cout << "stretching norm: " << temp.norm() << std::endl;
+    
 
 
 
-    if(COUT_ALL)
-    {
-        std::cout << "------------------------------- f -------------------------------" << std::endl;
-        std::cout << f.transpose() << std::endl;
-        std::cout << "------------------------------- f -------------------------------" << std::endl;
-    }
+    // if(COUT_ALL)
+    // {
+    //     std::cout << "------------------------------- f -------------------------------" << std::endl;
+    //     std::cout << temp.transpose() << std::endl;
+    //     std::cout << "------------------------------- f -------------------------------" << std::endl;
+    // }
     
     std::vector<TV> f_bc(2, TV::Zero());
 
     iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
         f_bc[dir_id].template segment<dim>(0) += f.col(node_j).template segment<dim>(0) / length;
+        // std::cout << "node j "<< node_j << " " << f.col(node_j).template segment<dim>(0) << std::endl;
     });
 
     TM F_bc = TM::Zero(), n_bc = TM::Zero();

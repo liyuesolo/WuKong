@@ -89,7 +89,7 @@ public:
     int final_dim;
 
     T dt = 1;
-    T newton_tol = 1e-4;
+    T newton_tol = 1e-6;
     T E = 1e7;
     T R = 0.01;
 
@@ -112,10 +112,11 @@ public:
     bool add_stretching = true;
     bool add_bending = true;
     bool add_shearing = true;
-    bool add_penalty = true;
-    bool add_regularizor = true;
-    bool add_pbc = false;
+    bool add_penalty = false;
+    bool add_regularizor = false;
+    bool add_pbc = true;
     bool add_eularian_reg = true;
+    bool disable_sliding = true;
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
