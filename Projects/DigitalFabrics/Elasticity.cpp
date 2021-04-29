@@ -3,12 +3,12 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::setUniaxialStrain(T theta, T s, TV& strain_dir)
 {
-    T theta_ = theta;
+    
     pbc_strain_data.clear();
     pbc_strain_data.resize(0);
     strain_dir = TV::Zero();
     if constexpr (dim == 2)
-        strain_dir = TV(std::cos(theta_), std::sin(theta_));
+        strain_dir = TV(std::cos(theta), std::sin(theta));
     iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         TV Xj = q0.col(node_j).template segment<dim>(0);
         TV Xi = q0.col(node_i).template segment<dim>(0);

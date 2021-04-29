@@ -89,7 +89,7 @@ public:
     int final_dim;
 
     T dt = 1;
-    T newton_tol = 1e-6;
+    T newton_tol = 1e-5;
     T E = 1e7;
     T R = 0.01;
 
@@ -117,10 +117,13 @@ public:
     bool add_pbc = true;
     bool add_eularian_reg = true;
     bool disable_sliding = true;
+    bool subdivide = false;
+    bool print_force_mag = false;
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
     std::vector<std::vector<int>> pbc_bending_pairs;
+    std::vector<std::vector<int>> pbc_bending_bn_pairs;
     std::vector<std::vector<int>> yarns;
     std::unordered_map<int, int> yarn_map;
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
@@ -170,6 +173,16 @@ public:
     template <class OP>
     void iteratePBCBendingPairs(const OP& f) {
         for (auto pair : pbc_bending_pairs){
+            std::vector<int> node_ids;
+            for(int i = 0; i < pair.size() - 1; i++)
+                node_ids.push_back(pair[i]);
+            f(node_ids, pair[pair.size() - 1]);
+        } 
+    }
+
+    template <class OP>
+    void iteratePBCBoundaryPairs(const OP& f) {
+        for (auto pair : pbc_bending_bn_pairs){
             std::vector<int> node_ids;
             for(int i = 0; i < pair.size() - 1; i++)
                 node_ids.push_back(pair[i]);

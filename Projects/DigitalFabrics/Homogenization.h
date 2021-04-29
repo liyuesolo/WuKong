@@ -23,18 +23,20 @@ public:
 
     void initalizeSim()
     {
-        sim.buildPlanePeriodicBCScene3x3Subnodes(4);
+        
+        sim.buildPlanePeriodicBCScene3x3Subnodes(8);
         // sim.buildPlanePeriodicBCScene3x3();
         TV strain_dir;
         // sim.setUniaxialStrain(0.76969, 1.1, strain_dir);
         // sim.setUniaxialStrain(0., 1.1, strain_dir);
-        sim.setUniaxialStrain(M_PI/4, 1.8, strain_dir);
+        sim.setUniaxialStrain(M_PI/4, 1.5, strain_dir);
     }
 
     void marcoYoungsModulusFitting()
     {
-        sim.disable_sliding = true;
-        sim.buildPlanePeriodicBCScene3x3();
+        // sim.disable_sliding = true;
+        // sim.buildPlanePeriodicBCScene3x3();
+        sim.buildPlanePeriodicBCScene3x3Subnodes(8);
         T s = 1.1;
         int n_angles = 400;
         T cycle = 2. * M_PI;

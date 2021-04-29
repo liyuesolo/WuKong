@@ -100,7 +100,8 @@ void EoLRodSim<T, dim>::addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eige
             residual.col(n1).template segment<dim>(0) += Fx1;   
         }
     });
-    // std::cout << "shearing norm: " << (residual - residual_cp).norm() << std::endl;
+    if (print_force_mag)
+        std::cout << "shearing norm: " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>

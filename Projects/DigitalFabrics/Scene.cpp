@@ -396,6 +396,7 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3Subnodes(int sub_div)
 {
+    subdivide = true;
     buildPlanePeriodicBCScene3x3();
     if (sub_div > 1)
         subdivideRods(sub_div);
@@ -404,16 +405,16 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3Subnodes(int sub_div)
 template<class T, int dim>
 void EoLRodSim<T, dim>::subdivideRods(int sub_div)
 {
-    auto setConnection = [&](Eigen::Ref<IV4Stack> connections, int node_i, int node_j, int yarn_type){
-            if (yarn_type == WARP)
+    auto setConnection = [&](Eigen::Ref<IV4Stack> cns, int node_i, int node_j, int yarn_type){
+            if (yarn_type == WEFT)
             {
-                connections(0, node_i) = node_j;
-                connections(1, node_j) = node_i;
+                cns(1, node_i) = node_j;
+                cns(0, node_j) = node_i;
             }
             else
             {
-                connections(3, node_i) = node_j;
-                connections(2, node_j) = node_i;
+                cns(3, node_i) = node_j;
+                cns(2, node_j) = node_i;
             }
         };
 
@@ -427,6 +428,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     normal.setZero();
     IV4Stack new_connections(4, n_nodes);
     new_connections.setConstant(-1);
+    
 
     for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
     {
@@ -461,12 +463,12 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
                 alpha = (alpha - 0.5) / 0.5;
             if (right_or_top_bd)
                 alpha = alpha / 0.5;
-            
+            // std::cout << alpha << std::endl;
             q.col(new_node_cnt).template segment<dim>(0) = 
-                q.col(node_i).template segment<dim>(0) * alpha + 
-                q.col(node_j).template segment<dim>(0) * (1 - alpha);
-            q(yarn_type, new_node_cnt) = q(yarn_type, node_i) * alpha + 
-                q(yarn_type, node_j) * (1 - alpha);
+                q.col(node_i).template segment<dim>(0) * (1 - alpha) + 
+                q.col(node_j).template segment<dim>(0) * alpha;
+            q(dim + yarn_type, new_node_cnt) = q(dim + yarn_type, node_i) * (1 - alpha) + 
+                q(dim + yarn_type, node_j) * alpha;
             // std::cout << "x sub: "<< q.col(new_node_cnt).template segment<dim>(0).transpose() << std::endl;
             int n0, n1;
             if (cnt == 0)
@@ -480,6 +482,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
             rods_sub.push_back(IV3(n0, n1, yarn_type));
             yarn_map[rods_sub.size()-1] = rod_idx;
             setConnection(new_connections, n0, n1, yarn_type);
+            dirichlet_data[new_node_cnt] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             new_node_cnt++;
             new_node_added = true;
             cnt++;
@@ -503,14 +506,54 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
         rods.col(i) = rods_sub[i];
     });
     connections = new_connections;
+
+    std::vector<int> init(5, -1);
+    for (int i = 0; i < 6; i++)
+        pbc_bending_bn_pairs.push_back(init);
+    
+    auto add4Nodes = [&](int front, int end, int yarn_id, int rod_id, std::vector<std::vector<int>>& pairs)
+    {
+        if (rods(0, rod_id) == front)
+        {
+            pbc_bending_bn_pairs[yarn_id][0] = front;
+            pbc_bending_bn_pairs[yarn_id][1] = rods(1, rod_id);
+            pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
+        }
+        if (rods(1, rod_id) == end)
+        {
+            pbc_bending_bn_pairs[yarn_id][3] = end;
+            pbc_bending_bn_pairs[yarn_id][2] = rods(0, rod_id);
+            pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
+        }
+    };
+
+    for (int i = 0; i < n_rods; i++)
+    {
+        add4Nodes(0, 1, 0, i, pbc_bending_bn_pairs);
+        add4Nodes(7, 8, 1, i, pbc_bending_bn_pairs);
+        add4Nodes(14, 15, 2, i, pbc_bending_bn_pairs);
+        add4Nodes(16, 17, 3, i, pbc_bending_bn_pairs);
+        add4Nodes(9, 10, 4, i, pbc_bending_bn_pairs);
+        add4Nodes(2, 3, 5, i, pbc_bending_bn_pairs);
+    }
+    q.conservativeResize(dof, new_node_cnt);
+    connections.conservativeResize(dof, new_node_cnt);
+    n_nodes = new_node_cnt;
+    normal.conservativeResize(dof, new_node_cnt);
+    is_end_nodes = std::vector<bool>(n_nodes, false);
     // std::cout << "new # rods: " << n_rods << std::endl;
     // std::cout << rods.transpose() << std::endl;
+    // std::cout << connections.transpose() << std::endl;
+    // std::cout << new_node_cnt << " " << q.cols() << std::endl;
+    
     q0 = q;
+    // std::exit(0);
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 {
+    
     pbc_ref_unique.clear();
     dirichlet_data.clear();
     pbc_ref.clear();
@@ -518,7 +561,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     yarns.clear();
 
 
-    add_shearing = false;
+    add_shearing = true;
     add_stretching = true;
     add_bending = true;
     add_penalty = false;
@@ -526,16 +569,16 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     add_pbc = true;
     add_eularian_reg = false;
 
-    ks = 1e0;
-    kb = 1e0;
+    ks = 1e1;
+    kb = 1e-1;
     kb_penalty = 1e0;
     ke = 1e-3;
     
     km = 1e-4;
-    kx = 1e0;
+    kx = 1e2;
     kc = 1e3;
-    k_pbc = 1e2;
-    kr = 1e0;
+    k_pbc = 1e1;
+    kr = 1e2;
     
     n_nodes = 21;
     n_rods = 24;

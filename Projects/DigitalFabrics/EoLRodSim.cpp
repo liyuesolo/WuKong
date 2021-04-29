@@ -190,7 +190,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     linearSolve(entry_K, residual, ddq);
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
-    if (norm < 1e-6) return norm;
+    // if (norm < 1e-6) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq);
     // std::cout << "E0: " << E0 << std::endl;
@@ -246,7 +246,8 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
         });
         residual_norm = residual.norm();
         T dq_norm = newtonLineSearch(dq, residual);
-        if (residual_norm < newton_tol || dq_norm < 1e-6)
+        // std::cout << "residual_norm " << residual_norm << std::endl;
+        if (residual_norm < newton_tol)// || dq_norm < 1e-6)
             break;
         
         if(cnt == hard_set_exit_number)
