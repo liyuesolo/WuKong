@@ -242,31 +242,7 @@ public:
         });
     }
 
-    void fixEulerian()
-    {
-        for(int i = 0; i < n_nodes; i++)
-            dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
-    }
-    void freeEulerian()
-    {
-        dirichlet_data.clear();
-        dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-
-        dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-        dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-
-        dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
-    }
+    
 
     // EoLSim.cpp
     T computeTotalEnergy(Eigen::Ref<const DOFStack> dq);
@@ -294,6 +270,9 @@ public:
     
 
     // Scene.cpp 
+    void fixEulerian();
+    void freeEulerian();
+    
     void checkConnections();
     void build5NodeTestScene();
     void buildLongRodForBendingTest();

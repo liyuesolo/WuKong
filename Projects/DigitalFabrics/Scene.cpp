@@ -421,6 +421,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     std::vector<IV3> rods_sub;
     // std::cout << "#nodes " << n_nodes << std::endl;
     int new_node_cnt = n_nodes;
+    
     n_nodes = n_nodes + (sub_div-1) * n_rods;
     q.conservativeResize(dof, n_nodes);
 
@@ -441,8 +442,8 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
         bool sign0 = connections.col(node_i).prod();
         int sign1 = connections.col(node_j).prod();
         
-        // std::cout << "xi: " << q.col(node_i).template segment<dim>(0).transpose() << std::endl;
-        // std::cout << "xj: "<< q.col(node_j).template segment<dim>(0).transpose() << std::endl;
+        // std::cout << "xi: " << q.col(node_i).transpose() << std::endl;
+        // std::cout << "xj: "<< q.col(node_j).transpose() << std::endl;
         T fraction = T(1) / sub_div;
         bool new_node_added = false;
         bool left_or_bottom_bd = (connections(0, node_i) < 0 || connections(2, node_i) < 0);
@@ -464,12 +465,16 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
             if (right_or_top_bd)
                 alpha = alpha / 0.5;
             // std::cout << alpha << std::endl;
-            q.col(new_node_cnt).template segment<dim>(0) = 
-                q.col(node_i).template segment<dim>(0) * (1 - alpha) + 
-                q.col(node_j).template segment<dim>(0) * alpha;
-            q(dim + yarn_type, new_node_cnt) = q(dim + yarn_type, node_i) * (1 - alpha) + 
-                q(dim + yarn_type, node_j) * alpha;
-            // std::cout << "x sub: "<< q.col(new_node_cnt).template segment<dim>(0).transpose() << std::endl;
+            // q.col(new_node_cnt).template segment<dim>(0) = 
+            //     q.col(node_i).template segment<dim>(0) * (1 - alpha) + 
+            //     q.col(node_j).template segment<dim>(0) * alpha;
+            // q(dim + yarn_type, new_node_cnt) = q(dim + yarn_type, node_i) * (1 - alpha) + 
+            //     q(dim + yarn_type, node_j) * alpha;
+            q.col(new_node_cnt) = 
+                q.col(node_i) * (1 - alpha) + 
+                q.col(node_j) * alpha;
+            
+            // std::cout << "x sub: "<< q.col(new_node_cnt).transpose() << std::endl;
             int n0, n1;
             if (cnt == 0)
             {
@@ -545,7 +550,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     // std::cout << rods.transpose() << std::endl;
     // std::cout << connections.transpose() << std::endl;
     // std::cout << new_node_cnt << " " << q.cols() << std::endl;
-    
+    // std::cout << q.transpose() << std::endl;
     q0 = q;
     // std::exit(0);
 }
@@ -572,7 +577,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     ks = 1e1;
     kb = 1e-1;
     kb_penalty = 1e0;
-    ke = 1e-3;
+    ke = 1e-4;
     
     km = 1e-4;
     kx = 1e2;
@@ -817,7 +822,49 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene1x1()
     q0 = q;
 }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::fixEulerian()
+{
+    for(int i = 0; i < n_nodes; i++)
+        dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+}
+template<class T, int dim>
+void EoLRodSim<T, dim>::freeEulerian()
+{
+    dirichlet_data.clear();
 
+    for (int i = 0; i < n_nodes; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            if (connections(j, i) < 0)
+            {
+                dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);
+                break;
+            }
+        }
+            
+    }
+        
+            
+
+    // dirichlet_data[2] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[9] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[16] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[3] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[10] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[17] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+    // dirichlet_data[1] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[8] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[15] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+    // dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+
+    dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+}
 
 
 

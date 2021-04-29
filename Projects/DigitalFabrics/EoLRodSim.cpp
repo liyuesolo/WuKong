@@ -254,6 +254,13 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
             break;
         cnt++;
     }
+    // add_regularizor = false;
+    // add_stretching=false;
+    // add_penalty =false;
+    // add_bending = true;
+    // add_shearing = false;
+    // add_pbc = false;
+    // add_eularian_reg = false;
     // std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
 

@@ -92,6 +92,8 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
             gradient_FD(d, n_node) = (E1 - E0) / (2*epsilon);
             if( gradient_FD(d, n_node) == 0 && gradient(d, n_node) == 0)
                 continue;
+            if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
+                continue;
             std::cout << n_node << " dof " << d << " " << gradient_FD(d, n_node) << " " << gradient(d, n_node) << std::endl;
             std::getchar();
             cnt++;
@@ -125,6 +127,8 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
             for(int i = 0; i < n_nodes; i++)
             {
                 if(A.coeff(n_node * dof + d, i * dof + d) == 0 && row_FD(d, i) == 0)
+                    continue;
+                if (std::abs( A.coeff(n_node * dof + d, i * dof + d) - row_FD(d, i)) < 1e-4)
                     continue;
                 std::cout << "node i: " << n_node << " node j: " << i << " dof: " << d << " " << row_FD(d, i) << " " << A.coeff(n_node * dof + d, i * dof + d) << std::endl;
                 std::getchar();

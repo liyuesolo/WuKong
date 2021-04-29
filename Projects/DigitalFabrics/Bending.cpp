@@ -101,6 +101,10 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
     Vector<T, 9> F;
     F.setZero();
     #include "Maple/YarnBendF.mcg"
+    // std::cout << "bending force " << F.transpose() << std::endl;
+    // for (int node : nodes)
+    //     std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
+    
     int cnt = 0;
     for (int node : nodes)
     {
@@ -146,12 +150,17 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             Vector<T, 12> F;
             F.setZero();
             #include "Maple/YarnBendPBCSDF.mcg"
+            // std::cout << "bending force " << F.transpose() << std::endl;
+            // for (int node : nodes)
+            //     std::cout << node << " ";
+            // std::cout << std::endl;
             int cnt = 0;
             for (int node : nodes)
             {
                 residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*(dim+1));
                 residual(dim + yarn_type, node) += F[cnt*(dim+1)+dim];
                 cnt++;
+                
             }
         });
     // std::cout << "bending force " << (residual - residual_cp).transpose() << std::endl;
