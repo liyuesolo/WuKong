@@ -90,7 +90,7 @@ public:
 
     T dt = 1;
     T newton_tol = 1e-5;
-    T E = 1e7;
+    T E = 1e2;
     T R = 0.01;
 
     T rho = 1;
@@ -105,6 +105,7 @@ public:
     T L = 1;
     T ke = 1e-2; // Eulerian DoF penalty
     T kr = 1e3;
+    
     
 
     TV gravity = TV::Zero();
@@ -151,6 +152,10 @@ public:
         fix_u[dof-2] = 1.0;
         fix_lagrangian.template segment<2>(dim).setZero();
         fix_eulerian.template segment<dim>(0).setZero();
+
+        ks = E * M_PI * R * R;
+        kb = ks * R * R * 0.5;
+        kx = kb/T(2)/(1.0 + 0.45);
     }
     ~EoLRodSim() {}
     
@@ -298,6 +303,8 @@ public:
     
     // DerivativeTest.cpp
     void runDerivativeTest();
+    void checkGradientSecondOrderTerm(Eigen::Ref<DOFStack> dq);
+    void checkHessianHigherOrderTerm(Eigen::Ref<DOFStack> dq);
     void checkGradient(Eigen::Ref<DOFStack> dq);
     void checkHessian(Eigen::Ref<DOFStack> dq);
 

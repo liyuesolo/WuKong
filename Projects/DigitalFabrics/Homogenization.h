@@ -27,9 +27,9 @@ public:
         sim.buildPlanePeriodicBCScene3x3Subnodes(8);
         // sim.buildPlanePeriodicBCScene3x3();
         TV strain_dir;
-        // sim.setUniaxialStrain(0.76969, 1.1, strain_dir);
-        // sim.setUniaxialStrain(0., 1.1, strain_dir);
-        sim.setUniaxialStrain(M_PI/4, 1.5, strain_dir);
+        sim.setUniaxialStrain(0.0471239, 1.1, strain_dir);
+        // sim.setUniaxialStrain(0.0, 1.1, strain_dir);
+        // sim.setUniaxialStrain(M_PI/4, 1.5, strain_dir);
     }
 
     void marcoYoungsModulusFitting()
@@ -45,7 +45,7 @@ public:
         for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
         {
             thetas.push_back(theta);
-            // std::cout << theta << std::endl;
+            std::cout << theta << std::endl;
             T youngs_modulus = YoungsModulusFromUniaxialStrain(theta, s);
             std::cout << "theta: " << theta << " youngs_modulus " << youngs_modulus << std::endl;
             youngs_moduli.push_back(youngs_modulus);

@@ -5,17 +5,18 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::runDerivativeTest()
 {
     // test which term
+    // print_force_mag = true;
     add_regularizor = false;
     add_stretching=false;
     add_penalty =false;
-    add_bending = true;
+    add_bending = false;
     add_shearing = false;
-    add_pbc = false;
+    add_pbc = true;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();
-    if (add_pbc)
+    if (false && add_pbc)
     {
         q(0, 3) += 0.1;
         q(2, 3) += 0.1;
@@ -66,10 +67,82 @@ void EoLRodSim<T, dim>::runDerivativeTest()
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::checkGradientSecondOrderTerm(Eigen::Ref<DOFStack> dq)
+{
+    std::cout << "===================== checkGradient =====================" << std::endl;
+    DOFStack gradient(dof, n_nodes);
+    gradient.setZero();
+    computeResidual(gradient, dq);
+    gradient *= -1;
+    const auto& gd = Eigen::Map<const VectorXT>(gradient.data(), gradient.size());
+    T E0 = computeTotalEnergy(dq);
+    DOFStack dx(dof, n_nodes);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        const auto& delta_x = Eigen::Map<const VectorXT>(dx.data(), dx.size());
+        T E1 = computeTotalEnergy(dq + dx);
+        T dE = E1 - E0;
+        
+        dE -= gd.dot(delta_x);
+        // std::cout << "dE " << dE << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/dE) << std::endl;
+        }
+        previous = dE;
+        dx *= 0.5;
+    }
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::checkHessianHigherOrderTerm(Eigen::Ref<DOFStack> dq)
+{
+    std::cout << "===================== check Hessian =====================" << std::endl;
+    std::vector<Eigen::Triplet<T>> entry_K;
+    buildSystemMatrix(entry_K, dq);
+    StiffnessMatrix A(n_nodes * dof, n_nodes * dof);
+    A.setFromTriplets(entry_K.begin(), entry_K.end());
+    
+    DOFStack gradient(dof, n_nodes);
+    gradient.setZero();
+    computeResidual(gradient, dq);
+    gradient *= -1;
+    const auto& f0 = Eigen::Map<const VectorXT>(gradient.data(), gradient.size());
+    
+    DOFStack dx(dof, n_nodes);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        const auto& delta_x = Eigen::Map<const VectorXT>(dx.data(), dx.size());
+        DOFStack g1(dof, n_nodes);
+        g1.setZero();
+        computeResidual(g1, dq + dx);
+        g1 *= -1;
+        const auto& f1 = Eigen::Map<const VectorXT>(g1.data(), g1.size());
+        
+        T df_norm = (f0 + (A * delta_x) - f1).norm();
+        std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+    }
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 {
-    
-
+    checkGradientSecondOrderTerm(dq);
+    return;
     T epsilon = 1e-6;
     DOFStack gradient(dof, n_nodes);
     gradient.setZero();
@@ -92,8 +165,8 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
             gradient_FD(d, n_node) = (E1 - E0) / (2*epsilon);
             if( gradient_FD(d, n_node) == 0 && gradient(d, n_node) == 0)
                 continue;
-            if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
-                continue;
+            // if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
+            //     continue;
             std::cout << n_node << " dof " << d << " " << gradient_FD(d, n_node) << " " << gradient(d, n_node) << std::endl;
             std::getchar();
             cnt++;
@@ -106,6 +179,9 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
 {
+    checkHessianHigherOrderTerm(dq);
+    return;
+    
     T epsilon = 1e-7;
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
@@ -128,8 +204,8 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
             {
                 if(A.coeff(n_node * dof + d, i * dof + d) == 0 && row_FD(d, i) == 0)
                     continue;
-                if (std::abs( A.coeff(n_node * dof + d, i * dof + d) - row_FD(d, i)) < 1e-4)
-                    continue;
+                // if (std::abs( A.coeff(n_node * dof + d, i * dof + d) - row_FD(d, i)) < 1e-4)
+                    // continue;
                 std::cout << "node i: " << n_node << " node j: " << i << " dof: " << d << " " << row_FD(d, i) << " " << A.coeff(n_node * dof + d, i * dof + d) << std::endl;
                 std::getchar();
             }

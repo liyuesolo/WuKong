@@ -78,7 +78,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 {
     if (key == ' ')
     {
+        
         eol_sim.advanceOneStep();
+        
         updateScreen(viewer);
     }
     return false;
@@ -347,6 +349,7 @@ int main(int argc, char *argv[])
     //================== Run Diff Test ==================
     // eol_sim.buildPlanePeriodicBCScene3x3();
     // homogenizer.initalizeSim();
+    // eol_sim.buildPlanePeriodicBCScene3x3();
     // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
 

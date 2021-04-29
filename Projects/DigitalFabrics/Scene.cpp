@@ -396,6 +396,9 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3Subnodes(int sub_div)
 {
+    pbc_bending_bn_pairs.clear();
+    yarn_map.clear();
+    
     subdivide = true;
     buildPlanePeriodicBCScene3x3();
     if (sub_div > 1)
@@ -574,16 +577,16 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     add_pbc = true;
     add_eularian_reg = false;
 
-    ks = 1e1;
-    kb = 1e-1;
+    // ks = 1e1;
+    // kb = 1e-1;
     kb_penalty = 1e0;
     ke = 1e-4;
     
-    km = 1e-4;
-    kx = 1e2;
+    // kx = 1e2;
+    kx *= 1.0;
     kc = 1e3;
-    k_pbc = 1e1;
-    kr = 1e2;
+    k_pbc = 1e3;
+    kr = 1e4;
     
     n_nodes = 21;
     n_rods = 24;

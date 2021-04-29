@@ -5,7 +5,7 @@ template<class T, int dim>
 T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
 {
     // advect q to compute internal energy
-    DOFStack q_temp = q + dq;
+    DOFStack q_temp = q0 + dq;
 
     T total_energy = 0;
     if (add_stretching)
@@ -35,7 +35,7 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
 template<class T, int dim>
 T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq)
 {
-    const DOFStack q_temp = q + dq;
+    const DOFStack q_temp = q0 + dq;
     if (add_stretching)
         addStretchingForce(q_temp, residual);
     if (add_bending)
@@ -68,7 +68,7 @@ void EoLRodSim<T, dim>::addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq)
 {
-    const DOFStack q_temp = q + dq;
+    const DOFStack q_temp = q0 + dq;
     if (add_stretching)
         addStretchingK(q_temp, entry_K);
     if (add_bending)
@@ -210,8 +210,14 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         {
             std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
             std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
+            // checkGradient(dq_ls);
+            // checkHessian(dq_ls);
             checkGradient(dq_ls);
-            checkHessian(dq_ls);
+            std::cout << residual.norm() << std::endl;
+            std::cout << "E1: " << E1 << std::endl;
+            ddq = residual;
+            alpha = 1.0;
+            std::getchar();
         }
         if (cnt == line_search_max) 
             return 1e30;
@@ -245,10 +251,10 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
                 }
         });
         residual_norm = residual.norm();
-        T dq_norm = newtonLineSearch(dq, residual);
-        // std::cout << "residual_norm " << residual_norm << std::endl;
         if (residual_norm < newton_tol)// || dq_norm < 1e-6)
             break;
+        T dq_norm = newtonLineSearch(dq, residual);
+        // std::cout << "residual_norm " << residual_norm << std::endl;
         
         if(cnt == hard_set_exit_number)
             break;
@@ -261,7 +267,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
     // add_shearing = false;
     // add_pbc = false;
     // add_eularian_reg = false;
-    // std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
+    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
 
 template<class T, int dim>

@@ -69,7 +69,7 @@ void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
     DOFStack f(dof, n_nodes), zero_delta(dof, n_nodes);
     f.setZero(); zero_delta.setZero();
     add_pbc = false;
-    computeResidual(f, zero_delta);
+    computeResidual(f, q);
     add_pbc = true;
 
     // DOFStack temp(dof, n_nodes);
