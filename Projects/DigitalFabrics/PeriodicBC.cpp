@@ -14,10 +14,10 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
         {
             for(int j = 0; j < dim; j++)
             {
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, kr * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -kr * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -kr * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, kr * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_pbc * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_pbc * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_pbc * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_pbc * Hessian(i, j)));
             }
         }
     });
@@ -86,15 +86,15 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
 template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
-    
+    DOFStack residual_cp = residual;
     iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
         TV xi = q_temp.col(node_i).template segment<dim>(0);
         TV xj = q_temp.col(node_j).template segment<dim>(0);
 
         T dij = (xj - xi).dot(strain_dir);
         
-        residual.col(node_i).template segment<dim>(0) += kr * strain_dir * (dij - Dij);
-        residual.col(node_j).template segment<dim>(0) += -kr * strain_dir * (dij - Dij);
+        residual.col(node_i).template segment<dim>(0) += k_pbc * strain_dir * (dij - Dij);
+        residual.col(node_j).template segment<dim>(0) += -k_pbc * strain_dir * (dij - Dij);
     });
 
     std::vector<TV> data;
@@ -141,6 +141,8 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Re
         residual.col(ref_i) += -k_pbc  *pair_dis_vec;
         residual.col(ref_j) += k_pbc *pair_dis_vec;
     });
+    if (print_force_mag)
+        std::cout << "pbc force " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>
@@ -175,7 +177,7 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
         TV xi = q_temp.col(node_i).template segment<dim>(0);
         TV xj = q_temp.col(node_j).template segment<dim>(0);
         T dij = (xj - xi).dot(strain_dir);
-        energy_pbc += 0.5 * kr * (dij - Dij) * (dij - Dij);
+        energy_pbc += 0.5 * k_pbc * (dij - Dij) * (dij - Dij);
     });
     std::vector<TV> data;
     std::vector<int> nodes(4);

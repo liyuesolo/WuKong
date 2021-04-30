@@ -143,6 +143,13 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
 {
     checkGradientSecondOrderTerm(dq);
     return;
+    add_regularizor = false;
+    add_stretching=false;
+    add_penalty =false;
+    add_bending = true;
+    add_shearing = false;
+    add_pbc = false;
+    add_eularian_reg = false;
     T epsilon = 1e-6;
     DOFStack gradient(dof, n_nodes);
     gradient.setZero();
@@ -174,6 +181,11 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
     }
     // if(!cnt)
         // std::cout << "Gradient all correct" << std::endl;
+    
+    add_stretching=true;
+    add_bending = true;
+    add_shearing = true;
+    add_pbc = true;
 }
 
 template<class T, int dim>

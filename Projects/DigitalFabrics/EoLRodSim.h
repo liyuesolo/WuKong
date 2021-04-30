@@ -89,9 +89,11 @@ public:
     int final_dim;
 
     T dt = 1;
-    T newton_tol = 1e-5;
-    T E = 1e2;
+    T newton_tol = 1e-6;
+    T E = 3e9;
     T R = 0.01;
+
+    T unit = 1e-2;
 
     T rho = 1;
     T ks = 1.0;  // stretching term
@@ -153,9 +155,12 @@ public:
         fix_lagrangian.template segment<2>(dim).setZero();
         fix_eulerian.template segment<dim>(0).setZero();
 
+        E *= (unit * unit);
         ks = E * M_PI * R * R;
         kb = ks * R * R * 0.5;
         kx = kb/T(2)/(1.0 + 0.45);
+
+        std::cout << "ks: " << ks << " kb: " << kb << " kx: " << kx << std::endl;
     }
     ~EoLRodSim() {}
     
@@ -250,7 +255,7 @@ public:
     
 
     // EoLSim.cpp
-    T computeTotalEnergy(Eigen::Ref<const DOFStack> dq);
+    T computeTotalEnergy(Eigen::Ref<const DOFStack> dq, bool verbose = false);
     T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq);
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
     bool projectDirichletEntrySystemMatrix(StiffnessMatrix& A);

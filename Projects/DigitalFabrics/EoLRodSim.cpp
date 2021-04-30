@@ -2,33 +2,38 @@
 #include <Eigen/SparseCore>
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const DOFStack> dq)
+T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const DOFStack> dq, bool verbose)
 {
     // advect q to compute internal energy
     DOFStack q_temp = q0 + dq;
 
     T total_energy = 0;
+    T E_stretching = 0, E_bending = 0, E_shearing = 0, E_eul_reg = 0, E_pbc = 0, E_penalty = 0;
     if (add_stretching)
-        total_energy += addStretchingEnergy(q_temp);
+        E_stretching += addStretchingEnergy(q_temp);
     if (add_bending)
-        total_energy += addBendingEnergy(q_temp);
+        E_bending += addBendingEnergy(q_temp);
     if (add_shearing)
     {
-        total_energy += addShearingEnergy(q_temp, true);
-        total_energy += addShearingEnergy(q_temp, false);
+        E_shearing += addShearingEnergy(q_temp, true);
+        E_shearing += addShearingEnergy(q_temp, false);
     }
     if (add_eularian_reg)
-        total_energy += addEulerianRegEnergy(q_temp);
+        E_eul_reg += addEulerianRegEnergy(q_temp);
     if (add_pbc)
-        total_energy += addPBCEnergy(q_temp);
+        E_pbc += addPBCEnergy(q_temp);
     if (add_penalty)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
                 if (std::abs(target(d)) <= 1e10 && mask(d))
-                    total_energy += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
+                    E_penalty += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
         });
-
+    total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty;
+    if (verbose)
+        std::cout << "E_stretching " << E_stretching << " E_bending " << E_bending << 
+        " E_shearing " << E_shearing << " E_eul_reg " << E_eul_reg << 
+        " E_pbc " << E_pbc << " E_penalty " << E_penalty << std::endl;
     return total_energy;
 }
 
@@ -56,6 +61,13 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<c
                 if (std::abs(target(d)) <= 1e10 && mask(d))
                     residual(d, node_id) -= kc * (dq(d, node_id) - target(d));
         });
+    else
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            {
+                for(int d = 0; d < dof; d++)
+                    if (std::abs(target(d)) <= 1e10 && mask(d))
+                        residual(d, node_id) = 0.0;
+            });
     return residual.norm();
 }
 template<class T, int dim>
@@ -153,7 +165,8 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
 
     A.setFromTriplets(entry_K.begin(), entry_K.end());
 
-    projectDirichletEntrySystemMatrix(A);
+    if(!add_penalty)
+        projectDirichletEntrySystemMatrix(A);
     
     StiffnessMatrix H = A;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
@@ -172,13 +185,20 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
             break;
     }
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
-    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = solver.solve(rhs);
+    const auto& x = solver.solve(rhs);
+    Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = x;
+    if(solver.info()!=Eigen::Success) 
+    {
+        std::cout << "solving Ax=b failed ||Ax-b||: " << (A*x - rhs).norm() << std::endl;
+        return false;
+    }
     return true;
 }
 
 template<class T, int dim>
 T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const DOFStack> residual, int line_search_max)
 {
+    bool verbose = false;
     int nz_stretching = 16 * n_rods;
     int nz_penalty = dof * dirichlet_data.size();
 
@@ -187,7 +207,8 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
 
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
-    linearSolve(entry_K, residual, ddq);
+    bool success = linearSolve(entry_K, residual, ddq);
+    
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
     // if (norm < 1e-6) return norm;
@@ -198,7 +219,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     while(true)
     {
         DOFStack dq_ls = dq + alpha * ddq;
-        T E1 = computeTotalEnergy(dq_ls);
+        T E1 = computeTotalEnergy(dq_ls, verbose);
         // std::cout << "E1: " << E1 << std::endl;
         if (E1 - E0 < 0) {
             dq = dq_ls;
@@ -208,16 +229,26 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         cnt += 1;
         if (cnt > 500)
         {
-            std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
-            std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
-            // checkGradient(dq_ls);
-            // checkHessian(dq_ls);
-            checkGradient(dq_ls);
-            std::cout << residual.norm() << std::endl;
-            std::cout << "E1: " << E1 << std::endl;
-            ddq = residual;
+            // std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
+            // // std::cout << residual.transpose() << std::endl;
+            dq = residual;
             alpha = 1.0;
-            std::getchar();
+            // // return 0.0;
+            // verbose = true;
+            // T E0 = computeTotalEnergy(dq, true);
+            // std::cout << "E0: " << E0 << std::endl;
+            // k_pbc = 0;
+            // T E2 = computeTotalEnergy(residual, verbose);
+            // std::cout << "E2 " << E2 << std::endl;
+            // std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
+            // // checkGradient(dq_ls);
+            // // checkHessian(dq_ls);
+            // // checkGradient(dq_ls);
+            // // std::cout << residual.norm() << std::endl;
+            // // std::cout << "E1: " << E1 << std::endl;
+            // // ddq = residual;
+            // // alpha = 100.0;
+            // std::getchar();
         }
         if (cnt == line_search_max) 
             return 1e30;
@@ -239,23 +270,35 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
     
         DOFStack residual(dof, n_nodes);
         residual.setZero();
-        computeResidual(residual, dq);
+
         // set Dirichlet boundary condition
-        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        {
-            for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                {
-                    residual(d, node_id) = 0.0;
-                    dq(d, node_id) = target(d);
-                }
-        });
+        
+        if(!add_penalty)
+            iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            {
+                for(int d = 0; d < dof; d++)
+                    if (std::abs(target(d)) <= 1e10 && mask(d))
+                        dq(d, node_id) = target(d);
+            });
+        computeResidual(residual, dq);
+
         residual_norm = residual.norm();
+        // std::cout << "residual_norm " << residual_norm << std::endl;
+        // std::getchar();
         if (residual_norm < newton_tol)// || dq_norm < 1e-6)
             break;
+        // if(!add_penalty)
+        // iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+        // {
+        //     for(int d = 0; d < dof; d++)
+        //         if (std::abs(target(d)) <= 1e10 && mask(d))
+        //         {
+        //             residual(d, node_id) = target(d);
+        //         }
+        // });
         T dq_norm = newtonLineSearch(dq, residual);
-        // std::cout << "residual_norm " << residual_norm << std::endl;
-        
+        if (dq_norm == 0)
+            break;
         if(cnt == hard_set_exit_number)
             break;
         cnt++;
@@ -277,7 +320,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     dq.setZero();
     implicitUpdate(dq);
     q += dq;
-    // computeDeformationGradientUnitCell();
+    computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
 }
 
