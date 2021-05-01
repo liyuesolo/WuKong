@@ -111,6 +111,7 @@ public:
     
 
     TV gravity = TV::Zero();
+    bool verbose = false;
 
     bool add_stretching = true;
     bool add_bending = true;
@@ -269,12 +270,14 @@ public:
     void implicitUpdate(Eigen::Ref<DOFStack> dq);
     void advanceOneStep();
 
+    void setVerbose(bool v) { verbose = v; }
     void resetScene() { q = q0; }
     
 public:
     // Elasticity.cpp
     void setUniaxialStrain(T theta, T s, TV& strain_dir);
-    void computeMacroStress(TM& sigma, TV strain_dir);
+    void setBiaxialStrain(T theta1, T s1, T theta2, T s2);
+    // void computeMacroStress(TM& sigma, TV strain_dir);
     void computeDeformationGradientUnitCell();
     void fitDeformationGradientUnitCell();
     

@@ -23,107 +23,33 @@ void EoLRodSim<T, dim>::setUniaxialStrain(T theta, T s, TV& strain_dir)
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
+void EoLRodSim<T, dim>::setBiaxialStrain(T theta1, T s1, T theta2, T s2)
 {
-    bool COUT_ALL = false;
-
-    TV xj = q.col(pbc_ref_unique[0](1)).template segment<dim>(0);
-    TV xi = q.col(pbc_ref_unique[0](0)).template segment<dim>(0);
-    TV xl = q.col(pbc_ref_unique[1](1)).template segment<dim>(0);
-    TV xk = q.col(pbc_ref_unique[1](0)).template segment<dim>(0);
-
-    TV Xj = q0.col(pbc_ref_unique[0](1)).template segment<dim>(0);
-    TV Xi = q0.col(pbc_ref_unique[0](0)).template segment<dim>(0);
-    TV Xl = q0.col(pbc_ref_unique[1](1)).template segment<dim>(0);
-    TV Xk = q0.col(pbc_ref_unique[1](0)).template segment<dim>(0);
-
-    TM X = TM::Zero(), x = TM::Zero();
-    X.col(0) = Xi - Xj;
-    X.col(1) = Xk - Xl;
-
-    x.col(0) = xi - xj;
-    x.col(1) = xk - xl;
-
-    TM F_macro = x * X.inverse();
-    
-    // if (COUT_ALL)
-        // std::cout << "Fd dot d: " << strain_dir.dot((F_macro * strain_dir).normalized()) << std::endl;
-
-    TM strain_marco = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
-
-    if (COUT_ALL)
-        std::cout << "macro green strain " << std::endl << strain_marco << std::endl;
-    
-
-    TM R90 = TM::Zero();
+    pbc_strain_data.clear();
+    pbc_strain_data.resize(0);
+    TV strain_dir1 = TV::Zero();
+    TV strain_dir2 = TV::Zero();
     if constexpr (dim == 2)
     {
-        R90.row(0) = TV(0, -1);
-        R90.row(1) = TV(1, 0);
+        strain_dir1 = TV(std::cos(theta1), std::sin(theta1));
+        strain_dir2 = TV(-std::sin(theta1), std::cos(theta1));
     }
-
-    TV n0 = (R90 * (xj - xi)).normalized(), n1 = (R90 * (xl - xk)).normalized();
-
-    // std::cout << n0.dot(xj - xi) << " " << n1.dot(xl - xk) << std::endl;
-
-    DOFStack f(dof, n_nodes), zero_delta(dof, n_nodes);
-    f.setZero(); zero_delta.setZero();
-    add_pbc = false;
-    computeResidual(f, q);
-    add_pbc = true;
-
-    // DOFStack temp(dof, n_nodes);
-    // temp.setZero();
-    // addStretchingForce(q, temp);
-    // std::cout << "------------------------------- stretching -------------------------------" << std::endl;
-    // std::cout << temp.transpose() << std::endl;
-    // std::cout << "------------------------------- stretching -------------------------------" << std::endl;
-    // std::cout << "stretching norm: " << temp.norm() << std::endl;
-    // temp.setZero();
-    // addShearingForce(q, temp, true);
-    // addShearingForce(q, temp, false);
-    // std::cout << "------------------------------- shearing -------------------------------" << std::endl;
-    // std::cout << temp.transpose() << std::endl;
-    // std::cout << "------------------------------- shearing -------------------------------" << std::endl;
-    // std::cout << "shearing norm: " << temp.norm() << std::endl;
-    
-    
-
-
-
-    if(COUT_ALL)
-    {
-        std::cout << "------------------------------- f -------------------------------" << std::endl;
-        std::cout << f.transpose() << std::endl;
-        std::cout << "------------------------------- f -------------------------------" << std::endl;
-    }
-    
-    std::vector<TV> f_bc(2, TV::Zero());
-
     iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-        T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
-        length *= unit;
-        int bc_node = dir_id == 0 ? node_j : node_i;
-        f_bc[dir_id].template segment<dim>(0) += f.col(bc_node).template segment<dim>(0) / length;
-        std::cout << "node j "<< node_j << " " << f.col(node_j).template segment<dim>(0).transpose() << std::endl;
+        TV Xj = q0.col(node_j).template segment<dim>(0);
+        TV Xi = q0.col(node_i).template segment<dim>(0);
+        if constexpr (dim == 2)
+        {
+            T Dij = (Xj - Xi).dot(strain_dir1);
+            T dij = Dij * s1;
+            // std::cout << Dij << " " << dij << std::endl;
+            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir1, dij)));
+
+            Dij = (Xj - Xi).dot(strain_dir2);
+            dij = Dij * s2;
+            // std::cout << Dij << " " << dij << std::endl;
+            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir2, dij)));
+        }
     });
-
-    TM F_bc = TM::Zero(), n_bc = TM::Zero();
-    F_bc.col(0) = f_bc[0]; F_bc.col(1) = f_bc[1];
-    n_bc.col(0) = n1; n_bc.col(1) = n0;
-
-    auto stress_marco = F_bc * n_bc.inverse();
-
-    // if (COUT_ALL)
-    {    
-        std::cout << "stress: " << std::endl;
-        std::cout << stress_marco << std::endl;
-    }
-    // sigma = stress_marco;
-    if (COUT_ALL)
-        std::cout << "strain_dir" << strain_dir.transpose() << " " << (stress_marco * strain_dir).transpose() << std::endl;
-
-    sigma = stress_marco.template block<dim, dim>(0, 0);
 }
 
 template<class T, int dim>

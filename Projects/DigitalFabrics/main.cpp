@@ -354,6 +354,7 @@ int main(int argc, char *argv[])
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();
-    homogenizer.marcoYoungsModulusFitting();
+    // homogenizer.marcoYoungsModulusFitting();
+    homogenizer.fitComplianceTensor();
     return 0;
 }

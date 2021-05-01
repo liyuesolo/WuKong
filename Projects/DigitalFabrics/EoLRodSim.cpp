@@ -285,32 +285,17 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
         residual_norm = residual.norm();
         // std::cout << "residual_norm " << residual_norm << std::endl;
         // std::getchar();
-        if (residual_norm < newton_tol)// || dq_norm < 1e-6)
+        if (residual_norm < newton_tol)
             break;
-        // if(!add_penalty)
-        // iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        // {
-        //     for(int d = 0; d < dof; d++)
-        //         if (std::abs(target(d)) <= 1e10 && mask(d))
-        //         {
-        //             residual(d, node_id) = target(d);
-        //         }
-        // });
+        
         T dq_norm = newtonLineSearch(dq, residual);
-        if (dq_norm == 0)
-            break;
+        
         if(cnt == hard_set_exit_number)
             break;
         cnt++;
     }
-    // add_regularizor = false;
-    // add_stretching=false;
-    // add_penalty =false;
-    // add_bending = true;
-    // add_shearing = false;
-    // add_pbc = false;
-    // add_eularian_reg = false;
-    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
+    if (verbose)
+        std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
 
 template<class T, int dim>
@@ -320,7 +305,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     dq.setZero();
     implicitUpdate(dq);
     q += dq;
-    computeDeformationGradientUnitCell();
+    // computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
 }
 
