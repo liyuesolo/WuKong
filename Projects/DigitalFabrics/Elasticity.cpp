@@ -53,6 +53,36 @@ void EoLRodSim<T, dim>::setBiaxialStrain(T theta1, T s1, T theta2, T s2)
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::setBiaxialStrainWeighted(T theta1, T s1, T theta2, T s2, T w)
+{
+    pbc_strain_data.clear();
+    pbc_strain_data.resize(0);
+    TV strain_dir1 = TV::Zero();
+    TV strain_dir2 = TV::Zero();
+    if constexpr (dim == 2)
+    {
+        strain_dir1 = TV(std::cos(theta1), std::sin(theta1));
+        strain_dir2 = TV(-std::sin(theta1), std::cos(theta1));
+    }
+    iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
+        TV Xj = q0.col(node_j).template segment<dim>(0);
+        TV Xi = q0.col(node_i).template segment<dim>(0);
+        if constexpr (dim == 2)
+        {
+            T Dij = (Xj - Xi).dot(strain_dir1);
+            T dij = Dij * s1;
+            // std::cout << Dij << " " << dij << std::endl;
+            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir1, dij)));
+
+            Dij = (Xj - Xi).dot(strain_dir2);
+            dij = Dij * s2;
+            // std::cout << Dij << " " << dij << std::endl;
+            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir2, dij)));
+        }
+    });
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::computeDeformationGradientUnitCell()
 {
     IV2 ref0 = pbc_ref_unique[0];

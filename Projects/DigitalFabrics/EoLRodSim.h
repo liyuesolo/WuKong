@@ -277,6 +277,7 @@ public:
     // Elasticity.cpp
     void setUniaxialStrain(T theta, T s, TV& strain_dir);
     void setBiaxialStrain(T theta1, T s1, T theta2, T s2);
+    void setBiaxialStrainWeighted(T theta1, T s1, T theta2, T s2, T w);
     // void computeMacroStress(TM& sigma, TV strain_dir);
     void computeDeformationGradientUnitCell();
     void fitDeformationGradientUnitCell();

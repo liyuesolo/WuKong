@@ -14,12 +14,16 @@ class Homogenization
     using IV2 = Vector<int, 2>;
     using TV = Vector<T, dim>;
     using TM = Matrix<T, dim, dim>;
-
+    using CDoF2D = Vector<T, 6>;
+    using CHessian2D = Matrix<T, 6, 6>;
     using ComplianceTensor = Matrix<T, 3 * (dim - 1), 3 * (dim - 1)>;
     using TVEntry = Vector<T, 3 * (dim - 1)>;
 
     using ComplianceTensorFull = Matrix<T, dim * dim, dim * dim>;
     using TVEntryFull = Vector<T, dim * dim>;
+
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+
 
 public:
     EoLRodSim<T, dim>& sim;
@@ -35,7 +39,6 @@ public:
     void computeMacroStress(TM& sigma, TV strain_dir);
 
     void computeMacroStressStrain(TM& stress_marco, TM& strain_marco);
-    
     
     void fitComplianceTensor();
 };
