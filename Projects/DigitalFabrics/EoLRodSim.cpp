@@ -170,6 +170,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     
     StiffnessMatrix H = A;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
+    Eigen::SparseLU<StiffnessMatrix> lu_solver;
 
     T mu = 10e-6;
     while(true)
@@ -184,6 +185,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
         else
             break;
     }
+    lu_solver.compute(A);
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
     const auto& x = solver.solve(rhs);
     Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = x;
@@ -231,8 +233,9 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         {
             // std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
             // // std::cout << residual.transpose() << std::endl;
-            dq = residual;
-            alpha = 1.0;
+            ddq = residual;
+            // alpha = 1.0;
+            // cnt = 0;
             // // return 0.0;
             // verbose = true;
             // T E0 = computeTotalEnergy(dq, true);
@@ -289,7 +292,9 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
             break;
         
         T dq_norm = newtonLineSearch(dq, residual);
-        
+        // std::cout << "dq_norm " << dq_norm << std::endl;
+        if (dq_norm < 1e-9)
+            break;
         if(cnt == hard_set_exit_number)
             break;
         cnt++;

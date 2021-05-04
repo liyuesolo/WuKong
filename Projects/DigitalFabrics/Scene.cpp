@@ -579,14 +579,17 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 
     // ks = 1e1;
     kb *= 1;
-    kx *= 1;
+    
     kb_penalty = 1e0;
     ke = 1e-4;
     
     // kx = 1e2;
+    R = 50;
+    config();
+
     kx *= 1.0;
     kc = 1e4;
-    k_pbc = 1e3;
+    k_pbc = 1e4;
     kr = 1e3;
     
     n_nodes = 21;

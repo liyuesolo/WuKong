@@ -1,4 +1,7 @@
 #include "Homogenization.h"
+#include <fstream>
+
+#include <unsupported/Eigen/CXX11/Tensor>
 
 template<class T, int dim>
 void Homogenization<T, dim>::initalizeSim()
@@ -9,14 +12,15 @@ void Homogenization<T, dim>::initalizeSim()
     TV strain_dir;
     // sim.setUniaxialStrain(0.298451, 1.1, strain_dir);
     // sim.setUniaxialStrain(M_PI/4 + 0.1, 1.1, strain_dir);
-        
-    sim.setUniaxialStrain(6.04757, 1.05, strain_dir);
+    sim.k_pbc = 1e4;
+    // sim.setUniaxialStrain(0.08333, 1.1, strain_dir);
+    // sim.setUniaxialStrain(6.04757, 1.001, strain_dir);
     // sim.setBiaxialStrain(6.04757, 1.1, strain_dir1, 6.04757, 0.9915, strain_dir2);
     // sim.setBiaxialStrain(M_PI/4 + 0.1, 1.1, M_PI/4 + 0.1, 1.0);
-    // sim.setUniaxialStrain(6.06327, 1.1, strain_dir);
+    sim.setUniaxialStrain(0.722566, 1.01, strain_dir);
     // sim.setUniaxialStrain(0.0, 1.1, strain_dir);
 
-    // sim.setUniaxialStrain(M_PI/4, 1.1, strain_dir);
+    // sim.setUniaxialStrain(M_PI/4, 1.01, strain_dir);
     // sim.advanceOneStep();
     // TM stress, strain;
     // computeMacroStressStrain(stress, strain);
@@ -71,7 +75,7 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& stra
 
     sim.iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
-        length /= sim.unit;
+        length *= sim.unit;
         int bc_node = dir_id == 0 ? node_j : node_i;
         f_bc[dir_id].template segment<dim>(0) += f.col(bc_node).template segment<dim>(0) / length;
         
@@ -82,6 +86,7 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& stra
     n_bc.col(0) = n1; n_bc.col(1) = n0;
 
     stress_marco = F_bc * n_bc.inverse();
+    
 }
 template<class T, int dim>
 void Homogenization<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
@@ -140,7 +145,7 @@ void Homogenization<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
 
     sim.iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
-        length /= sim.unit;
+        length *= sim.unit;
         int bc_node = dir_id == 0 ? node_j : node_i;
         f_bc[dir_id].template segment<dim>(0) += f.col(bc_node).template segment<dim>(0) / length; 
     });
@@ -150,7 +155,9 @@ void Homogenization<T, dim>::computeMacroStress(TM& sigma, TV strain_dir)
     n_bc.col(0) = n1; n_bc.col(1) = n0;
 
     sigma = F_bc * n_bc.inverse();
+    const auto& vec_strain = Eigen::Map<const Vector<T, dim*dim>>(strain_marco.data(), strain_marco.size());
     sigma /= strain_marco.norm();
+    // sigma /= sqrt(vec_strain.dot(vec_strain));
 }
 
 template<class T, int dim>
@@ -158,8 +165,8 @@ void Homogenization<T, dim>::marcoYoungsModulusFitting()
 {
     // sim.unit = 1.0;
     sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    // sim.k_pbc = 1e5;
-    T s = 1.001;
+    // sim.k_pbc = 1e8;
+    T s = 1.01;
     int n_angles = 400;
     T cycle = 2. * M_PI;
     // T cycle = M_PI / 4.0;
@@ -186,7 +193,7 @@ T Homogenization<T, dim>::YoungsModulusFromUniaxialStrain(T theta, T s)
 {
     TV strain_dir, strain_dir_orth;
     sim.setUniaxialStrain(theta, s, strain_dir);
-    // sim.setBiaxialStrain(theta, s, theta, 0.992);
+    // sim.setBiaxialStrain(theta, s, theta, 1.0);
     sim.advanceOneStep();
     
     TM sigma, epsilon;
@@ -195,7 +202,6 @@ T Homogenization<T, dim>::YoungsModulusFromUniaxialStrain(T theta, T s)
     T youngs_modulus = strain_dir.dot(sigma * strain_dir);
 
     sim.resetScene();
-    // return youngs_modulus / (s-1.0);
     return youngs_modulus;
 }
 
@@ -218,10 +224,11 @@ void Homogenization<T, dim>::fitComplianceTensor()
     CDoF2D S_entry;
     S_entry.setZero();
     ComplianceTensor S;
-    S.setOnes();
-    // S.setZero();
+    // S.setOnes();
+    S.setZero();
     int n_angles = 400;
-    T s1 = 1.001, s2 = 1.0;
+    // int n_angles = 36;
+    T s1 = 1.01, s2 = 1.0;
 
     std::vector<TVEntry> strain_entries, stress_entries;
 
@@ -229,13 +236,15 @@ void Homogenization<T, dim>::fitComplianceTensor()
     {
         for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
         {
-            sim.setBiaxialStrain(theta, s1, theta, s2);
             TV strain_dir;
+            sim.setUniaxialStrain(theta, s1, strain_dir);
+            // sim.setBiaxialStrain(theta, s1, theta, s2);
+            // TV strain_dir;
             // sim.setUniaxialStrain(theta, s1, strain_dir);
             sim.advanceOneStep();
             TM stress, strain;
             computeMacroStressStrain(stress, strain);
-
+            // std::cout << "E sim : " << strain_dir.dot(stress * strain_dir) / strain.norm() << std::endl;
             if constexpr (dim == 2)
             {
                 TVEntry se0, se1, se2;
@@ -249,10 +258,34 @@ void Homogenization<T, dim>::fitComplianceTensor()
         }
     };
 
-    auto computeEnergy = [&, n_angles](CDoF2D& S_entry)
+    auto loadDataFromFile = [&]()
+    {
+        std::string base_path = "/home/yueli/Downloads/hexagon_uniaxial_distanceBased/";
+        for (int degree = 0; degree < 180; degree++)
+        {
+            
+            std::ifstream in(base_path + "uniaxial_"+std::to_string(degree)+".000000degrees.txt");
+            T eps00, eps01, eps10, eps11, sigma00, sigma01, sigma10, sigma11, dummy;
+            while(in >> eps00 >> eps01 >> eps10 >> eps11 >> sigma00 >> sigma01 >> sigma10 >> sigma11 >> dummy >> dummy >> dummy >> dummy >> dummy)
+            {
+                
+                TVEntry se0, se1, se2;
+                se0[0] = sigma00; se0[1] = sigma11; se0[2] = sigma01; 
+                se1[0] = eps00; se1[1] = eps11; se1[2] = 2.0 * eps01; 
+                if(se1.norm() < 1e-6)
+                    continue;
+                strain_entries.push_back(se1);
+                stress_entries.push_back(se0);
+                // break;
+            }
+            in.close();
+        }
+    };
+
+    auto computeEnergy = [&]()
     {
         T energy = 0.0;
-        for (int i = 0; i < n_angles; i++)
+        for (int i = 0; i < stress_entries.size(); i++)
         {
             // energy += 0.5 * (S * stress_entries[i] - strain_entries[i]).squaredNorm() / strain_entries[i].squaredNorm();
             auto x = stress_entries[i];
@@ -264,11 +297,11 @@ void Homogenization<T, dim>::fitComplianceTensor()
         return energy;
     };
 
-    auto computeGradient = [&, n_angles](CDoF2D& S_entry)
+    auto computeGradient = [&]()
     {
         CDoF2D gradient;
         gradient.setZero();
-        for (int i = 0; i < n_angles; i++)
+        for (int i = 0; i < stress_entries.size(); i++)
         {
             CDoF2D F;
             auto x = stress_entries[i];
@@ -280,11 +313,11 @@ void Homogenization<T, dim>::fitComplianceTensor()
     };
 
 
-    auto computeHessian = [&, n_angles]()
+    auto computeHessian = [&]()
     {
         CHessian2D H;
         H.setZero();
-        for (int a = 0; a < n_angles; a++)
+        for (int a = 0; a < stress_entries.size(); a++)
         {
             auto x = stress_entries[a];
             auto b = strain_entries[a];
@@ -302,28 +335,39 @@ void Homogenization<T, dim>::fitComplianceTensor()
 
     auto leastSquareFit = [&]()
     {
-        CDoF2D gradient = computeGradient(S_entry);
+        CDoF2D gradient = computeGradient();
         
         CHessian2D H = computeHessian();
         CDoF2D dx = H.colPivHouseholderQr().solve(gradient);
         
         S_entry += dx;
 
+        
         S(0, 0) = S_entry[0]; S(0, 1) = S_entry[1]; S(0, 2) = S_entry[2];
         S(1, 0) = S_entry[1]; S(1, 1) = S_entry[3]; S(1, 2) = S_entry[4];
         S(2, 0) = S_entry[2]; S(2, 1) = S_entry[4]; S(2, 2) = S_entry[5];
 
-        std::cout << S_entry << std::endl;
+        // std::cout << "Sσ - ε " << (S * stress_entries[0] - strain_entries[0]).norm() << std::endl;
+
+        // std::cout << S_entry << std::endl;
     };
     
     gatherData();
+    // loadDataFromFile();
+    std::cout << "# sample: " << stress_entries.size() << std::endl;
     std::cout << "======== Simulation Data Generation Done ========" << std::endl;
-
+    T e = computeEnergy();
+    std::cout << "e: " << e << std::endl;
     leastSquareFit();
+
+    e = computeEnergy();
+    auto gd = computeGradient();
+    std::cout << "e: " << e << " |g|: " << gd.norm() << std::endl;
     std::cout << "S" << std::endl;
     std::cout << S << std::endl;
+
     std::vector<T> thetas, youngs_moduli;
-    for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
+    for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)400)
     {
         thetas.push_back(theta);
         TVEntry ddT_vec;
@@ -333,6 +377,189 @@ void Homogenization<T, dim>::fitComplianceTensor()
         T youngs_modulus = 1.0 / ddT_vec.dot(S * ddT_vec);
         youngs_moduli.push_back(youngs_modulus);
     }
+    for(T theta : thetas)
+        std::cout << theta << " ";
+    std::cout << std::endl;
+    for(T youngs_modulus : youngs_moduli)
+        std::cout << youngs_modulus << " ";
+    std::cout << std::endl;
+}
+
+
+template<class T, int dim>
+void Homogenization<T, dim>::fitComplianceFullTensor()
+{
+    // sim.unit = 1.0;
+    sim.buildPlanePeriodicBCScene3x3Subnodes(8);
+    // sim.k_pbc = 1e5;
+    // sim.k_pbc=1e5;
+    sim.setVerbose(false);
+    /*
+    compliance tensor should be dim x dim by dim x dim
+    */
+
+    // A : C: A
+    //sum_ijkl Aij Cijkl Akl
+
+    Vector<T, 16> S_entry;
+    S_entry.setZero();
+    ComplianceTensorFull S;
+    S.setOnes();
+    // S.setZero();
+    // int n_angles = 400;
+    int n_angles = 36;
+    T s1 = 1.001, s2 = 1.0;
+
+    std::vector<TVEntryFull> strain_entries, stress_entries;
+
+    auto gatherData = [&, s1, s2, n_angles]()
+    {
+        for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
+        // for (T theta : {1.25664, 1.88496})
+        {
+            sim.setBiaxialStrain(theta, s1, theta, s2);
+            TV strain_dir;
+            // sim.setUniaxialStrain(theta, s1, strain_dir);
+            sim.advanceOneStep();
+            TM stress, strain;
+            computeMacroStressStrain(stress, strain);
+            // std::cout << "E sim : " << strain_dir.dot(stress * strain_dir) / strain.norm() << std::endl;
+            if constexpr (dim == 2)
+            {
+                TVEntryFull se0, se1, se2;
+                se0[0] = stress(0, 0); se0[3] = stress(1, 1); se0[1] = stress(0, 1); se0[2] = stress(1, 0);
+                se1[0] = strain(0, 0); se1[3] = strain(1, 1); se1[1] = strain(0, 1); se1[2] = strain(1, 0);
+
+                strain_entries.push_back(se1);
+                stress_entries.push_back(se0);
+            }
+            sim.resetScene();
+        }
+    };
+
+    auto loadDataFromFile = [&]()
+    {
+        std::string base_path = "/home/yueli/Downloads/hexagon_uniaxial_distanceBased/";
+        for (int degree = 0; degree < 180; degree++)
+        {
+            int cnt = 0;
+            std::ifstream in(base_path + "uniaxial_"+std::to_string(degree)+".000000degrees.txt");
+            T eps00, eps01, eps10, eps11, sigma00, sigma01, sigma10, sigma11, dummy;
+            while(in >> eps00 >> eps01 >> eps10 >> eps11 >> sigma00 >> sigma01 >> sigma10 >> sigma11 >> dummy >> dummy >> dummy >> dummy >> dummy)
+            {
+                
+                TVEntryFull se0, se1, se2;
+                se0[0] = sigma00;  se0[1] = sigma01; se0[2] = sigma10; se0[3] = sigma11;
+                se1[0] = eps00;  se1[1] = eps01; se1[2] = eps10; se1[3] = eps11;
+                if(se1.norm() < 1e-6)
+                    continue;
+                stress_entries.push_back(se0);
+                strain_entries.push_back(se1);
+                
+            }
+            in.close();
+        }
+    };
+
+    auto computeEnergy = [&]()
+    {
+        T energy = 0.0;
+        for (int i = 0; i < stress_entries.size(); i++)
+        {
+            
+            // energy += 0.5 * (S * stress_entries[i] - strain_entries[i]).squaredNorm() / strain_entries[i].squaredNorm();
+            auto x = stress_entries[i];
+            auto b = strain_entries[i];
+            T V[1];
+            #include "Maple/LSVFull.mcg"
+            energy += V[0];
+        }
+        return energy;
+    };
+
+    auto computeGradient = [&]()
+    {
+        Vector<T, 16> gradient;
+        gradient.setZero();
+        for (int i = 0; i < stress_entries.size(); i++)
+        {
+            Vector<T, 16> F;
+            auto x = stress_entries[i];
+            auto b = strain_entries[i];
+            #include "Maple/LSFFull.mcg"
+            gradient += F;
+        }
+        return gradient;
+    };
+
+
+    auto computeHessian = [&]()
+    {
+        Matrix<T, 16, 16> H;
+        H.setZero();
+        for (int a = 0; a < stress_entries.size(); a++)
+        {
+            auto x = stress_entries[a];
+            auto b = strain_entries[a];
+            T J[16][16];
+            memset(J, 0, sizeof(J));
+            #include "Maple/LSJFull.mcg"
+            for(int i = 0; i< 16; i++)
+                for(int j = 0; j< 16; j++)
+                    H(i, j) += -J[i][j];
+            // H += (stress_entries[i] * stress_entries[i].transpose()).transpose() / strain_entries[i].squaredNorm();
+        }
+        return H;
+    };
+    
+
+    auto leastSquareFit = [&]()
+    {
+        Vector<T, 16> gradient = computeGradient();
+        
+        Matrix<T, 16, 16> H = computeHessian();
+        Vector<T, 16> dx = H.colPivHouseholderQr().solve(gradient);
+        // Vector<T, 16> dx = H.inverse() * gradient;
+        
+        S_entry += dx;
+
+        for(int i = 0; i< 4; i++)
+            for(int j = 0; j< 4; j++)
+                S(i, j) = S_entry(i * 4 + j);
+    };
+    
+    // gatherData();
+    loadDataFromFile();
+
+    std::cout << "======== Simulation Data Generation Done ========" << std::endl;
+    T e = computeEnergy();
+    std::cout << "e: " << e << std::endl;
+    leastSquareFit();
+
+    e = computeEnergy();
+    auto gd = computeGradient();
+    std::cout << "e: " << e << " |g|: " << gd.norm() << std::endl;
+    std::cout << "S" << std::endl;
+    std::cout << S << std::endl;
+    std::cout << std::endl;
+    // S << 0.00484941, -2.40251e-07, 2.40148e-07, -0.00457267, 2.00858e-11, 0.00471005, 0.00471203, 2.12701e-11, 2.00858e-11, 0.00471005, 0.00471203, 2.12701e-11, -0.00457267, 2.48572e-07, -2.48449e-07, 0.00484941;
+
+    std::vector<T> thetas, youngs_moduli;
+    for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)400)
+    // for (T theta : {1.25664, 1.88496})
+    {
+        thetas.push_back(theta);
+        TVEntryFull ddT_vec;
+        ddT_vec[0] = std::cos(theta) * std::cos(theta);
+        ddT_vec[3] = std::sin(theta) * std::sin(theta);
+        ddT_vec[1] = std::cos(theta) * std::sin(theta);
+        ddT_vec[2] = std::cos(theta) * std::sin(theta);
+        T youngs_modulus = 1.0 / ddT_vec.dot(S * ddT_vec);
+        youngs_moduli.push_back(youngs_modulus);
+    }
+    for(T theta : thetas)
+        std::cout << theta << " ";
+    std::cout << std::endl;
     for(T youngs_modulus : youngs_moduli)
         std::cout << youngs_modulus << " ";
     std::cout << std::endl;

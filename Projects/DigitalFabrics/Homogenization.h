@@ -41,6 +41,7 @@ public:
     void computeMacroStressStrain(TM& stress_marco, TM& strain_marco);
     
     void fitComplianceTensor();
+    void fitComplianceFullTensor();
 };
 
 #endif

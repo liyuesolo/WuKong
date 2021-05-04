@@ -91,9 +91,9 @@ public:
     T dt = 1;
     T newton_tol = 1e-6;
     T E = 3e9;
-    T R = 0.01;
+    T R = 1;
 
-    T unit = 1e-2;
+    T unit = 1e-3;
 
     T rho = 1;
     T ks = 1.0;  // stretching term
@@ -156,14 +156,20 @@ public:
         fix_lagrangian.template segment<2>(dim).setZero();
         fix_eulerian.template segment<dim>(0).setZero();
 
+        config();
+    }
+    ~EoLRodSim() {}
+
+    void config()
+    {
         E *= (unit * unit);
+        R *= unit;
         ks = E * M_PI * R * R;
         kb = ks * R * R * 0.5;
         kx = kb/T(2)/(1.0 + 0.45);
 
         std::cout << "ks: " << ks << " kb: " << kb << " kx: " << kx << std::endl;
     }
-    ~EoLRodSim() {}
     
     // TODO: use ... operator
     void cout5Nodes(int n0, int n1, int n2, int n3, int n4)

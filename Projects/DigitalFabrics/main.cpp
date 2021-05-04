@@ -355,6 +355,7 @@ int main(int argc, char *argv[])
 
     // eol_sim.resetScene();
     // homogenizer.marcoYoungsModulusFitting();
+    // homogenizer.fitComplianceFullTensor();
     homogenizer.fitComplianceTensor();
     return 0;
 }
