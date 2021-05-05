@@ -568,7 +568,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     pbc_bending_pairs.clear();
     yarns.clear();
 
-    newton_tol = 1e-5;
+    
     add_shearing = true;
     add_stretching = true;
     add_bending = true;
@@ -584,9 +584,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     ke = 1e-4;
     
     // kx = 1e2;
-    R = 50;
-    config();
-
+    
     kx *= 1.0;
     kc = 1e4;
     k_pbc = 1e4;
@@ -721,6 +719,19 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 
         for (int i = 0; i < n_rods; i++)
             yarn_map[i] = i;
+
+        // for(int i = 0; i < yarns[3].size() - 1; i++)
+        // {
+        //     q(1, yarns[3][i]) -= 0.05;
+        //     q(3, yarns[3][i]) -= 0.05;
+        // }
+
+        // for(int i = 0; i < yarns[5].size() - 1; i++)
+        // {
+        //     q(1, yarns[5][i]) += 0.05;
+        //     q(3, yarns[5][i]) += 0.05;
+        // }
+        
     }
     else
     {

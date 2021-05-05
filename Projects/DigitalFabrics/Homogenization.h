@@ -12,6 +12,7 @@ class Homogenization
     using TVDOF = Vector<T, dim+2>;
     using DOFStack = Matrix<T, dim + 2, Eigen::Dynamic>;
     using IV2 = Vector<int, 2>;
+    using TV2 = Vector<T, 2>;
     using TV = Vector<T, dim>;
     using TM = Matrix<T, dim, dim>;
     using CDoF2D = Vector<T, 6>;
@@ -34,9 +35,9 @@ public:
 
     void initalizeSim();
 
-    void marcoYoungsModulusFitting();
-    T YoungsModulusFromUniaxialStrain(T theta, T s);
-    void computeMacroStress(TM& sigma, TV strain_dir);
+    void marcoMaterialParametersFitting();
+    void materialParametersFromUniaxialStrain(T theta, T s, TV2& E_nu);
+    void computeYoungsModulusPoissonRatioBatch();
 
     void computeMacroStressStrain(TM& stress_marco, TM& strain_marco);
     

@@ -170,7 +170,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
     
     StiffnessMatrix H = A;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    Eigen::SparseLU<StiffnessMatrix> lu_solver;
+    
 
     T mu = 10e-6;
     while(true)
@@ -185,7 +185,7 @@ bool EoLRodSim<T, dim>::linearSolve(const std::vector<Eigen::Triplet<T>>& entry_
         else
             break;
     }
-    lu_solver.compute(A);
+    
     const auto& rhs = Eigen::Map<const VectorXT>(residual.data(), residual.size());
     const auto& x = solver.solve(rhs);
     Eigen::Map<VectorXT>(ddq.data(), ddq.size()) = x;
@@ -218,6 +218,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
     T E0 = computeTotalEnergy(dq);
     // std::cout << "E0: " << E0 << std::endl;
     int cnt = 0;
+    bool set_to_gradient = true;
     while(true)
     {
         DOFStack dq_ls = dq + alpha * ddq;
@@ -234,8 +235,13 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
             // std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
             // // std::cout << residual.transpose() << std::endl;
             ddq = residual;
-            // alpha = 1.0;
-            // cnt = 0;
+            if(set_to_gradient)
+            {
+                alpha = 1.0;
+                cnt = 0;
+            }
+            set_to_gradient = false;
+            
             // // return 0.0;
             // verbose = true;
             // T E0 = computeTotalEnergy(dq, true);
@@ -254,7 +260,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
             // std::getchar();
         }
         if (cnt == line_search_max) 
-            return 1e30;
+            return 1e16;
             
     }
     // std::cout << "#ls: " << cnt << std::endl;
@@ -267,7 +273,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
     int cnt = 0;
     T residual_norm = 1e10;
     // this is not a hack, just used to debug intermediate results
-    int hard_set_exit_number = INT_MAX;
+    int hard_set_exit_number = 2000;
     while (true)
     {
     
@@ -291,14 +297,15 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
         if (residual_norm < newton_tol)
             break;
         
-        T dq_norm = newtonLineSearch(dq, residual);
+        T dq_norm = newtonLineSearch(dq, residual, 1000);
         // std::cout << "dq_norm " << dq_norm << std::endl;
-        if (dq_norm < 1e-9)
+        if (dq_norm < 1e-9 || dq_norm > 1e10)
             break;
         if(cnt == hard_set_exit_number)
             break;
         cnt++;
     }
+
     if (verbose)
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
 }
@@ -306,12 +313,38 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::advanceOneStep()
 {
+    newton_tol = 1e-6;
     DOFStack dq(dof, n_nodes);
     dq.setZero();
     implicitUpdate(dq);
     q += dq;
     // computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
+    auto checkHessian = [&](){
+        StiffnessMatrix A(n_nodes * dof, n_nodes * dof);
+        std::vector<Eigen::Triplet<T>> entry_K;
+        addStiffnessMatrix(entry_K, dq);
+        A.setFromTriplets(entry_K.begin(), entry_K.end());
+        projectDirichletEntrySystemMatrix(A);
+        Eigen::SimplicialLLT<StiffnessMatrix> solver;
+        solver.compute(A);
+        Eigen::MatrixXd A_dense = A;
+        Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+        eigen_solver.compute(A_dense, /* computeEigenvectors = */ false);
+        auto eigen_values = eigen_solver.eigenvalues();
+        T min_ev = 1e10;
+        for (int i = 0; i < A.cols(); i++)
+            if (eigen_values[i].real() < min_ev)
+                min_ev = eigen_values[i].real();
+        std::cout << min_ev << std::endl;
+        // std::cout << "The eigenvalues of the Hessian are: " << eigen_solver.eigenvalues().transpose() << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
+            std::cout << "Indefinite Hessian at Equilibrium" << std::endl;
+        else
+            std::cout << "Definite Hessian at Equilibrium" << std::endl;
+    };
+
+    // checkHessian();
 }
 
 template class EoLRodSim<double, 3>;

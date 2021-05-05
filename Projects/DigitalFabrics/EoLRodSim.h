@@ -89,11 +89,11 @@ public:
     int final_dim;
 
     T dt = 1;
-    T newton_tol = 1e-6;
+    T newton_tol = 1e-4;
     T E = 3e9;
-    T R = 1;
+    T R = 0.01;
 
-    T unit = 1e-3;
+    T unit = 1;
 
     T rho = 1;
     T ks = 1.0;  // stretching term
@@ -141,6 +141,7 @@ public:
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
 
+
 public:
 
     EoLRodSim()
@@ -162,11 +163,10 @@ public:
 
     void config()
     {
-        E *= (unit * unit);
-        R *= unit;
-        ks = E * M_PI * R * R;
-        kb = ks * R * R * 0.5;
-        kx = kb/T(2)/(1.0 + 0.45);
+        T area = M_PI * R * R;
+        ks = E * area;
+        kb = E * area * R * R * 0.25;
+        kx = E/T(2)/(1.0 + 0.42);
 
         std::cout << "ks: " << ks << " kb: " << kb << " kx: " << kx << std::endl;
     }
@@ -281,8 +281,8 @@ public:
     
 public:
     // Elasticity.cpp
-    void setUniaxialStrain(T theta, T s, TV& strain_dir);
-    void setBiaxialStrain(T theta1, T s1, T theta2, T s2);
+    void setUniaxialStrain(T theta, T s, TV& strain_dir, TV& ortho_dir);
+    void setBiaxialStrain(T theta1, T s1, T theta2, T s2, TV& strain_dir, TV& ortho_dir);
     void setBiaxialStrainWeighted(T theta1, T s1, T theta2, T s2, T w);
     // void computeMacroStress(TM& sigma, TV strain_dir);
     void computeDeformationGradientUnitCell();

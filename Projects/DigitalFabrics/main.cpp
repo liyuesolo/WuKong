@@ -176,8 +176,8 @@ int main(int argc, char *argv[])
                 if (ImGui::DragFloat("Angle", &(theta_pbc), 0.f, 0.1f, M_PI * 2.f))
                 {
                     eol_sim.resetScene();
-                    Vector<T, dim> strain_dir;
-                    eol_sim.setUniaxialStrain(theta_pbc, 1.1, strain_dir);
+                    Vector<T, dim> strain_dir, ortho_dir;
+                    eol_sim.setUniaxialStrain(theta_pbc, 1.1, strain_dir, ortho_dir);
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
                 }
@@ -309,8 +309,8 @@ int main(int argc, char *argv[])
             viewer.launch_init();
             // viewer.draw();
             per_yarn = false;
-            Vector<T, dim> strain_dir;
-            eol_sim.setUniaxialStrain(theta, s, strain_dir);
+            Vector<T, dim> strain_dir, ortho_dir;
+            eol_sim.setUniaxialStrain(theta, s, strain_dir, ortho_dir);
             eol_sim.advanceOneStep();
             eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
             
@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();
-    // homogenizer.marcoYoungsModulusFitting();
+    // homogenizer.computeYoungsModulusPoissonRatioBatch();
     // homogenizer.fitComplianceFullTensor();
     homogenizer.fitComplianceTensor();
     return 0;
