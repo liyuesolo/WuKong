@@ -14,10 +14,10 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
         {
             for(int j = 0; j < dim; j++)
             {
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_pbc * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_pbc * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_pbc * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_pbc * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_strain * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_strain * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_strain * Hessian(i, j)));
+                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_strain * Hessian(i, j)));
             }
         }
     });
@@ -93,8 +93,8 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Re
 
         T dij = (xj - xi).dot(strain_dir);
         
-        residual.col(node_i).template segment<dim>(0) += k_pbc * strain_dir * (dij - Dij);
-        residual.col(node_j).template segment<dim>(0) += -k_pbc * strain_dir * (dij - Dij);
+        residual.col(node_i).template segment<dim>(0) += k_strain * strain_dir * (dij - Dij);
+        residual.col(node_j).template segment<dim>(0) += -k_strain * strain_dir * (dij - Dij);
     });
 
     std::vector<TV> data;
@@ -177,7 +177,7 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
         TV xi = q_temp.col(node_i).template segment<dim>(0);
         TV xj = q_temp.col(node_j).template segment<dim>(0);
         T dij = (xj - xi).dot(strain_dir);
-        energy_pbc += 0.5 * k_pbc * (dij - Dij) * (dij - Dij);
+        energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
     });
     std::vector<TV> data;
     std::vector<int> nodes(4);
@@ -212,6 +212,44 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
 
         TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
         energy_pbc += 0.5  *k_pbc * pair_dis_vec.dot(pair_dis_vec);
+    });
+
+    return energy_pbc;
+}
+
+template<class T, int dim>
+T EoLRodSim<T, dim>::addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<const DOFStack>& lambdas, T kappa)
+{
+    T energy_pbc = 0.0;
+    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+        TV xi = q_temp.col(node_i).template segment<dim>(0);
+        TV xj = q_temp.col(node_j).template segment<dim>(0);
+        T dij = (xj - xi).dot(strain_dir);
+        energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
+    });
+
+    std::vector<TV> data;
+    std::vector<int> nodes(4);
+    buildMapleRotationPenaltyData(q_temp, data, nodes);
+    T V[1];
+    #include "Maple/RotationPenaltyV.mcg"
+    energy_pbc += V[0];
+
+    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
+        
+        int ref_i = pbc_ref_unique[yarn_type](0);
+        int ref_j = pbc_ref_unique[yarn_type](1);
+
+        TVDOF qi = q_temp.col(node_i);
+        TVDOF qj = q_temp.col(node_j);
+        TVDOF qi_ref = q_temp.col(ref_i);
+        TVDOF qj_ref = q_temp.col(ref_j);
+
+        if (ref_i == node_i && ref_j == node_j)
+            return;
+
+        TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
+        energy_pbc += 0.5  * k_pbc * pair_dis_vec.dot(pair_dis_vec);
     });
 
     return energy_pbc;

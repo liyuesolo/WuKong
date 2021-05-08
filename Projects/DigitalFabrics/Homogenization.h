@@ -29,11 +29,17 @@ class Homogenization
 public:
     EoLRodSim<T, dim>& sim;
     
+    T s1 = 1.01;
+    T s2 = 1.0;
+
+    bool biaxial = false;
+    
 public:
     Homogenization(EoLRodSim<T, dim>& eol_sim) : sim(eol_sim) {}
     ~Homogenization() {}
 
-    void initalizeSim();
+    void initialize();
+    void testOneSample();
 
     void marcoMaterialParametersFitting();
     void materialParametersFromUniaxialStrain(T theta, T s, TV2& E_nu);

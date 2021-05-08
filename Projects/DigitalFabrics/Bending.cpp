@@ -101,9 +101,9 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
     Vector<T, 9> F;
     F.setZero();
     #include "Maple/YarnBendF.mcg"
-    // std::cout << "bending force " << F.transpose() << std::endl;
+    // std::cout << "bending crossing force local " << F.transpose() << std::endl;
     // for (int node : nodes)
-    //     std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
+        // std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
     
     int cnt = 0;
     for (int node : nodes)
@@ -126,7 +126,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
         if (top != -1 && bottom != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
                 addBendingForceSingleDirection(q_temp, residual, middle, top, bottom, 1);
-    });   
+    });  
+    // std::cout << "bending crossing force " << (residual - residual_cp).norm() << std::endl; 
     if (!subdivide)
         iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
             int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;
@@ -162,10 +163,13 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
                 cnt++;
                 
             }
+            // std::cout << "bending pbc force " << (residual - residual_cp).norm() << std::endl;
+            
         });
     // std::cout << "bending force " << (residual - residual_cp).transpose() << std::endl;
     if (print_force_mag)
         std::cout << "bending force " << (residual - residual_cp).norm() << std::endl;
+    // std::getchar();
     // std::exit(0);
 }
 

@@ -77,7 +77,7 @@ public:
 
     int dof = dim + 2;
     
-    DOFStack q, q0;
+    DOFStack q, q0, q_full;
     IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
@@ -104,11 +104,13 @@ public:
     T km = 1e-3; //mass term
     T kx = 1.0; // shearing term
     T k_pbc = 1.0; // perodic BC term
+    T k_strain = 1.0;
     T L = 1;
     T ke = 1e-2; // Eulerian DoF penalty
     T kr = 1e3;
+    T k_yc = 1.0;
     
-    
+    T tunnel_R = R * 4.0;
 
     TV gravity = TV::Zero();
     bool verbose = false;
@@ -123,6 +125,8 @@ public:
     bool disable_sliding = true;
     bool subdivide = false;
     bool print_force_mag = false;
+    bool add_contact_penalty = true;
+    bool use_alm = true;
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
@@ -141,6 +145,7 @@ public:
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
 
+    StiffnessMatrix weights;
 
 public:
 
@@ -166,7 +171,7 @@ public:
         T area = M_PI * R * R;
         ks = E * area;
         kb = E * area * R * R * 0.25;
-        kx = E/T(2)/(1.0 + 0.42);
+        kx = E/T(2)/(1.0 + 0.42) * area;
 
         std::cout << "ks: " << ks << " kb: " << kb << " kx: " << kx << std::endl;
     }
@@ -242,24 +247,6 @@ public:
         }); 
     }
 
-
-    void initializeSystemMatrix(Eigen::Ref<const TVStack> dq, 
-        std::vector<int> &entryCol, 
-        std::vector<TMDOF> &entryVal)
-    {
-        final_dim = std::pow(grid_range, dof);
-        int n_rows = n_nodes;
-        entryCol.resize(n_rows * final_dim);
-        entryVal.resize(n_rows * final_dim);
-        tbb::parallel_for(0, n_rows, [&](int g) {
-            for (int i = 0; i < final_dim; ++i) {
-                entryCol[g * final_dim + i] = -1;
-                entryVal[g * final_dim + i] = TMDOF::Zero();
-            }
-        });
-    }
-
-    
 
     // EoLSim.cpp
     T computeTotalEnergy(Eigen::Ref<const DOFStack> dq, bool verbose = false);
@@ -347,11 +334,16 @@ public:
     void addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, bool top_right);  
     void addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, bool top_right);
     T addShearingEnergy(Eigen::Ref<const DOFStack> q_temp, bool top_right);
+    void toMapleNodesVector(std::vector<Vector<T, dim>>& x, Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes);
 
     //PeriodicBC.cpp
     T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
+    T addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<const DOFStack>& lambdas, T kappa);
     void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    void addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack>& lambdas);
     void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
+    void addPBCKALM(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack>& lambdas);  
     void buildMapleRotationPenaltyData(Eigen::Ref<const DOFStack> q_temp, 
         std::vector<TV>& data, std::vector<int>& nodes);
 

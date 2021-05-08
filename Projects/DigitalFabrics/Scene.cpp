@@ -433,6 +433,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     IV4Stack new_connections(4, n_nodes);
     new_connections.setConstant(-1);
     
+    std::vector<Eigen::Triplet<T>> w_entry;
 
     for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
     {
@@ -561,7 +562,6 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 {
-    print_force_mag = false;
     pbc_ref_unique.clear();
     dirichlet_data.clear();
     pbc_ref.clear();
@@ -569,25 +569,29 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     yarns.clear();
 
     
-    add_shearing = true;
     add_stretching = true;
     add_bending = true;
     add_penalty = false;
-    add_regularizor = false;
     add_pbc = true;
-    add_eularian_reg = false;
 
-    // ks = 1e1;
-    kb *= 1;
+    if(disable_sliding)
+    {
+        add_shearing = true;
+        add_eularian_reg = false;
+        k_pbc = 1e8;
+        k_strain = 1e8;
+    }
+    else
+    {
+        add_shearing = false;
+        add_eularian_reg = true;
+        ke = 1e-2;
+        k_pbc = 1e3;
+        k_strain = 1e3;
+    }
     
-    kb_penalty = 1e0;
-    ke = 1e-4;
+
     
-    // kx = 1e2;
-    
-    kx *= 1.0;
-    kc = 1e4;
-    k_pbc = 1e4;
     kr = 1e3;
     
     n_nodes = 21;
@@ -719,18 +723,6 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
 
         for (int i = 0; i < n_rods; i++)
             yarn_map[i] = i;
-
-        // for(int i = 0; i < yarns[3].size() - 1; i++)
-        // {
-        //     q(1, yarns[3][i]) -= 0.05;
-        //     q(3, yarns[3][i]) -= 0.05;
-        // }
-
-        // for(int i = 0; i < yarns[5].size() - 1; i++)
-        // {
-        //     q(1, yarns[5][i]) += 0.05;
-        //     q(3, yarns[5][i]) += 0.05;
-        // }
         
     }
     else

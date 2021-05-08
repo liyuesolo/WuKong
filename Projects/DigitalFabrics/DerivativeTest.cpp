@@ -10,31 +10,31 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_stretching=false;
     add_penalty =false;
     add_bending = false;
-    add_shearing = false;
-    add_pbc = true;
+    add_shearing = true;
+    add_pbc = false;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_nodes);
     dq.setZero();
-    if (false && add_pbc)
+    if (true || add_pbc)
     {
-        q(0, 3) += 0.1;
-        q(2, 3) += 0.1;
-        q(3, 1) += 0.1;
-        q(1, 4) += 0.1;
-        q(2, 2) += 0.1;
-        q(1, 3) += 0.1;
-        q(1, 0) += 0.1;
+        // q(0, 3) += 0.1;
+        // q(2, 3) += 0.1;
+        // q(3, 1) += 0.1;
+        // q(1, 4) += 0.1;
+        // q(2, 2) += 0.1;
+        // q(1, 3) += 0.1;
+        // q(1, 0) += 0.1;
 
-        q(1, 0) += 0.1;
-        q(0, 0) += 0.1;
-        q(0, 1) -= 0.1;
-        q(1, 1) -= 0.1;
-        q(0, 15) += 0.1;
-        q(1, 8) += 0.1;
-        // q(1, 14) -= 0.1;
-        q(0, 9) += 0.1;
-        q(1, 9) += 0.1;
+        // q(1, 0) += 0.1;
+        // q(0, 0) += 0.1;
+        // q(0, 1) -= 0.1;
+        // q(1, 1) -= 0.1;
+        // q(0, 15) += 0.1;
+        // q(1, 8) += 0.1;
+        // // q(1, 14) -= 0.1;
+        // q(0, 9) += 0.1;
+        // q(1, 9) += 0.1;
         
     }
     else
@@ -146,8 +146,8 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<DOFStack> dq)
     add_regularizor = false;
     add_stretching=false;
     add_penalty =false;
-    add_bending = true;
-    add_shearing = false;
+    add_bending = false;
+    add_shearing = true;
     add_pbc = false;
     add_eularian_reg = false;
     T epsilon = 1e-6;
@@ -192,9 +192,9 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<DOFStack> dq)
 {
     checkHessianHigherOrderTerm(dq);
-    return;
+    // return;
     
-    T epsilon = 1e-7;
+    T epsilon = 1e-8;
     std::vector<Eigen::Triplet<T>> entry_K;
     buildSystemMatrix(entry_K, dq);
     Eigen::SparseMatrix<T> A(n_nodes * dof, n_nodes * dof);

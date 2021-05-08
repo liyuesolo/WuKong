@@ -134,4 +134,4 @@ def writePointsToFile(sFile):
     f.write("M104 S0\n")
 
 
-writePointsToFile("toto.gcode")
+writePointsToFile("test_fabric.gcode")

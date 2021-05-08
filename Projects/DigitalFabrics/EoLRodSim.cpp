@@ -230,33 +230,49 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<DOFStack> dq, Eigen::Ref<const 
         }
         alpha *= T(0.5);
         cnt += 1;
-        if (cnt > 500)
+        if (cnt > 15)
         {
+            dq = dq_ls;
+            return 1e16;
+            // checkGradient(dq_ls);
             // std::cout << "!!!!!!!!!!!!!!!!!! line count: !!!!!!!!!!!!!!!!!!" << cnt << std::endl;
             // // std::cout << residual.transpose() << std::endl;
-            ddq = residual;
             if(set_to_gradient)
             {
+                ddq = residual;
                 alpha = 1.0;
                 cnt = 0;
+                set_to_gradient = false;
             }
-            set_to_gradient = false;
+            else
+            {
+                dq = dq_ls;
+                // std::cout << residual.norm() << std::endl;
+                // T E0 = computeTotalEnergy(dq, true);
+                // T E2 = computeTotalEnergy(dq + residual, true);
+                // E2 = computeTotalEnergy(dq + 0.01 * residual, true);
+                // E2 = computeTotalEnergy(dq + alpha * residual, true);
+                // std::getchar();
+                return 1e16;
+            }
             
-            // // return 0.0;
-            // verbose = true;
-            // T E0 = computeTotalEnergy(dq, true);
+            // // // return 0.0;
+            // // verbose = true;
+            // // T E0 = computeTotalEnergy(dq, true);
             // std::cout << "E0: " << E0 << std::endl;
-            // k_pbc = 0;
-            // T E2 = computeTotalEnergy(residual, verbose);
+            // // k_pbc = 0;
+            // T E2 = computeTotalEnergy(dq + residual, true);
             // std::cout << "E2 " << E2 << std::endl;
-            // std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
+            // // std::cout << "CHECKING GRADIENT AND HESSIAN " << std::endl;
+            // // // checkGradient(dq_ls);
+            // // // checkHessian(dq_ls);
             // // checkGradient(dq_ls);
-            // // checkHessian(dq_ls);
-            // // checkGradient(dq_ls);
-            // // std::cout << residual.norm() << std::endl;
-            // // std::cout << "E1: " << E1 << std::endl;
-            // // ddq = residual;
-            // // alpha = 100.0;
+            // // print_force_mag = true;
+            // std::cout << "residual.norm() " << residual.norm() << std::endl;
+            // // std::cout << residual.transpose() << std::endl;
+            // // // std::cout << "E1: " << E1 << std::endl;
+            // // // ddq = residual;
+            // // // alpha = 100.0;
             // std::getchar();
         }
         if (cnt == line_search_max) 
@@ -271,9 +287,9 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
 {
     int cnt = 0;
-    T residual_norm = 1e10;
+    T residual_norm = 1e10, dq_norm = 1e10;
     // this is not a hack, just used to debug intermediate results
-    int hard_set_exit_number = 2000;
+    int hard_set_exit_number = INT_MAX;
     while (true)
     {
     
@@ -292,33 +308,34 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<DOFStack> dq)
         computeResidual(residual, dq);
 
         residual_norm = residual.norm();
-        // std::cout << "residual_norm " << residual_norm << std::endl;
+        std::cout << "residual_norm " << residual_norm << std::endl;
         // std::getchar();
         if (residual_norm < newton_tol)
             break;
         
-        T dq_norm = newtonLineSearch(dq, residual, 1000);
+        dq_norm = newtonLineSearch(dq, residual, 100);
         // std::cout << "dq_norm " << dq_norm << std::endl;
-        if (dq_norm < 1e-9 || dq_norm > 1e10)
-            break;
+        // if (dq_norm < 1e-9 || dq_norm > 1e10)
+        // if (dq_norm > 1e10)
+            // break;
         if(cnt == hard_set_exit_number)
             break;
         cnt++;
     }
 
     if (verbose)
-        std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << std::endl;
+        std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::advanceOneStep()
 {
-    newton_tol = 1e-6;
+    // newton_tol = 1e-6;
     DOFStack dq(dof, n_nodes);
     dq.setZero();
     implicitUpdate(dq);
     q += dq;
-    // computeDeformationGradientUnitCell();
+    computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
     auto checkHessian = [&](){
         StiffnessMatrix A(n_nodes * dof, n_nodes * dof);

@@ -22,7 +22,8 @@ void EoLRodSim<T, dim>::addEulerianRegForce(Eigen::Ref<const DOFStack> q_temp, E
         // T delta_eularian = q_temp(yarn_type + dim, i) - q0(yarn_type + dim, i);
         // residual(dim + yarn_type, i) += -ke * delta_eularian;
     });
-    // std::cout << "Eulerian penalty norm: " << (residual - residual_cp).norm() << std::endl;
+    if(print_force_mag)
+        std::cout << "Eulerian penalty norm: " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>
