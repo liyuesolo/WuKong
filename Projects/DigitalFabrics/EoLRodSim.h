@@ -74,14 +74,16 @@ public:
     using IV5 = Vector<int, 5>;
     
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    using Entry = Eigen::Triplet<T>;
 
     int dof = dim + 2;
     
-    DOFStack q, q0, q_full;
-    IV3Stack rods;
+    DOFStack q, q0, q_unit, q0_unit;
+    IV3Stack rods, rods_unit;
     IV4Stack connections;
     TV3Stack normal;
     int n_nodes;
+    int n_dof;
     int n_rods;
     IV2 n_rod_uv;
     
@@ -127,6 +129,7 @@ public:
     bool print_force_mag = false;
     bool add_contact_penalty = true;
     bool use_alm = true;
+    bool run_diff_test = false;
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
@@ -145,7 +148,7 @@ public:
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
 
-    StiffnessMatrix weights;
+    StiffnessMatrix W;
 
 public:
 
@@ -247,20 +250,26 @@ public:
         }); 
     }
 
-
+    
     // EoLSim.cpp
-    T computeTotalEnergy(Eigen::Ref<const DOFStack> dq, bool verbose = false);
-    T computeResidual(Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack> dq);
+    T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, bool verbose = false);
+
+    T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq);
+    
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
     bool projectDirichletEntrySystemMatrix(StiffnessMatrix& A);
-    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
-    void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
-    void buildSystemMatrix(std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack> dq);
-    bool linearSolve(const std::vector<Eigen::Triplet<T>>& entry_K, 
-        Eigen::Ref<const DOFStack> residual, Eigen::Ref<DOFStack> ddq);
-    T newtonLineSearch(Eigen::Ref<DOFStack> dq, 
-        Eigen::Ref<const DOFStack> residual, int line_search_max = 10000);
-    void implicitUpdate(Eigen::Ref<DOFStack> dq);
+    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
+         Eigen::Ref<const VectorXT> dq);
+    void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
+    void buildSystemMatrix(
+         Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K);
+    
+    bool linearSolve(StiffnessMatrix& K, 
+        Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq);
+    T newtonLineSearch(Eigen::Ref<VectorXT> dq, 
+        Eigen::Ref<const VectorXT> residual, int line_search_max = 10000);
+    void implicitUpdate(Eigen::Ref<VectorXT> dq);
+
     void advanceOneStep();
 
     void setVerbose(bool v) { verbose = v; }
@@ -286,7 +295,10 @@ public:
     void buildShearingTest();
     void buildPlanePeriodicBCScene3x3();
     void buildPlanePeriodicBCScene3x3Subnodes(int sub_div = 1);
+    
     void subdivideRods(int sub_div);
+    void subdivideRodIntoWeightMatrix(int div);
+
     void buildPlanePeriodicBCScene1x1();
     void buildRodNetwork(int width, int height);
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
@@ -305,10 +317,10 @@ public:
     
     // DerivativeTest.cpp
     void runDerivativeTest();
-    void checkGradientSecondOrderTerm(Eigen::Ref<DOFStack> dq);
-    void checkHessianHigherOrderTerm(Eigen::Ref<DOFStack> dq);
-    void checkGradient(Eigen::Ref<DOFStack> dq);
-    void checkHessian(Eigen::Ref<DOFStack> dq);
+    void checkGradientSecondOrderTerm(Eigen::Ref<VectorXT> dq);
+    void checkHessianHigherOrderTerm(Eigen::Ref<VectorXT> dq);
+    void checkGradient(Eigen::Ref<VectorXT> dq);
+    void checkHessian(Eigen::Ref<VectorXT> dq);
 
 
     // ======================== Energy Forces and Hessian Entries ========================

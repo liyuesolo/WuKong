@@ -103,7 +103,7 @@ void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack
     #include "Maple/YarnBendF.mcg"
     // std::cout << "bending crossing force local " << F.transpose() << std::endl;
     // for (int node : nodes)
-        // std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
+    //     std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
     
     int cnt = 0;
     for (int node : nodes)

@@ -343,19 +343,18 @@ int main(int argc, char *argv[])
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);
-        viewer.launch();
+        // viewer.launch();
     }
 
     //================== Run Diff Test ==================
     // eol_sim.buildPlanePeriodicBCScene3x3();
     // homogenizer.initialize();
     // eol_sim.buildPlanePeriodicBCScene3x3();
-    // homogenizer.marcoYoungsModulusFitting();
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();
     // homogenizer.computeYoungsModulusPoissonRatioBatch();
     // homogenizer.fitComplianceFullTensor();
-    // homogenizer.fitComplianceTensor();
+    homogenizer.fitComplianceTensor();
     return 0;
 }
