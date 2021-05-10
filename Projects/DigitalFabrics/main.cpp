@@ -70,7 +70,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             // viewer.data().add_edges(X.row(i), x.row(i), Eigen::RowVector3d(1, 1, 1));
         }
         viewer.data().add_points(X, Eigen::RowVector3d(1,1,1));
-        viewer.data().add_points(x, Eigen::RowVector3d(0,0,0));  
+        // viewer.data().add_points(x, Eigen::RowVector3d(0,0,0));  
     }
 };
 

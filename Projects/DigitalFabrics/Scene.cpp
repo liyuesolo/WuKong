@@ -587,9 +587,10 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     // n_dof = n_nodes * dof;
     // W = StiffnessMatrix(n_nodes * dof, n_nodes * dof);
     // W.setIdentity();
-    // q0_unit = q0;
-    
 
+    // do not move out the unit cell
+    tunnel_R = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+        q0.col(rods.col(0)(1)).template segment<dim>(0)).norm() * 2.0;
 }
 
 template<class T, int dim>
@@ -767,10 +768,6 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     
     q0 = q;
     
-    q_unit = q;
-    q0_unit = q0;
-    rods_unit = rods;
-
     n_dof = n_nodes * dof;
     W = StiffnessMatrix(n_nodes * dof, n_dof);
     W.setIdentity();

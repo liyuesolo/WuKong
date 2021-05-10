@@ -19,7 +19,9 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(0.0, 1.01, strain_dir);
 
     // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(0.1, 1.1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(0.2, 1.1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.61792, 1.1, strain_dir, ortho_dir);
+    sim.setUniaxialStrain(M_PI/4, 1.2, strain_dir, ortho_dir);
     // // sim.setBiaxialStrain(M_PI/4 - 0.1, 1.01, M_PI/4 - 0.1, 1.0, strain_dir, ortho_dir);
     // // strain_dir.normalize();
     // // ortho_dir.normalize();
@@ -47,19 +49,22 @@ template<class T, int dim>
 void Homogenization<T, dim>::initialize()
 {
     sim.print_force_mag = false;
-    sim.disable_sliding = false;
+    sim.disable_sliding = true;
     sim.verbose = false;
     sim.buildPlanePeriodicBCScene3x3Subnodes(8);
     // sim.buildPlanePeriodicBCScene3x3();
     // sim.add_eularian_reg = false;
+    sim.add_contact_penalty = true;
     sim.use_alm = false;
     sim.add_penalty = false;
     sim.newton_tol = 1e-6;
-    sim.k_pbc = 1e8;
-    sim.k_strain = 1e8;
-    sim.ke = 1e-2;
+    sim.k_pbc = 1e1;    
+    sim.k_strain = 1e6;
+    sim.ke = 1e-3;
+    sim.k_yc = 1e6;
     // sim.kb *= 10.0;
-    s1 = 1.01;
+    
+    s1 = 1.1;
     s2 = 1.0;
 }
 
@@ -116,6 +121,7 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& stra
     n_bc.col(0) = n1; n_bc.col(1) = n0;
 
     stress_marco = F_bc * n_bc.inverse();
+    
     
 }
 
@@ -519,4 +525,4 @@ void Homogenization<T, dim>::fitComplianceFullTensor()
 }
 
 template class Homogenization<double, 3>;
-template class Homogenization<double, 2>;
+template class Homogenization<double, 2>;   

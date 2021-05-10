@@ -12,11 +12,13 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_penalty =false;
     add_bending = false;
     add_shearing = false;
-    add_pbc = true;
+    add_pbc = false;
+    add_contact_penalty = true;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_dof);
     dq.setZero();
+    std::cout << tunnel_R << std::endl;
     if (true )
     {
         // dq(0, 3) += 0.01;
@@ -36,7 +38,7 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         // // q(1, 14) -= 0.1;
         // dq(0, 9) += 0.01;
         // dq(1, 9) += 0.01;
-        
+        dq(2, 20) += 0.1;
     }
     else
     {
@@ -143,8 +145,8 @@ void EoLRodSim<T, dim>::checkHessianHigherOrderTerm(Eigen::Ref<VectorXT> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
 {
-    checkGradientSecondOrderTerm(dq);
-    return;
+    // checkGradientSecondOrderTerm(dq);
+    // return;
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
     T kappa = 1.5;
@@ -152,7 +154,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
     VectorXT gradient(n_dof);
     gradient.setZero();
     std::cout << "===================== checkGradient =====================" << std::endl;
-    // std::cout << "current state vector delta " << (dq).transpose() << std::endl;
+    // std::cout << "current state vector delta " << (dq) << std::endl;
     computeResidual(gradient, dq, lambdas, kappa);
     VectorXT gradient_FD(n_dof);
     gradient_FD.setZero();
@@ -166,8 +168,8 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
         dq(dof_i) += epsilon;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         gradient_FD(dof_i) = (E1 - E0) / (2*epsilon);
-        // if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
-            // continue;
+        if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+            continue;
         // if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
         //     continue;
         std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;

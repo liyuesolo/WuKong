@@ -20,7 +20,8 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
     DOFStack q_temp = q0 + dq_full;
 
     T total_energy = 0;
-    T E_stretching = 0, E_bending = 0, E_shearing = 0, E_eul_reg = 0, E_pbc = 0, E_penalty = 0;
+    T E_stretching = 0, E_bending = 0, E_shearing = 0, 
+        E_eul_reg = 0, E_pbc = 0, E_penalty = 0, E_contact = 0;
     if (add_stretching)
         E_stretching += addStretchingEnergy(q_temp);
     if (add_bending)
@@ -46,11 +47,13 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
                 if (mask(d))
                     E_penalty += 0.5 * kc * std::pow(target(d) - dq_full(node_id * dof + d), 2);
         });
-    total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty;
+    if (add_contact_penalty)
+        E_contact += addParallelContactEnergy(q_temp);
+    total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty + E_contact;
     if (verbose)
         std::cout << "E_stretching " << E_stretching << " E_bending " << E_bending << 
         " E_shearing " << E_shearing << " E_eul_reg " << E_eul_reg << 
-        " E_pbc " << E_pbc << " E_penalty " << E_penalty << std::endl;
+        " E_pbc " << E_pbc << " E_penalty " << E_penalty << " E_contact " << E_contact << std::endl;
     return total_energy;
 }
 
@@ -71,8 +74,6 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
 
     DOFStack dq_full(dof, n_nodes);
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
-
-
     DOFStack q_temp = q0 + dq_full;
     
 
@@ -97,7 +98,8 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
     }
     if (add_eularian_reg)
         addEulerianRegForce(q_temp, gradient_full);
-    
+    if (add_contact_penalty)
+        addParallelContactForce(q_temp, gradient_full);
     if (add_penalty)
     {
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
@@ -112,6 +114,7 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
     else
     {
         residual = W.transpose() * Eigen::Map<const VectorXT>(gradient_full.data(), gradient_full.size());
+        
         if (!run_diff_test)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
                 {
@@ -166,6 +169,8 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Entry>& entry_K,
         else
             addPBCK(q_temp, entry_K);
     }
+    if (add_contact_penalty)
+        addParallelContactK(q_temp, entry_K);
 }
 
 template<class T, int dim>
@@ -201,39 +206,23 @@ void EoLRodSim<T, dim>::buildSystemMatrix(
     if(!add_penalty && !run_diff_test)
         projectDirichletEntrySystemMatrix(K);
 
+
     K.makeCompressed();
 }
 
 template<class T, int dim>
 bool EoLRodSim<T, dim>::projectDirichletEntrySystemMatrix(StiffnessMatrix& A)
 {
-    // project Dirichlet data, set the row and col of Dirichlet nodal dof to be zero first
-    for (int k=0; k<A.outerSize(); ++k)
-        for (typename StiffnessMatrix::InnerIterator it(A,k); it; ++it)
-        {
-            int node_i = std::floor(it.row() / dof);
-            int dof_i = it.row() % dof;
-            int node_j = std::floor(it.col() / dof);
-            int dof_j = it.col() % dof;            
-            if(dirichlet_data.find(node_i) != dirichlet_data.end())
-            {
-                TVDOF mask = dirichlet_data[node_i].second;
-                if(mask(dof_i))
-                    it.valueRef() = 0.0;
-            }
-            if(dirichlet_data.find(node_j) != dirichlet_data.end())
-            {
-                TVDOF mask = dirichlet_data[node_j].second;
-                if(mask(dof_j))
-                    it.valueRef() = 0.0;
-            }
-        }
     // project Dirichlet data, set Dirichlet nodal index to be 1
     iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
     {
         for(int d = 0; d < dof; d++)
-            if (std::abs(target(d)) <= 1e10 && mask(d))
+            if (mask(d))
+            {
+                A.row(node_id * dof + d) *= 0.0;
+                A.col(node_id * dof + d) *= 0.0;
                 A.coeffRef(node_id * dof + d, node_id * dof + d) = 1.0;
+            }
     });
     // A.makeCompressed();
 }
@@ -448,6 +437,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq;
     q += dq_full;
 
+    std::cout << "total Eulerian displacement " << dq_full.transpose().block(0, dim, n_nodes, 2).cwiseAbs().sum() << std::endl;
     // computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
     // auto checkHessian = [&](){

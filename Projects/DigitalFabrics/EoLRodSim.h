@@ -78,8 +78,8 @@ public:
 
     int dof = dim + 2;
     
-    DOFStack q, q0, q_unit, q0_unit;
-    IV3Stack rods, rods_unit;
+    DOFStack q, q0;
+    IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
     int n_nodes;
@@ -373,6 +373,8 @@ public:
 
     // ParallelContact.cpp
     T addParallelContactEnergy(Eigen::Ref<const DOFStack> q_temp);
+    void addParallelContactForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    void addParallelContactK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);
 };
 
 #endif
