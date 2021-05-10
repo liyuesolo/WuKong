@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);
-        // viewer.launch();
+        viewer.launch();
     }
 
     //================== Run Diff Test ==================
@@ -353,7 +353,7 @@ int main(int argc, char *argv[])
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();
-    homogenizer.computeYoungsModulusPoissonRatioBatch();
+    // homogenizer.computeYoungsModulusPoissonRatioBatch();
     // homogenizer.fitComplianceFullTensor();
     // homogenizer.fitComplianceTensor();
     return 0;

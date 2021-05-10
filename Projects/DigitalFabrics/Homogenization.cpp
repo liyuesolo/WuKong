@@ -19,7 +19,7 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(0.0, 1.01, strain_dir);
 
     // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(0.1, 1.05, strain_dir, ortho_dir);
+    sim.setUniaxialStrain(0.1, 1.1, strain_dir, ortho_dir);
     // // sim.setBiaxialStrain(M_PI/4 - 0.1, 1.01, M_PI/4 - 0.1, 1.0, strain_dir, ortho_dir);
     // // strain_dir.normalize();
     // // ortho_dir.normalize();
@@ -47,16 +47,17 @@ template<class T, int dim>
 void Homogenization<T, dim>::initialize()
 {
     sim.print_force_mag = false;
-    sim.disable_sliding = true;
+    sim.disable_sliding = false;
     sim.verbose = false;
     sim.buildPlanePeriodicBCScene3x3Subnodes(8);
     // sim.buildPlanePeriodicBCScene3x3();
     // sim.add_eularian_reg = false;
     sim.use_alm = false;
+    sim.add_penalty = false;
     sim.newton_tol = 1e-6;
     sim.k_pbc = 1e8;
     sim.k_strain = 1e8;
-    
+    sim.ke = 1e-2;
     // sim.kb *= 10.0;
     s1 = 1.01;
     s2 = 1.0;

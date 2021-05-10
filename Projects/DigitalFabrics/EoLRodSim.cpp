@@ -5,18 +5,18 @@ template<class T, int dim>
 T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
     Eigen::Ref<const DOFStack> lambdas, T kappa, bool verbose)
 {
-    // advect q to compute internal energy
-    DOFStack dq_full(dof, n_nodes);
-    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq;
-    
+    VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    dq_full(d, node_id) = target(d);
+                if (mask(d))
+                    dq_projected(node_id * dof + d) = target(d);
         });
 
+    DOFStack dq_full(dof, n_nodes);
+
+    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
     DOFStack q_temp = q0 + dq_full;
 
     T total_energy = 0;
@@ -43,8 +43,8 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    E_penalty += 0.5 * kc * std::pow(target(d) - dq(d, node_id), 2);
+                if (mask(d))
+                    E_penalty += 0.5 * kc * std::pow(target(d) - dq_full(node_id * dof + d), 2);
         });
     total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty;
     if (verbose)
@@ -60,16 +60,18 @@ template<class T, int dim>
 T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, 
     Eigen::Ref<const VectorXT> dq, Eigen::Ref<const DOFStack> lambdas, T kappa)
 {
-    DOFStack dq_full(dof, n_nodes);
-    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq;
-    
+    VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    dq_full(d, node_id) = target(d);
+                if (mask(d))
+                    dq_projected(node_id * dof + d) = target(d);
         });
+
+    DOFStack dq_full(dof, n_nodes);
+    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
+
 
     DOFStack q_temp = q0 + dq_full;
     
@@ -95,29 +97,31 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
     }
     if (add_eularian_reg)
         addEulerianRegForce(q_temp, gradient_full);
+    
     if (add_penalty)
+    {
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    gradient_full(d, node_id) -= kc * (dq(d, node_id) - target(d));
+                if (mask(d))
+                    gradient_full(d, node_id) -= kc * (dq_full(node_id * dof + d) - target(d));
         });
+        residual = W.transpose() * Eigen::Map<const VectorXT>(gradient_full.data(), gradient_full.size());
+        return residual.norm();
+    }
     else
     {
+        residual = W.transpose() * Eigen::Map<const VectorXT>(gradient_full.data(), gradient_full.size());
         if (!run_diff_test)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
                 {
                     for(int d = 0; d < dof; d++)
-                        if (std::abs(target(d)) <= 1e10 && mask(d))
-                            gradient_full(d, node_id) = 0.0;
+                        if (mask(d))
+                            residual(node_id * dof + d) = 0.0;
                 });
+        return residual.norm();
     }
-        
-    // std::cout << gradient_full.norm() << std::endl;
-    residual = W.transpose() * Eigen::Map<const VectorXT>(gradient_full.data(), gradient_full.size());
-    // std::cout << residual.norm() << std::endl;
-    // std::getchar();
-    return residual.norm();
+    
 }
 template<class T, int dim>
 void EoLRodSim<T, dim>::addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K)
@@ -130,16 +134,17 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Entry>& entry_K, 
     Eigen::Ref<const VectorXT> dq, T kappa)
 {
-    DOFStack dq_full(dof, n_nodes);
-    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq;
-
+    VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             for(int d = 0; d < dof; d++)
-                if (std::abs(target(d)) <= 1e10 && mask(d))
-                    dq_full(d, node_id) = target(d);
+                if (mask(d))
+                    dq_projected(node_id * dof + d) = target(d);
         });
+
+    DOFStack dq_full(dof, n_nodes);
+    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
 
     DOFStack q_temp = q0 + dq_full;
     
@@ -170,7 +175,7 @@ void EoLRodSim<T, dim>::addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entr
     iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
     {
         for(int d = 0; d < dof; d++)
-            if (std::abs(target(d)) <= 1e10 && mask(d))
+            if (mask(d))
                 entry_K.push_back(Eigen::Triplet<T>(node_id * dof + d, node_id * dof + d, kc));
     });
 }
@@ -191,10 +196,11 @@ void EoLRodSim<T, dim>::buildSystemMatrix(
     StiffnessMatrix A(n_nodes * dof, n_nodes * dof);
     A.setFromTriplets(entry_K.begin(), entry_K.end());
     
-    if(!add_penalty && !run_diff_test)
-        projectDirichletEntrySystemMatrix(A);
-    
     K = W.transpose() * A * W;
+
+    if(!add_penalty && !run_diff_test)
+        projectDirichletEntrySystemMatrix(K);
+
     K.makeCompressed();
 }
 
@@ -389,7 +395,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 10000;
+    int max_newton_iter = 1000;
 
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setZero();

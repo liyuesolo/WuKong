@@ -507,7 +507,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
             rods_sub.push_back(IV3(n0, n1, yarn_type));
             yarn_map[rods_sub.size()-1] = rod_idx;
             setConnection(new_connections, n0, n1, yarn_type);
-            dirichlet_data[new_node_cnt] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[new_node_cnt] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             new_node_cnt++;
             new_node_added = true;
             cnt++;
@@ -604,7 +604,8 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     
     add_stretching = true;
     add_bending = true;
-    add_penalty = false;
+    
+    kc = 1e8;
     add_pbc = true;
 
     if(disable_sliding)
@@ -618,9 +619,9 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     {
         add_shearing = false;
         add_eularian_reg = true;
-        ke = 1e-4;
-        k_pbc = 1e6;
-        k_strain = 1e6;
+        ke = 1;
+        k_pbc = 1e8;
+        k_strain = 1e8;
     }
     
 
@@ -877,7 +878,8 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::fixEulerian()
 {
     for(int i = 0; i < n_nodes; i++)
-        dirichlet_data[i] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+        if (connections.col(i).prod() < 0)
+            dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);
     dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
 }
 
@@ -889,15 +891,8 @@ void EoLRodSim<T, dim>::freeEulerian()
 
     for (int i = 0; i < n_nodes; i++)
     {
-        for (int j = 0; j < 4; j++)
-        {
-            if (connections(j, i) < 0)
-            {
-                dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);
-                break;
-            }
-        }
-            
+        if (connections.col(i).prod() < 0)
+            dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);    
     }
 
     dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
