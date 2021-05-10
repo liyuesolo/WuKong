@@ -399,7 +399,6 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3Subnodes(int sub_div)
     pbc_bending_bn_pairs.clear();
     yarn_map.clear();
     
-    
     buildPlanePeriodicBCScene3x3();
     if (sub_div > 1)
     {
@@ -568,7 +567,18 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     
     normal.conservativeResize(dof, new_node_cnt);
     is_end_nodes = std::vector<bool>(n_nodes, false);
+    
+    n_pb_cons = 0;
+    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
+        int ref_i = pbc_ref_unique[yarn_type](0);
+        int ref_j = pbc_ref_unique[yarn_type](1);
 
+        if (ref_i == node_i && ref_j == node_j)
+            return;
+        n_pb_cons++;
+    });
+
+    
     q0 = q;
     n_dof = dof_cnt;
     W = StiffnessMatrix(n_nodes * dof, n_dof);
@@ -578,7 +588,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     // W = StiffnessMatrix(n_nodes * dof, n_nodes * dof);
     // W.setIdentity();
     // q0_unit = q0;
-
+    
 
 }
 
@@ -608,9 +618,9 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     {
         add_shearing = false;
         add_eularian_reg = true;
-        ke = 1e-2;
-        k_pbc = 1e8;
-        k_strain = 1e8;
+        ke = 1e-4;
+        k_pbc = 1e6;
+        k_strain = 1e6;
     }
     
 
@@ -759,7 +769,10 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     q_unit = q;
     q0_unit = q0;
     rods_unit = rods;
-    n_dof = n_nodes;
+
+    n_dof = n_nodes * dof;
+    W = StiffnessMatrix(n_nodes * dof, n_dof);
+    W.setIdentity();
 }
 
 template<class T, int dim>

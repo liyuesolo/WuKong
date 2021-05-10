@@ -85,6 +85,7 @@ public:
     int n_nodes;
     int n_dof;
     int n_rods;
+    int n_pb_cons;
     IV2 n_rod_uv;
     
     const static int grid_range = 3;
@@ -252,22 +253,27 @@ public:
 
     
     // EoLSim.cpp
-    T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, bool verbose = false);
+    T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
+        Eigen::Ref<const DOFStack> lambdas, T kappa, 
+        bool verbose = false);
 
-    T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq);
+    T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq,
+         Eigen::Ref<const DOFStack> lambdas, T kappa);
     
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
     bool projectDirichletEntrySystemMatrix(StiffnessMatrix& A);
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
-         Eigen::Ref<const VectorXT> dq);
+         Eigen::Ref<const VectorXT> dq, T kappa);
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
     void buildSystemMatrix(
-         Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K);
+         Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K, T kappa);
     
     bool linearSolve(StiffnessMatrix& K, 
         Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq);
     T newtonLineSearch(Eigen::Ref<VectorXT> dq, 
-        Eigen::Ref<const VectorXT> residual, int line_search_max = 10000);
+        Eigen::Ref<const VectorXT> residual, 
+        Eigen::Ref<const DOFStack> lambdas, T kappa,
+        int line_search_max = 100);
     void implicitUpdate(Eigen::Ref<VectorXT> dq);
 
     void advanceOneStep();
@@ -351,11 +357,12 @@ public:
 
     //PeriodicBC.cpp
     T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
-    T addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<const DOFStack>& lambdas, T kappa);
+    T addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<const DOFStack> lambdas, T kappa);
     void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
-    void addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual, Eigen::Ref<const DOFStack>& lambdas);
+    void addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
+         Eigen::Ref<const DOFStack> lambdas, T kappa);
     void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
-    void addPBCKALM(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, Eigen::Ref<const DOFStack>& lambdas);  
+    void addPBCKALM(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, T kappa);  
     void buildMapleRotationPenaltyData(Eigen::Ref<const DOFStack> q_temp, 
         std::vector<TV>& data, std::vector<int>& nodes);
 

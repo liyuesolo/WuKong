@@ -2,3 +2,5 @@
 build/*
 ext/cache/*
 CMakeLists.txt.user
+.gcode
+output/

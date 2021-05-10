@@ -353,8 +353,8 @@ int main(int argc, char *argv[])
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();
-    // homogenizer.computeYoungsModulusPoissonRatioBatch();
+    homogenizer.computeYoungsModulusPoissonRatioBatch();
     // homogenizer.fitComplianceFullTensor();
-    homogenizer.fitComplianceTensor();
+    // homogenizer.fitComplianceTensor();
     return 0;
 }
