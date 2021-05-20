@@ -10,10 +10,10 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     add_regularizor = false;
     add_stretching=false;
     add_penalty =false;
-    add_bending = false;
+    add_bending = true;
     add_shearing = false;
     add_pbc = false;
-    add_contact_penalty = true;
+    add_contact_penalty = false;
     add_eularian_reg = false;
 
     DOFStack dq(dof, n_dof);
@@ -21,23 +21,23 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     std::cout << tunnel_R << std::endl;
     if (true )
     {
-        // dq(0, 3) += 0.01;
-        // dq(2, 3) += 0.01;
-        // dq(3, 1) += 0.01;
-        // dq(1, 4) += 0.01;
-        // dq(2, 2) += 0.01;
-        // dq(1, 3) += 0.01;
-        // dq(1, 0) += 0.01;
+        dq(0, 3) += 0.01;
+        dq(2, 3) += 0.01;
+        dq(3, 1) += 0.01;
+        dq(1, 4) += 0.01;
+        dq(2, 2) += 0.01;
+        dq(1, 3) += 0.01;
+        dq(1, 0) += 0.01;
 
-        // dq(1, 0) += 0.01;
-        // dq(0, 0) += 0.01;
-        // dq(0, 1) -= 0.01;
-        // dq(1, 1) -= 0.01;
-        // dq(0, 15) += 0.01;
-        // dq(1, 8) += 0.01;
-        // // q(1, 14) -= 0.1;
-        // dq(0, 9) += 0.01;
-        // dq(1, 9) += 0.01;
+        dq(1, 0) += 0.01;
+        dq(0, 0) += 0.01;
+        dq(0, 1) -= 0.01;
+        dq(1, 1) -= 0.01;
+        dq(0, 15) += 0.01;
+        dq(1, 8) += 0.01;
+        // q(1, 14) -= 0.1;
+        dq(0, 9) += 0.01;
+        dq(1, 9) += 0.01;
         dq(2, 20) += 0.1;
     }
     else
@@ -193,13 +193,12 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<VectorXT> dq)
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
     T kappa = 1.5;
-    T epsilon = 1e-2;
+    T epsilon = 1e-6;
     StiffnessMatrix A;
     buildSystemMatrix(dq, A, kappa);
 
     for(int dof_i = 0; dof_i < n_dof; dof_i++)
     {
-        
         {
             dq(dof_i) += epsilon;
             VectorXT g0(n_dof), g1(n_dof);

@@ -15,39 +15,53 @@ void EoLRodSim<T, dim>::toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, E
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::entryHelperBending(Eigen::Ref<const DOFStack> q_temp, 
-    std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset)
-{
-    std::vector<Vector<T, dim + 1>> x(3);
-    std::vector<int> nodes = {n0, n1, n2};
-    toMapleNodesVector(x, q_temp, nodes, uv_offset);
-    T J[9][9];
-    memset(J, 0, sizeof(J));
-    #include "Maple/YarnBendJ.mcg"
-    for(int k = 0; k < nodes.size(); k++)
-        for(int l = 0; l < nodes.size(); l++)
-            for(int i = 0; i < dim + 1; i++)
-                for (int j = 0; j < dim + 1; j++)
-                    {
-                        int u_offset = i == dim ? dim + uv_offset : i;
-                        int v_offset = j == dim ? dim + uv_offset : j;
-                        entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + u_offset, nodes[l] * dof + v_offset, -J[k*(dim + 1) + i][l * (dim + 1) + j]));
-                    }
-    
-}
-
-
-template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K)
 {
+
+    auto entryHelperBending = [&](int n0, int n1, int n2, int uv_offset)
+    {
+        T kappa0 = curvature_functions[uv_offset]->value(q_temp(dim + uv_offset, n0));
+        T dkappa0du;
+        curvature_functions[uv_offset]->gradient(q_temp(dim + uv_offset, n0), dkappa0du);
+        T d2kappa0du2;
+        curvature_functions[uv_offset]->hessian(q_temp(dim + uv_offset, n0), d2kappa0du2);
+
+        std::vector<Vector<T, dim + 1>> x(3);
+        std::vector<int> nodes = {n0, n1, n2};
+        toMapleNodesVector(x, q_temp, nodes, uv_offset);
+        T J[10][10];
+        memset(J, 0, sizeof(J));
+        #include "Maple/YarnBendRestCurvatureJ.mcg"
+        for(int k = 0; k < nodes.size(); k++)
+            for(int l = 0; l < nodes.size(); l++)
+                for(int i = 0; i < dim + 1; i++)
+                    for (int j = 0; j < dim + 1; j++)
+                        {
+                            int u_offset = i == dim ? dim + uv_offset : i;
+                            int v_offset = j == dim ? dim + uv_offset : j;
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + u_offset, nodes[l] * dof + v_offset, -J[k*(dim + 1) + i][l * (dim + 1) + j]));
+                        }
+        
+        for (int i = 0; i < 9; i++)
+        {
+            int node_i = std::floor(T(i)/(dim + 1));
+            int dof_i = i % (dim + 1);
+            int offset = dof_i == dim ? dim + uv_offset : dof_i;
+
+            entry_K.push_back(Entry(nodes[node_i] * dof + offset, nodes[0] * dof + dim + uv_offset, -J[i][9] * -dkappa0du));
+            entry_K.push_back(Entry(nodes[0] * dof + dim + uv_offset, nodes[node_i] * dof + offset, -J[9][i] * -dkappa0du));
+        }
+
+        entry_K.push_back(Entry(nodes[0] * dof + dim + uv_offset, nodes[0] * dof + dim + uv_offset, -J[9][9] * d2kappa0du2));
+    };
 
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left])
-                entryHelperBending(q_temp, entry_K, middle, right, left, 0);
+                entryHelperBending(middle, right, left, 0);
         if (top != -1 && bottom != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
-                entryHelperBending(q_temp, entry_K, middle, top, bottom, 1);
+                entryHelperBending(middle, top, bottom, 1);
     });
     if (!subdivide)
         iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
@@ -70,11 +84,23 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
         });    
     else
         iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+            T kappa0 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[0]));
+            T kappa1 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[3]));
+
+            T dkappa0du, dkappa1du;
+            curvature_functions[yarn_type]->gradient(q_temp(dim + yarn_type, nodes[0]), dkappa0du);
+            curvature_functions[yarn_type]->gradient(q_temp(dim + yarn_type, nodes[3]), dkappa1du);
+            
+            T d2kappa0du2, d2kappa1du2;
+
+            curvature_functions[yarn_type]->hessian(q_temp(dim + yarn_type, nodes[0]), d2kappa0du2);
+            curvature_functions[yarn_type]->hessian(q_temp(dim + yarn_type, nodes[3]), d2kappa1du2);
+
             std::vector<Vector<T, dim + 1>> x(nodes.size());
             toMapleNodesVector(x, q_temp, nodes, yarn_type);
-            T J[12][12];
+            T J[14][14];
             memset(J, 0, sizeof(J));
-            #include "Maple/YarnBendPBCSDJ.mcg"
+            #include "Maple/YarnBendPBCRestCurvatureJ.mcg"
             int cnt = 0;
             for(int k = 0; k < nodes.size(); k++)
                 for(int l = 0; l < nodes.size(); l++)
@@ -86,46 +112,67 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
         
                                 entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + u_offset, nodes[l] * dof + v_offset, -J[k*(dim + 1) + i][l * (dim + 1) + j]));
                             }
+
+            
+            for (int i = 0; i < 12; i++)
+            {
+                int node_i = std::floor(T(i)/(dim + 1));
+                int dof_i = i % (dim + 1);
+                int offset = dof_i == dim ? dim + yarn_type : dof_i;
+
+                entry_K.push_back(Entry(nodes[node_i] * dof + offset, nodes[0] * dof + dim + yarn_type, -J[i][12] * -dkappa0du));
+                entry_K.push_back(Entry(nodes[node_i] * dof + offset, nodes[3] * dof + dim + yarn_type, -J[i][13] * -dkappa1du));
+
+                entry_K.push_back(Entry(nodes[0] * dof + dim + yarn_type, nodes[node_i] * dof + offset, -J[12][i] * -dkappa0du));
+                entry_K.push_back(Entry(nodes[3] * dof + dim + yarn_type, nodes[node_i] * dof + offset, -J[13][i] * -dkappa1du));
+            }
+
+            entry_K.push_back(Entry(nodes[0] * dof + dim + yarn_type, nodes[0] * dof + dim + yarn_type, -J[12][12] * d2kappa0du2));
+            entry_K.push_back(Entry(nodes[3] * dof + dim + yarn_type, nodes[3] * dof + dim + yarn_type, -J[13][13] * d2kappa1du2));
+            entry_K.push_back(Entry(nodes[0] * dof + dim + yarn_type, nodes[3] * dof + dim + yarn_type, -J[12][13] * -dkappa0du * -dkappa1du));
+            entry_K.push_back(Entry(nodes[3] * dof + dim + yarn_type, nodes[0] * dof + dim + yarn_type, -J[13][12] * -dkappa0du * -dkappa1du));
         });
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::addBendingForceSingleDirection(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
-        int n0, int n1, int n2, int uv_offset)
-{
-    // if(n0 == 4)
-        // cout4Nodes(n0, n1, n2, uv_offset);
-    std::vector<Vector<T, dim + 1>> x(3);
-    std::vector<int> nodes = {n0, n1, n2};
-    toMapleNodesVector(x, q_temp, nodes, uv_offset);
-    Vector<T, 9> F;
-    F.setZero();
-    #include "Maple/YarnBendF.mcg"
-    // std::cout << "bending crossing force local " << F.transpose() << std::endl;
-    // for (int node : nodes)
-    //     std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
-    
-    int cnt = 0;
-    for (int node : nodes)
-    {
-        residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*(dim+1));
-        residual(dim + uv_offset, node) += F[cnt*(dim+1)+dim];
-        cnt++;
-    } 
-} 
-
-template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
+    auto addBendingForceSingleDirection = [&](int n0, int n1, int n2, int uv_offset)
+    {
+        // if(n0 == 4)
+            // cout4Nodes(n0, n1, n2, uv_offset);
+        T kappa0 = curvature_functions[uv_offset]->value(q_temp(dim + uv_offset, n0));
+        T dkappa0du;
+        curvature_functions[uv_offset]->gradient(q_temp(dim + uv_offset, n0), dkappa0du);
+        
+        std::vector<Vector<T, dim + 1>> x(3);
+        std::vector<int> nodes = {n0, n1, n2};
+        toMapleNodesVector(x, q_temp, nodes, uv_offset);
+        Vector<T, 10> F;
+        F.setZero();
+        #include "Maple/YarnBendRestCurvatureF.mcg"
+        // std::cout << "bending crossing force local " << F.transpose() << std::endl;
+        // for (int node : nodes)
+        //     std::cout << node << " " << q_temp.col(node).transpose() << " uv " << uv_offset << std::endl;
+        
+        int cnt = 0;
+        for (int node : nodes)
+        {
+            residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*(dim+1));
+            residual(dim + uv_offset, node) += F[cnt*(dim+1)+dim];
+            cnt++;
+        } 
+        residual(dim + uv_offset, n0) += F(9) * -dkappa0du;
+    };
 
     DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left])
-                addBendingForceSingleDirection(q_temp, residual, middle, right, left, 0);
+                addBendingForceSingleDirection(middle, right, left, 0);
         if (top != -1 && bottom != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
-                addBendingForceSingleDirection(q_temp, residual, middle, top, bottom, 1);
+                addBendingForceSingleDirection(middle, top, bottom, 1);
     });  
     // std::cout << "bending crossing force " << (residual - residual_cp).norm() << std::endl; 
     if (!subdivide)
@@ -146,11 +193,17 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
         });
     else
         iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+            T kappa0 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[0]));
+            T kappa1 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[3]));
+            T dkappa0du, dkappa1du;
+            curvature_functions[yarn_type]->gradient(q_temp(dim + yarn_type, nodes[0]), dkappa0du);
+            curvature_functions[yarn_type]->gradient(q_temp(dim + yarn_type, nodes[3]), dkappa1du);
+
             std::vector<Vector<T, dim + 1>> x(nodes.size());
             toMapleNodesVector(x, q_temp, nodes, yarn_type);
-            Vector<T, 12> F;
+            Vector<T, 14> F;
             F.setZero();
-            #include "Maple/YarnBendPBCSDF.mcg"
+            #include "Maple/YarnBendPBCRestCurvatureF.mcg"
             // std::cout << "bending force " << F.transpose() << std::endl;
             // for (int node : nodes)
             //     std::cout << node << " ";
@@ -161,10 +214,10 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
                 residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*(dim+1));
                 residual(dim + yarn_type, node) += F[cnt*(dim+1)+dim];
                 cnt++;
-                
             }
             // std::cout << "bending pbc force " << (residual - residual_cp).norm() << std::endl;
-            
+            residual(dim + yarn_type, nodes[0]) += F(12) * -dkappa0du;
+            residual(dim + yarn_type, nodes[3]) += F(13) * -dkappa1du;
         });
     // std::cout << "bending force " << (residual - residual_cp).transpose() << std::endl;
     if (print_force_mag)
@@ -173,26 +226,25 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
     // std::exit(0);
 }
 
-template<class T, int dim>
-T EoLRodSim<T, dim>::bendingEnergySingleDirection(Eigen::Ref<const DOFStack> q_temp, int n0, int n1, int n2, int uv_offset)
-{
-    // cout4Nodes(n0, n1, n2, uv_offset);
-    // std::cout << "q2" <<  q_temp.col(n2).transpose() <<std::endl;
-    // std::cout << "q0" <<  q_temp.col(n0).transpose() <<std::endl;
-    // std::cout << "q1" <<  q_temp.col(n1).transpose() <<std::endl;
-    std::vector<Vector<T, dim + 1>> x(3);
-    std::vector<int> nodes = {n0, n1, n2};
-    toMapleNodesVector(x, q_temp, nodes, uv_offset);
-    T V[1];
-    #include "Maple/YarnBendV.mcg"
-    // std::cout << V[0] << std::endl;
-    // std::getchar();
-    return V[0];
-}
+
 
 template<class T, int dim>
 T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
+    auto bendingEnergySingleDirection = [&](int n0, int n1, int n2, int uv_offset)
+    {
+        T kappa0 = curvature_functions[uv_offset]->value(q_temp(dim + uv_offset, n0));
+        // std::cout << "curvature "<< kappa0 << std::endl;
+        std::vector<Vector<T, dim + 1>> x(3);
+        std::vector<int> nodes = {n0, n1, n2};
+        toMapleNodesVector(x, q_temp, nodes, uv_offset);
+        T V[1];
+        #include "Maple/YarnBendRestCurvatureV.mcg"
+        // std::cout << V[0] << std::endl;
+        // std::getchar();
+        return V[0];
+    };
+
     T energy = 0.0;
     
     VectorXT crossing_energy(n_nodes);
@@ -201,10 +253,10 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if((!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left]) )
-                crossing_energy[middle] += bendingEnergySingleDirection(q_temp, middle, right, left, 0);
+                crossing_energy[middle] += bendingEnergySingleDirection(middle, right, left, 0);
         if (top != -1 && bottom != -1)
             if((!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom]) )
-                crossing_energy[middle] += bendingEnergySingleDirection(q_temp, middle, top, bottom, 1);
+                crossing_energy[middle] += bendingEnergySingleDirection(middle, top, bottom, 1);
     });
     energy += crossing_energy.sum();
     
@@ -220,10 +272,14 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     else
         iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
             // std::cout << nodes[0] << " " << nodes[1] << " "<< nodes[2] << " "<< nodes[3] << " "<<yarn_type <<std::endl;
+            T kappa0 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[0]));
+            T kappa1 = curvature_functions[yarn_type]->value(q_temp(dim + yarn_type, nodes[3]));
+            // std::cout << kappa0 << " " << kappa1 << std::endl;
+            // std::getchar();
             std::vector<Vector<T, dim + 1>> x(nodes.size());
             toMapleNodesVector(x, q_temp, nodes, yarn_type);
             T V[1];
-            #include "Maple/YarnBendPBCSDV.mcg"
+            #include "Maple/YarnBendPBCRestCurvatureV.mcg"
             energy += V[0];
             // std::cout << V[0] << std::endl;
         });

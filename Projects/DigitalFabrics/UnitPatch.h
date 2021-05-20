@@ -1,0 +1,101 @@
+#ifndef UNIT_PATCH_H
+#define UNIT_PATCH_H
+
+#include "EoLRodSim.h"
+
+template<class T, int dim>
+class EoLRodSim;
+
+template<class T, int dim>
+class UnitPatch
+{
+public:
+    using TV = Vector<T, dim>;
+
+    using TV2 = Vector<T, 2>;
+    using TV3 = Vector<T, 3>;
+    using TVDOF = Vector<T, dim+2>;
+    using TVStack = Matrix<T, dim, Eigen::Dynamic>;
+    
+
+    using TM = Matrix<T, dim, dim>;
+    using TM3 = Matrix<T, 3, 3>;
+    using TMDOF = Matrix<T, dim + 2, dim + 2>;
+
+    using TV3Stack = Matrix<T, 3, Eigen::Dynamic>;
+    using IV3Stack = Matrix<int, 3, Eigen::Dynamic>;
+    using IV4Stack = Matrix<int, 4, Eigen::Dynamic>;
+    using DOFStack = Matrix<T, dim + 2, Eigen::Dynamic>;
+
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+
+    using IV2 = Vector<int, 2>;
+    using IV3 = Vector<int, 3>;
+    using IV4 = Vector<int, 4>;
+    using IV5 = Vector<int, 5>;
+    
+    using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    using Entry = Eigen::Triplet<T>;
+
+private:
+    EoLRodSim<T, dim>& sim;
+
+    DOFStack& q = sim.q;
+    IV3Stack& rods = sim.rods;
+    IV4Stack& connections = sim.connections;
+
+
+public:
+    UnitPatch(EoLRodSim<T, dim>& eol_sim) : sim(eol_sim) {}
+    ~UnitPatch() {}
+
+    void buildScene(int patch_type);
+
+    void build3x3StraightRod();
+    void buildPlanePeriodicBCScene3x3();
+
+    void buildStraightAndSineScene(int sub_div);
+    void buildStraightAndHemiCircleScene(int sub_div);
+
+    void set_left_right(int idx, int left)
+    {
+        connections(0, idx) = left;
+        connections(1, left) = idx;
+    }
+    void set_top_bottom(int idx, int top)
+    {
+        connections(3, idx) = top;
+        connections(2, top) = idx;
+    }
+
+    void clearSimData()
+    {
+        if (!sim.disable_sliding)
+            sim.add_shearing = false;
+        sim.pbc_ref_unique.clear();
+        sim.dirichlet_data.clear();
+        sim.pbc_ref.clear();
+        sim.pbc_bending_pairs.clear();
+        sim.yarns.clear();
+    }
+    void addRods(std::vector<int>& nodes, int yarn_type, int& cnt);
+    void subdivide(int sub_div);
+    void add4Nodes(int front, int end, int yarn_id, int rod_id)
+    {
+        if (rods(0, rod_id) == front)
+        {
+            sim.pbc_bending_bn_pairs[yarn_id][0] = front;
+            sim.pbc_bending_bn_pairs[yarn_id][1] = rods(1, rod_id);
+            sim.pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
+        }
+        if (rods(1, rod_id) == end)
+        {
+            sim.pbc_bending_bn_pairs[yarn_id][3] = end;
+            sim.pbc_bending_bn_pairs[yarn_id][2] = rods(0, rod_id);
+            sim.pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
+        }
+    };
+
+};
+
+#endif

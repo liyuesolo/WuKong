@@ -10,6 +10,8 @@
 #include <tbb/tbb.h>
 #include "VecMatDef.h"
 
+#include "UnitPatch.h"
+#include "CurvatureFunction.h"
 
 #define WARP 0
 #define WEFT 1
@@ -75,6 +77,9 @@ public:
     
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
+
+    // takes a Eulerian Coord and returns the curvature at rest state
+    int N_PBC_BENDING_ELE = 5;
 
     int dof = dim + 2;
     
@@ -148,6 +153,8 @@ public:
 
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
+
+    std::vector<CurvatureFunction<T, dim>*> curvature_functions;
 
     StiffnessMatrix W;
 
@@ -280,6 +287,9 @@ public:
 
     void setVerbose(bool v) { verbose = v; }
     void resetScene() { q = q0; }
+    void fixEulerian();
+    void freeEulerian();
+
     
 public:
     // Elasticity.cpp
@@ -292,9 +302,9 @@ public:
     
 
     // Scene.cpp 
-    void fixEulerian();
-    void freeEulerian();
     
+    void buildSceneFromUnitPatch(int patch_id);
+
     void checkConnections();
     void build5NodeTestScene();
     void buildLongRodForBendingTest();
@@ -304,9 +314,6 @@ public:
     
     void subdivideRods(int sub_div);
     void subdivideRodIntoWeightMatrix(int div);
-
-    void buildPlanePeriodicBCScene1x1();
-    void buildRodNetwork(int width, int height);
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
     //Visualization.cpp
@@ -334,14 +341,9 @@ public:
     // Bending.cpp
     void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
         std::vector<int>& nodes, int yarn_type);
-    void entryHelperBending(Eigen::Ref<const DOFStack> q_temp, 
-        std::vector<Eigen::Triplet<T>>& entry_K, int n0, int n1, int n2, int uv_offset);
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);
-    T bendingEnergySingleDirection(Eigen::Ref<const DOFStack> q_temp, int n0, int n1, int n2, int uv_offset);
-    void addBendingForceSingleDirection(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
-        int n0, int n1, int n2, int uv_offset);
 
     // Stretching.cpp
     void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  

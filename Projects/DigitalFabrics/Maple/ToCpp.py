@@ -24,6 +24,6 @@ def mcgToCpp(filename):
 # mcgToCpp("YarnBendJ.mcg")
 
 
-mcgToCpp("YarnBendPBCSDV.mcg")
-mcgToCpp("YarnBendPBCSDF.mcg")
-mcgToCpp("YarnBendPBCSDJ.mcg")
+mcgToCpp("YarnBendPBCRestCurvatureJ.mcg")
+mcgToCpp("YarnBendPBCRestCurvatureF.mcg")
+mcgToCpp("YarnBendPBCRestCurvatureV.mcg")

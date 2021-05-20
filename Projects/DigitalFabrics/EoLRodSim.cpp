@@ -421,7 +421,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
         cnt++;
     }
 
-    if (verbose)
+    // if (verbose)
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
 }
 
@@ -433,11 +433,20 @@ void EoLRodSim<T, dim>::advanceOneStep()
     dq.setZero();
     implicitUpdate(dq);
     
+    VectorXT dq_projected = dq;
+    if(!add_penalty && !run_diff_test)
+        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+        {
+            for(int d = 0; d < dof; d++)
+                if (mask(d))
+                    dq_projected(node_id * dof + d) = target(d);
+        });
     DOFStack dq_full(dof, n_nodes);
-    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq;
-    q += dq_full;
+    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
+    q += 1.0 * dq_full;
 
-    std::cout << "total Eulerian displacement " << dq_full.transpose().block(0, dim, n_nodes, 2).cwiseAbs().sum() << std::endl;
+    
+    // std::cout << "total Eulerian displacement " << dq_full.transpose().block(0, dim, n_nodes, 2).cwiseAbs().sum() << std::endl;
     // computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();
     // auto checkHessian = [&](){
@@ -465,6 +474,30 @@ void EoLRodSim<T, dim>::advanceOneStep()
     // };
 
     // checkHessian();
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::fixEulerian()
+{
+    for(int i = 0; i < n_nodes; i++)
+        if (connections.col(i).prod() < 0)
+            dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);
+    dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+}
+
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::freeEulerian()
+{
+    dirichlet_data.clear();
+
+    for (int i = 0; i < n_nodes; i++)
+    {
+        if (connections.col(i).prod() < 0)
+            dirichlet_data[i]= std::make_pair(TVDOF::Zero(), fix_eulerian);    
+    }
+
+    dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
 }
 
 template class EoLRodSim<double, 3>;

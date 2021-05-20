@@ -264,10 +264,7 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV2 u1 = q.col(node1).template segment<2>(dim);
         TV2 delta_u = u1 - u0;
         int yarn_type = rods.col(rod_idx)[2];
-        if(u0[yarn_type] < 0 || u0[yarn_type]>1)
-            std::cout << "u0: " << u0 << std::endl;
-        if(u1[yarn_type] < 0 || u1[yarn_type]>1)
-            std::cout << "u1: " << u1 << std::endl;
+        
 
         int uv_offset = yarn_type == WARP ? 0 : 1;
     
@@ -275,6 +272,7 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
         // rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
         rod_energy[rod_idx] += std::abs(w.norm() - 1);
+        
         std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
 
     }
@@ -293,8 +291,10 @@ void EoLRodSim<T, dim>::getColorFromStretching(
     //     }
     // });
 
-    if(rod_energy.maxCoeff())
+    if(rod_energy.maxCoeff() > 1e-4)
         rod_energy /= rod_energy.maxCoeff();
+    else
+        rod_energy.setZero();
     
     tbb::parallel_for(0, n_rods, [&](int rod_idx){
         for(int i = 0; i < 40; i++)

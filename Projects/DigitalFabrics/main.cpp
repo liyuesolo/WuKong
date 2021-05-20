@@ -107,28 +107,8 @@ int main(int argc, char *argv[])
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {
-        if(test == FiveNodes)
-        {
-            assert(dim == 2);
-            eol_sim.build5NodeTestScene();
-        }
-        else if (test == GridScene)
-        {
-            assert(dim == 3);
-            eol_sim.buildRodNetwork(2, 2);    
-            // eol_sim.addBCStretchingTest();
-            eol_sim.addBCShearingTest();    
-        }
-        else if (test == Bending)
-        {
-            assert(dim == 2);
-            eol_sim.buildLongRodForBendingTest();
-        }
-        else if (test == Shearing)
-        {
-            eol_sim.buildShearingTest();
-        }
-        else if (test == PlanePBC)
+        
+        if (test == PlanePBC)
         {
             eol_sim.buildPlanePeriodicBCScene3x3Subnodes();
         }
