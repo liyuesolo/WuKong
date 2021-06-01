@@ -1,6 +1,6 @@
 #include "Homogenization.h"
 #include <fstream>
-
+#include <iomanip>
 
 template<class T, int dim>
 void Homogenization<T, dim>::testOneSample()
@@ -19,7 +19,11 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(0.0, 1.01, strain_dir);
 
     // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(0, 1.05, strain_dir, ortho_dir);
+    //4.52389
+    // sim.setUniaxialStrain(1.27235, 1.1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.28805, 1.1, strain_dir, ortho_dir);
+    sim.setUniaxialStrain(1.1624, s1, strain_dir, ortho_dir);
+    
     // sim.setUniaxialStrain(1.61792, 2.2, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(M_PI/4, 1.6, strain_dir, ortho_dir);
     // // sim.setBiaxialStrain(M_PI/4 - 0.1, 1.01, M_PI/4 - 0.1, 1.0, strain_dir, ortho_dir);
@@ -51,21 +55,21 @@ void Homogenization<T, dim>::initialize()
     sim.print_force_mag = false;
     sim.disable_sliding = false;
     sim.verbose = false;
-    // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
+    // sim.buildPlanePeriodicBCScene3x3Subnodes(16);
     sim.buildSceneFromUnitPatch(2);
     // sim.buildPlanePeriodicBCScene3x3();
-    // sim.add_eularian_reg = false;
+    sim.add_eularian_reg = true;
     sim.add_contact_penalty = true;
     sim.use_alm = false;
     sim.add_penalty = false;
     sim.newton_tol = 1e-6;
-    sim.k_pbc = 1e8;    
-    sim.k_strain = 1e6;
-    sim.ke = 1e-4;
+    // sim.k_pbc = 1e5;    
+    // sim.k_strain = 1e6;
+    // sim.ke = 1e-4;
     sim.k_yc = 1e8;
     
     
-    s1 = 2.0;
+    s1 = 1.1;
     s2 = 1.0;
 }
 
@@ -138,11 +142,12 @@ void Homogenization<T, dim>::computeYoungsModulusPoissonRatioBatch()
     std::vector<T> thetas, youngs_moduli, poisson_ratio;
     for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
     {
-        thetas.push_back(theta);
-        // std::cout << theta << std::endl;
+        T theta6 = std::round( theta * 1e4 ) / 1e4;
+        thetas.push_back(theta6);
         TV2 E_nu;
-        materialParametersFromUniaxialStrain(theta, s1, E_nu);
-        std::cout << "theta: " << theta << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+        materialParametersFromUniaxialStrain(theta6, s1, E_nu);
+        // std::cout << "theta: " << theta / M_PI * 180.0 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+        std::cout << std::setprecision(6) << "theta: " << theta6 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
         youngs_moduli.push_back(E_nu(0));
         poisson_ratio.push_back(E_nu(1));
     }

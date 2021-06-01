@@ -443,7 +443,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
         });
     DOFStack dq_full(dof, n_nodes);
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
-    q += 1.0 * dq_full;
+    q += dq_full;
 
     
     // std::cout << "total Eulerian displacement " << dq_full.transpose().block(0, dim, n_nodes, 2).cwiseAbs().sum() << std::endl;

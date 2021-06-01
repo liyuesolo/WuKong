@@ -35,6 +35,7 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<const DOFStack> q_tem
                     residual(dir, middle) += -k_yc * (q_temp(dir, middle) - q0(dir, middle) + tunnel_R);
                 else
                     residual(dir, middle) += -k_yc * (q_temp(dir, middle) - q0(dir, middle) - tunnel_R);
+                // std::cout << "node " << middle << " " << delta_u << " " << tunnel_R << std::endl;   
             };
             singleDirGrad(dim);
             singleDirGrad(dim + 1);
@@ -59,13 +60,17 @@ T EoLRodSim<T, dim>::addParallelContactEnergy(Eigen::Ref<const DOFStack> q_temp)
             auto singleDirEnergy = [&, middle](int dir)
             {
                 T delta_u = q_temp(dir, middle) - q0(dir, middle);
-                std::cout << delta_u << " " << tunnel_R << std::endl;   
+                // std::cout << "node " << middle << " " << delta_u << " " << tunnel_R << std::endl;   
                 if (std::abs(delta_u) < tunnel_R)
                     return;
                 if (delta_u < 0)
                     crossing_energy[middle] += 0.5 * k_yc * std::pow(q_temp(dir, middle) - q0(dir, middle) + tunnel_R, 2);
                 else
                     crossing_energy[middle] += 0.5 * k_yc * std::pow(q_temp(dir, middle) - q0(dir, middle) - tunnel_R, 2);
+                
+                // std::cout << "node " << middle << " " << delta_u << " " << tunnel_R << std::endl;   
+                // std::cout << "u0 " << q0(dir, middle) << " q_temp " << q_temp(dir, middle) << std::endl;
+                // std::getchar();
             };
             singleDirEnergy(dim);
             singleDirEnergy(dim+1);

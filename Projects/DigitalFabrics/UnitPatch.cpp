@@ -37,6 +37,36 @@ void UnitPatch<T, dim>::subdivide(int sub_div)
     
 }
 
+template<class T, int dim>
+void UnitPatch<T, dim>::clearSimData()
+{
+    sim.kc = 1e8;
+    sim.add_pbc = true;
+
+    if(sim.disable_sliding)
+    {
+        sim.add_shearing = true;
+        sim.add_eularian_reg = false;
+        sim.k_pbc = 1e8;
+        sim.k_strain = 1e8;
+    }
+    else
+    {
+        sim.add_shearing = false;
+        sim.add_eularian_reg = true;
+        sim.ke = 1e-4;    
+        sim.k_yc = 1e8;
+    }
+    sim.k_pbc = 1e8;
+    sim.k_strain = 1e8;
+    sim.kr = 1e3;
+    sim.pbc_ref_unique.clear();
+    sim.dirichlet_data.clear();
+    sim.pbc_ref.clear();
+    sim.pbc_bending_pairs.clear();
+    sim.yarns.clear();
+}
+
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildStraightAndHemiCircleScene(int sub_div)
@@ -326,7 +356,8 @@ void UnitPatch<T, dim>::buildStraightAndHemiCircleScene(int sub_div)
         }
         
         sim.tunnel_R = (sim.q0.col(rods.col(0)(0)).template segment<dim>(0) - 
-            sim.q0.col(rods.col(0)(1)).template segment<dim>(0)).norm() * 4.0;
+            sim.q0.col(rods.col(0)(1)).template segment<dim>(0)).norm() * 0.5;
+
         sim.curvature_functions.push_back(new CircleCurvature<T, dim>(r));
         sim.curvature_functions.push_back(new LineCurvature<T, dim>());
     }

@@ -68,16 +68,8 @@ public:
         connections(2, top) = idx;
     }
 
-    void clearSimData()
-    {
-        if (!sim.disable_sliding)
-            sim.add_shearing = false;
-        sim.pbc_ref_unique.clear();
-        sim.dirichlet_data.clear();
-        sim.pbc_ref.clear();
-        sim.pbc_bending_pairs.clear();
-        sim.yarns.clear();
-    }
+    void clearSimData();
+    
     void addRods(std::vector<int>& nodes, int yarn_type, int& cnt);
     void subdivide(int sub_div);
     void add4Nodes(int front, int end, int yarn_id, int rod_id)
