@@ -1,5 +1,21 @@
 #include "CurvatureFunction.h"
 
+// template<class T, int dim>
+// T DiscreteCurvature<T, dim>::value(std::vector<T>& us) 
+// {
+//     auto func = [&](T x)
+//     {
+//         if (x < 0.5)
+//             return std::sqrt(r * r - (x - 0.25) * (x - 0.25)) + 0.5;
+//     };
+//     T y0 = func(us[0]), y1 = func(us[0]), y2 = func(us[0]);
+//     if constexpr (dim == 2)
+//     {
+//         std::vector<Vector<T, dim + 1>> x(3);
+//         x[0][0] = us[0]; x[0][1] = y0; x[0][2] = us[0];
+//     }
+// }
+
 template<class T, int dim>
 T CircleCurvature<T, dim>::value(T u) 
 { 
@@ -87,3 +103,7 @@ template class SineCurvature<double, 2>;
 
 template class CircleCurvature<double, 3>;
 template class CircleCurvature<double, 2>;   
+
+
+// template class DiscreteCurvature<double, 3>;
+// template class DiscreteCurvature<double, 2>;   

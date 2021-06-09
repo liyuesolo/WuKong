@@ -63,6 +63,10 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
                 entryHelperBending(middle, top, bottom, 1);
     });
+
+    if(!add_pbc_bending)
+        return;
+        
     if (!subdivide)
         iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
             int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;
@@ -164,7 +168,7 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
         } 
         residual(dim + uv_offset, n0) += F(9) * -dkappa0du;
     };
-
+    
     DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
@@ -174,6 +178,8 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
                 addBendingForceSingleDirection(middle, top, bottom, 1);
     });  
+    if(!add_pbc_bending)
+        return;
     // std::cout << "bending crossing force " << (residual - residual_cp).norm() << std::endl; 
     if (!subdivide)
         iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
@@ -234,13 +240,23 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     auto bendingEnergySingleDirection = [&](int n0, int n1, int n2, int uv_offset)
     {
         T kappa0 = curvature_functions[uv_offset]->value(q_temp(dim + uv_offset, n0));
-        // std::cout << "curvature "<< kappa0 << std::endl;
+        // if (uv_offset == 0)
+            // std::cout << "curvature "<< kappa0 << std::endl;
         std::vector<Vector<T, dim + 1>> x(3);
         std::vector<int> nodes = {n0, n1, n2};
         toMapleNodesVector(x, q_temp, nodes, uv_offset);
         T V[1];
         #include "Maple/YarnBendRestCurvatureV.mcg"
         // std::cout << V[0] << std::endl;
+        // std::getchar();
+        
+        // if (uv_offset == 0)
+        // {
+        //     std::cout << "node " << n0 << " " << V[0] << std::endl;
+        //     std::cout << "theta " << t27 << " discrete " << 0.4E1/t1*t27 << " analytical " << kappa0 << std::endl;
+        //     std::cout << "u left: " << q_temp(dim + uv_offset, n2) << " u middle: " << q_temp(dim + uv_offset, n0) << " u right: " << q_temp(dim + uv_offset, n1) << std::endl;            
+        //     std::cout << "u left: " << q0(dim + uv_offset, n2) << " u middle: " << q0(dim + uv_offset, n0) << " u right: " << q0(dim + uv_offset, n1) << std::endl;
+        // }
         // std::getchar();
         return V[0];
     };
@@ -260,6 +276,8 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     });
     energy += crossing_energy.sum();
     
+    if(!add_pbc_bending)
+        return energy;
     if (!subdivide)
         iteratePBCBendingPairs([&](std::vector<int> nodes, int pair_id){
             int yarn_type = pbc_ref[pair_id].first == WARP ? 0 : 1;

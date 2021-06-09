@@ -118,7 +118,11 @@ public:
     T kr = 1e3;
     T k_yc = 1.0;
     
-    T tunnel_R = R * 4.0;
+
+    float theta = 0.f;
+
+    T tunnel_u = R * 4.0;
+    T tunnel_v = R * 4.0;
 
     TV gravity = TV::Zero();
     bool verbose = false;
@@ -127,8 +131,10 @@ public:
     bool add_bending = true;
     bool add_shearing = true;
     bool add_penalty = false;
+    bool add_rotation_penalty = true;
     bool add_regularizor = false;
     bool add_pbc = true;
+    bool add_pbc_bending = true;
     bool add_eularian_reg = true;
     bool disable_sliding = true;
     bool subdivide = false;
@@ -136,6 +142,7 @@ public:
     bool add_contact_penalty = true;
     bool use_alm = true;
     bool run_diff_test = false;
+    bool use_discrete_rest_bending = true;
 
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
@@ -146,6 +153,7 @@ public:
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
     std::vector<std::pair<int, IV2>> pbc_ref;
+    std::vector<int> sliding_nodes;
 
     std::vector<IV2> pbc_ref_unique;
 
@@ -214,6 +222,14 @@ public:
     }
 
     template <class OP>
+    void iterateSlidingNodes(const OP& f) {
+        for (int idx : sliding_nodes){
+            f(idx);
+        } 
+    }
+
+    
+    template <class OP>
     void iteratePBCBoundaryPairs(const OP& f) {
         for (auto pair : pbc_bending_bn_pairs){
             std::vector<int> node_ids;
@@ -248,6 +264,7 @@ public:
     void iterateYarnCrossingsSerial(const OP& f) {
         for (int i = 0; i < n_nodes; i++)
             f(i, connections(0, i), connections(1, i), connections(2, i), connections(3, i));
+            // f(i, connections(2, i), connections(3, i), connections(0, i), connections(1, i));
     }
 
     template <class OP>

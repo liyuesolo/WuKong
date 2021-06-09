@@ -441,11 +441,35 @@ void EoLRodSim<T, dim>::advanceOneStep()
                 if (mask(d))
                     dq_projected(node_id * dof + d) = target(d);
         });
+    
+    
     DOFStack dq_full(dof, n_nodes);
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
-    q += dq_full;
+    q = q0 + dq_full;
 
+    std::cout << "E_bend: " << addBendingEnergy(q) << std::endl;
+    std::cout << "E_stretch: " << addStretchingEnergy(q) << std::endl;
+    std::cout << "E total: " << addBendingEnergy(q) + addStretchingEnergy(q) << std::endl;
     
+    // std::cout << dq_full.transpose() << std::endl;
+    
+    // DOFStack lambdas;
+    // T kappa = 1e3;
+
+    // VectorXT residual(n_dof);
+    // residual.setZero();
+    // DOFStack residual_mat(dof, n_nodes);
+    // residual_mat.setZero();
+    // computeResidual(residual, dq_projected, lambdas, kappa);
+    // Eigen::Map<VectorXT>(residual_mat.data(), residual_mat.size()) = residual;
+    // std::cout << residual_mat.transpose() << std::endl;
+    // std::cout << "dEdu " << residual_mat.transpose().col(2) << std::endl;
+
+    // std::cout << q.col(1).transpose() << std::endl;
+    // std::cout << q0.col(1).transpose() << std::endl;
+    // std::cout << dq_full.col(1).transpose() << std::endl;
+    // std::cout << dq.segment(dof, dof).transpose() << std::endl;
+    // std::cout << dq_projected.segment(dof, dof).transpose() << std::endl;
     // std::cout << "total Eulerian displacement " << dq_full.transpose().block(0, dim, n_nodes, 2).cwiseAbs().sum() << std::endl;
     // computeDeformationGradientUnitCell();
     // fitDeformationGradientUnitCell();

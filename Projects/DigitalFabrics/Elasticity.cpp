@@ -3,7 +3,7 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::setUniaxialStrain(T theta, T s, TV& strain_dir, TV& ortho_dir)
 {
-    
+    this->theta = theta;
     pbc_strain_data.clear();
     pbc_strain_data.resize(0);
     strain_dir = TV::Zero();

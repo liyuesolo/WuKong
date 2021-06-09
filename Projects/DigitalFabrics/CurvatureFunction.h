@@ -3,6 +3,10 @@
 
 #include <cmath>
 #include <iostream>
+#include <utility>
+#include <vector>
+
+// #include "VecMatDef.h"
 
 template<class T, int dim>
 class CurvatureFunction
@@ -24,6 +28,15 @@ class LineCurvature : public CurvatureFunction<T, dim>
 public:
 
 };
+
+// template<class T, int dim>
+// class DiscreteCurvature : public CurvatureFunction<T, dim>
+// {
+//     T r;
+// public:
+//     DiscreteCurvature(T _r) : r(_r) {}
+//     virtual T value(std::vector<T>& us);
+// };
 
 template<class T, int dim>
 class CircleCurvature : public CurvatureFunction<T, dim>

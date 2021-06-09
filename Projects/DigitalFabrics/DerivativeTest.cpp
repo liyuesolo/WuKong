@@ -8,17 +8,17 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     // print_force_mag = true;
     run_diff_test = true;
     add_regularizor = false;
-    add_stretching=false;
+    add_stretching=true;
     add_penalty =false;
     add_bending = false;
     add_shearing = false;
     add_pbc = false;
-    add_contact_penalty = true;
-    add_eularian_reg = true;
+    add_contact_penalty = false;
+    add_eularian_reg = false;
 
     DOFStack dq(dof, n_dof);
     dq.setZero();
-    std::cout << tunnel_R << std::endl;
+    // std::cout << tunnel_R << std::endl;
     if (true )
     {
         dq(0, 3) += 0.01;
@@ -38,7 +38,7 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         // q(1, 14) -= 0.1;
         dq(0, 9) += 0.01;
         dq(1, 9) += 0.01;
-        dq(2, 20) += 0.1;
+        // dq(2, 20) += 0.1;
     }
     else
     {
@@ -65,7 +65,7 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         q(1, 15) -= 0.1;
     }
 
-    checkGradient(Eigen::Map<VectorXT>(dq.data(), dq.size()));
+    // checkGradient(Eigen::Map<VectorXT>(dq.data(), dq.size()));
     checkHessian(Eigen::Map<VectorXT>(dq.data(), dq.size()));
 }
 
@@ -145,8 +145,8 @@ void EoLRodSim<T, dim>::checkHessianHigherOrderTerm(Eigen::Ref<VectorXT> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
 {
-    // checkGradientSecondOrderTerm(dq);
-    // return;
+    checkGradientSecondOrderTerm(dq);
+    return;
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
     T kappa = 1.5;
@@ -188,7 +188,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<VectorXT> dq)
 {
-    // checkHessianHigherOrderTerm(dq);
+    checkHessianHigherOrderTerm(dq);
     // return;
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
@@ -211,6 +211,8 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<VectorXT> dq)
             for(int i = 0; i < n_dof; i++)
             {
                 if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+                    continue;
+                if (std::floor(dof_i / T(dof)) < 8)
                     continue;
                 // if (std::abs( A.coeff(n_node * dof + d, i * dof + d) - row_FD(d, i)) < 1e-4)
                     // continue;

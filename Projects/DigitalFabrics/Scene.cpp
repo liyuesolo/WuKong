@@ -134,7 +134,8 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     IV4Stack new_connections(4, n_nodes);
     new_connections.setConstant(-1);
     
-
+    auto unit_yarn_map = yarn_map;
+    yarn_map.clear();
     for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
     {
         IV2 end_points = rods.col(rod_idx).template segment<2>(0);
@@ -198,7 +199,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
                 n0 = new_node_cnt-1; n1 = new_node_cnt;
             }
             rods_sub.push_back(IV3(n0, n1, yarn_type));
-            yarn_map[rods_sub.size()-1] = rod_idx;
+            yarn_map[rods_sub.size()-1] = unit_yarn_map[rod_idx];
             setConnection(new_connections, n0, n1, yarn_type);
             // dirichlet_data[new_node_cnt] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             new_node_cnt++;
@@ -215,7 +216,7 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
             rods_sub.push_back(IV3(node_i, node_j, yarn_type));
             setConnection(new_connections, node_i, node_j, yarn_type);   
         }
-        yarn_map[rods_sub.size()-1] = rod_idx;
+        yarn_map[rods_sub.size()-1] = unit_yarn_map[rod_idx];
         
     }
     n_rods = rods_sub.size();
@@ -282,8 +283,9 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     // W.setIdentity();
 
     // do not move out the unit cell
-    tunnel_R = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+    tunnel_u = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
         q0.col(rods.col(0)(1)).template segment<dim>(0)).norm() * 2.0;
+    tunnel_v = tunnel_u;
 }
 
 template<class T, int dim>
@@ -368,6 +370,11 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         rods.col(cnt++) = IV3(2, 4, WEFT); rods.col(cnt++) = IV3(4, 5, WEFT); rods.col(cnt++) = IV3(5, 6, WEFT); rods.col(cnt++) = IV3(6, 3, WEFT); 
         rods.col(cnt++) = IV3(9, 11, WEFT); rods.col(cnt++) = IV3(11, 12, WEFT);  rods.col(cnt++) = IV3(12, 13, WEFT); rods.col(cnt++) = IV3(13, 10, WEFT); 
         rods.col(cnt++) = IV3(16, 18, WEFT); rods.col(cnt++) = IV3(18, 19, WEFT); rods.col(cnt++) = IV3(19, 20, WEFT); rods.col(cnt++) = IV3(20, 17, WEFT);
+        
+        for(int i = 0; i < 4; i++)
+            for(int j = 0; j < 6;j++)
+                yarn_map[j * 4 + i] = j;
+
         assert(cnt == n_rods);
 
         auto set_left_right = [&](Eigen::Ref<IV4Stack> connections, int idx, int left){
@@ -448,8 +455,6 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         yarns.push_back({9, 11, 12, 13, 10, WEFT});
         yarns.push_back({2, 4, 5, 6, 3, WEFT});
 
-        for (int i = 0; i < n_rods; i++)
-            yarn_map[i] = i;
         
     }
     else

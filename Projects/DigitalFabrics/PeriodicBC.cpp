@@ -23,17 +23,20 @@ void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<E
     });
     if constexpr (dim == 2)
     {
-        std::vector<TV> data;
-        std::vector<int> nodes(4);
-        buildMapleRotationPenaltyData(q_temp, data, nodes);
-        T J[8][8];
-        memset(J, 0, sizeof(J));
-        #include "Maple/RotationPenaltyJ.mcg"
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                for (int k = 0; k < dim; k++)
-                    for (int l = 0; l < dim; l++)
-                        entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -J[i*dim + k][j*dim+l]));
+        if (add_rotation_penalty)
+        {
+            std::vector<TV> data;
+            std::vector<int> nodes(4);
+            buildMapleRotationPenaltyData(q_temp, data, nodes);
+            T J[8][8];
+            memset(J, 0, sizeof(J));
+            #include "Maple/RotationPenaltyJ.mcg"
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 4; j++)
+                    for (int k = 0; k < dim; k++)
+                        for (int l = 0; l < dim; l++)
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -J[i*dim + k][j*dim+l]));
+        }
 
         // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
         //     TV xi = q_temp.col(node_i).template segment<dim>(0);
@@ -147,6 +150,7 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
          Eigen::Ref<const DOFStack> lambdas, T kappa)
 {
+    
     DOFStack residual_cp = residual;
     iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
         TV xi = q_temp.col(node_i).template segment<dim>(0);
@@ -157,14 +161,16 @@ void EoLRodSim<T, dim>::addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen:
         residual.col(node_i).template segment<dim>(0) += k_strain * strain_dir * (dij - Dij);
         residual.col(node_j).template segment<dim>(0) += -k_strain * strain_dir * (dij - Dij);
     });
-
-    std::vector<TV> data;
-    std::vector<int> nodes(4);
-    buildMapleRotationPenaltyData(q_temp, data, nodes);
-    Vector<T, 8> dedx;
-    #include "Maple/RotationPenaltyF.mcg"
-    for (int i = 0; i < 4; i++)
-        residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
+    if (add_rotation_penalty)
+    {
+        std::vector<TV> data;
+        std::vector<int> nodes(4);
+        buildMapleRotationPenaltyData(q_temp, data, nodes);
+        Vector<T, 8> dedx;
+        #include "Maple/RotationPenaltyF.mcg"
+        for (int i = 0; i < 4; i++)
+            residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
+    }
 
     int cons_cnt = 0;
     iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
@@ -196,8 +202,10 @@ void EoLRodSim<T, dim>::addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen:
 template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
 {
+    
     DOFStack residual_cp = residual;
     iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
+    
         TV xi = q_temp.col(node_i).template segment<dim>(0);
         TV xj = q_temp.col(node_j).template segment<dim>(0);
 
@@ -206,14 +214,17 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Re
         residual.col(node_i).template segment<dim>(0) += k_strain * strain_dir * (dij - Dij);
         residual.col(node_j).template segment<dim>(0) += -k_strain * strain_dir * (dij - Dij);
     });
-
-    std::vector<TV> data;
-    std::vector<int> nodes(4);
-    buildMapleRotationPenaltyData(q_temp, data, nodes);
-    Vector<T, 8> dedx;
-    #include "Maple/RotationPenaltyF.mcg"
-    for (int i = 0; i < 4; i++)
-        residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
+    
+    if (add_rotation_penalty)
+    {
+        std::vector<TV> data;
+        std::vector<int> nodes(4);
+        buildMapleRotationPenaltyData(q_temp, data, nodes);
+        Vector<T, 8> dedx;
+        #include "Maple/RotationPenaltyF.mcg"
+        for (int i = 0; i < 4; i++)
+            residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
+    }
 
     // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
     //     TV xi = q_temp.col(node_i).template segment<dim>(0);
@@ -232,6 +243,7 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Re
     // });
     // return;
     iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
+        // cout3Nodes(node_i, node_j, yarn_type);
         int ref_i = pbc_ref_unique[yarn_type](0);
         int ref_j = pbc_ref_unique[yarn_type](1);
 
@@ -289,13 +301,17 @@ T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
         T dij = (xj - xi).dot(strain_dir);
         energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
     });
-    std::vector<TV> data;
-    std::vector<int> nodes(4);
-    buildMapleRotationPenaltyData(q_temp, data, nodes);
-    T V[1];
-    #include "Maple/RotationPenaltyV.mcg"
-    energy_pbc += V[0];
 
+    if (add_rotation_penalty)
+    {
+        std::vector<TV> data;
+        std::vector<int> nodes(4);
+        buildMapleRotationPenaltyData(q_temp, data, nodes);
+        T V[1];
+        #include "Maple/RotationPenaltyV.mcg"
+        energy_pbc += V[0];
+    }
+    
     // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
     //     TV xi = q_temp.col(node_i).template segment<dim>(0);
     //     TV xj = q_temp.col(node_j).template segment<dim>(0);

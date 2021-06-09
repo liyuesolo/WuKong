@@ -56,6 +56,9 @@ public:
 
     void buildStraightAndSineScene(int sub_div);
     void buildStraightAndHemiCircleScene(int sub_div);
+    void buildTwoRodsScene(int sub_div);
+    void buildSlidingTestScene(int sub_div);
+    void buildStraightYarnScene(int sub_div);
 
     void set_left_right(int idx, int left)
     {
@@ -70,7 +73,7 @@ public:
 
     void clearSimData();
     
-    void addRods(std::vector<int>& nodes, int yarn_type, int& cnt);
+    void addRods(std::vector<int>& nodes, int yarn_type, int& cnt, int yarn_idx = 0);
     void subdivide(int sub_div);
     void add4Nodes(int front, int end, int yarn_id, int rod_id)
     {
@@ -87,6 +90,9 @@ public:
             sim.pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
         }
     };
+
+private:
+    T LDis(int i, int j) { return (q.col(i).template segment<dim>(0) - q.col(j).template segment<dim>(0)).norm(); }
 
 };
 

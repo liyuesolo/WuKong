@@ -3,6 +3,9 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 #include <igl/png/writePNG.h>
+#include <igl/png/readPNG.h>
+#include "igl/colormap.h"
+
 #include "EoLRodSim.h"
 #include "Homogenization.h"
 
@@ -31,7 +34,7 @@ static bool per_yarn = true;
 static bool slide = false;
 
 static float theta_pbc = 0;
-
+static float strain = 1.0;
 static int n_rod_per_yarn = 4;
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
@@ -78,9 +81,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 {
     if (key == ' ')
     {
-        
-        eol_sim.advanceOneStep();
-        
+        eol_sim.advanceOneStep();   
         updateScreen(viewer);
     }
     return false;
@@ -99,8 +100,14 @@ const char* test_case_names[] = {
 
 int main(int argc, char *argv[])
 {
+    // using RGBMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
+    // RGBMat R, G, B, A;
+    // igl::png::readPNG("checkerboard.png", R, G, B, A);
+
     int n_test_case = sizeof(test_case_names)/sizeof(const char*);
     
+    int selected = -1;
+    double u0 = 0.0, x0 = 0.0;
 
     static TestCase test = FiveNodes;
     TestCase test_current = FitE; // set to be a different from above or change the above one to be a random one
@@ -153,11 +160,19 @@ int main(int argc, char *argv[])
             }
             if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
             {   
-                if (ImGui::DragFloat("Angle", &(theta_pbc), 0.f, 0.1f, M_PI * 2.f))
+                if (ImGui::DragFloat("Angle", &(eol_sim.theta), 0.f, 0.1f, M_PI * 2.f))
                 {
                     eol_sim.resetScene();
                     Vector<T, dim> strain_dir, ortho_dir;
-                    eol_sim.setUniaxialStrain(theta_pbc, 1.1, strain_dir, ortho_dir);
+                    eol_sim.setUniaxialStrain(eol_sim.theta, 1.1, strain_dir, ortho_dir);
+                    eol_sim.advanceOneStep();
+                    updateScreen(viewer);
+                }
+                if (ImGui::DragFloat("Strain", &(strain), 1.f, 0.02f, 1.1f))
+                {
+                    eol_sim.resetScene();
+                    Vector<T, dim> strain_dir, ortho_dir;
+                    eol_sim.setUniaxialStrain(eol_sim.theta, strain, strain_dir, ortho_dir);
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
                 }
@@ -177,6 +192,11 @@ int main(int argc, char *argv[])
                     }
                 }
                 if (ImGui::Checkbox("RegularizeEulerian", &eol_sim.add_eularian_reg))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Tunnel", &eol_sim.add_contact_penalty))
                 {
                     eol_sim.resetScene();
                     updateScreen(viewer);
@@ -258,7 +278,72 @@ int main(int argc, char *argv[])
         };
     }
     
+    viewer.callback_mouse_down =
+    [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+	  {
+	    double x = viewer.current_mouse_x;
+	    double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+	    
+	    Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2);
+        Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
+        rod_v.setZero();
+        rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
+
+		igl::project(rod_v, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+
+		for(int i=0; i<pxy.rows(); ++i)
+		{
+            
+			if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
+			{
+				selected = i;
+                x0 = x;
+				return true;
+			}
+		}
+	    return false;
+	  };
     
+
+    viewer.callback_mouse_up = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+	  {
+		if(selected!=-1)
+		{
+			selected = -1;
+            eol_sim.q0 = eol_sim.q;
+			return true;
+		}
+	    return false;
+	  };
+
+    viewer.callback_mouse_move =
+    [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+	  {
+		if(selected!=-1)
+		{
+            // eol_sim.resetScene();
+            // updateScreen(viewer);
+			double x = viewer.current_mouse_x;
+	    	double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+	    
+			double delta = (x - x0) / viewer.core().viewport(2);
+            // eol_sim.q(dim, 3) = u0;
+            Eigen::VectorXd delta_dof(4); delta_dof.setZero();
+            auto zero_delta = delta_dof;
+            Eigen::VectorXd mask_dof(4); mask_dof.setZero();
+            delta_dof(0) = delta;
+            mask_dof(0) = 1;
+            mask_dof(2) = 0;
+            mask_dof(3) = 1;
+            eol_sim.dirichlet_data[3] = std::make_pair(delta_dof, mask_dof);
+            eol_sim.advanceOneStep();
+            updateScreen(viewer);
+            
+            return true;
+		}
+
+	    return false;
+	  };
     //================== Run GUI ==================
     
     
@@ -271,7 +356,6 @@ int main(int argc, char *argv[])
     Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> A(width,height);
     if (test_current == FitEBatch)
     {
-        
         
         T s = 1.1;
         int n_angles = 40;
