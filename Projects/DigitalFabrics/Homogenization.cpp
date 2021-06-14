@@ -23,7 +23,7 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(1.27235, 1.1, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(1.28805, 1.1, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(0.0157, s1, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(3.43, s1, strain_dir, ortho_dir);
+    sim.setUniaxialStrain(80.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
     
     // sim.setUniaxialStrain(1.61792, 2.2, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(M_PI/4, 1.6, strain_dir, ortho_dir);
@@ -56,19 +56,19 @@ void Homogenization<T, dim>::initialize()
     sim.print_force_mag = false;
     sim.disable_sliding = false;
     sim.verbose = false;
-    // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    sim.buildSceneFromUnitPatch(3);
+    sim.buildPlanePeriodicBCScene3x3Subnodes(8);
+    // sim.buildSceneFromUnitPatch(3);
     // sim.buildPlanePeriodicBCScene3x3();
     sim.add_eularian_reg = true;
     sim.add_contact_penalty = true;
     sim.use_alm = false;
     sim.add_penalty = false;
-    sim.add_shearing = false;
+    sim.add_shearing = true;
     // sim.add_stretching = false;
     // sim.kb *= 1e4;
     sim.newton_tol = 1e-6;
-    sim.k_pbc = 1e2;    
-    sim.k_strain = 1e4;
+    sim.k_pbc = 1e4;    
+    sim.k_strain = 1e8;
     // sim.ke = 1e-4;
     sim.k_yc = 1e8;
     

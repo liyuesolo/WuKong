@@ -6,6 +6,8 @@ void EoLRodSim<T, dim>::addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vec
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left == -1 || bottom == -1 || top == -1 && right == -1)
             return;
+        if (std::find(sliding_nodes.begin(), sliding_nodes.end(), middle) != sliding_nodes.end())
+            return;
         int n1 = top_right ? right : left;
         int n3 = top_right ? top : bottom;
 
@@ -33,6 +35,8 @@ void EoLRodSim<T, dim>::addShearingForce(Eigen::Ref<const DOFStack> q_temp, Eige
     DOFStack residual_cp = residual;
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left == -1 || bottom == -1 || top == -1 && right == -1)
+            return;
+        if (std::find(sliding_nodes.begin(), sliding_nodes.end(), middle) != sliding_nodes.end())
             return;
         int n1 = top_right ? right : left;
         int n3 = top_right ? top : bottom;
@@ -74,7 +78,8 @@ T EoLRodSim<T, dim>::addShearingEnergy(Eigen::Ref<const DOFStack> q_temp, bool t
     iterateYarnCrossingsParallel([&](int middle, int bottom, int top, int left, int right){
         if (left == -1 || bottom == -1 || top == -1 && right == -1)
             return;
-
+        if (std::find(sliding_nodes.begin(), sliding_nodes.end(), middle) != sliding_nodes.end())
+            return;
         int n1 = top_right ? right : left;
         int n3 = top_right ? top : bottom;
         

@@ -1,4 +1,5 @@
 #include "EoLRodSim.h"
+#include "igl/colormap.h"
 
 // template<class T, int dim>
 // void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -233,16 +234,101 @@ void EoLRodSim<T, dim>::getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::Matri
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::markSlidingRange(int idx, int dir, int depth, 
+    std::vector<bool>& can_slide, int root)
+{
+    if (depth > slide_over_n_rods[dir] || idx == -1)
+        return;
+    T rod_length = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+        q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
+    // distance root/crossing node travels
+    T root_sliding_dis = std::abs(q(dim + dir, root) - q0(dim + dir, root));
+    T dis_to_root_rest_state = std::abs(q0(dim + dir, idx) - q0(dim + dir, root));
+    T dis_to_root_current = std::abs(q(dim + dir, idx) - q(dim + dir, root));
+    
+    if (idx == root || root_sliding_dis < 1e-6)
+        can_slide[idx * 2 + dir] = true;
+    
+    if (root_sliding_dis > slide_over_n_rods[dir] * rod_length - 1e-6)
+    {
+        if(dis_to_root_current > dis_to_root_rest_state)
+            can_slide[idx * 2 + dir] = true;
+    }
+    else
+    {
+        can_slide[idx * 2 + dir] = true;
+    }
+    
+    
+    if(dir == 0)
+    {
+        markSlidingRange(connections(2, idx), dir, depth + 1, can_slide, root);
+        markSlidingRange(connections(3, idx), dir, depth + 1, can_slide, root);
+    }
+    else
+    {
+        markSlidingRange(connections(0, idx), dir, depth + 1, can_slide, root);
+        markSlidingRange(connections(1, idx), dir, depth + 1, can_slide, root);
+    }   
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
 {
+    std::vector<bool> can_slide(n_nodes * 2, false);
+
+    iterateSlidingNodes([&](int node_idx){
+              
+        if (dirichlet_data.find(node_idx) != dirichlet_data.end())
+        {
+            TVDOF mask = dirichlet_data[node_idx].first;
+            if(!mask[dim])
+                markSlidingRange(node_idx, 0, 0, can_slide, node_idx);
+            if(!mask[dim+1])
+                markSlidingRange(node_idx, 1, 0, can_slide, node_idx);
+        }
+        else
+        {
+            markSlidingRange(node_idx, 0, 0, can_slide, node_idx);
+            markSlidingRange(node_idx, 1, 0, can_slide, node_idx);
+            
+        }
+    });
+
     C.resize(n_rods * 40, 3);
     std::vector<Eigen::Vector3d> colors = {
         Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(1, 1, 0), Eigen::Vector3d(0, 1, 0), 
         Eigen::Vector3d(0, 1, 1), Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(1, 0, 1)};
+    int n_yarn = yarns.size();
+    VectorXT delta_u(n_rods);
+    delta_u.setZero();
+
+    tbb::parallel_for(0, n_rods, [&](int rod_idx){
+        int v0 = rods(0, rod_idx);
+        int v1 = rods(1, rod_idx);
+        T dU = (q0.col(v1).template segment<2>(dim) - q0.col(v0).template segment<2>(dim)).norm();
+        T du = (q.col(v1).template segment<2>(dim) - q.col(v0).template segment<2>(dim)).norm();
+        delta_u[rod_idx] = std::abs(du - dU);
+    });
     
+    // Eigen::MatrixXd sliding_color(n_rods, 3);
+    // sliding_color.setZero();
+    // std::cout << "color mapping" << std::endl;
+    // igl::colormap(igl::ColorMapType::COLOR_MAP_TYPE_JET, delta_u, true, sliding_color);
+    // std::cout << "color mapping done" << std::endl;
     tbb::parallel_for(0, n_rods, [&](int rod_idx){
         for(int i = 0; i < 40; i++)
-            C.row(rod_idx * 40 + i) = colors[std::floor(yarn_map[rod_idx]/T(n_rod_per_yarn))];
+        {
+
+            if(can_slide[rods(0,rod_idx) * 2 + rods(2, rod_idx)] && can_slide[rods(1,rod_idx) * 2 + rods(2, rod_idx)])
+                C.row(rod_idx * 40 + i) = colors[0];
+            else
+                C.row(rod_idx * 40 + i) = colors[2];
+
+        }
+            // C.row(rod_idx * 40 + i) = sliding_color.row(rod_idx);
+            // C.row(rod_idx * 40 + i) = rod_idx % 2 == 0 ? Eigen::Vector3d::Ones() : Eigen::Vector3d::Zero();
+            // C.row(rod_idx * 40 + i) = colors[yarn_map[rod_idx]];
     });
 }
 

@@ -60,21 +60,11 @@ public:
     void buildSlidingTestScene(int sub_div);
     void buildStraightYarnScene(int sub_div);
 
-    void set_left_right(int idx, int left)
-    {
-        connections(0, idx) = left;
-        connections(1, left) = idx;
-    }
-    void set_top_bottom(int idx, int top)
-    {
-        connections(3, idx) = top;
-        connections(2, top) = idx;
-    }
+    void buildStraightYarn3x1(int sub_div);
 
-    void clearSimData();
-    
-    void addRods(std::vector<int>& nodes, int yarn_type, int& cnt, int yarn_idx = 0);
-    void subdivide(int sub_div);
+
+private:
+    T LDis(int i, int j) { return (q.col(i).template segment<dim>(0) - q.col(j).template segment<dim>(0)).norm(); }
     void add4Nodes(int front, int end, int yarn_id, int rod_id)
     {
         if (rods(0, rod_id) == front)
@@ -90,10 +80,23 @@ public:
             sim.pbc_bending_bn_pairs[yarn_id][4] = rods(2, rod_id);
         }
     };
+    void set_left_right(int idx, int left)
+    {
+        connections(0, idx) = left;
+        connections(1, left) = idx;
+    }
+    void set_top_bottom(int idx, int top)
+    {
+        connections(3, idx) = top;
+        connections(2, top) = idx;
+    }
 
-private:
-    T LDis(int i, int j) { return (q.col(i).template segment<dim>(0) - q.col(j).template segment<dim>(0)).norm(); }
+    void clearSimData();
+    
+    void addRods(std::vector<int>& nodes, int yarn_type, int& cnt, int yarn_idx = 0);
+    void subdivide(int sub_div);
 
+    void subdivideStraightYarns(int sub_div);
 };
 
 #endif

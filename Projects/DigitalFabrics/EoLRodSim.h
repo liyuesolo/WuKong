@@ -153,7 +153,9 @@ public:
     std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
     // pbc_ref[direction] = (node_i, node_j)
     std::vector<std::pair<int, IV2>> pbc_ref;
+
     std::vector<int> sliding_nodes;
+    IV2 slide_over_n_rods = IV2::Zero();
 
     std::vector<IV2> pbc_ref_unique;
 
@@ -340,6 +342,7 @@ public:
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);
+    void markSlidingRange(int idx, int dir, int depth, std::vector<bool>& can_slide, int root);
 
     // BoundaryCondtion.cpp
     void addBCStretchingTest();

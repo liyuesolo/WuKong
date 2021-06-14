@@ -283,8 +283,10 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     // W.setIdentity();
 
     // do not move out the unit cell
-    tunnel_u = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
-        q0.col(rods.col(0)(1)).template segment<dim>(0)).norm() * 2.0;
+    slide_over_n_rods = IV2(std::floor(sub_div * 0.25), std::floor(sub_div * 0.25));
+    T rod_length = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+        q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
+    tunnel_u = slide_over_n_rods[0] * rod_length;
     tunnel_v = tunnel_u;
 }
 
@@ -424,6 +426,21 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
             dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+
+            // sliding_nodes = {4, 11, 18, 5, 12, 19, 8, 6, 13, 20};
+            
+            // dirichlet_data[11] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[13] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[5] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // sliding_nodes = {4, 18, 12, 6, 20};
+
+            dirichlet_data[4] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[18] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[20] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            dirichlet_data[6] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            sliding_nodes = {5, 13, 12, 11, 19};
+
         }
             
         
