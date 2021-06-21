@@ -1,6 +1,6 @@
 #include "EoLRodSim.h"
 #include "igl/colormap.h"
-
+#include "igl/readOBJ.h"
 // template<class T, int dim>
 // void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
 //     Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display, 
@@ -96,6 +96,34 @@
 //     });
 // }
 
+// template<class T, int dim>
+// void EoLRodSim<T, dim>::appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, T scale, Vector<T, 3> shift)
+// {
+//     Eigen::MatrixXd v_sphere;
+//     Eigen::MatrixXi f_sphere;
+
+//     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
+
+//     v_sphere = v_sphere * scale;
+
+//     tbb::parallel_for(0, (int)v_sphere.rows(), [&](int row_idx){
+//         v_sphere.row(row_idx) += shift;
+//     });
+
+//     int n_vtx_prev = V.rows();
+//     int n_face_prev = F.rows();
+
+//     tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+//         f_sphere.row(row_idx) += Eigen::Vector3i(n_vtx_prev, n_vtx_prev, n_vtx_prev);
+//     });
+
+//     V.conservativeResize(V.rows() + v_sphere.rows(), 3);
+//     F.conservativeResize(F.rows() + f_sphere.rows(), 3);
+
+//     V.block(n_vtx_prev, 0, v_sphere.rows(), 3) = v_sphere;
+//     F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
+// }
+
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
     Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display, 
@@ -126,8 +154,10 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
         int rov = rod_cnt * rod_offset_v;
         int rof = rod_cnt * rod_offset_f;
 
-        TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0);
-        TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0);
+        TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0) / 0.03;
+        TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0) / 0.03;
+        // TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0) / 1;
+        // TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0) / 1;
 
         // int yarn_type = rods_display.col(rod_cnt)[2];
         // T u_from = q_display(dim + yarn_type, rods_display.col(rod_cnt)[0]);

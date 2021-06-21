@@ -60,6 +60,8 @@ public:
     void buildSlidingTestScene(int sub_div);
     void buildStraightYarnScene(int sub_div);
 
+    void buildZigZagScene(int sub_div);
+
     void buildStraightYarn3x1(int sub_div);
 
 

@@ -21,9 +21,9 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
     //4.52389
     // sim.setUniaxialStrain(1.27235, 1.1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(1.28805, 1.1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(0.0157, s1, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(80.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    sim.setUniaxialStrain(0.0, 1.1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.3509, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(90.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
     
     // sim.setUniaxialStrain(1.61792, 2.2, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(M_PI/4, 1.6, strain_dir, ortho_dir);
@@ -54,10 +54,10 @@ template<class T, int dim>
 void Homogenization<T, dim>::initialize()
 {
     sim.print_force_mag = false;
-    sim.disable_sliding = false;
+    sim.disable_sliding = true;
     sim.verbose = false;
     sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    // sim.buildSceneFromUnitPatch(3);
+    // sim.buildSceneFromUnitPatch(2);
     // sim.buildPlanePeriodicBCScene3x3();
     sim.add_eularian_reg = true;
     sim.add_contact_penalty = true;
@@ -67,11 +67,10 @@ void Homogenization<T, dim>::initialize()
     // sim.add_stretching = false;
     // sim.kb *= 1e4;
     sim.newton_tol = 1e-6;
-    sim.k_pbc = 1e4;    
-    sim.k_strain = 1e8;
-    // sim.ke = 1e-4;
+    // sim.k_pbc = 1e10;    
+    // sim.k_strain = 1e5;
+    sim.ke = 1e-2;
     sim.k_yc = 1e8;
-    
     
     
     s1 = 1.1;
@@ -119,7 +118,8 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& stra
     std::vector<TV> f_bc(2, TV::Zero());
 
     sim.iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-        T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
+        // T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
+        T length = dir_id == 1 ? (Xj - Xi).norm() : (Xl - Xk).norm();
         length /= (2.0 * sim.R);
         
         int bc_node = dir_id == 0 ? node_j : node_i;
@@ -207,9 +207,9 @@ void Homogenization<T, dim>::fitComplianceTensor()
         for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
         {
             TV strain_dir, ortho_dir;
-            sim.setBiaxialStrain(theta, s1, theta, s2, strain_dir, ortho_dir);
+            // sim.setBiaxialStrain(theta, s1, theta, s2, strain_dir, ortho_dir);
             // TV strain_dir;
-            // sim.setUniaxialStrain(theta, s1, strain_dir, ortho_dir);
+            sim.setUniaxialStrain(theta, s1, strain_dir, ortho_dir);
             sim.advanceOneStep();
             TM stress, strain;
             computeMacroStressStrain(stress, strain);

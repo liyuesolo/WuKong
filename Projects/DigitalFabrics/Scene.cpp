@@ -425,9 +425,12 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
             dirichlet_data[0] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             dirichlet_data[7] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             dirichlet_data[14] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-            dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
 
-            // sliding_nodes = {4, 11, 18, 5, 12, 19, 8, 6, 13, 20};
+            dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_lagrangian);
+            sliding_nodes = {4, 11, 18, 5, 12, 19, 6, 13, 20};
+
+            // dirichlet_data[12] = std::make_pair(TVDOF::Zero(), fix_all);
+            // sliding_nodes = {4, 11, 18, 5, 19, 6, 13, 20};
             
             // dirichlet_data[11] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             // dirichlet_data[13] = std::make_pair(TVDOF::Zero(), fix_eulerian);
@@ -435,11 +438,12 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
             // dirichlet_data[19] = std::make_pair(TVDOF::Zero(), fix_eulerian);
             // sliding_nodes = {4, 18, 12, 6, 20};
 
-            dirichlet_data[4] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-            dirichlet_data[18] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-            dirichlet_data[20] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-            dirichlet_data[6] = std::make_pair(TVDOF::Zero(), fix_eulerian);
-            sliding_nodes = {5, 13, 12, 11, 19};
+            // dirichlet_data[4] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[18] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[20] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // dirichlet_data[6] = std::make_pair(TVDOF::Zero(), fix_eulerian);
+            // sliding_nodes = {5, 13, 12, 11, 19};
+            // sliding_nodes = {5, 13, 11, 19};
 
         }
             
@@ -479,7 +483,7 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
         std::cout << "3D version this is not implemented" << std::endl;
         std::exit(0);
     }
-    
+    q *= 0.03;
     q0 = q;
     
     n_dof = n_nodes * dof;

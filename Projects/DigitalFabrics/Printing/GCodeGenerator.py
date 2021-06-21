@@ -17,6 +17,12 @@ class GCodeGenerator:
         self.absolute_extrusion = False
 
         self.last_E = 0.0
+
+        if(self.printer_type == "PrusaI3"):
+            self.nozzle_diameter = 0.4
+            self.filament_diameter = 0.175
+        else:
+            print("Please add printer and filament info for this printer....")
     
     def writeHeader(self):
         if(self.printer_type == "PrusaI3"):
@@ -64,10 +70,32 @@ class GCodeGenerator:
 
     def retract(self, E):
         self.gcode_file.write("G1 E" + str(E) + "\n")
+    
 
-    def writeLine(self, X, Y, Z, E=None, F=None, move_up_nozzle=True):
+    def computeExtrusion(self, X, Y, Z, material_height):
+
+        length = np.sqrt(
+                (X[1] - X[0]) * (X[1] - X[0]) + 
+                (Y[1] - Y[0]) * (Y[1] - Y[0]) + 
+                (Z[1] - Z[0]) * (Z[1] - Z[0]))
+
+        rf = self.filament_diameter / 2.0
+        
+        filameter_area_cross_section = np.pi * rf * rf
+        
+        # E * filameter_area_cross_section = self.nozzle_diameter * material_height * material_height_length
+        # print(length, self.nozzle_diameter, material_height, filameter_area_cross_section)
+        extrusion_amount = length * self.nozzle_diameter * material_height / filameter_area_cross_section
+        # print(extrusion_amount)
+        
+        return extrusion_amount
+
+
+    def writeLine(self, X, Y, Z, material_height, E=None, F=None, move_up_nozzle=True, move_up_nozzle2=True):
+        
         if move_up_nozzle:
-            self.moveTo(X[0], Y[0], Z[0] + 0.5, F = 2000)
+            self.moveTo(X[0], Y[0], Z[0] + 2.5, F = 2000)
+
         self.moveTo(X[0], Y[0], Z[0], F = 2000)
         self.retract(0.4)
         cmd = "G1 X" + str(X[1]) + " Y" + str(Y[1]) + " Z" + str(Z[1])
@@ -75,12 +103,13 @@ class GCodeGenerator:
             cmd += " E" + str(self.last_E + E)
             self.last_E += E
         else:
-            cmd += " E" + str(E)
+            # cmd += " E" + str(E)
+            cmd += " E" + str(self.computeExtrusion(X, Y, Z, material_height))
         cmd += " F" + str(F)
         self.gcode_file.write(cmd+"\n")
         self.retract(-0.4)
-        if move_up_nozzle:
-            self.moveTo(X[1], Y[1], Z[1] + 0.5, F = 2000)
+        if move_up_nozzle2:
+            self.moveTo(X[1], Y[1], Z[1] + 2.5, F = 2000)
 
     def checkValid(self):
         print(self.header_written and self.footer_written)

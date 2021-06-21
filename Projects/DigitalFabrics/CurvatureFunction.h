@@ -29,14 +29,18 @@ public:
 
 };
 
-// template<class T, int dim>
-// class DiscreteCurvature : public CurvatureFunction<T, dim>
-// {
-//     T r;
-// public:
-//     DiscreteCurvature(T _r) : r(_r) {}
-//     virtual T value(std::vector<T>& us);
-// };
+template<class T, int dim>
+class PreBendCurvaure : public CurvatureFunction<T, dim>
+{
+    T length;
+    T theta;
+public:
+    PreBendCurvaure(T _length, T _theta) : length(_length), theta(_theta) {}
+    virtual T value(T u)
+    {
+        return theta / length;
+    }
+};
 
 template<class T, int dim>
 class CircleCurvature : public CurvatureFunction<T, dim>

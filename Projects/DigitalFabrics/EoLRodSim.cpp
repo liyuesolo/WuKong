@@ -384,7 +384,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 1000;
+    int max_newton_iter = 2000;
 
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setZero();
@@ -447,10 +447,45 @@ void EoLRodSim<T, dim>::advanceOneStep()
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
     q = q0 + dq_full;
 
-    std::cout << "E_bend: " << addBendingEnergy(q) << std::endl;
-    std::cout << "E_stretch: " << addStretchingEnergy(q) << std::endl;
-    std::cout << "E total: " << addBendingEnergy(q) + addStretchingEnergy(q) << std::endl;
+    // std::cout << "E_bend: " << addBendingEnergy(q) << std::endl;
+    // std::cout << "E_stretch: " << addStretchingEnergy(q) << std::endl;
+    // std::cout << "E_reg: " << addEulerianRegEnergy(q) << std::endl;
+    // std::cout << "E total: " << addBendingEnergy(q) + addStretchingEnergy(q) << std::endl;
     
+    // DOFStack force(dof, n_nodes);
+    // force.setZero();
+    // DOFStack total_force = force;
+    // addBendingForce(q, force);
+    // total_force += force;
+    // std::cout << "bending force norm " << force.norm() << std::endl;
+    // force.setZero();
+    // addStretchingForce(q, force);
+    // total_force += force;
+    // std::cout << "stretching force norm " << force.norm() << std::endl;
+    // force.setZero();
+    // if (add_shearing)
+    // {
+    //     addShearingForce(q, force, true);
+    //     addShearingForce(q, force, false);
+    //     total_force += force;
+    //     std::cout << "shearing force norm " << force.norm() << std::endl;
+    // }
+
+    // std::cout << "stretching + bending + shearing norm " << total_force.norm() << std::endl;
+    // force.setZero();
+    // addEulerianRegForce(q, force);
+    // std::cout << "reg force norm " << force.norm() << std::endl;
+
+    // iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
+    //     TV xi = q.col(node_i).template segment<dim>(0);
+    //     TV xj = q.col(node_j).template segment<dim>(0);
+
+    //     TV Xi = q0.col(node_i).template segment<dim>(0);
+    //     TV Xj = q0.col(node_j).template segment<dim>(0);
+
+    //     std::cout << "node " << node_i << " node " << node_j << " " << (xi-xj).norm() << " " << (Xi - Xj).norm() << std::endl;
+    // });
+
     // std::cout << dq_full.transpose() << std::endl;
     
     // DOFStack lambdas;

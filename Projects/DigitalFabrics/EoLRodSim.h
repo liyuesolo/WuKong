@@ -98,8 +98,8 @@ public:
 
     T dt = 1;
     T newton_tol = 1e-4;
-    T E = 3e9;
-    T R = 0.01;
+    T E = 3.5e9; //PLA
+    T R = 0.0002;
 
     T unit = 1;
 
@@ -336,6 +336,8 @@ public:
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
     //Visualization.cpp
+    // void appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+    //     T scale = 1.0, Vector<T, 3> shift = Vector<T, 3>::Zero());
     void getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn = 4);
     void getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x);
     void getColorFromStretching(Eigen::MatrixXd& C);

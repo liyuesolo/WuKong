@@ -240,7 +240,7 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     auto bendingEnergySingleDirection = [&](int n0, int n1, int n2, int uv_offset)
     {
         T kappa0 = curvature_functions[uv_offset]->value(q_temp(dim + uv_offset, n0));
-        // if (uv_offset == 0)
+        // if (uv_offset == 1)
             // std::cout << "curvature "<< kappa0 << std::endl;
         std::vector<Vector<T, dim + 1>> x(3);
         std::vector<int> nodes = {n0, n1, n2};

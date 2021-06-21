@@ -1,4 +1,6 @@
 #include <igl/opengl/glfw/Viewer.h>
+#include <igl/project.h>
+#include <igl/unproject_on_plane.h>
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
@@ -6,8 +8,10 @@
 #include <igl/png/readPNG.h>
 #include "igl/colormap.h"
 
+#include "UI.h"
 #include "EoLRodSim.h"
 #include "Homogenization.h"
+#include "HybridC2Curve.h"
 
 #define T double
 #define dim 2
@@ -16,14 +20,20 @@
 bool USE_VIEWER = true;
 
 EoLRodSim<T, dim> eol_sim;
-
+HybridC2Curve<T, dim> hybrid_curve;
 Homogenization<T, dim> homogenizer(eol_sim);
+
+
 
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
 
 Eigen::MatrixXd nodes;
+
+
+Eigen::MatrixXd V_drawing;
+Eigen::MatrixXi F_drawing;
 
 static bool tileUnit = false;
 static bool showUnit = false;
@@ -32,102 +42,119 @@ static bool show_index = false;
 static bool show_original = false;
 static bool per_yarn = true;
 static bool slide = false;
+static bool draw_unit = false;
+
+static bool draw_line = true;
+static bool draw_curve = false;
+
 
 static float theta_pbc = 0;
 static float strain = 1.0;
 static int n_rod_per_yarn = 4;
 
+
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
     viewer.data().clear();
-    if(tileUnit)
-        eol_sim.buildPeriodicNetwork(V, F, C);
-    else
-        eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
-    viewer.data().set_mesh(V, F);
-    if(showUnit)
-        viewer.data().set_colors(C);
-    if (per_yarn)
+    if (draw_unit)
     {
-        eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-        viewer.data().set_colors(C);
+        if(V_drawing.size())
+        {
+            viewer.data().set_mesh(V_drawing, F_drawing);
+        }
+    }
+    else
+    {
         if(tileUnit)
+            eol_sim.buildPeriodicNetwork(V, F, C);
+        else
+            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+        viewer.data().set_mesh(V, F);
+        if(showUnit)
+            viewer.data().set_colors(C);
+        if (per_yarn)
         {
             eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            C.conservativeResize(F.rows(), 3);
-            tbb::parallel_for(0, eol_sim.n_rods * 40, [&](int i){
-                for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/40); j++)
-                {
-                    C.row(j * eol_sim.n_rods * 40 + i) = C.row(i);
-                }
-            });
             viewer.data().set_colors(C);
+            if(tileUnit)
+            {
+                eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+                C.conservativeResize(F.rows(), 3);
+                tbb::parallel_for(0, eol_sim.n_rods * 40, [&](int i){
+                    for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/40); j++)
+                    {
+                        C.row(j * eol_sim.n_rods * 40 + i) = C.row(i);
+                    }
+                });
+                viewer.data().set_colors(C);
+            }
         }
-    }
-    if(show_original && !tileUnit)
-    {
-        Eigen::MatrixXd X, x;
-        eol_sim.getEulerianDisplacement(X, x);
-        for (int i = 0; i < X.rows(); i++)
+        if(show_original && !tileUnit)
         {
-            // viewer.data().add_edges(X.row(i), x.row(i), Eigen::RowVector3d(1, 1, 1));
+            Eigen::MatrixXd X, x;
+            eol_sim.getEulerianDisplacement(X, x);
+            for (int i = 0; i < X.rows(); i++)
+            {
+                // viewer.data().add_edges(X.row(i), x.row(i), Eigen::RowVector3d(1, 1, 1));
+            }
+            viewer.data().add_points(X, Eigen::RowVector3d(1,1,1));
+            // viewer.data().add_points(x, Eigen::RowVector3d(0,0,0));  
         }
-        viewer.data().add_points(X, Eigen::RowVector3d(1,1,1));
-        // viewer.data().add_points(x, Eigen::RowVector3d(0,0,0));  
     }
+    
 };
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)
 {
     if (key == ' ')
     {
-        eol_sim.advanceOneStep();   
+        if (draw_unit)
+        {
+
+        }
+        else
+        {
+            eol_sim.advanceOneStep();   
+        }
         updateScreen(viewer);
     }
     return false;
 }
 
 enum TestCase{
-    FiveNodes, Bending, Stretching, Shearing, GridScene,
-    PlanePBC, FitE, FitEBatch
+    DrawUnit, StaticSolve, BatchRendering
 };
 
 const char* test_case_names[] = {
-    "FiveNodes", "Bending", "Stretching", "Shearing", "GridScene",
-    "PlanePBC", "FitE", "FitEBatch"
+    "DrawUnit", "StaticSolve", "BatchRendering"
 };
 
 
 int main(int argc, char *argv[])
 {
-    // using RGBMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
+    using RGBMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
     // RGBMat R, G, B, A;
     // igl::png::readPNG("checkerboard.png", R, G, B, A);
 
     int n_test_case = sizeof(test_case_names)/sizeof(const char*);
     
     int selected = -1;
-    double u0 = 0.0, x0 = 0.0;
+    double u0 = 0.0, x0 = 0.0, y0 = 0.0;
 
-    static TestCase test = FiveNodes;
-    TestCase test_current = FitE; // set to be a different from above or change the above one to be a random one
+    static TestCase test = BatchRendering;
+    TestCase test_current = DrawUnit; // set to be a different from above or change the above one to be a random one
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
-    {
-        
-        if (test == PlanePBC)
+    {   
+        if (test_current == DrawUnit)
         {
-            eol_sim.buildPlanePeriodicBCScene3x3Subnodes();
+            draw_unit = true;
+            // viewer.core().camera_zoom = 0.1;
         }
-        else if (test == FitEBatch)
+        else if (test_current == StaticSolve)
         {
             homogenizer.testOneSample();
-            // homogenizer.marcoYoungsModulusFitting();
-        }
-        else if (test == FitE)
-        {
-            homogenizer.testOneSample();
-            // homogenizer.marcoYoungsModulusFitting();
+            draw_unit = false;
         }
         updateScreen(viewer);
     };
@@ -136,18 +163,18 @@ int main(int argc, char *argv[])
     
     igl::opengl::glfw::imgui::ImGuiMenu menu;
     
-    if (test_current == FitEBatch)
+    if (test_current == BatchRendering)
     {
         menu.callback_draw_viewer_menu = [&](){
             viewer.core().align_camera_center(viewer.data().V, viewer.data().F);
         };
     }
-    else
+    else if (test_current == StaticSolve)
     {
         viewer.plugins.push_back(&menu);
+        
         menu.callback_draw_viewer_menu = [&]()
-        {
-            
+        {   
             // menu.draw_viewer_menu();
             if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
             {   
@@ -220,18 +247,6 @@ int main(int argc, char *argv[])
                 {
                     updateScreen(viewer);
                 }
-                // if (ImGui::Checkbox("ShowUnit", &showUnit))
-                // {
-                //     viewer.data().clear();
-                //     viewer.data().set_mesh(V, F);
-                //     if(showUnit)
-                //         viewer.data().set_colors(C);
-                //     if (per_yarn)
-                //     {
-                //         eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-                //         viewer.data().set_colors(C);
-                //     } 
-                // }
                 if (ImGui::Checkbox("ShowIndex", &show_index))
                 {
                     if(show_index)
@@ -242,8 +257,7 @@ int main(int argc, char *argv[])
                     }
                 }
                 if (ImGui::Checkbox("ShowEulerianRest", &show_original))
-                {
-                    
+                {   
                     updateScreen(viewer);
                 }
             }
@@ -277,32 +291,79 @@ int main(int argc, char *argv[])
             }
         };
     }
+    else if (test_current == DrawUnit)
+    {
+        viewer.plugins.push_back(&menu);
+        menu.callback_draw_viewer_menu = [&]()
+        {
+            if (ImGui::Checkbox("Line", &draw_line))
+            {
+            }
+            if (ImGui::Checkbox("Curve", &draw_curve))
+            {
+            }
+        };
+    }
     
-    viewer.callback_mouse_down =
-    [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
-	  {
-	    double x = viewer.current_mouse_x;
-	    double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-	    
-	    Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2);
-        Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
-        rod_v.setZero();
-        rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
+    auto draw_unit_func = [&](igl::opengl::glfw::Viewer& viewer, int button, int)->bool
+    {
+        double x = viewer.current_mouse_x;
+        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        Eigen::Vector4f eye_n = (viewer.core().view).inverse().col(3);
+        Eigen::Vector3d point;
+        igl::unproject_on_plane(Eigen::Vector2d(x,y), viewer.core().proj*viewer.core().view, viewer.core().viewport, eye_n, point);
+        
+        if (button == 0) // left button
+        {
+            // appendSphereMesh(V_drawing, F_drawing, 0.1, point);
+            hybrid_curve.data_points.push_back(Vector<T, 2>(x, y));
+            std::vector<Vector<T, 2>> points_on_curve;
+            hybrid_curve.getLinearSegments(points_on_curve);
+            appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve);
+        }
+        else if (button == 2) // right button
+        {
+            // removeSphereMesh(V_drawing, F_drawing);
+            if(hybrid_curve.data_points.size())
+            {
+                hybrid_curve.data_points.pop_back();
+                std::vector<Vector<T, 2>> points_on_curve;
+                hybrid_curve.getLinearSegments(points_on_curve);
+                appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve, true);
+            }
+        }
+        updateScreen(viewer);
+        return false;
+    };
 
-		igl::project(rod_v, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
-
-		for(int i=0; i<pxy.rows(); ++i)
-		{
+    if (test_current == DrawUnit)
+        viewer.callback_mouse_down = draw_unit_func;
+    else
+        viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+        {
+            double x = viewer.current_mouse_x;
+            double y = viewer.core().viewport(3) - viewer.current_mouse_y;
             
-			if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
-			{
-				selected = i;
-                x0 = x;
-				return true;
-			}
-		}
-	    return false;
-	  };
+            Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2);
+            Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
+            rod_v.setZero();
+            rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
+
+            igl::project(rod_v, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+
+            for(int i=0; i<pxy.rows(); ++i)
+            {
+                
+                if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
+                {
+                    selected = i;
+                    x0 = x;
+                    y0 = y;
+                    return true;
+                }
+            }
+            return false;
+        };
     
 
     viewer.callback_mouse_up = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
@@ -316,47 +377,57 @@ int main(int argc, char *argv[])
 	    return false;
 	  };
 
-    viewer.callback_mouse_move =
-    [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
-	  {
-		if(selected!=-1)
-		{
-            // eol_sim.resetScene();
-            // updateScreen(viewer);
-			double x = viewer.current_mouse_x;
-	    	double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-	    
-			double delta = (x - x0) / viewer.core().viewport(2);
-            // eol_sim.q(dim, 3) = u0;
-            Eigen::VectorXd delta_dof(4); delta_dof.setZero();
-            auto zero_delta = delta_dof;
-            Eigen::VectorXd mask_dof(4); mask_dof.setZero();
-            delta_dof(0) = delta;
-            mask_dof(0) = 1;
-            mask_dof(2) = 0;
-            mask_dof(3) = 1;
-            eol_sim.dirichlet_data[3] = std::make_pair(delta_dof, mask_dof);
-            eol_sim.advanceOneStep();
-            updateScreen(viewer);
+    if (test_current == DrawUnit)
+    {
+        
+        viewer.callback_mouse_move =
+        [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+        {
+            double x = viewer.current_mouse_x;
+            double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        
+            return false;
+        };
+    }
+    else
+        viewer.callback_mouse_move =
+        [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+        {
+            if(selected!=-1)
+            {
+                double x = viewer.current_mouse_x;
+                double y = viewer.core().viewport(3) - viewer.current_mouse_y;
             
-            return true;
-		}
+                double delta_x = (x - x0) / viewer.core().viewport(2);
+                double delta_y = (y - y0) / viewer.core().viewport(3);
+                // eol_sim.q(dim, 3) = u0;
+                Eigen::VectorXd delta_dof(4); delta_dof.setZero();
+                auto zero_delta = delta_dof;
+                Eigen::VectorXd mask_dof(4); mask_dof.setZero();
+                delta_dof(0) = delta_x;
+                // delta_dof(1) = delta_y;
+                mask_dof(0) = 1;
+                mask_dof(2) = 0;
+                mask_dof(3) = 1;
+                eol_sim.dirichlet_data[selected] = std::make_pair(delta_dof, mask_dof);
+                eol_sim.advanceOneStep();
+                updateScreen(viewer);
+                
+                return true;
+            }
 
-	    return false;
-	  };
+            return false;
+        };
     //================== Run GUI ==================
     
     
-    
-    
+
     int width = 800, height = 800;
-    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> R(width,height);
-    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> G(width,height);
-    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> B(width,height);
-    Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic> A(width,height);
-    if (test_current == FitEBatch)
+    
+    if (test_current == BatchRendering)
     {
-        
+        RGBMat R(width,height), G(width,height), B(width,height), A(width,height);
+
         T s = 1.1;
         int n_angles = 40;
         T cycle = 2.0 * M_PI;
@@ -397,12 +468,23 @@ int main(int argc, char *argv[])
             viewer.launch_shut();
         }
         
-        
     }
-    else
+    else if (test_current == StaticSolve)
     {
         viewer.data().set_face_based(true);
         viewer.data().shininess = 1.0;
+        viewer.data().point_size = 25.0;
+        setupScene(viewer);
+        viewer.callback_key_down = &key_down;
+        viewer.core().align_camera_center(V);
+        key_down(viewer,'0',0);
+        viewer.launch();
+    }
+    else if (test_current == DrawUnit)
+    {
+        
+        viewer.data().set_face_based(true);
+        viewer.data().shininess = 0.0;
         viewer.data().point_size = 25.0;
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
