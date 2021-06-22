@@ -52,6 +52,7 @@ static float theta_pbc = 0;
 static float strain = 1.0;
 static int n_rod_per_yarn = 4;
 
+int n_faces = 20;
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
@@ -80,10 +81,10 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             {
                 eol_sim.getColorPerYarn(C, n_rod_per_yarn);
                 C.conservativeResize(F.rows(), 3);
-                tbb::parallel_for(0, eol_sim.n_rods * 40, [&](int i){
+                tbb::parallel_for(0, eol_sim.n_rods * n_faces, [&](int i){
                     for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/40); j++)
                     {
-                        C.row(j * eol_sim.n_rods * 40 + i) = C.row(i);
+                        C.row(j * eol_sim.n_rods * n_faces + i) = C.row(i);
                     }
                 });
                 viewer.data().set_colors(C);
@@ -142,7 +143,7 @@ int main(int argc, char *argv[])
     double u0 = 0.0, x0 = 0.0, y0 = 0.0;
 
     static TestCase test = BatchRendering;
-    TestCase test_current = DrawUnit; // set to be a different from above or change the above one to be a random one
+    TestCase test_current = StaticSolve; // set to be a different from above or change the above one to be a random one
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {   

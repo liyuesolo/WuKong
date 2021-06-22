@@ -142,8 +142,12 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
     int n_ros_draw = rods_display.cols();
     
 
-    int rod_offset_v = n_div * 2 + 2;
-    int rod_offset_f = n_div * 4;
+    // int rod_offset_v = n_div * 2 + 2;
+    // int rod_offset_f = n_div * 4;
+
+    int rod_offset_v = n_div * 2;
+    int rod_offset_f = n_div * 2;
+    
     V.resize(n_ros_draw * rod_offset_v, 3);
     V.setZero();
     F.resize(n_ros_draw * rod_offset_f, 3);
@@ -197,10 +201,10 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
         
         TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
         
-        V(rov + n_div*2+1, 1) = axis_world.norm();
+        // V(rov + n_div*2+1, 1) = axis_world.norm();
         
-        V.row(rov + n_div*2+1) = (V.row(rov + n_div*2+1) * R).transpose() + vtx_from;
-        V.row(rov + n_div*2) = vtx_from;
+        // V.row(rov + n_div*2+1) = (V.row(rov + n_div*2+1) * R).transpose() + vtx_from;
+        // V.row(rov + n_div*2) = vtx_from;
         
         for(int i = 0; i < n_div; i++)
         {
@@ -217,13 +221,16 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
             V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
             
             //top faces of the cylinder
-            F.row(rof + i) = IV3(rov + n_div*2, rov + i, rov + (i+1)%(n_div));
+            // F.row(rof + i) = IV3(rov + n_div*2, rov + i, rov + (i+1)%(n_div));
             //bottom faces of the cylinder
-            F.row(rof + i+n_div) = IV3(rov + n_div*2+1, rov + n_div + (i+1)%(n_div), rov + i + n_div);
+            // F.row(rof + i+n_div) = IV3(rov + n_div*2+1, rov + n_div + (i+1)%(n_div), rov + i + n_div);
             
             //side faces of the cylinder
-            F.row(rof + i*2 + 2 * n_div) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
-            F.row(rof + i*2 + 1 + 2 * n_div) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+            // F.row(rof + i*2 + 2 * n_div) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+            // F.row(rof + i*2 + 1 + 2 * n_div) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+
+            F.row(rof + i*2 ) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+            F.row(rof + i*2 + 1) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
         }
 
     });
@@ -305,6 +312,8 @@ void EoLRodSim<T, dim>::markSlidingRange(int idx, int dir, int depth,
 template<class T, int dim>
 void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
 {
+    int n_faces = 20;
+
     std::vector<bool> can_slide(n_nodes * 2, false);
 
     iterateSlidingNodes([&](int node_idx){
@@ -325,7 +334,7 @@ void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
         }
     });
 
-    C.resize(n_rods * 40, 3);
+    C.resize(n_rods * n_faces, 3);
     std::vector<Eigen::Vector3d> colors = {
         Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(1, 1, 0), Eigen::Vector3d(0, 1, 0), 
         Eigen::Vector3d(0, 1, 1), Eigen::Vector3d(0, 0, 1), Eigen::Vector3d(1, 0, 1)};
@@ -347,13 +356,13 @@ void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
     // igl::colormap(igl::ColorMapType::COLOR_MAP_TYPE_JET, delta_u, true, sliding_color);
     // std::cout << "color mapping done" << std::endl;
     tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        for(int i = 0; i < 40; i++)
+        for(int i = 0; i < n_faces; i++)
         {
 
             if(can_slide[rods(0,rod_idx) * 2 + rods(2, rod_idx)] && can_slide[rods(1,rod_idx) * 2 + rods(2, rod_idx)])
-                C.row(rod_idx * 40 + i) = colors[0];
+                C.row(rod_idx * n_faces + i) = colors[0];
             else
-                C.row(rod_idx * 40 + i) = colors[2];
+                C.row(rod_idx * n_faces + i) = colors[2];
 
         }
             // C.row(rod_idx * 40 + i) = sliding_color.row(rod_idx);
@@ -366,7 +375,8 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::getColorFromStretching(
     Eigen::MatrixXd& C)
 {
-    C.resize(n_rods * 40, 3);
+    int n_faces = 20;
+    C.resize(n_rods * n_faces, 3);
     DOFStack q_temp = q - q0;
     VectorXT rod_energy(n_rods);
     rod_energy.setZero();
@@ -413,8 +423,8 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         rod_energy.setZero();
     
     tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        for(int i = 0; i < 40; i++)
-            C.row(rod_idx * 40 + i) = Eigen::Vector3d(rod_energy[rod_idx], rod_energy[rod_idx], rod_energy[rod_idx]);
+        for(int i = 0; i < n_faces; i++)
+            C.row(rod_idx * n_faces + i) = Eigen::Vector3d(rod_energy[rod_idx], rod_energy[rod_idx], rod_energy[rod_idx]);
     });
 
 }

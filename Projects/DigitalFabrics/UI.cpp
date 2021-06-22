@@ -75,6 +75,7 @@ void appendCylinderMesh(igl::opengl::glfw::Viewer& viewer,
     int rod_offset_f = n_div * 2;
 
     int n_rods = points_on_curve.size() - 1;
+    
 
     V.resize(n_rods * rod_offset_v, 3);
     V.setZero();

@@ -123,7 +123,7 @@ def writePointsToFile(sFile):
 
   with open(sFile, "w") as f: 
     writeHeader(f)
-    createCurves(f,PatternPlain,10,2.5,0.4,(10,10))
+    createCurves(f,PatternPlain,1,2.5,0.4,(10,10))
     f.write("M107\n")
     f.write("M104 S0 ; turn off extruder\n")
     f.write("M140 S0 ; turn off heatbed\n")
@@ -134,4 +134,4 @@ def writePointsToFile(sFile):
     f.write("M104 S0\n")
 
 
-writePointsToFile("test_fabric.gcode")
+writePointsToFile("weave.gcode")

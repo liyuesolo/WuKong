@@ -2,8 +2,9 @@
 #define HYBRID_C2_CURVE_H
 
 
-// borrowed from
+// reference
 // view-source:http://www.cemyuksel.com/research/interpolating_splines/curves.html
+// A Class of C2 Interpolating Splines ACM Transactions on Graphics, 39, 5, 2020
 
 #include <utility>
 #include <iostream>
@@ -73,7 +74,7 @@ public:
                                     center, axis1, axis2, 
                                     Vector<T, 2>(limits[0], limits[2])));
         }
-        
+        // line 1143 curvePos
         auto curve_func = [&](T t, int idx)
         {
             T tt = curve_data[idx]->limits[0] + t * (curve_data[idx]->limits[1] - curve_data[idx]->limits[0]);
@@ -82,24 +83,30 @@ public:
                     curve_data[idx]->axis2 * std::sin(tt);
         };
         
+        // first half of the first spline, no interpolation
         for (int vtx = 0; vtx < sub_div / 2; vtx++)
         {
             T t = T(vtx) / sub_div;
             TV F0 = curve_func(t, 0);
             points_on_curve.push_back(F0);
         }
+        // interpolate between two splines
         for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
         {
             for (int vtx = 0; vtx < sub_div / 2; vtx++)
             {
                 T t = T(vtx) / sub_div * 2.0;
                 T theta = t * M_PI * 0.5;
+                // maps to 0.5 ~ 1 for the first spline
                 TV F0 = curve_func((theta + M_PI * 0.5)/M_PI, curve_idx);
+                // maps to 0 ~ 0.5 for the second spline
                 TV F1 = curve_func(theta/M_PI, curve_idx+1);
+                // equation (2)
                 TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
                 points_on_curve.push_back(Ci);
             }
         }
+        // second half of the last spline, no interpolation
         for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
         {
             T t = T(vtx) / sub_div;
@@ -112,6 +119,7 @@ public:
 
 private:
 
+    // copied from source code
     void circularInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
@@ -162,6 +170,7 @@ private:
         limits = Vector<T, 3>(limit1, 0, limit2);
     }
 
+    // copied from source code
     void ellipticalInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
@@ -245,6 +254,7 @@ private:
         }
     }
 
+    // copied from source code
     void hybridInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         circularInterpolation(i, center, axis1, axis2, limits);
