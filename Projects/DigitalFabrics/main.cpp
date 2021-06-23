@@ -23,8 +23,6 @@ EoLRodSim<T, dim> eol_sim;
 HybridC2Curve<T, dim> hybrid_curve;
 Homogenization<T, dim> homogenizer(eol_sim);
 
-
-
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
@@ -44,15 +42,17 @@ static bool per_yarn = true;
 static bool slide = false;
 static bool draw_unit = false;
 
-static bool draw_line = true;
-static bool draw_curve = false;
-
+static bool drawing = true;
+static bool editing = !drawing;
+static bool show_data_points = true;
 
 static float theta_pbc = 0;
 static float strain = 1.0;
 static int n_rod_per_yarn = 4;
 
 int n_faces = 20;
+
+std::vector<HybridC2Curve<T, dim>> hybrid_curves;
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
@@ -111,7 +111,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
     {
         if (draw_unit)
         {
-
+            std::vector<Vector<T, 2>> points_on_curve;
+            hybrid_curve.getLinearSegments(points_on_curve);
+            appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve, true);
         }
         else
         {
@@ -297,30 +299,108 @@ int main(int argc, char *argv[])
         viewer.plugins.push_back(&menu);
         menu.callback_draw_viewer_menu = [&]()
         {
-            if (ImGui::Checkbox("Line", &draw_line))
+            if (ImGui::CollapsingHeader("CurveIO", ImGuiTreeNodeFlags_DefaultOpen))
             {
+                float w = ImGui::GetContentRegionAvailWidth();
+                float p = ImGui::GetStyle().FramePadding.x;
+                if (ImGui::Button("Load##Curve##Data##Points", ImVec2((w-p)/2.f, 0)))
+                {
+                    std::string fname = igl::file_dialog_open();
+                    if (fname.length() != 0)
+                    {
+                        hybrid_curve.data_points.clear();
+                        std::ifstream in(fname);
+                        double x, y;
+                        while(in >> x >> y)
+                            hybrid_curve.data_points.push_back(Vector<T, 2>(x, y));
+                        in.close();
+                    }
+                }
+                ImGui::SameLine(0, p);
+                if (ImGui::Button("Save##Curve##Data##Points", ImVec2((w-p)/2.f, 0)))
+                {
+                    std::string fname = igl::file_dialog_save();
+
+                    if (fname.length() != 0)
+                    {
+                        std::ofstream out(fname);
+                        for (auto pt : hybrid_curve.data_points)
+                        {
+                            out << pt.transpose() << std::endl;
+                        }
+                        out.close();
+                    }
+                }
             }
-            if (ImGui::Checkbox("Curve", &draw_curve))
+
+            if (ImGui::CollapsingHeader("Drawing Options", ImGuiTreeNodeFlags_DefaultOpen))
             {
+                if (ImGui::DragInt("SubDivision", &(hybrid_curve.sub_div), 1.f, 8, 64))
+                {
+                    std::vector<Vector<T, 2>> points_on_curve;
+                    hybrid_curve.getLinearSegments(points_on_curve);
+                    appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve);
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Drawing", &drawing))
+                {
+                    editing = !drawing;
+                }
+                if (ImGui::Checkbox("Editing", &editing))
+                {
+                    drawing = !editing;
+                }
+                if (ImGui::Checkbox("ShowDataPoints", &show_data_points))
+                {
+
+                }
+                float w = ImGui::GetContentRegionAvailWidth();
+                float p = ImGui::GetStyle().FramePadding.x;
+                if (ImGui::Button("Add##Curve", ImVec2((w-p)/2.f, 0)))
+                {
+                    hybrid_curves.push_back(hybrid_curve);
+                    hybrid_curve = HybridC2Curve<T, 2>();
+                }
+                ImGui::SameLine(0, p);
+                if (ImGui::Button("Remove##Curve", ImVec2((w-p)/2.f, 0)))
+                {
+                    hybrid_curves.pop_back();
+                }
             }
         };
     }
     
     auto draw_unit_func = [&](igl::opengl::glfw::Viewer& viewer, int button, int)->bool
     {
+        if (!drawing)
+            return false;
         double x = viewer.current_mouse_x;
         double y = viewer.core().viewport(3) - viewer.current_mouse_y;
         Eigen::Vector4f eye_n = (viewer.core().view).inverse().col(3);
-        Eigen::Vector3d point;
-        igl::unproject_on_plane(Eigen::Vector2d(x,y), viewer.core().proj*viewer.core().view, viewer.core().viewport, eye_n, point);
+        // Eigen::Vector3d point;
+        // igl::unproject_on_plane(Eigen::Vector2d(x,y), viewer.core().proj*viewer.core().view, viewer.core().viewport, eye_n, point);
         
         if (button == 0) // left button
         {
-            // appendSphereMesh(V_drawing, F_drawing, 0.1, point);
             hybrid_curve.data_points.push_back(Vector<T, 2>(x, y));
             std::vector<Vector<T, 2>> points_on_curve;
+            // for(auto curve : hybrid_curves)
+            // {
+            //     std::vector<Vector<T, 2>> points;
+            //     hybrid_curve.getLinearSegments(points);
+            //     points_on_curve.insert(points_on_curve.end(), points.begin(), points.end());
+            // }
             hybrid_curve.getLinearSegments(points_on_curve);
             appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve);
+            if (show_data_points)
+            {
+                for (auto pt : hybrid_curve.data_points)
+                {
+                    Eigen::Vector3d point;
+                    igl::unproject_on_plane(pt, viewer.core().proj*viewer.core().view, viewer.core().viewport, eye_n, point);
+                    appendSphereMesh(V_drawing, F_drawing, 0.05, point);
+                }
+            }
         }
         else if (button == 2) // right button
         {
@@ -331,6 +411,15 @@ int main(int argc, char *argv[])
                 std::vector<Vector<T, 2>> points_on_curve;
                 hybrid_curve.getLinearSegments(points_on_curve);
                 appendCylinderMesh(viewer, V_drawing, F_drawing, points_on_curve, true);
+                if (show_data_points)
+                {
+                    for (auto pt : hybrid_curve.data_points)
+                    {
+                        Eigen::Vector3d point;
+                        igl::unproject_on_plane(pt, viewer.core().proj*viewer.core().view, viewer.core().viewport, eye_n, point);
+                        appendSphereMesh(V_drawing, F_drawing, 0.05, point);
+                    }
+                }
             }
         }
         updateScreen(viewer);
@@ -354,7 +443,6 @@ int main(int argc, char *argv[])
 
             for(int i=0; i<pxy.rows(); ++i)
             {
-                
                 if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
                 {
                     selected = i;
@@ -485,8 +573,8 @@ int main(int argc, char *argv[])
     {
         
         viewer.data().set_face_based(true);
-        viewer.data().shininess = 0.0;
-        viewer.data().point_size = 25.0;
+        viewer.data().shininess = 1.0;
+        // viewer.data().point_size = 25.0;
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);

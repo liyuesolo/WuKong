@@ -245,6 +245,10 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
         std::vector<Vector<T, dim + 1>> x(3);
         std::vector<int> nodes = {n0, n1, n2};
         toMapleNodesVector(x, q_temp, nodes, uv_offset);
+
+        // x0, x1, x2, u1, u2
+        // X0, X1, X2, u0, u1, u2
+
         T V[1];
         #include "Maple/YarnBendRestCurvatureV.mcg"
         // std::cout << V[0] << std::endl;

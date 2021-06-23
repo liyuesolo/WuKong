@@ -12,7 +12,6 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
-#include <tbb/tbb.h>
 #include "VecMatDef.h"
 
 template<class T, int dim>
@@ -35,7 +34,7 @@ public:
     std::vector<TV> data_points;
     std::vector<TV> points_on_curve;
     std::vector<CurveData<T, dim>*> curve_data;
-
+ 
 public:
     HybridC2Curve(int _sub_div) : sub_div(_sub_div) {}
     HybridC2Curve() : sub_div(64) {}
@@ -60,6 +59,27 @@ public:
         
     }
 
+    void normalizeDataPoints()
+    {
+        TV min_point = TV::Ones() * 1e10, max_point = TV::Ones() * -1e10;
+        for (auto pt : data_points)
+        {
+            for (int d = 0; d < dim; d++)
+            {
+                min_point[d] = std::min(min_point[d], pt[d]);
+                max_point[d] = std::min(max_point[d], pt[d]);
+            }
+        }
+        T longest_dis = -1000;
+        for (int d = 0; d < dim; d++)
+            longest_dis = std::max(longest_dis, max_point[d] - min_point[d]);
+        for (TV& pt : data_points)
+        {
+            pt = (pt - min_point) / longest_dis;
+        }
+            // pt /= longest_dis;   
+    }
+
     void generateC2Curves()
     {
         curve_data.clear();
@@ -74,7 +94,7 @@ public:
                                     center, axis1, axis2, 
                                     Vector<T, 2>(limits[0], limits[2])));
         }
-        // line 1143 curvePos
+        // adapted from line 1143 curvePos
         auto curve_func = [&](T t, int idx)
         {
             T tt = curve_data[idx]->limits[0] + t * (curve_data[idx]->limits[1] - curve_data[idx]->limits[0]);
@@ -119,7 +139,7 @@ public:
 
 private:
 
-    // copied from source code
+    // adapted from source code
     void circularInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
@@ -170,7 +190,7 @@ private:
         limits = Vector<T, 3>(limit1, 0, limit2);
     }
 
-    // copied from source code
+    // adapted from source code
     void ellipticalInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
@@ -254,7 +274,7 @@ private:
         }
     }
 
-    // copied from source code
+    // adapted from source code
     void hybridInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
     {
         circularInterpolation(i, center, axis1, axis2, limits);

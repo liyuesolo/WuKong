@@ -5,7 +5,8 @@ void appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, double scale, Vect
     Eigen::MatrixXd v_sphere;
     Eigen::MatrixXi f_sphere;
 
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere162.obj", v_sphere, f_sphere);
 
     v_sphere = v_sphere * scale;
 
@@ -34,7 +35,8 @@ void removeSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
         Eigen::MatrixXd v_sphere;
         Eigen::MatrixXi f_sphere;
 
-        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
+        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere162.obj", v_sphere, f_sphere);
 
         int n_vtx_prev = V.rows();
         int n_face_prev = F.rows();
@@ -123,7 +125,6 @@ void appendCylinderMesh(igl::opengl::glfw::Viewer& viewer,
 
             F.row(rof + i*2 ) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
             F.row(rof + i*2 + 1) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
-            
             
         }
     });

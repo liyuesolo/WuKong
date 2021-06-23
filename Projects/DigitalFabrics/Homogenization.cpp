@@ -56,8 +56,8 @@ void Homogenization<T, dim>::initialize()
     sim.print_force_mag = false;
     sim.disable_sliding = true;
     sim.verbose = false;
-    sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    // sim.buildSceneFromUnitPatch(2);
+    // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
+    sim.buildSceneFromUnitPatch(8);
     // sim.buildPlanePeriodicBCScene3x3();
     sim.add_eularian_reg = true;
     sim.add_contact_penalty = true;

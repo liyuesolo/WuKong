@@ -59,6 +59,7 @@ public:
     void buildTwoRodsScene(int sub_div);
     void buildSlidingTestScene(int sub_div);
     void buildStraightYarnScene(int sub_div);
+    void buildUnitFromC2Curves(int sub_div);
 
     void buildZigZagScene(int sub_div);
 

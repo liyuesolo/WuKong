@@ -1,4 +1,8 @@
+#include <iostream>
+#include <utility>
+#include <fstream>
 #include "UnitPatch.h"
+#include "HybridC2Curve.h"
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildScene(int patch_type)
@@ -19,6 +23,97 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
         buildStraightYarn3x1(8);
     else if (patch_type == 7)
         buildZigZagScene(64);
+    else if (patch_type == 8)
+        buildUnitFromC2Curves(8);
+}
+
+
+template<class T, int dim>
+void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
+{
+    auto unit_yarn_map = sim.yarn_map;
+    sim.yarn_map.clear();
+    sim.add_rotation_penalty = false;
+    clearSimData();
+
+    if constexpr (dim == 2)
+    {
+        std::string data_points_file = "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/test.curve";
+        T x, y;
+        
+        std::ifstream in(data_points_file);
+        
+        HybridC2Curve<T, dim> curve(sub_div);
+        while(in >> x >> y)
+        {
+            curve.data_points.push_back(TV(x, y));
+        }
+        in.close();
+        curve.normalizeDataPoints();
+        std::vector<TV> points_on_curve;
+        curve.getLinearSegments(points_on_curve);
+
+        sim.n_nodes = points_on_curve.size();
+        sim.n_rods = points_on_curve.size() - 1;
+
+        q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
+        rods = IV3Stack(3, sim.n_rods); rods.setZero();
+        connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
+
+        sim.normal = TV3Stack(3, sim.n_rods);
+        sim.normal.setZero();
+        sim.subdivide = true;
+
+        sim.add_pbc_bending = false;
+        int cnt = 0, dof_cnt = 0;
+        T arc_length_sum = 0;
+        std::vector<int> rod0;
+        for (int i = 0; i < sim.n_nodes; i++)
+        {
+            q.col(i).template segment<dim>(0) = points_on_curve[i];
+            q.col(i).template segment<2>(dim) = points_on_curve[i];
+            rod0.push_back(i);
+            if (i == 0) continue;
+            arc_length_sum += LDis(i-1, i);
+            q(dim, i) = q(dim, i-1) + LDis(i-1, i);
+        }
+
+        addRods(rod0, WARP, cnt, 0);
+
+        sim.pbc_ref_unique.push_back(IV2(WARP, rod0[rod0.size()-1]));
+        // sim.pbc_ref_unique.push_back(IV2(WEFT, rod0[rod0.size()-1]));
+
+        sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, rod0[rod0.size()-1])));
+        // sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(0, rod0[rod0.size()-1])));
+
+        sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
+
+        // if (sim.disable_sliding)
+        {
+            for(int i = 0; i < sim.n_nodes; i++)
+                sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+        }
+        q *= 0.03;
+        sim.q0 = q;
+        dof_cnt = sim.n_nodes * sim.dof;
+        sim.n_dof = dof_cnt;
+        sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
+        // sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        sim.W.setIdentity();
+
+        // for (int i = 0; i < sim.n_nodes; i++)
+        //     if(sim.dirichlet_data.find(i) == sim.dirichlet_data.end())
+        //         sim.sliding_nodes.push_back(i);
+
+        sim.slide_over_n_rods = IV2(std::floor(sub_div * 0.2), std::floor(sub_div * 0.2));
+        T rod_length = (sim.q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+            sim.q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
+        sim.tunnel_u = sim.slide_over_n_rods[0] * rod_length;
+        sim.tunnel_v = sim.tunnel_u;
+
+        sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+    }
 }
 
 template<class T, int dim>
@@ -176,15 +271,6 @@ void UnitPatch<T, dim>::buildZigZagScene(int sub_div)
     sim.subdivide = true;
 
     sim.add_pbc_bending = false;
-
-    q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
-    rods = IV3Stack(3, sim.n_rods); rods.setZero();
-    connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
-
-    sim.normal = TV3Stack(3, sim.n_rods);
-    sim.normal.setZero();
-    sim.subdivide = true;
-    
 
     if constexpr (dim == 2)
     {
