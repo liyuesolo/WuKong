@@ -24,9 +24,31 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 7)
         buildZigZagScene(64);
     else if (patch_type == 8)
-        buildUnitFromC2Curves(8);
+        buildUnitFromC2Curves(64);
 }
 
+// assuming passing points sorted long from to to direction
+template<class T, int dim>
+void UnitPatch<T, dim>::addStraightYarnCrossNPoints(const TV& from, const TV& to,
+    const std::vector<TV>& passing_points, int sub_div,
+    std::vector<TV>& sub_points, std::vector<int>& node_idx, int start, bool pbc)
+{
+    node_idx.push_back(start);
+    sub_points.push_back(from);
+    T length_yarn = (to - from).norm();
+    TV length_vec = (to - from).normalized();
+    for (int i = 0; i < passing_points.size(); i++)
+    {
+        T fraction = (passing_points[i] - from).norm() / length_yarn;
+        int n_sub_nodes = std::ceil(fraction * sub_div);
+        T length_sub = (passing_points[i] - from).norm() / T(n_sub_nodes + 1);
+        for (int j = 0; j < n_sub_nodes; j++)
+            sub_points.push_back(sub_points.back() + length_sub * length_vec);
+        // node_idx
+        sub_points.push_back(passing_points[i]);
+    }
+    sub_points.push_back(to);
+}
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
@@ -34,24 +56,29 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
     auto unit_yarn_map = sim.yarn_map;
     sim.yarn_map.clear();
     sim.add_rotation_penalty = false;
+    sim.add_pbc_bending = false;
+    sim.subdivide = true;
+
     clearSimData();
+    std::vector<Eigen::Triplet<T>> w_entry;
 
     if constexpr (dim == 2)
     {
         std::string data_points_file = "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/test.curve";
         T x, y;
-        
+
         std::ifstream in(data_points_file);
-        
-        HybridC2Curve<T, dim> curve(sub_div);
+
+        HybridC2Curve<T, dim>* curve = new HybridC2Curve<T, dim>(sub_div);
         while(in >> x >> y)
         {
-            curve.data_points.push_back(TV(x, y));
+            curve->data_points.push_back(TV(x, y) * 0.03);
         }
         in.close();
-        curve.normalizeDataPoints();
+        curve->normalizeDataPoints();
         std::vector<TV> points_on_curve;
-        curve.getLinearSegments(points_on_curve);
+        // curve->getLinearSegments(points_on_curve);
+        curve->sampleCurves(points_on_curve);
 
         sim.n_nodes = points_on_curve.size();
         sim.n_rods = points_on_curve.size() - 1;
@@ -62,46 +89,82 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
 
         sim.normal = TV3Stack(3, sim.n_rods);
         sim.normal.setZero();
-        sim.subdivide = true;
-
-        sim.add_pbc_bending = false;
+        
         int cnt = 0, dof_cnt = 0;
         T arc_length_sum = 0;
+        
         std::vector<int> rod0;
         for (int i = 0; i < sim.n_nodes; i++)
         {
-            q.col(i).template segment<dim>(0) = points_on_curve[i];
-            q.col(i).template segment<2>(dim) = points_on_curve[i];
+            setPos(i, points_on_curve[i], points_on_curve[i]);
             rod0.push_back(i);
-            if (i == 0) continue;
-            arc_length_sum += LDis(i-1, i);
-            q(dim, i) = q(dim, i-1) + LDis(i-1, i);
+            q(dim, i) = T(i) * (curve->data_points.size() - 1 )/ (sim.n_nodes - 1);
         }
+        
+        sim.dof_offsets.resize(sim.n_nodes, 0);
+        // rod0 0, points_on_curve.size()
 
+        for (int i = 0; i < sim.n_nodes; i++)
+        {
+            sim.dof_offsets[i] = dof_cnt;
+            for(int d = 0; d < dim; d++)
+            {
+                w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, dof_cnt, 1.0));
+                dof_cnt++;
+            }
+            if (i == 0 || i == sim.n_nodes - 1)
+                for(int d = dim; d < sim.dof; d++)
+                {
+                    w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, dof_cnt, 1.0));
+                    dof_cnt++;
+                }
+            else
+            {    
+                int idx_last = sim.dof + (points_on_curve.size() - 2) * dim;
+                
+                T alpha = q(dim, i);
+                for(int d = dim; d < sim.dof; d++)
+                {
+                    w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, d, 1 - alpha));
+                    w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, idx_last + d, alpha));
+                }
+            }
+
+        }
+        
+        // q *= 0.03;
+        
+        std::vector<T> data_points_discrete_arc_length;
+        
+        for(int i = 0; i < curve->data_points.size(); i++)
+        {
+            data_points_discrete_arc_length.push_back(q(dim, i*sub_div/2));
+        }
+        
         addRods(rod0, WARP, cnt, 0);
 
-        sim.pbc_ref_unique.push_back(IV2(WARP, rod0[rod0.size()-1]));
+        sim.pbc_ref_unique.push_back(IV2(0, rod0.back()));
         // sim.pbc_ref_unique.push_back(IV2(WEFT, rod0[rod0.size()-1]));
 
-        sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, rod0[rod0.size()-1])));
+        sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, rod0.back())));
         // sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(0, rod0[rod0.size()-1])));
 
         sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
 
         // if (sim.disable_sliding)
         {
-            for(int i = 0; i < sim.n_nodes; i++)
-                sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            // for(int i = 0; i < sim.n_nodes; i++)
+                // sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            sim.dirichlet_data[points_on_curve.size() - 1] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
             sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
         }
-        q *= 0.03;
         sim.q0 = q;
-        dof_cnt = sim.n_nodes * sim.dof;
+        // dof_cnt = sim.n_nodes * sim.dof;
         sim.n_dof = dof_cnt;
         sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
-        // sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
-        sim.W.setIdentity();
-
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        // sim.W.setIdentity();
+        // std::cout << sim.W << std::endl;
         // for (int i = 0; i < sim.n_nodes; i++)
         //     if(sim.dirichlet_data.find(i) == sim.dirichlet_data.end())
         //         sim.sliding_nodes.push_back(i);
@@ -112,9 +175,328 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         sim.tunnel_u = sim.slide_over_n_rods[0] * rod_length;
         sim.tunnel_v = sim.tunnel_u;
 
-        sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+        // sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+        Vector<T, dim + 1> q0 = q.col(0).template segment<dim + 1>(0);
+        Vector<T, dim + 1> q1 = q.col(rod0.back()).template segment<dim + 1>(0);
+        
+        DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
+            // curve, 
+            // data_points_discrete_arc_length, 
+            q0, q1);
+        sim.curvature_functions.push_back(curve_func);
+        curve_func->setData(curve, data_points_discrete_arc_length);
+
+        std::cout << q.transpose() << std::endl;
     }
 }
+
+
+
+// template<class T, int dim>
+// void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
+// {
+//     auto unit_yarn_map = sim.yarn_map;
+//     sim.yarn_map.clear();
+//     sim.add_rotation_penalty = false;
+//     sim.add_pbc_bending = false;
+//     sim.subdivide = true;
+
+//     clearSimData();
+//     std::vector<Eigen::Triplet<T>> w_entry;
+
+//     if constexpr (dim == 2)
+//     {
+//         std::string data_points_file = "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/test.curve";
+//         T x, y;
+
+//         std::ifstream in(data_points_file);
+
+//         HybridC2Curve<T, dim>* curve = new HybridC2Curve<T, dim>(sub_div);
+//         while(in >> x >> y)
+//         {
+//             curve->data_points.push_back(TV(x, y) * 0.03);
+//         }
+//         in.close();
+//         curve->normalizeDataPoints();
+//         std::vector<TV> points_on_curve;
+//         // curve->getLinearSegments(points_on_curve);
+//         curve->sampleCurves(points_on_curve);
+
+//         sim.n_nodes = points_on_curve.size();
+//         sim.n_rods = points_on_curve.size() - 1;
+
+//         q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
+//         rods = IV3Stack(3, sim.n_rods); rods.setZero();
+//         connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
+
+//         sim.normal = TV3Stack(3, sim.n_rods);
+//         sim.normal.setZero();
+        
+//         int cnt = 0, dof_cnt = 0;
+//         T arc_length_sum = 0;
+        
+//         std::vector<int> rod0;
+//         for (int i = 0; i < sim.n_nodes; i++)
+//         {
+//             setPos(i, points_on_curve[i], points_on_curve[i]);
+//             rod0.push_back(i);
+//             if (i == 0) 
+//             {
+//                 q(dim, 0) = 0.0;
+//                 continue;
+//             }
+//             arc_length_sum += LDis(i-1, i);
+//             q(dim, i) = q(dim, i-1) + LDis(i-1, i);
+//         }
+        
+//         q(dim, sim.n_nodes - 1) = arc_length_sum;
+
+//         sim.dof_offsets.resize(sim.n_nodes, 0);
+//         // rod0 0, points_on_curve.size()
+
+//         for (int i = 0; i < sim.n_nodes; i++)
+//         {
+//             sim.dof_offsets[i] = dof_cnt;
+//             for(int d = 0; d < dim; d++)
+//             {
+//                 w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, dof_cnt, 1.0));
+//                 dof_cnt++;
+//             }
+//             if (i == 0 || i == sim.n_nodes - 1)
+//                 for(int d = dim; d < sim.dof; d++)
+//                 {
+//                     w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, dof_cnt, 1.0));
+//                     dof_cnt++;
+//                 }
+//             else
+//             {    
+//                 int idx_last = sim.dof + (points_on_curve.size() - 2) * dim;
+                
+//                 T alpha = q(dim, i) / arc_length_sum;
+//                 for(int d = dim; d < sim.dof; d++)
+//                 {
+//                     w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, d, 1 - alpha));
+//                     w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, idx_last + d, alpha));
+//                 }
+//             }
+
+//         }
+        
+//         // q *= 0.03;
+        
+//         std::vector<T> data_points_discrete_arc_length;
+        
+//         for(int i = 0; i < curve->data_points.size(); i++)
+//         {
+//             data_points_discrete_arc_length.push_back(q(dim, i*sub_div/2));
+//         }
+        
+//         addRods(rod0, WARP, cnt, 0);
+
+//         sim.pbc_ref_unique.push_back(IV2(0, rod0.back()));
+//         // sim.pbc_ref_unique.push_back(IV2(WEFT, rod0[rod0.size()-1]));
+
+//         sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, rod0.back())));
+//         // sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(0, rod0[rod0.size()-1])));
+
+//         sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
+
+//         // if (sim.disable_sliding)
+//         {
+//             // for(int i = 0; i < sim.n_nodes; i++)
+//                 // sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+//             sim.dirichlet_data[points_on_curve.size() - 1] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+//             sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+//         }
+//         sim.q0 = q;
+//         // dof_cnt = sim.n_nodes * sim.dof;
+//         sim.n_dof = dof_cnt;
+//         sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
+//         sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+//         // sim.W.setIdentity();
+//         // std::cout << sim.W << std::endl;
+//         // for (int i = 0; i < sim.n_nodes; i++)
+//         //     if(sim.dirichlet_data.find(i) == sim.dirichlet_data.end())
+//         //         sim.sliding_nodes.push_back(i);
+
+//         sim.slide_over_n_rods = IV2(std::floor(sub_div * 0.2), std::floor(sub_div * 0.2));
+//         T rod_length = (sim.q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+//             sim.q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
+//         sim.tunnel_u = sim.slide_over_n_rods[0] * rod_length;
+//         sim.tunnel_v = sim.tunnel_u;
+
+//         // sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+//         Vector<T, dim + 1> q0 = q.col(0).template segment<dim + 1>(0);
+//         Vector<T, dim + 1> q1 = q.col(rod0.back()).template segment<dim + 1>(0);
+        
+//         DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
+//             // curve, 
+//             // data_points_discrete_arc_length, 
+//             q0, q1);
+//         sim.curvature_functions.push_back(curve_func);
+//         curve_func->setData(curve, data_points_discrete_arc_length);
+
+//         std::cout << q.transpose() << std::endl;
+//     }
+// }
+
+// template<class T, int dim>
+// void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
+// {
+//     auto unit_yarn_map = sim.yarn_map;
+//     sim.yarn_map.clear();
+//     sim.add_rotation_penalty = false;
+//     sim.subdivide = true;
+//     sim.add_pbc_bending = false;
+
+//     clearSimData();
+
+//     if constexpr (dim == 2)
+//     {
+//         std::string data_points_file = "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/test.curve";
+//         T x, y;
+        
+//         std::ifstream in(data_points_file);
+        
+//         HybridC2Curve<T, dim> curve(sub_div);
+//         while(in >> x >> y)
+//         {
+//             curve.data_points.push_back(TV(x, y));
+//         }
+//         in.close();
+//         curve.normalizeDataPoints();
+//         std::vector<TV> points_on_curve;
+//         curve.getLinearSegments(points_on_curve);
+
+//         sim.n_nodes = points_on_curve.size();
+//         sim.n_rods = points_on_curve.size() - 1;
+
+//         q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
+//         rods = IV3Stack(3, sim.n_rods); rods.setZero();
+//         connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
+
+//         sim.normal = TV3Stack(3, sim.n_rods);
+//         sim.normal.setZero();
+       
+
+//         // set ending points and sliding nodes first
+//         // std::vector<int> already_pushed_nodes;
+
+//         int node_cnt = 0;
+//         // already_pushed_nodes.push_back(node_cnt);
+//         setPos(node_cnt++, points_on_curve.front(), points_on_curve.front());
+//         q(dim, node_cnt-1) = 0.0;
+//         fixEulerian(node_cnt-1);
+        
+//         // already_pushed_nodes.push_back(node_cnt);
+//         setPos(node_cnt++, points_on_curve.back(), points_on_curve.back());
+//         fixEulerian(node_cnt-1);
+
+//         // TV rod1_start(curve.data_points[1][0], 0.2);
+//         // TV rod1_end(curve.data_points[1][0], 0.8);
+
+//         // already_pushed_nodes.push_back(node_cnt);
+//         // setPos(node_cnt++, rod1_start, rod1_start);
+//         // fixEulerian(node_cnt-1);
+
+//         // already_pushed_nodes.push_back(node_cnt);
+//         // setPos(node_cnt++, rod1_start, rod1_start);
+//         // fixEulerian(node_cnt-1);
+
+//         // already_pushed_nodes.push_back(node_cnt);
+//         TV crossing = curve.data_points[1];
+//         setPos(node_cnt++, crossing, crossing);
+//         std::unordered_map<int, int> existing_nodes_rod0;
+//         existing_nodes_rod0[0] = 0;
+//         existing_nodes_rod0[points_on_curve.size() - 1] = 1;
+//         existing_nodes_rod0[sub_div] = 2;
+
+//         // build yarns noting that the points above are already pushed.
+//         int rod_cnt = 0;
+
+//         T arc_length_sum = 0;
+//         std::vector<int> rod0;
+        
+//         for (int i = 0; i < points_on_curve.size(); i++)
+//         {
+//             //haven't pushed yet
+//             bool added = existing_nodes_rod0.find(i) != existing_nodes_rod0.end();
+//             if(added) 
+//             {
+//                 rod0.push_back(existing_nodes_rod0[i]);
+//             }
+//             else
+//             {
+//                 setPos(node_cnt, points_on_curve[i], points_on_curve[i]);
+//                 rod0.push_back(node_cnt);
+//             }
+//             if (i == 0)
+//             {
+//                 // node_cnt++;
+//                 continue;
+//             }
+//             arc_length_sum += LDis(node_cnt-1, node_cnt);
+//             if(!added) 
+//             {
+//                 q(dim, node_cnt) = q(dim, node_cnt-1) + LDis(node_cnt-1, node_cnt);
+//                 node_cnt++;
+//             }
+//         }
+
+//         addRods(rod0, WARP, rod_cnt, 0);
+
+//         // std::vector<TV> nodes0;
+    
+//         // addStraightYarnCrossNPoints(rod1_start, 
+//         //                             rod1_end,
+//         //                             {curve.data_points[1]},
+//         //                             {4},
+//         //                             sub_div, nodes0, false);
+
+//         // q.conservativeResize(q.rows() + nodes0.size());
+
+//         // std::vector<int> rod1;
+//         // for (int i = 0; i < nodes0.size(); i++) rod1.push_back(cnt + i);
+        
+//         // addRods(rod1, WEFT, cnt, 1);
+        
+//         sim.pbc_ref_unique.push_back(IV2(0, rod0.back()));
+//         // sim.pbc_ref_unique.push_back(IV2(rod1.front(), rod1.back()));
+
+//         sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, rod0.back())));
+//         // sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(rod1.front(), rod1.back())));
+
+//         sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
+
+//         // if (sim.disable_sliding)
+//         {
+//             for(int i = 0; i < sim.n_nodes; i++)
+//                 sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+//             sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+//         }
+
+//         q *= 0.03;
+//         sim.q0 = q;
+//         int dof_cnt = sim.n_nodes * sim.dof;
+//         sim.n_dof = dof_cnt;
+//         sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
+//         // sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+//         sim.W.setIdentity();
+
+//         // for (int i = 0; i < sim.n_nodes; i++)
+//         //     if(sim.dirichlet_data.find(i) == sim.dirichlet_data.end())
+//         //         sim.sliding_nodes.push_back(i);
+
+//         sim.slide_over_n_rods = IV2(std::floor(sub_div * 0.2), std::floor(sub_div * 0.2));
+//         T rod_length = (sim.q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+//             sim.q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
+//         sim.tunnel_u = sim.slide_over_n_rods[0] * rod_length;
+//         sim.tunnel_v = sim.tunnel_u;
+
+//         sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+//     }
+//     // std::cout << q.transpose() << std::endl;
+// }
 
 template<class T, int dim>
 void UnitPatch<T, dim>::subdivideStraightYarns(int sub_div)
@@ -1362,12 +1744,6 @@ void UnitPatch<T, dim>::buildTwoRodsScene(int sub_div)
 }
 
 template<class T, int dim>
-void UnitPatch<T, dim>::subdivide(int sub_div)
-{
-    
-}
-
-template<class T, int dim>
 void UnitPatch<T, dim>::clearSimData()
 {
     sim.kc = 1e8;
@@ -1414,6 +1790,8 @@ void UnitPatch<T, dim>::buildStraightAndHemiCircleScene(int sub_div)
 
     sim.normal = TV3Stack(3, sim.n_rods);
     sim.normal.setZero();
+
+    sim.subdivide = true;
     
     if constexpr (dim == 2)
     {
@@ -1530,7 +1908,7 @@ void UnitPatch<T, dim>::buildStraightAndHemiCircleScene(int sub_div)
             IV4Stack new_connections(4, sim.n_nodes);
             new_connections.setConstant(-1);
 
-            sim.subdivide = true;
+            
 
             auto setConnection = [&](Eigen::Ref<IV4Stack> cns, int node_i, int node_j, int yarn_type){
                     if (yarn_type == WEFT)
@@ -1724,6 +2102,10 @@ void UnitPatch<T, dim>::buildStraightAndHemiCircleScene(int sub_div)
             sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
             sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
         }
+
+        sim.dof_offsets.resize(sim.n_nodes, 0);
+        for(int i = 0; i < 17; i++)
+            sim.dof_offsets[i] = i * sim.dof;
         
         sim.slide_over_n_rods = IV2(std::floor(sub_div * 0.2), std::floor(sub_div * 0.2));
         T rod_length = (sim.q0.col(rods.col(0)(0)).template segment<dim>(0) - 

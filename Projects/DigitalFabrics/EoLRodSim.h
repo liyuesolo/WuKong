@@ -91,6 +91,7 @@ public:
     int n_dof;
     int n_rods;
     int n_pb_cons;
+    int n_non_interp_nodes;
     IV2 n_rod_uv;
     
     const static int grid_range = 3;
@@ -117,7 +118,8 @@ public:
     T ke = 1e-2; // Eulerian DoF penalty
     T kr = 1e3;
     T k_yc = 1.0;
-    
+
+    std::vector<int> dof_offsets;    
 
     float theta = 0.f;
 
@@ -235,6 +237,8 @@ public:
     void iteratePBCBoundaryPairs(const OP& f) {
         for (auto pair : pbc_bending_bn_pairs){
             std::vector<int> node_ids;
+            if(std::find(pair.begin(), pair.end(), -1) != pair.end())
+                std::cout << "[EoLRodSim.h] -1 in PBC bending pairs" << std::endl;
             for(int i = 0; i < pair.size() - 1; i++)
                 node_ids.push_back(pair[i]);
             f(node_ids, pair[pair.size() - 1]);
@@ -363,6 +367,12 @@ public:
     // Bending.cpp
     void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
         std::vector<int>& nodes, int yarn_type);
+    void convertxXforMaple(std::vector<Vector<T, dim + 1>>& x, 
+        const std::vector<TV>& X,
+        Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes, int yarn_type);
+    void getMaterialPositions(Eigen::Ref<const DOFStack> q_temp, 
+        const std::vector<int>& nodes, std::vector<TV>& X, int uv_offset);
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);

@@ -261,6 +261,10 @@ void EoLRodSim<T, dim>::subdivideRods(int sub_div)
     
     normal.conservativeResize(dof, new_node_cnt);
     is_end_nodes = std::vector<bool>(n_nodes, false);
+
+    dof_offsets.resize(n_nodes, 0);
+    for(int i = 0; i < 21; i++)
+        dof_offsets[i] = i * dof;
     
     n_pb_cons = 0;
     iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){

@@ -9,9 +9,11 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
+            int offset = dof_offsets[node_id];
             for(int d = 0; d < dof; d++)
                 if (mask(d))
-                    dq_projected(node_id * dof + d) = target(d);
+                    dq_projected(offset + d) = target(d);
+                    // dq_projected(node_id * dof + d) = target(d);
         });
 
     DOFStack dq_full(dof, n_nodes);
@@ -67,9 +69,11 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
+            int offset = dof_offsets[node_id];
             for(int d = 0; d < dof; d++)
                 if (mask(d))
-                    dq_projected(node_id * dof + d) = target(d);
+                    dq_projected(offset + d) = target(d);
+                    // dq_projected(node_id * dof + d) = target(d);
         });
 
     DOFStack dq_full(dof, n_nodes);
@@ -118,9 +122,11 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual,
         if (!run_diff_test)
             iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
                 {
+                    int offset = dof_offsets[node_id];
                     for(int d = 0; d < dof; d++)
                         if (mask(d))
-                            residual(node_id * dof + d) = 0.0;
+                            // residual(node_id * dof + d) = 0.0;
+                            residual(offset + d) = 0.0;
                 });
         return residual.norm();
     }
@@ -141,9 +147,11 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Entry>& entry_K,
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
+            int offset = dof_offsets[node_id];
             for(int d = 0; d < dof; d++)
                 if (mask(d))
-                    dq_projected(node_id * dof + d) = target(d);
+                    dq_projected(offset + d) = target(d);
+                    // dq_projected(node_id * dof + d) = target(d);
         });
 
     DOFStack dq_full(dof, n_nodes);
@@ -202,10 +210,11 @@ void EoLRodSim<T, dim>::buildSystemMatrix(
     A.setFromTriplets(entry_K.begin(), entry_K.end());
     
     K = W.transpose() * A * W;
-
+    
     if(!add_penalty && !run_diff_test)
         projectDirichletEntrySystemMatrix(K);
 
+    
 
     K.makeCompressed();
 }
@@ -213,15 +222,24 @@ void EoLRodSim<T, dim>::buildSystemMatrix(
 template<class T, int dim>
 bool EoLRodSim<T, dim>::projectDirichletEntrySystemMatrix(StiffnessMatrix& A)
 {
+
+    // requires no reduced node before it !!!!!!!!!!!!!!!!!
+
     // project Dirichlet data, set Dirichlet nodal index to be 1
     iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
     {
+        int offset = dof_offsets[node_id];
+
         for(int d = 0; d < dof; d++)
             if (mask(d))
             {
-                A.row(node_id * dof + d) *= 0.0;
-                A.col(node_id * dof + d) *= 0.0;
-                A.coeffRef(node_id * dof + d, node_id * dof + d) = 1.0;
+                // A.row(node_id * dof + d) *= 0.0;
+                // A.col(node_id * dof + d) *= 0.0;
+                // A.coeffRef(node_id * dof + d, node_id * dof + d) = 1.0;
+
+                A.row(offset + d) *= 0.0;
+                A.col(offset + d) *= 0.0;
+                A.coeffRef(offset + d, offset + d) = 1.0;
             }
     });
     // A.makeCompressed();
@@ -395,7 +413,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
     
         VectorXT residual(n_dof);
         residual.setZero();
-        
+        // std::cout << "compute residual" << std::endl;
         computeResidual(residual, dq, lambdas, kappa);
 
         residual_norm = residual.norm();
@@ -437,9 +455,11 @@ void EoLRodSim<T, dim>::advanceOneStep()
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
+            int offset = dof_offsets[node_id];
             for(int d = 0; d < dof; d++)
                 if (mask(d))
-                    dq_projected(node_id * dof + d) = target(d);
+                    // dq_projected(node_id * dof + d) = target(d);
+                    dq_projected(offset + d) = target(d);
         });
     
     
@@ -486,7 +506,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     //     std::cout << "node " << node_i << " node " << node_j << " " << (xi-xj).norm() << " " << (Xi - Xj).norm() << std::endl;
     // });
 
-    // std::cout << dq_full.transpose() << std::endl;
+    std::cout << dq_full.transpose() << std::endl;
     
     // DOFStack lambdas;
     // T kappa = 1e3;

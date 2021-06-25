@@ -94,10 +94,41 @@ private:
         connections(2, top) = idx;
     }
 
+    void setLagPos(int idx, const TV& lpos)
+    {
+        if(idx >= q.cols())
+            std::cout << "[UnitPatch.h] invalid idx --- exceeding matrix size " << std::endl;
+        q.col(idx).template segment<dim>(0) = lpos;
+    }
+
+    void setEulPos(int idx, const TV2& epos)
+    {
+        if(idx >= q.cols())
+            std::cout << "[UnitPatch.h] invalid idx --- exceeding matrix size " << std::endl;
+        q.col(idx).template segment<2>(dim) = epos;
+    }
+
+    void setPos(int idx, const TV& lpos, const TV2& epos)
+    {
+        if(idx >= q.cols())
+            std::cout << "[UnitPatch.h] invalid idx --- exceeding matrix size " << std::endl;
+        q.col(idx).template segment<dim>(0) = lpos;
+        q.col(idx).template segment<2>(dim) = epos;
+    }
+
+    void fixEulerian(int idx)
+    {
+        sim.dirichlet_data[idx] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+    }
+
     void clearSimData();
     
     void addRods(std::vector<int>& nodes, int yarn_type, int& cnt, int yarn_idx = 0);
-    void subdivide(int sub_div);
+
+    void addStraightYarnCrossNPoints(const TV& from, const TV& to,
+        const std::vector<TV>& passing_points, int sub_div,
+        std::vector<TV>& sub_points, std::vector<int>& node_idx,
+        int start, bool pbc = false);
 
     void subdivideStraightYarns(int sub_div);
 };

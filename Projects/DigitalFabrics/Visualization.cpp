@@ -377,7 +377,7 @@ void EoLRodSim<T, dim>::getColorFromStretching(
 {
     int n_faces = 20;
     C.resize(n_rods * n_faces, 3);
-    DOFStack q_temp = q - q0;
+    
     VectorXT rod_energy(n_rods);
     rod_energy.setZero();
     // tbb::parallel_for(0, n_rods, [&](int rod_idx){
@@ -386,20 +386,21 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         int node1 = rods.col(rod_idx)[1];
         TV x0 = q.col(node0).template segment<dim>(0);
         TV x1 = q.col(node1).template segment<dim>(0);
-        TV2 u0 = q.col(node0).template segment<2>(dim);
-        TV2 u1 = q.col(node1).template segment<2>(dim);
-        TV2 delta_u = u1 - u0;
-        int yarn_type = rods.col(rod_idx)[2];
-        
-
-        int uv_offset = yarn_type == WARP ? 0 : 1;
     
-        // add elastic potential here 1/2 ks delta_u * (||w|| - 1)^2
-        TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-        // rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
-        rod_energy[rod_idx] += std::abs(w.norm() - 1);
+
+        int yarn_type = rods.col(rod_idx)[2];
+        std::vector<TV> X;
+        std::vector<int> nodes = { node0, node1 };
+        getMaterialPositions(q, nodes, X, yarn_type);
+
+        std::vector<TV> x(4);
+        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
+
+        T V[1];
+        #include "Maple/YarnStretchingV.mcg"
+        rod_energy[rod_idx] += V[0];
         
-        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(w.norm() - 1) << std::endl;
+        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(t13/t6-1) << std::endl;
 
     }
     // });

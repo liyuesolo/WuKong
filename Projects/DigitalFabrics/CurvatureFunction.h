@@ -6,26 +6,70 @@
 #include <utility>
 #include <vector>
 
+#include "HybridC2Curve.h"
 // #include "VecMatDef.h"
 
 template<class T, int dim>
 class CurvatureFunction
 {
 public:
-    
+    using TV = Vector<T, dim>;
+    Vector<T, dim + 1> starting_point, ending_point;
+
 public:
-    CurvatureFunction() {}
+    CurvatureFunction(Vector<T, dim + 1> q0, Vector<T, dim + 1> q1)
+        : starting_point(q0), ending_point(q1) {}
+    CurvatureFunction()
+        : starting_point(Vector<T, dim + 1>::Zero()), ending_point(Vector<T, dim + 1>::Ones()) {}
     ~CurvatureFunction() {}
 
     virtual T value(T u) {return 0;}
     virtual void gradient(T u, T& dedu) { dedu = 0; }
     virtual void hessian(T u, T& de2du2) { de2du2 = 0; }
+    
+    virtual void getMaterialPos(T u, TV& X) 
+    { 
+        X = starting_point.template segment<dim>(0) + 
+            (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0)) * 
+            (u / (ending_point[dim] - starting_point[dim]));
+    }
 };
 
 template<class T, int dim>
 class LineCurvature : public CurvatureFunction<T, dim>
 {
 public:
+};
+
+template<class T, int dim>
+class DiscreteHybridCurvature : public CurvatureFunction<T, dim>
+{
+public:
+    using TV = Vector<T, dim>;
+    HybridC2Curve<T, dim>* curve;
+    std::vector<T> data_points_discrete_arc_length;
+
+public:
+    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c) : CurvatureFunction<T, dim>(), curve(c) {}
+
+    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c, 
+    //                         std::vector<T> v,
+    //                         Vector<T, dim + 1> q0, 
+    //                         Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1), 
+    //                         curve(c)
+    //                         , data_points_discrete_arc_length(v) 
+    //                         {}
+    DiscreteHybridCurvature() : CurvatureFunction<T, dim>(){}
+
+    DiscreteHybridCurvature(Vector<T, dim + 1> q0, 
+                            Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
+    virtual void getMaterialPos(T u, TV& X); 
+
+    void setData(HybridC2Curve<T, dim>* c, const std::vector<T>& v)
+    {
+        curve = c;
+        data_points_discrete_arc_length = v;
+    }
 
 };
 

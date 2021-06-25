@@ -56,8 +56,64 @@ public:
             generateC2Curves();
             points = points_on_curve;
         }
-        
     }
+
+    void constructIndividualCurves()
+    {
+        curve_data.clear();
+        
+        for(int i = 1; i < data_points.size() - 1; i++)
+        {
+            TV center, axis1, axis2; Vector<T, 3> limits;
+            hybridInterpolation(i, center, axis1, axis2, limits);
+            curve_data.push_back(new CurveData<T, dim>(
+                                    center, axis1, axis2, 
+                                    Vector<T, 2>(limits[0], limits[2])));
+        }
+    }
+
+    void sampleCurves(std::vector<TV>& points)
+    {
+        points_on_curve.clear();
+        constructIndividualCurves();
+        
+        // first half of the first spline, no interpolation
+        for (int vtx = 0; vtx < sub_div / 2; vtx++)
+        {
+            T t = T(vtx) / sub_div;
+            TV F0; F(t, 0, F0);
+            points_on_curve.push_back(F0);
+        }
+        // interpolate between two splines
+        for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
+        {
+            for (int vtx = 0; vtx < sub_div / 2; vtx++)
+            {
+                T t = T(vtx) / sub_div * 2.0;
+                T theta = t * M_PI * 0.5;
+                TV F0, F1;
+                // maps to 0.5 ~ 1 for the first spline
+                // TV F0 = curve_func((theta + M_PI * 0.5)/M_PI, curve_idx);
+                F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
+                // maps to 0 ~ 0.5 for the second spline
+                // TV F1 = curve_func(theta/M_PI, curve_idx+1);
+                F(theta/M_PI, curve_idx+1, F1);
+                // equation (2)
+                TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
+                points_on_curve.push_back(Ci);
+            }
+        }
+        // second half of the last spline, no interpolation
+        for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
+        {
+            T t = T(vtx) / sub_div;
+            TV F1; F(t, curve_data.size() - 1, F1);
+            points_on_curve.push_back(F1);
+        }
+
+        points = points_on_curve;
+    }
+    
 
     void normalizeDataPoints()
     {
@@ -80,6 +136,31 @@ public:
             // pt /= longest_dis;   
     }
 
+    void getPosOnCurve(int curve_idx, T t, TV& pos, bool interpolate)
+    {
+        if (interpolate)
+        {
+            T theta = t * M_PI * 0.5;
+            TV F0, F1;
+            F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
+            F(theta/M_PI, curve_idx+1, F1);
+            pos = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
+        }
+        else
+        {
+            F(t, curve_idx, pos);
+        }
+    }
+
+    // adapted from line 1143 curvePos
+    void F(T t, int idx, TV& pos)
+    {
+        T tt = curve_data[idx]->limits[0] + t * (curve_data[idx]->limits[1] - curve_data[idx]->limits[0]);
+        pos = curve_data[idx]->center + 
+                curve_data[idx]->axis1 * std::cos(tt) +
+                curve_data[idx]->axis2 * std::sin(tt);
+    }
+
     void generateC2Curves()
     {
         curve_data.clear();
@@ -94,20 +175,12 @@ public:
                                     center, axis1, axis2, 
                                     Vector<T, 2>(limits[0], limits[2])));
         }
-        // adapted from line 1143 curvePos
-        auto curve_func = [&](T t, int idx)
-        {
-            T tt = curve_data[idx]->limits[0] + t * (curve_data[idx]->limits[1] - curve_data[idx]->limits[0]);
-            return curve_data[idx]->center + 
-                    curve_data[idx]->axis1 * std::cos(tt) +
-                    curve_data[idx]->axis2 * std::sin(tt);
-        };
         
         // first half of the first spline, no interpolation
         for (int vtx = 0; vtx < sub_div / 2; vtx++)
         {
             T t = T(vtx) / sub_div;
-            TV F0 = curve_func(t, 0);
+            TV F0; F(t, 0, F0);
             points_on_curve.push_back(F0);
         }
         // interpolate between two splines
@@ -117,10 +190,13 @@ public:
             {
                 T t = T(vtx) / sub_div * 2.0;
                 T theta = t * M_PI * 0.5;
+                TV F0, F1;
                 // maps to 0.5 ~ 1 for the first spline
-                TV F0 = curve_func((theta + M_PI * 0.5)/M_PI, curve_idx);
+                // TV F0 = curve_func((theta + M_PI * 0.5)/M_PI, curve_idx);
+                F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
                 // maps to 0 ~ 0.5 for the second spline
-                TV F1 = curve_func(theta/M_PI, curve_idx+1);
+                // TV F1 = curve_func(theta/M_PI, curve_idx+1);
+                F(theta/M_PI, curve_idx+1, F1);
                 // equation (2)
                 TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
                 points_on_curve.push_back(Ci);
@@ -130,7 +206,7 @@ public:
         for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
         {
             T t = T(vtx) / sub_div;
-            TV F1 = curve_func(t, curve_data.size() - 1);
+            TV F1; F(t, curve_data.size() - 1, F1);
             points_on_curve.push_back(F1);
         }
     }

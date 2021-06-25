@@ -8,69 +8,25 @@ void EoLRodSim<T, dim>::addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::v
         int node1 = rods.col(rod_idx)[1];
         TV x0 = q_temp.col(node0).template segment<dim>(0);
         TV x1 = q_temp.col(node1).template segment<dim>(0);
-        TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-        TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-        TV2 delta_u = u1 - u0;
 
-        T l = (x1 - x0).norm();
-        TV d = (x1 - x0).normalized();
-
-        TM P = TM::Identity() - d * d.transpose();
+        std::vector<TV> X;
         int yarn_type = rods.col(rod_idx)[2];
+        std::vector<int> nodes = { node0, node1 };
+        getMaterialPositions(q_temp, nodes, X, yarn_type);
 
-        int uv_offset = yarn_type == WARP ? 0 : 1;
+        std::vector<TV> x(4);
+        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
 
-        TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-        
-        // add streching K here
-        {
-            TM dfxdx = -1.0 * (ks/l * P - ks / std::abs(delta_u[uv_offset]) * TM::Identity());
-            TV dfxdu = -1.0 * (ks * w.norm() / std::abs(delta_u[uv_offset]) * d);
-            T dfudu = -1.0 * (-ks * w.squaredNorm() / std::abs(delta_u[uv_offset]));
-            TV dfudx = -1.0 * (ks / std::abs(delta_u[uv_offset]) * w);
-
-            for(int i = 0; i < dim; i++)
-            {
-                //dfx/dx
-                for(int j = 0; j < dim; j++)
-                {
-                    //dfx0/dx0
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node0 * dof + j, dfxdx(i, j)));
-                    //dfx1/dx1
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node1 * dof + j, dfxdx(i, j)));
-                    //dfx0/dx1
-                    entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node1 * dof + j, -dfxdx(i, j)));
-                    //dfx1/dx0
-                    entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node0 * dof + j, -dfxdx(i, j)));
-                }
-                // dfx1/du1
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node1 * dof + dim + uv_offset, dfxdu(i)));
-                // dfx1/du0
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + i, node0 * dof + dim + uv_offset, -dfxdu(i)));
-                // dfx0/du1
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node1 * dof + dim + uv_offset, -dfxdu(i)));
-                // dfx0/du0
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + i, node0 * dof + dim + uv_offset, dfxdu(i)));
-
-                // dfu0/dx0
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node0 * dof + i, dfudx(i)));
-                // dfu1/dx1
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node1 * dof + i, dfudx(i)));
-                // dfu1/dx0
-                entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node0 * dof + i, -dfudx(i)));
-                // dfu0/dx1
-                entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + i, -dfudx(i)));
-            }
-            
-            //dfu0/du0
-            entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, dfudu));
-            //dfu1/du1
-            entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node1 * dof + dim + uv_offset, dfudu));
-            //dfu1/du0
-            entry_K.push_back(Eigen::Triplet<T>(node1 * dof + dim + uv_offset, node0 * dof + dim + uv_offset, -dfudu));
-            //dfu0/du1
-            entry_K.push_back(Eigen::Triplet<T>(node0 * dof + dim + uv_offset, node1 * dof + dim + uv_offset, -dfudu));
-        }   
+        T J[8][8];
+        memset(J, 0, sizeof(J));
+        #include "Maple/YarnStretchingJ.mcg"
+        for(int k = 0; k < nodes.size(); k++)
+            for(int l = 0; l < nodes.size(); l++)
+                for(int i = 0; i < dim; i++)
+                    for (int j = 0; j < dim; j++)
+                        {
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + i, nodes[l] * dof + j, -J[k*dim + i][l * dim + j]));
+                        }
     }
 }
 template<class T, int dim>
@@ -83,28 +39,31 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Ei
         int node1 = rods.col(rod_idx)[1];
         TV x0 = q_temp.col(node0).template segment<dim>(0);
         TV x1 = q_temp.col(node1).template segment<dim>(0);
-        TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-        TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-        TV2 delta_u = u1 - u0;
         
-        T l = (x1 - x0).norm();
-        TV d = (x1 - x0).normalized();
-
+        std::vector<TV> X;
         int yarn_type = rods.col(rod_idx)[2];
+        std::vector<int> nodes = { node0, node1 };
+        getMaterialPositions(q_temp, nodes, X, yarn_type);
 
-        int uv_offset = yarn_type == WARP ? 0 : 1;
+        std::vector<TV> x(4);
+        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
 
-        TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-        //fx
-        residual.col(node0).template segment<dim>(0) += ks * (w.norm() - 1.0) * d;
-        residual.col(node1).template segment<dim>(0) += -ks * (w.norm() - 1.0) * d;
-        //fu
-        residual.col(node0)[dim + uv_offset] += -0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
-        residual.col(node1)[dim + uv_offset] += 0.5 * ks * (std::pow(w.norm(), 2) - 1.0);
+        Vector<T, 8> F;
+        F.setZero();
+        #include "Maple/YarnStretchingF.mcg"
+        
+        int cnt = 0;
+        for (int node : nodes)
+        {
+            residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*dim);
+            cnt++;
+        } 
+
     }
     if(print_force_mag)
         std::cout << "stretching norm: " << (residual - residual_cp).norm() << std::endl;
 }
+
 template<class T, int dim>
 T EoLRodSim<T, dim>::addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
@@ -117,19 +76,19 @@ T EoLRodSim<T, dim>::addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp)
         int node1 = rods.col(rod_idx)[1];
         TV x0 = q_temp.col(node0).template segment<dim>(0);
         TV x1 = q_temp.col(node1).template segment<dim>(0);
-        TV2 u0 = q_temp.col(node0).template segment<2>(dim);
-        TV2 u1 = q_temp.col(node1).template segment<2>(dim);
-        TV2 delta_u = u1 - u0;
 
+        std::vector<TV> X;
         int yarn_type = rods.col(rod_idx)[2];
+        std::vector<int> nodes = { node0, node1 };
+        getMaterialPositions(q_temp, nodes, X, yarn_type);
 
-        int uv_offset = yarn_type == WARP ? 0 : 1;
-    
-        // add elastic potential here 1/2 ks delta_u * (||w|| - 1)^2
-        TV w = (x1 - x0) / std::abs(delta_u[uv_offset]);
-        rod_energy[rod_idx] += 0.5 * ks * std::abs(delta_u[uv_offset]) * std::pow(w.norm() - 1.0, 2);
-        
-    // }
+        std::vector<TV> x(4);
+        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
+
+        T V[1];
+        #include "Maple/YarnStretchingV.mcg"
+        rod_energy[rod_idx] += V[0];
+
     });
     return rod_energy.sum();
 }
