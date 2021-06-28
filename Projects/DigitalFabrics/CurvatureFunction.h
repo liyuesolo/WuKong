@@ -27,11 +27,12 @@ public:
     virtual void gradient(T u, T& dedu) { dedu = 0; }
     virtual void hessian(T u, T& de2du2) { de2du2 = 0; }
     
-    virtual void getMaterialPos(T u, TV& X) 
+    virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h) 
     { 
         X = starting_point.template segment<dim>(0) + 
-            (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0)) * 
-            (u / (ending_point[dim] - starting_point[dim]));
+            u * (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0));
+        dXdu = (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0));
+        d2Xdu2 = TV::Zero();
     }
 };
 
@@ -63,7 +64,7 @@ public:
 
     DiscreteHybridCurvature(Vector<T, dim + 1> q0, 
                             Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
-    virtual void getMaterialPos(T u, TV& X); 
+    virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h); 
 
     void setData(HybridC2Curve<T, dim>* c, const std::vector<T>& v)
     {

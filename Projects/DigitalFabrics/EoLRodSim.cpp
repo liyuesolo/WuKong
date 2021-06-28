@@ -506,7 +506,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     //     std::cout << "node " << node_i << " node " << node_j << " " << (xi-xj).norm() << " " << (Xi - Xj).norm() << std::endl;
     // });
 
-    std::cout << dq_full.transpose() << std::endl;
+    // std::cout << dq_full.transpose() << std::endl;
     
     // DOFStack lambdas;
     // T kappa = 1e3;
@@ -554,6 +554,58 @@ void EoLRodSim<T, dim>::advanceOneStep()
 
     // checkHessian();
 }
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::convertxXforMaple(
+        std::vector<TV>& x, 
+        const std::vector<TV>& X,
+        Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes)
+{
+    int cnt = 0;
+    for (int node : nodes)
+    {
+        x[cnt] = q_temp.col(node).template segment<dim>(0);
+        x[cnt + nodes.size()] = X[cnt];
+        cnt++;
+    }
+
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
+    std::vector<int>& nodes, int yarn_type)
+{
+    int cnt = 0;
+    for (int node : nodes)
+    {
+        Vector<T, dim + 1> xu;
+        xu.template segment<dim>(0) = q_temp.col(node).template segment<dim>(0);
+        xu[dim] = q_temp(dim + yarn_type, node);
+        x[cnt++] = xu;
+    }
+}
+
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::getMaterialPositions(
+    Eigen::Ref<const DOFStack> q_temp,
+    const std::vector<int>& nodes, std::vector<TV>& X, int uv_offset,
+    std::vector<TV>& dXdu, std::vector<TV>& d2Xdu2, bool g, bool h)
+{
+    X.resize(nodes.size(), TV::Zero());
+    dXdu.resize(nodes.size(), TV::Zero());
+    d2Xdu2.resize(nodes.size(), TV::Zero());
+
+    int cnt = 0;
+    for(int node : nodes)
+    {
+        curvature_functions[uv_offset]->getMaterialPos(q_temp(dim + uv_offset, node), 
+            X[cnt], dXdu[cnt], d2Xdu2[cnt], g, h);
+        cnt++;
+    }
+}
+
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::fixEulerian()

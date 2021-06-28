@@ -8,13 +8,14 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     // print_force_mag = true;
     run_diff_test = true;
     add_regularizor = false;
-    add_stretching=true;
+    add_stretching = false;
     add_penalty =false;
-    add_bending = false;
+    add_bending = true;
     add_shearing = false;
     add_pbc = false;
     add_contact_penalty = false;
     add_eularian_reg = false;
+    
 
     DOFStack dq(dof, n_dof);
     dq.setZero();
@@ -23,17 +24,16 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     {
         dq(0, 3) += 0.01;
         dq(2, 3) += 0.01;
-        dq(3, 1) += 0.01;
+        dq(2, 1) += 0.01;
         dq(1, 4) += 0.01;
         dq(2, 2) += 0.01;
         dq(1, 3) += 0.01;
-        dq(1, 0) += 0.01;
-
-        dq(1, 0) += 0.01;
-        dq(0, 0) += 0.01;
+        
+        // dq(1, 0) += 0.01;
+        // dq(0, 0) += 0.01;
         dq(0, 1) -= 0.01;
         dq(1, 1) -= 0.01;
-        dq(0, 15) += 0.01;
+        dq(0, 6) += 0.01;
         dq(1, 8) += 0.01;
         // q(1, 14) -= 0.1;
         dq(0, 9) += 0.01;
@@ -64,9 +64,37 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         q(1, 18) += 0.1;
         q(1, 15) -= 0.1;
     }
-
-    // checkGradient(Eigen::Map<VectorXT>(dq.data(), dq.size()));
+    dq *= 0.03;
+    checkGradient(Eigen::Map<VectorXT>(dq.data(), dq.size()));
     checkHessian(Eigen::Map<VectorXT>(dq.data(), dq.size()));
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::checkMaterialPositionDerivatives()
+{
+    T epsilon = 1e-6;
+    int yarn_type = 0;
+    for (int i = 0; i < n_nodes; i++)
+    {
+        std::vector<int> nodes = { i };
+        std::vector<TV> X0, X1; std::vector<TV> dXdu, dXdu1; std::vector<TV> d2Xdu2, dummy2;
+        
+        getMaterialPositions(q, nodes, X0, yarn_type, dXdu, d2Xdu2, true, true);
+
+        TV x0 = X0[0];
+        q(dim, i) += epsilon;
+        getMaterialPositions(q, nodes, X1, yarn_type, dXdu1, dummy2, true, false);
+        TV x1 = X1[0];
+
+        for (int d = 0; d < dim; d++)
+        {
+            std::cout << "dXdu: " << (x1[d] - x0[d]) / epsilon << " " << dXdu[0][d] << std::endl;
+            std::cout << "d2Xdu2 " << (dXdu1[0][d] - dXdu[0][d]) / epsilon << " " << d2Xdu2[0][d] << std::endl;
+            std::getchar();
+        }
+        q(dim, i) -= epsilon;
+        
+    }
 }
 
 template<class T, int dim>
@@ -122,6 +150,7 @@ void EoLRodSim<T, dim>::checkHessianHigherOrderTerm(Eigen::Ref<VectorXT> dq)
     VectorXT dx(n_dof);
     dx.setRandom();
     dx *= 1.0 / dx.norm();
+    for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
     dx *= 0.001;
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
@@ -146,7 +175,7 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
 {
     checkGradientSecondOrderTerm(dq);
-    return;
+    // return;
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
     T kappa = 1.5;
@@ -163,11 +192,16 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
     {
         dq(dof_i) += epsilon;
         T E0 = computeTotalEnergy(dq, lambdas, kappa);
-        dq(dof_i) -= 2.0 * epsilon;
+        // dq(dof_i) -= 2.0 * epsilon;
+        // T E1 = computeTotalEnergy(dq, lambdas, kappa);
+        // dq(dof_i) += epsilon;
+
+        dq(dof_i) -= 1.0 * epsilon;
         T E1 = computeTotalEnergy(dq, lambdas, kappa);
-        dq(dof_i) += epsilon;
+        
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
-        gradient_FD(dof_i) = (E1 - E0) / (2*epsilon);
+        // gradient_FD(dof_i) = (E1 - E0) / (2*epsilon);
+        gradient_FD(dof_i) = (E1 - E0) / (1*epsilon);
         if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
             continue;
         // if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
@@ -193,7 +227,7 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<VectorXT> dq)
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setOnes();
     T kappa = 1.5;
-    T epsilon = 1e-6;
+    T epsilon = 1e-5;
     StiffnessMatrix A;
     buildSystemMatrix(dq, A, kappa);
 
@@ -204,18 +238,25 @@ void EoLRodSim<T, dim>::checkHessian(Eigen::Ref<VectorXT> dq)
             VectorXT g0(n_dof), g1(n_dof);
             g0.setZero(); g1.setZero();
             computeResidual(g0, dq, lambdas, kappa);
-            dq(dof_i) -= 2.0 * epsilon;
+            // dq(dof_i) -= 2.0 * epsilon;
+            // computeResidual(g1, dq, lambdas, kappa);
+            // dq(dof_i) += epsilon;
+            // VectorXT row_FD = (g1 - g0) / (2 * epsilon);
+
+            dq(dof_i) -= 1.0 * epsilon;
             computeResidual(g1, dq, lambdas, kappa);
-            dq(dof_i) += epsilon;
-            VectorXT row_FD = (g1 - g0) / (2 * epsilon);
+            
+            VectorXT row_FD = (g1 - g0) / (epsilon);
+
             for(int i = 0; i < n_dof; i++)
             {
                 if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
                     continue;
-                if (std::floor(dof_i / T(dof)) < 8)
-                    continue;
-                // if (std::abs( A.coeff(n_node * dof + d, i * dof + d) - row_FD(d, i)) < 1e-4)
-                    // continue;
+                // if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-4)
+                //     continue;
+                // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+                //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+                //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
                 std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
                     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
                     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;

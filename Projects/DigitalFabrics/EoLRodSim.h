@@ -312,6 +312,18 @@ public:
     void resetScene() { q = q0; }
     void fixEulerian();
     void freeEulerian();
+    
+private:
+
+    void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes, int yarn_type);
+    void convertxXforMaple(std::vector<TV>& x, 
+        const std::vector<TV>& X,
+        Eigen::Ref<const DOFStack> q_temp,
+        std::vector<int>& nodes);
+    void getMaterialPositions(Eigen::Ref<const DOFStack> q_temp, 
+        const std::vector<int>& nodes, std::vector<TV>& X, int uv_offset,
+        std::vector<TV>& dXdu, std::vector<TV>& d2Xdu2, bool g, bool h);
 
     
 public:
@@ -325,7 +337,6 @@ public:
     
 
     // Scene.cpp 
-    
     void buildSceneFromUnitPatch(int patch_id);
 
     void checkConnections();
@@ -340,8 +351,6 @@ public:
     void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
     //Visualization.cpp
-    // void appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
-    //     T scale = 1.0, Vector<T, 3> shift = Vector<T, 3>::Zero());
     void getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn = 4);
     void getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x);
     void getColorFromStretching(Eigen::MatrixXd& C);
@@ -349,10 +358,6 @@ public:
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);
     void markSlidingRange(int idx, int dir, int depth, std::vector<bool>& can_slide, int root);
-
-    // BoundaryCondtion.cpp
-    void addBCStretchingTest();
-    void addBCShearingTest();
     
     // DerivativeTest.cpp
     void runDerivativeTest();
@@ -361,18 +366,13 @@ public:
     void checkGradient(Eigen::Ref<VectorXT> dq);
     void checkHessian(Eigen::Ref<VectorXT> dq);
 
+    void checkMaterialPositionDerivatives();
+
 
     // ======================== Energy Forces and Hessian Entries ========================
     //                                             so -df/dx
     // Bending.cpp
-    void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
-        std::vector<int>& nodes, int yarn_type);
-    void convertxXforMaple(std::vector<Vector<T, dim + 1>>& x, 
-        const std::vector<TV>& X,
-        Eigen::Ref<const DOFStack> q_temp,
-        std::vector<int>& nodes, int yarn_type);
-    void getMaterialPositions(Eigen::Ref<const DOFStack> q_temp, 
-        const std::vector<int>& nodes, std::vector<TV>& X, int uv_offset);
+    
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);

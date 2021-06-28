@@ -388,10 +388,10 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         TV x1 = q.col(node1).template segment<dim>(0);
     
 
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
         int yarn_type = rods.col(rod_idx)[2];
-        std::vector<TV> X;
         std::vector<int> nodes = { node0, node1 };
-        getMaterialPositions(q, nodes, X, yarn_type);
+        getMaterialPositions(q, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
 
         std::vector<TV> x(4);
         x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];

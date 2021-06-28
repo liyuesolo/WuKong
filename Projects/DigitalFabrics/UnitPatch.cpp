@@ -72,7 +72,10 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         HybridC2Curve<T, dim>* curve = new HybridC2Curve<T, dim>(sub_div);
         while(in >> x >> y)
         {
-            curve->data_points.push_back(TV(x, y) * 0.03);
+            if (sim.run_diff_test)
+                curve->data_points.push_back(TV(x, y));
+            else
+                curve->data_points.push_back(TV(x, y) * 0.03);
         }
         in.close();
         curve->normalizeDataPoints();
@@ -80,6 +83,9 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         // curve->getLinearSegments(points_on_curve);
         curve->sampleCurves(points_on_curve);
 
+        // curve->derivativeTestdF();
+
+        
         sim.n_nodes = points_on_curve.size();
         sim.n_rods = points_on_curve.size() - 1;
 
@@ -180,14 +186,14 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         Vector<T, dim + 1> q1 = q.col(rod0.back()).template segment<dim + 1>(0);
         
         DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
-            // curve, 
-            // data_points_discrete_arc_length, 
             q0, q1);
         sim.curvature_functions.push_back(curve_func);
         curve_func->setData(curve, data_points_discrete_arc_length);
 
-        std::cout << q.transpose() << std::endl;
+        // std::cout << q.transpose() << std::endl;
     }
+
+    // sim.checkMaterialPositionDerivatives();
 }
 
 

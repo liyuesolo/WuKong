@@ -1,69 +1,7 @@
 #include "CurvatureFunction.h"
-
-// template<class T, int dim>
-// void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X) 
-// {
-//     // std::cout << "getMaterialPos" << std::endl;
-//     T fraction = u / (this->ending_point[dim] - this->starting_point[dim]);
-//     // std::cout << "u " << u << " " << this->starting_point[dim] << " " << this->ending_point[dim] << std::endl;
-//     if (fraction < 1e-6)
-//     {
-//         X = this->starting_point.template segment<dim>(0);
-//         return;
-//     }
-
-//     // set default to the last one
-//     int curve_id = -2;
-//     int left_node = -1;    
-//     // find which curve the current points lies on
-//     for (int i = 0; i < curve->data_points.size(); i++)
-//     {
-//         T fraction_data_point = 
-//             (data_points_discrete_arc_length[i] - this->starting_point[dim]) /
-//                 (this->ending_point[dim] - this->starting_point[dim]);
-
-//         if( fraction_data_point > fraction || std::abs(fraction_data_point - 1) < 1e-6
-//             || std::abs(fraction_data_point - fraction) < 1e-6)
-//         {
-//             curve_id = i - 2;
-//             left_node = i - 1;
-//             break;
-//         }
-//     }
-    
-//     bool shift = true;
-//     // the first half of the first curve
-//     if (curve_id == -1)
-//     {
-//         curve_id = 0;
-//         // shift = false;
-//     }
-//     if (left_node == 0)
-//         shift = false;
-//     if (curve_id == -2 || curve_id > curve->data_points.size() - 2)
-//         std::cout << "[CurvatureFunction.h] invalid curve index " << curve_id << std::endl;
-    
-//     T t = (u - data_points_discrete_arc_length[left_node]) / 
-//         (data_points_discrete_arc_length[left_node + 1] - data_points_discrete_arc_length[left_node]);
-        
-//     // shift 0.5 because we want to use second half of the previous curve
-//     if (shift)
-//         // curve->getPosOnCurve(curve_id, t, X);
-//         curve->getPosOnCurve(curve_id, t * 0.5 + 0.5, X);
-//     else
-//         curve->getPosOnCurve(curve_id, t * 0.5, X);
-
-//     T shifted = shift ? t * 0.5 + 0.5 : t * 0.5;
-//     // X *= 0.03;
-//     // std::cout << "t " << t << " scaled " << shifted << " curve idx " << curve_id << " left node " << left_node << std::endl;
-//     // std::cout << u << " " << X.transpose() << std::endl;
-//     // std::cout << "getMaterialPos done" << std::endl;
-//     // std::getchar();
-// }
-
-
 template<class T, int dim>
-void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X) 
+void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X, 
+    TV& dXdu, TV& d2Xdu2, bool g, bool h) 
 {
     // std::cout << "getMaterialPos" << std::endl;
     T dx = 1.0;
@@ -89,16 +27,24 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X)
     T t = u - T(left_node * dx);
     
     bool interpolate = false;
-    if (left_node == 0)
+    if ( left_node == 0 )
         t *= 0.5;
-    else if(left_node == curve->data_points.size() - 2)
+    else if( left_node == curve->data_points.size() - 2 )
         t = t * 0.5 + 0.5;
     else
         interpolate = true;
 
     // std::cout << "t " << t << " u " << u <<  " curve idx " << curve_id << " left node " << left_node << " interpolate " << interpolate << std::endl;
     
-    curve->getPosOnCurve(curve_id, t, X, interpolate);
+    // curve->getPosOnCurve(curve_id, t, X, interpolate);
+
+    curve->getPosOnCurveWithDerivatives(curve_id, t, X, dXdu, d2Xdu2, g, h, interpolate);
+
+    if ( left_node == 0 || left_node == curve->data_points.size() - 2)
+    {
+        dXdu *= 0.5; 
+        d2Xdu2 *= 0.5 * 0.5;
+    }
 
     // T shifted = shift ? t * 0.5 + 0.5 : t * 0.5;
     // X *= 0.03;
