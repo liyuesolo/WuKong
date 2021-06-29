@@ -96,33 +96,6 @@
 //     });
 // }
 
-// template<class T, int dim>
-// void EoLRodSim<T, dim>::appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, T scale, Vector<T, 3> shift)
-// {
-//     Eigen::MatrixXd v_sphere;
-//     Eigen::MatrixXi f_sphere;
-
-//     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere.obj", v_sphere, f_sphere);
-
-//     v_sphere = v_sphere * scale;
-
-//     tbb::parallel_for(0, (int)v_sphere.rows(), [&](int row_idx){
-//         v_sphere.row(row_idx) += shift;
-//     });
-
-//     int n_vtx_prev = V.rows();
-//     int n_face_prev = F.rows();
-
-//     tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
-//         f_sphere.row(row_idx) += Eigen::Vector3i(n_vtx_prev, n_vtx_prev, n_vtx_prev);
-//     });
-
-//     V.conservativeResize(V.rows() + v_sphere.rows(), 3);
-//     F.conservativeResize(F.rows() + f_sphere.rows(), 3);
-
-//     V.block(n_vtx_prev, 0, v_sphere.rows(), 3) = v_sphere;
-//     F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
-// }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -158,8 +131,8 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
         int rov = rod_cnt * rod_offset_v;
         int rof = rod_cnt * rod_offset_f;
 
-        TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0) / 0.03;
-        TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0) / 0.03;
+        TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0) / unit;
+        TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0) / unit;
         // TV vtx_from_TV = q_display.col(rods_display.col(rod_cnt)[0]).template segment<dim>(0) / 1;
         // TV vtx_to_TV = q_display.col(rods_display.col(rod_cnt)[1]).template segment<dim>(0) / 1;
 
@@ -276,17 +249,37 @@ void EoLRodSim<T, dim>::markSlidingRange(int idx, int dir, int depth,
 {
     if (depth > slide_over_n_rods[dir] || idx == -1)
         return;
-    T rod_length = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
-        q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
-    // distance root/crossing node travels
-    T root_sliding_dis = std::abs(q(dim + dir, root) - q0(dim + dir, root));
-    T dis_to_root_rest_state = std::abs(q0(dim + dir, idx) - q0(dim + dir, root));
-    T dis_to_root_current = std::abs(q(dim + dir, idx) - q(dim + dir, root));
+
+    // T rod_length = (q0.col(rods.col(0)(0)).template segment<dim>(0) - 
+    //     q0.col(rods.col(0)(1)).template segment<dim>(0)).norm();
     
+    // distance root/crossing node travels
+
+    // std::vector<TV> X, X0, X_root, X0_root, dXdu, d2Xdu2;
+    // getMaterialPositions(q0, {idx}, X, dir, dXdu, d2Xdu2, false, false );
+    // getMaterialPositions(q, {idx}, X0, dir, dXdu, d2Xdu2, false, false );
+    // getMaterialPositions(q0, {root}, X0_root, dir, dXdu, d2Xdu2, false, false );
+    // getMaterialPositions(q, {root}, X_root, dir, dXdu, d2Xdu2, false, false );
+
+    T root_sliding_dis = std::abs(q(dim + dir, root) - q0(dim + dir, root));
+    
+    T dis_to_root_rest_state = std::abs(q0(dim + dir, idx) - q0(dim + dir, root));
+
+    T dis_to_root_current = std::abs(q(dim + dir, idx) - q(dim + dir, root));
+
+    // T root_sliding_dis = (X_root[0] - X0_root[0]).norm();
+    
+    // T dis_to_root_rest_state = (X0[0] - X0_root[0]).norm();
+
+    // T dis_to_root_current = (X[0] - X_root[0]).norm();
+
+    T sliding_range = dir == 0 ? tunnel_u : tunnel_v;
+
     if (idx == root || root_sliding_dis < 1e-6)
         can_slide[idx * 2 + dir] = true;
     
-    if (root_sliding_dis > slide_over_n_rods[dir] * rod_length - 1e-6)
+    // if (root_sliding_dis > slide_over_n_rods[dir] * rod_length - 1e-6)
+    if (root_sliding_dis > sliding_range - 1e-6)
     {
         if(dis_to_root_current > dis_to_root_rest_state)
             can_slide[idx * 2 + dir] = true;

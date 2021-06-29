@@ -3,6 +3,13 @@ template<class T, int dim>
 void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X, 
     TV& dXdu, TV& d2Xdu2, bool g, bool h) 
 {
+    if (u < 0)
+    {
+        X = this->starting_point.template segment<dim>(0);
+        dXdu = TV::Zero();
+        d2Xdu2 = TV::Zero();
+        return;
+    }
     // std::cout << "getMaterialPos" << std::endl;
     T dx = 1.0;
 

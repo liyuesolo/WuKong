@@ -40,6 +40,9 @@ template<class T, int dim>
 class LineCurvature : public CurvatureFunction<T, dim>
 {
 public:
+    LineCurvature(Vector<T, dim + 1> q0, 
+                Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
+    LineCurvature() : CurvatureFunction<T, dim>(){}
 };
 
 template<class T, int dim>

@@ -126,11 +126,26 @@ private:
     void addRods(std::vector<int>& nodes, int yarn_type, int& cnt, int yarn_idx = 0);
 
     void addStraightYarnCrossNPoints(const TV& from, const TV& to,
-        const std::vector<TV>& passing_points, int sub_div,
+        const std::vector<TV>& passing_points, 
+        const std::vector<int>& passing_points_id, 
+        int sub_div,
         std::vector<TV>& sub_points, std::vector<int>& node_idx,
+        std::vector<int>& key_points_location,
         int start, bool pbc = false);
 
     void subdivideStraightYarns(int sub_div);
+
+    void markDoFSingleStrand(
+        const std::vector<int>& nodes_on_strand, 
+        const std::vector<int>& key_points_location_on_strand, 
+        const std::vector<int>& key_points_location_global, 
+        const std::vector<int>& key_points_location_dof, 
+        std::vector<Eigen::Triplet<T>>& w_entry,
+        int& dof_cnt, int yarn_type);
+
+    void addKeyPointsDoF(const std::vector<int>& key_points, 
+        std::vector<Eigen::Triplet<T>>& w_entry,
+        int& dof_cnt);
 };
 
 #endif

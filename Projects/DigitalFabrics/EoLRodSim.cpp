@@ -5,11 +5,13 @@ template<class T, int dim>
 T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
     Eigen::Ref<const DOFStack> lambdas, T kappa, bool verbose)
 {
+    
     VectorXT dq_projected = dq;
     if(!add_penalty && !run_diff_test)
         iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
         {
             int offset = dof_offsets[node_id];
+            // std::cout << "node " << node_id << " offset " << offset << " total " << n_dof << std::endl;
             for(int d = 0; d < dof; d++)
                 if (mask(d))
                     dq_projected(offset + d) = target(d);
@@ -21,13 +23,19 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
     Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
     DOFStack q_temp = q0 + dq_full;
 
+    // std::cout << q_temp.transpose() << std::endl;
+    // std::getchar();
+
     T total_energy = 0;
     T E_stretching = 0, E_bending = 0, E_shearing = 0, 
         E_eul_reg = 0, E_pbc = 0, E_penalty = 0, E_contact = 0;
+    
     if (add_stretching)
         E_stretching += addStretchingEnergy(q_temp);
+    
     if (add_bending)
         E_bending += addBendingEnergy(q_temp);
+    
     if (add_shearing)
     {
         E_shearing += addShearingEnergy(q_temp, true);
@@ -49,6 +57,7 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
                 if (mask(d))
                     E_penalty += 0.5 * kc * std::pow(target(d) - dq_full(node_id * dof + d), 2);
         });
+    
     if (add_contact_penalty)
         E_contact += addParallelContactEnergy(q_temp);
     total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty + E_contact;
@@ -214,8 +223,8 @@ void EoLRodSim<T, dim>::buildSystemMatrix(
     if(!add_penalty && !run_diff_test)
         projectDirichletEntrySystemMatrix(K);
 
+    // std::cout << K << std::endl;
     
-
     K.makeCompressed();
 }
 
@@ -255,7 +264,7 @@ bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K,
 
     StiffnessMatrix H = K;
     Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    
+    // std::cout << H << std::endl;
     T mu = 10e-6;
     while(true)
     {
@@ -299,6 +308,7 @@ T EoLRodSim<T, dim>::newtonLineSearch(Eigen::Ref<VectorXT> dq,
     
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
+    std::cout << norm << std::endl;
     // if (norm < 1e-6) return norm;
     T alpha = 1;
     T E0 = computeTotalEnergy(dq, lambdas, kappa);
@@ -402,7 +412,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 2000;
+    int max_newton_iter = 1000;
 
     DOFStack lambdas(dof, n_pb_cons);
     lambdas.setZero();
@@ -413,7 +423,7 @@ void EoLRodSim<T, dim>::implicitUpdate(Eigen::Ref<VectorXT> dq)
     
         VectorXT residual(n_dof);
         residual.setZero();
-        // std::cout << "compute residual" << std::endl;
+        std::cout << "compute residual" << std::endl;
         computeResidual(residual, dq, lambdas, kappa);
 
         residual_norm = residual.norm();

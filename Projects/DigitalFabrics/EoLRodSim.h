@@ -102,7 +102,7 @@ public:
     T E = 3.5e9; //PLA
     T R = 0.0002;
 
-    T unit = 1;
+    T unit = 0.03;
 
     T rho = 1;
     T ks = 1.0;  // stretching term

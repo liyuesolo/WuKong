@@ -31,9 +31,9 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<const DOFStack> q_tem
                 if (std::abs(delta_u) < tunnel_R)
                     return;
                 if (delta_u < 0)
-                    residual(dir, node_id) += -k_yc * (q_temp(dir, node_id) - q0(dir, node_id) + tunnel_R);
+                    residual(dir, node_id) += -k_yc * (delta_u + tunnel_R);
                 else
-                    residual(dir, node_id) += -k_yc * (q_temp(dir, node_id) - q0(dir, node_id) - tunnel_R);
+                    residual(dir, node_id) += -k_yc * (delta_u - tunnel_R);
                 // std::cout << "node " << middle << " " << delta_u << " " << tunnel_R << std::endl;   
             };
         singleDirGrad(dim);
@@ -51,17 +51,26 @@ T EoLRodSim<T, dim>::addParallelContactEnergy(Eigen::Ref<const DOFStack> q_temp)
     VectorXT crossing_energy(n_nodes);
     crossing_energy.setZero();
     iterateSlidingNodes([&](int node_id){
+        
         auto singleDirEnergy = [&, node_id](int dir)
         {
             T tunnel_R = dir == dim ? tunnel_u : tunnel_v;
+
             T delta_u = q_temp(dir, node_id) - q0(dir, node_id);
-            
+
+            // std::vector<TV> X, X0, dXdu, d2Xdu2;
+            // getMaterialPositions(q0, {node_id}, X0, dir, dXdu, d2Xdu2, false, false );
+            // getMaterialPositions(q_temp, {node_id}, X, dir, dXdu, d2Xdu2, false, false );
+
+            // T delta_u = (X[0] - X0[0]).norm();
+            // std::cout << "delta u " << delta_u << " tunnel R " << tunnel_R << " dim " << dir << std::endl;
             if (std::abs(delta_u) < tunnel_R)
                 return;
             if (delta_u < 0)
-                crossing_energy[node_id] += 0.5 * k_yc * std::pow(q_temp(dir, node_id) - q0(dir, node_id) + tunnel_R, 2);
+                // crossing_energy[node_id] += 0.5 * k_yc * std::pow(q_temp(dir, node_id) - q0(dir, node_id) + tunnel_R, 2);
+                crossing_energy[node_id] += 0.5 * k_yc * std::pow(delta_u + tunnel_R, 2);
             else
-                crossing_energy[node_id] += 0.5 * k_yc * std::pow(q_temp(dir, node_id) - q0(dir, node_id) - tunnel_R, 2);
+                crossing_energy[node_id] += 0.5 * k_yc * std::pow(delta_u - tunnel_R, 2);
             
             // std::cout << "node " << node_id << std::endl;
         };

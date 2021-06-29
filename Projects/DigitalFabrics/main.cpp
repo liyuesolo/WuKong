@@ -182,11 +182,11 @@ int main(int argc, char *argv[])
             if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
             {   
                 ImGui::Combo("TestCase", (int *)(&test_current), test_case_names, n_test_case);
-                if(test != test_current)
-                {
-                    test = test_current;
-                    setupScene(viewer);
-                }
+                // if(test != test_current)
+                // {
+                //     test = test_current;
+                //     setupScene(viewer);
+                // }
             }
             if (ImGui::CollapsingHeader("PeriodicBC", ImGuiTreeNodeFlags_DefaultOpen))
             {   
@@ -434,7 +434,7 @@ int main(int argc, char *argv[])
             double x = viewer.current_mouse_x;
             double y = viewer.core().viewport(3) - viewer.current_mouse_y;
             
-            Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2);
+            Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2) / eol_sim.unit;
             Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
             rod_v.setZero();
             rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
@@ -448,6 +448,7 @@ int main(int argc, char *argv[])
                     selected = i;
                     x0 = x;
                     y0 = y;
+                    std::cout << "selected " << selected << std::endl;
                     return true;
                 }
             }
@@ -493,11 +494,15 @@ int main(int argc, char *argv[])
                 Eigen::VectorXd delta_dof(4); delta_dof.setZero();
                 auto zero_delta = delta_dof;
                 Eigen::VectorXd mask_dof(4); mask_dof.setZero();
-                delta_dof(0) = delta_x;
-                // delta_dof(1) = delta_y;
+                
+                delta_dof(0) = delta_x * eol_sim.unit;
+                // delta_dof(1) = delta_y * eol_sim.unit;
+                
                 mask_dof(0) = 1;
-                mask_dof(2) = 0;
+                // mask_dof(1) = 1;
+                mask_dof(2) = 1;
                 mask_dof(3) = 1;
+                
                 eol_sim.dirichlet_data[selected] = std::make_pair(delta_dof, mask_dof);
                 eol_sim.advanceOneStep();
                 updateScreen(viewer);
@@ -578,7 +583,7 @@ int main(int argc, char *argv[])
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         key_down(viewer,'0',0);
-        viewer.launch();
+        // viewer.launch();
     }
 
     //================== Run Diff Test ==================
