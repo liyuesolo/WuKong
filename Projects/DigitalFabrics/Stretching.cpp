@@ -12,7 +12,7 @@ void EoLRodSim<T, dim>::addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::v
         std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
         int yarn_type = rods.col(rod_idx)[2];
         std::vector<int> nodes = { node0, node1 };
-        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, true, true);
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, true, false);
 
         std::vector<TV> x(4);
         x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
@@ -39,15 +39,40 @@ void EoLRodSim<T, dim>::addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::v
 
                             entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + dim + yarn_type, nodes[l] * dof + j, -J[2 * dim + k * dim + i][l * dim + j] * dXdu[k][i]));
 
-                            
+                            // dX/du ^T d2e/dX2 dXdu                    
                             entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + dim + yarn_type, 
                                                                 nodes[l] * dof + dim + yarn_type, 
                                                                 -J[2 * dim + k*dim + i][2 * dim + l * dim + j] * dXdu[l][j] * dXdu[k][i]));
+                            
                         }
-        
+    }
+    for (int rod_idx = 0; rod_idx < n_rods; rod_idx++)
+    {
+        int node0 = rods.col(rod_idx)[0];
+        int node1 = rods.col(rod_idx)[1];
+        TV x0 = q_temp.col(node0).template segment<dim>(0);
+        TV x1 = q_temp.col(node1).template segment<dim>(0);
 
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        int yarn_type = rods.col(rod_idx)[2];
+        std::vector<int> nodes = { node0, node1 };
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, true, true);
 
-        
+        std::vector<TV> x(4);
+        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
+
+        Vector<T, 8> F;
+        F.setZero();
+        #include "Maple/YarnStretchingF.mcg"
+
+        // sum de/dX d2X/du2
+        for(int d = 0; d < dim; d++)
+        {
+            entry_K.push_back(Eigen::Triplet<T>(nodes[0] * dof + dim + yarn_type, 
+                                                nodes[0] * dof + dim + yarn_type, -F[0*dim + 2*dim + d] * d2Xdu2[0][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[1] * dof + dim + yarn_type, 
+                                                nodes[1] * dof + dim + yarn_type, -F[1*dim + 2*dim + d] * d2Xdu2[1][d]));
+        }
     }
 }
 template<class T, int dim>

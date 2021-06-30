@@ -18,9 +18,9 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 4)
         buildTwoRodsScene(16);
     else if (patch_type == 5)
-        buildSlidingTestScene(8);
+        buildSlidingTestScene(32);
     else if (patch_type == 6)
-        buildStraightYarn3x1(8);
+        peanut(32);
     else if (patch_type == 7)
         buildZigZagScene(64);
     else if (patch_type == 8)
@@ -48,7 +48,7 @@ void UnitPatch<T, dim>::markDoFSingleStrand(
         const std::vector<int>& key_points_location_global, 
         const std::vector<int>& key_points_location_dof, 
         std::vector<Eigen::Triplet<T>>& w_entry,
-        int& dof_cnt, int yarn_type)
+        int& dof_cnt, int yarn_type, bool closed)
 {
     for (int k = 0; k < key_points_location_on_strand.size() - 1; k++)
     {
@@ -75,8 +75,12 @@ void UnitPatch<T, dim>::markDoFSingleStrand(
             for(int d = dim; d < sim.dof; d++)
             {
                 T alpha = (q(dim + yarn_type, nodes_on_strand[node_idx]) - q(dim + yarn_type, left_node)) / (q(dim + yarn_type, right_node) - q(dim + yarn_type, left_node));
-                // std::cout << q(dim + yarn_type, nodes_on_strand[node_idx]) << " " << q(dim + yarn_type, left_node) << " " << q(dim + yarn_type, right_node) << std::endl;
+                if (closed && k == key_points_location_on_strand.size() - 2)
+                    alpha *= -1;
+                // std::cout << "u current " << q(dim + yarn_type, nodes_on_strand[node_idx]) << " " << q(dim + yarn_type, left_node) << " " << q(dim + yarn_type, right_node) << std::endl;
                 // std::cout << "alpha " << alpha << std::endl;
+                // w_entry.push_back(Eigen::Triplet<T>(nodes_on_strand[node_idx] * sim.dof + d, left * sim.dof + d, 1 - alpha));
+                // w_entry.push_back(Eigen::Triplet<T>(nodes_on_strand[node_idx] * sim.dof + d, right * sim.dof + d, alpha));
                 w_entry.push_back(Eigen::Triplet<T>(nodes_on_strand[node_idx] * sim.dof + d, left * sim.dof + d, 1 - alpha));
                 w_entry.push_back(Eigen::Triplet<T>(nodes_on_strand[node_idx] * sim.dof + d, right * sim.dof + d, alpha));
             }
@@ -100,24 +104,29 @@ void UnitPatch<T, dim>::addStraightYarnCrossNPoints(const TV& from, const TV& to
     T length_yarn = (to - from).norm();
     TV length_vec = (to - from).normalized();
     int cnt = 1;
+    TV loop_point = from;
+    TV loop_left = from;
     for (int i = 0; i < passing_points.size(); i++)
     {
-        T fraction = (passing_points[i] - from).norm() / length_yarn;
+        T fraction = (passing_points[i] - loop_point).norm() / length_yarn;
         int n_sub_nodes = std::ceil(fraction * sub_div);
-        T length_sub = (passing_points[i] - from).norm() / T(n_sub_nodes);
+        T length_sub = (passing_points[i] - loop_point).norm() / T(n_sub_nodes);
         for (int j = 0; j < n_sub_nodes - 1; j++)
         {
-            sub_points.push_back(sub_points.back() + length_sub * length_vec);
+            sub_points.push_back(loop_left + length_sub * length_vec);
+            loop_left = sub_points.back();
             node_idx.push_back(start + cnt);
             cnt++;
         }
         node_idx.push_back(passing_points_id[i]);
-        key_points_location.push_back(cnt);
+        key_points_location.push_back(cnt + i);
+        loop_point = passing_points[i];
+        loop_left = passing_points[i];
     }
     T fraction;
     int n_sub_nodes;
     T length_sub;
-    if(passing_points.size())
+    if( passing_points.size() )
     {
         fraction = (to - passing_points.back()).norm() / length_yarn;
         n_sub_nodes = std::ceil(fraction * sub_div) + 1;
@@ -133,10 +142,16 @@ void UnitPatch<T, dim>::addStraightYarnCrossNPoints(const TV& from, const TV& to
         if (j == 0)
         {
             if(passing_points.size())
+            {
                 sub_points.push_back(passing_points.back() + length_sub * length_vec);
+                loop_left = sub_points.back();
+            }
         }
         else
-            sub_points.push_back(sub_points.back() + length_sub * length_vec);
+        {
+            sub_points.push_back(loop_left + length_sub * length_vec);
+            loop_left = sub_points.back();
+        }
         if(passing_points.size() == 0 && j == 0)
             continue;
         node_idx.push_back(start + cnt);
@@ -589,123 +604,199 @@ void UnitPatch<T, dim>::addRods(std::vector<int>& nodes, int yarn_type, int& cnt
 }
 
 template<class T, int dim>
-void UnitPatch<T, dim>::buildStraightYarn3x1(int sub_div)
+void UnitPatch<T, dim>::peanut(int sub_div)
 {
-    clearSimData();
-    sim.n_nodes = 11;
-    sim.n_rods = 10;
-
-    q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
-    rods = IV3Stack(3, sim.n_rods); rods.setZero();
-    connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
-
-    sim.normal = TV3Stack(3, sim.n_rods);
-    sim.normal.setZero();
+    if (sim.run_diff_test)
+        sim.unit = 1;
+    auto unit_yarn_map = sim.yarn_map;
+    sim.yarn_map.clear();
+    sim.add_rotation_penalty = false;
+    sim.add_pbc_bending = false;
     sim.subdivide = true;
-    
+
+    clearSimData();
+    std::vector<Eigen::Triplet<T>> w_entry;
 
     if constexpr (dim == 2)
-    {
+    {   
+        HybridC2Curve<T, dim>* curve = new HybridC2Curve<T, dim>(sub_div);
+        curve->data_points.push_back(TV(0.5, -0.5) * sim.unit);
+        curve->data_points.push_back(TV::Zero() * sim.unit);
+        curve->data_points.push_back(TV(0.5, 0.5) * sim.unit);
+        curve->data_points.push_back(TV(1.0, 0.0) * sim.unit);
+        curve->data_points.push_back(TV(0.5, -0.5) * sim.unit);
+        std::vector<TV> points_on_curve;
+        curve->sampleCurves(points_on_curve);
+
+        sim.n_nodes = points_on_curve.size() - 1;
+        int n_points_circle = sim.n_nodes;
+        sim.n_rods = points_on_curve.size() - 1;
+
+        q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
+        // rods = IV3Stack(3, sim.n_rods); rods.setZero();
+        // connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
+
+        int cnt = 0, dof_cnt = 0;
+
+        std::vector<int> rod0;
+        for (int i = 0; i < sim.n_nodes; i++)
         {
-            q.col(0).template segment<dim>(0) = TV2(0.125, 0.25);
-            q.col(1).template segment<dim>(0) = TV2(0.25, 0.25);
-            q.col(2).template segment<dim>(0) = TV2(0.5, 0.25);
-            q.col(3).template segment<dim>(0) = TV2(0.75, 0.25);
-            q.col(4).template segment<dim>(0) = TV2(0.875, 0.25);
-
-            q.col(5).template segment<dim>(0) = TV2(0.25, 0.125);
-            q.col(6).template segment<dim>(0) = TV2(0.25, 0.375);
-            q.col(7).template segment<dim>(0) = TV2(0.5, 0.125);
-            q.col(8).template segment<dim>(0) = TV2(0.5, 0.375);
-            q.col(9).template segment<dim>(0) = TV2(0.75, 0.125);
-            q.col(10).template segment<dim>(0) = TV2(0.75, 0.375);
-
-            q.block(dim, 0, 2, 11) = q.block(0, 0, 2, 11);
-            
-            int cnt = 0;
-            std::vector<int> rod0 = {0, 1, 2, 3, 4}, 
-                             rod1 = {5, 1, 6},
-                             rod2 = {7, 2, 8},
-                             rod3 = {9, 3, 10};
-            
-            addRods(rod0, WARP, cnt, 0);
-            addRods(rod1, WEFT, cnt, 1);
-            addRods(rod2, WEFT, cnt, 2);
-            addRods(rod3, WEFT, cnt, 3);
-            
-            sim.q0 = q;
-            sim.n_dof = sim.n_nodes * sim.dof;
-
-            
-            sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(5, 6)));
-            sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(7, 8)));
-            sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(9, 10)));
-
-            sim.pbc_ref.push_back(std::make_pair(WARP, IV2(0, 4)));
-            sim.pbc_ref_unique.push_back(IV2(0, 4));
-            sim.pbc_ref_unique.push_back(IV2(5, 6));
-
-            if (sim.disable_sliding)
-            {
-                for(int i = 0; i < sim.n_nodes; i++)
-                    sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-                sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-            }
-            else
-            {
-                for(int i = 4; i < 11; i++)
-                    sim.dirichlet_data[i] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-                
-                sim.dirichlet_data[3] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-                sim.dirichlet_data[1] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-
-                sim.dirichlet_data[0] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-            }
-            sim.n_dof = sim.n_nodes * sim.dof;            
-            // sim.sliding_nodes = {1, 2, 3};
-            sim.sliding_nodes = {2};
+            setPos(i, points_on_curve[i], points_on_curve[i]);
+            rod0.push_back(i);
+            q(dim, i) = T(i) * (curve->data_points.size() - 1 )/ (sim.n_nodes);
         }
-        if(sub_div > 1)
+        rod0.push_back(0);
+        
+        TV rod1_from(0.5, -1.0), rod1_to(0.5, 0.6);
+        rod1_from *= sim.unit; rod1_to *= sim.unit;
+
+        std::vector<int> rod1, key_points_location_rod1;
+        std::vector<TV> points_rod1;
+
+        addStraightYarnCrossNPoints(rod1_from, rod1_to, 
+                {curve->data_points[0], curve->data_points[2]}, 
+                {0, 2 * sub_div/2}, 
+                sub_div, 
+                points_rod1, rod1, 
+                key_points_location_rod1,
+                sim.n_nodes);
+        
+        sim.n_nodes += points_rod1.size();
+        sim.n_rods += rod1.size() - 1;
+
+        q.conservativeResize(sim.dof, sim.n_nodes);
+        rods = IV3Stack(3, sim.n_rods); rods.setZero();
+        connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;        
+        
+        for (int i = 0; i < points_rod1.size(); i++)
         {
-            subdivideStraightYarns(sub_div);
-
-            int n_bending_pairs = 4;
-            
-            std::vector<int> init(sim.N_PBC_BENDING_ELE, -1);
-            for (int i = 0; i < n_bending_pairs; i++)
-                sim.pbc_bending_bn_pairs.push_back(init);
-
-            for (int i = 0; i < sim.n_rods; i++)
-            {
-                add4Nodes(0, 4, 0, i);
-                add4Nodes(5, 6, 1, i);
-                add4Nodes(7, 8, 2, i);
-                add4Nodes(9, 10, 3, i);
-            }
-            
-            assert(sim.pbc_bending_bn_pairs == n_bending_pairs);
-
-            
-
-        }
-        else
-        {
-            sim.q0 = q;
-            sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
-            sim.W.setIdentity();
+            int idx = n_points_circle + i;
+            setPos(idx, points_rod1[i], points_rod1[i]);
+            q(dim + 1, idx) = LDis(rod1.front(), idx) / (rod1_to - rod1_from).norm();
+            // std::cout << "idx " << idx << " u " << q.col(idx).transpose() << std::endl;
         }
         
+        q(dim + 1, 0) = LDis(rod1.front(), 0) / (rod1_to - rod1_from).norm();
+        q(dim + 1, 2 * sub_div / 2) = LDis(rod1.front(), 2 * sub_div / 2) / (rod1_to - rod1_from).norm();
+
+        // std::cout << "idx 0 " <<  q.col(0).transpose() << " idx " << 2 * sub_div / 2 << " " << q(dim + 1, 2 * sub_div / 2) << std::endl;
+
+        // for(int idx : rod1)
+        // {
+        //     std::cout << "idx " << idx << " " << q.col(idx).transpose() << std::endl;
+        // }
+
+        sim.dof_offsets.resize(sim.n_nodes, 0);
+
+        std::vector<int> key_points = { rod0.front(), 
+                                        rod1.front(),
+                                        rod1.back(), 
+                                        2 * sub_div / 2 
+                                    };
+
+        addKeyPointsDoF(key_points, w_entry, dof_cnt);
+        
+        std::vector<int> rod0_kp_on_strand = { 0, 2 * sub_div / 2, n_points_circle};
+        std::vector<int> rod0_kp_global = {0, 2 * sub_div / 2, 0};
+        std::vector<int> rod0_kp_dof = { 0, 3, 0 };
+
+        markDoFSingleStrand(rod0, rod0_kp_on_strand,
+            rod0_kp_global, 
+            rod0_kp_dof,
+            w_entry, dof_cnt, WARP, true);
+        
+        // std::cout << "key_points_location_rod1[0] " << key_points_location_rod1[0] << std::endl;
+        // std::cout << "key_points_location_rod1[1] " << key_points_location_rod1[1] << std::endl;
+
+        std::vector<int> rod1_kp_on_strand = { 0, key_points_location_rod1[0], key_points_location_rod1[1], int(rod1.size()) - 1 };
+        std::vector<int> rod1_kp_global = { n_points_circle, 0, 2 * sub_div / 2, sim.n_nodes - 1};
+        std::vector<int> rod1_kp_dof = { 1, 0, 3, 2 };
+        
+        markDoFSingleStrand(rod1, 
+            rod1_kp_on_strand,
+            rod1_kp_global,
+            rod1_kp_dof,
+             w_entry, dof_cnt, WEFT);
+        
+        
+        std::vector<T> data_points_discrete_arc_length;
+        
+        for(int i = 0; i < curve->data_points.size(); i++)
+        {
+            data_points_discrete_arc_length.push_back(q(dim, i*sub_div/2));
+        }
+        
+        addRods(rod0, WARP, cnt, 0);
+        addRods(rod1, WEFT, cnt, 1);
+
+        sim.pbc_ref_unique.push_back(IV2(sub_div/2, sub_div/2 * 3));
+        sim.pbc_ref_unique.push_back(IV2(rod1.front(), rod1.back()));
+
+        sim.pbc_ref.push_back(std::make_pair(WARP, IV2(sub_div/2, sub_div/2 * 3)));
+        sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(rod1.front(), rod1.back())));
+
         sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
 
-        sim.curvature_functions.push_back(new LineCurvature<T, dim>());
-        sim.curvature_functions.push_back(new LineCurvature<T, dim>());
+        if(true)
+        {
+            // sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+            TVDOF mask_xyu = TVDOF::Ones(); mask_xyu[3] = 0.0;
 
-        sim.slide_over_n_rods = IV2(std::floor(sub_div * 0.25), std::floor(sub_div * 0.25));
-        T rod_length = (sim.q0.col(rods.col(1)(0)).template segment<dim>(0) - 
-            sim.q0.col(rods.col(1)(1)).template segment<dim>(0)).norm();
+            sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), mask_xyu);
+            
+            sim.dirichlet_data[sub_div / 2 * 2] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
 
-        sim.tunnel_u = sim.slide_over_n_rods[0] * rod_length;
-        sim.tunnel_v = sim.tunnel_u;
+            TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
+            shift_x[1] = -1.5 * sim.unit;
+            mask_x[1] = 1; mask_x[2] = 1; mask_x[3] = 1;
+            sim.dirichlet_data[rod1.front()] = std::make_pair(shift_x, mask_x);
+        }
+       
+
+        sim.sliding_nodes.push_back(0);
+
+        sim.q0 = q;
+        // dof_cnt = sim.n_nodes * sim.dof;
+        sim.n_dof = dof_cnt;
+        sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+
+
+        sim.slide_over_n_rods = IV2(0, std::floor(sub_div * 0.3));
+
+        T r0 = 0;
+        T r1 = sim.q0(dim + 1, rod1[1]) - sim.q0(dim + 1, rod1[0]);
+
+        sim.tunnel_u = sim.slide_over_n_rods[0] * r0;
+        sim.tunnel_v = sim.slide_over_n_rods[1] * r1;
+
+
+        Vector<T, dim + 1> q0 = q.col(0).template segment<dim + 1>(0);
+        Vector<T, dim + 1> q1 = q.col(rod0.back()).template segment<dim + 1>(0);
+        
+        DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
+            q0, q1);
+        sim.curvature_functions.push_back(curve_func);
+        curve_func->setData(curve, data_points_discrete_arc_length);
+
+        q0.template segment<dim>(0) = rod1_from; q1.template segment<dim>(0) = rod1_to;
+        q0(dim) = q(dim + 1, rod1.front()); q1(dim) = q(dim + 1, rod1.back());
+        sim.curvature_functions.push_back(new LineCurvature<T, dim>(q0, q1));
+        // std::cout << q0.transpose() << std::endl;
+        // std::cout << q1.transpose() << std::endl;
+
+        sim.normal = TV3Stack(3, sim.n_rods);
+        sim.normal.setZero();
+
+        // std::cout << q.transpose() << std::endl;
+        // std::cout << rods.transpose() << std::endl;
+
+        // for (int i : rod1)
+        //     std::cout << i << " ";
+        // std::cout << std::endl;
+        // std::cout << sim.W.rows() << " " << sim.W.cols() << std::endl;
+        // std::cout << sim.W << std::endl;
     }
 }
 
@@ -1085,18 +1176,33 @@ void UnitPatch<T, dim>::buildSlidingTestScene(int sub_div)
 
         sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
 
-        sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-        sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+        if(true)
+        {
+            sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+            sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
 
-        sim.dirichlet_data[rod1.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-        // sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-        // sim.dirichlet_data[sub_div / 2] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            sim.dirichlet_data[rod1.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+            TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
+            shift_x[0] = 0.8 * sim.unit;
+            mask_x[0] = 1; mask_x[2] = 1; mask_x[3] = 1;
+            sim.dirichlet_data[rod1.back()] = std::make_pair(shift_x, mask_x);
+        }
+        if(false)
+        {
+            sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+            sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
 
-        TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
-        shift_x[0] = 1.2 * sim.unit;
-        mask_x[0] = 1; mask_x[2] = 1; mask_x[3] = 1;
-        // sim.dirichlet_data[rod1.front()] = std::make_pair(shift_x, mask_x);
-        sim.dirichlet_data[rod1.back()] = std::make_pair(shift_x, mask_x);
+            sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+            TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
+
+            T s = 0.15 * std::sqrt(2);
+
+            shift_x[0] = s * sim.unit;
+            // shift_x[1] = -(0.4 + 0.5 - s) * sim.unit;
+            shift_x[1] = -0.45 * sim.unit;
+            mask_x[0] = 1; mask_x[1] = 1; mask_x[2] = 1; mask_x[3] = 1;
+            sim.dirichlet_data[rod1.front()] = std::make_pair(shift_x, mask_x);
+        }
 
         sim.sliding_nodes.push_back(sub_div / 2);
 

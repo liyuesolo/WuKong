@@ -8,7 +8,7 @@ void EoLRodSim<T, dim>::runDerivativeTest()
     // print_force_mag = true;
     run_diff_test = true;
     add_regularizor = false;
-    add_stretching = true;
+    add_stretching = false;
     add_penalty =false;
     add_bending = true;
     add_shearing = false;
@@ -26,6 +26,7 @@ void EoLRodSim<T, dim>::runDerivativeTest()
         dq(2, 3) += 0.01;
         dq(2, 1) += 0.01;
         dq(1, 4) += 0.01;
+        dq(2, 4) += 0.01;
         dq(2, 2) += 0.01;
         dq(1, 3) += 0.01;
         
@@ -199,7 +200,7 @@ void EoLRodSim<T, dim>::checkGradient(Eigen::Ref<VectorXT> dq)
         dq(dof_i) -= 1.0 * epsilon;
         T E1 = computeTotalEnergy(dq, lambdas, kappa);
         
-        std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
+        // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         // gradient_FD(dof_i) = (E1 - E0) / (2*epsilon);
         gradient_FD(dof_i) = (E1 - E0) / (1*epsilon);
         if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)

@@ -63,7 +63,7 @@ public:
 
     void buildZigZagScene(int sub_div);
 
-    void buildStraightYarn3x1(int sub_div);
+    void peanut(int sub_div);
 
 
 private:
@@ -141,7 +141,7 @@ private:
         const std::vector<int>& key_points_location_global, 
         const std::vector<int>& key_points_location_dof, 
         std::vector<Eigen::Triplet<T>>& w_entry,
-        int& dof_cnt, int yarn_type);
+        int& dof_cnt, int yarn_type, bool closed = false);
 
     void addKeyPointsDoF(const std::vector<int>& key_points, 
         std::vector<Eigen::Triplet<T>>& w_entry,

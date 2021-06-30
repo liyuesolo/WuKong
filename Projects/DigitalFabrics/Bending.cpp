@@ -34,30 +34,103 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
 
                         }
         
-        // for (int i = 0; i < 9; i++)
-        // {
-        //     int node_i = std::floor(T(i)/(dim + 1));
-        //     int dof_i = i % (dim + 1);
-        //     int offset = dof_i == dim ? dim + uv_offset : dof_i;
+        
+    };
 
-        //     entry_K.push_back(Entry(nodes[node_i] * dof + offset, nodes[0] * dof + dim + uv_offset, -J[i][9] * -dkappa0du));
-        //     entry_K.push_back(Entry(nodes[0] * dof + dim + uv_offset, nodes[node_i] * dof + offset, -J[9][i] * -dkappa0du));
-        // }
+    auto addHessianEntry = [&](int n0, int n1, int n2, int uv_offset)
+    {
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        std::vector<int> nodes = {n0, n1, n2};        
+        getMaterialPositions(q_temp, nodes, X, uv_offset, dXdu, d2Xdu2, true, true);
 
-        // entry_K.push_back(Entry(nodes[0] * dof + dim + uv_offset, nodes[0] * dof + dim + uv_offset, -J[9][9] * d2kappa0du2));
+        std::vector<TV> x(6);
+        convertxXforMaple(x, X, q_temp, nodes);
+        
+        Vector<T, 12> F;
+        F.setZero();
+
+        #include "Maple/YarnBendDiscreteRestCurvatureF.mcg"
+
+        for(int d = 0; d < dim; d++)
+        {
+            entry_K.push_back(Eigen::Triplet<T>(nodes[0] * dof + dim + uv_offset, 
+                                nodes[0] * dof + dim + uv_offset, -F[0*dim + 3*dim + d] * d2Xdu2[0][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[1] * dof + dim + uv_offset, 
+                                nodes[1] * dof + dim + uv_offset, -F[1*dim + 3*dim + d] * d2Xdu2[1][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[2] * dof + dim + uv_offset, 
+                                nodes[2] * dof + dim + uv_offset, -F[2*dim + 3*dim + d] * d2Xdu2[2][d]));
+        }
+        
     };
 
     iterateYarnCrossingsSerial([&](int middle, int bottom, int top, int left, int right){
         if (left != -1 && right != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[right] && !is_end_nodes[left])
-                entryHelperBending(middle, right, left, 0);
+                {
+                    entryHelperBending(middle, right, left, 0);
+                    addHessianEntry(middle, right, left, 0);
+                }
         if (top != -1 && bottom != -1)
             if(!is_end_nodes[middle] && !is_end_nodes[top] && !is_end_nodes[bottom])
-                entryHelperBending(middle, top, bottom, 1);
+                {
+                    entryHelperBending(middle, top, bottom, 1);
+                    addHessianEntry(middle, top, bottom, 1);
+                }
     });
 
     if(!add_pbc_bending)
         return;
+
+    iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+        
+        std::vector<TV> x(nodes.size());
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
+        convertxXforMaple(x, X, q_temp, nodes);
+        
+        T J[16][16];
+        memset(J, 0, sizeof(J));
+        #include "Maple/YarnBendDiscreteRestCurvaturePBCJ.mcg"
+        for(int k = 0; k < nodes.size(); k++)
+            for(int l = 0; l < nodes.size(); l++)
+                for(int i = 0; i < dim; i++)
+                    for (int j = 0; j < dim; j++)
+                        {
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + i, nodes[l] * dof + j, -J[k*dim + i][l * dim + j]));
+
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + i, nodes[l] * dof + dim + yarn_type, -J[k*dim + i][4 * dim + l * dim + j] * dXdu[l][j]));
+
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + dim + yarn_type, nodes[l] * dof + j, -J[4 * dim + k * dim + i][l * dim + j] * dXdu[k][i]));
+
+                            
+                            entry_K.push_back(Eigen::Triplet<T>(nodes[k] * dof + dim + yarn_type, 
+                                                                nodes[l] * dof + dim + yarn_type, 
+                                                                -J[4 * dim + k*dim + i][4 * dim + l * dim + j] * dXdu[l][j] * dXdu[k][i]));
+
+                        }
+    });
+
+    iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+        
+        std::vector<TV> x(nodes.size());
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
+        convertxXforMaple(x, X, q_temp, nodes);
+        Vector<T, 16> F;
+        #include "Maple/YarnBendDiscreteRestCurvaturePBCF.mcg"
+        
+        for(int d = 0; d < dim; d++)
+        {
+            entry_K.push_back(Eigen::Triplet<T>(nodes[0] * dof + dim + yarn_type, 
+                                nodes[0] * dof + dim + yarn_type, -F[0*dim + 4*dim + d] * d2Xdu2[0][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[1] * dof + dim + yarn_type, 
+                                nodes[1] * dof + dim + yarn_type, -F[1*dim + 4*dim + d] * d2Xdu2[1][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[2] * dof + dim + yarn_type, 
+                                nodes[2] * dof + dim + yarn_type, -F[2*dim + 4*dim + d] * d2Xdu2[2][d]));
+            entry_K.push_back(Eigen::Triplet<T>(nodes[3] * dof + dim + yarn_type, 
+                                nodes[3] * dof + dim + yarn_type, -F[3*dim + 4*dim + d] * d2Xdu2[3][d]));
+        }
+    });
 
 }
 
@@ -336,6 +409,27 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
             std::cout << "bending force " << (residual - residual_cp).norm() << std::endl;
         return;
     }
+
+    iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+        
+        std::vector<TV> x(nodes.size());
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
+        convertxXforMaple(x, X, q_temp, nodes);
+        Vector<T, 16> F;
+        #include "Maple/YarnBendDiscreteRestCurvaturePBCF.mcg"
+        
+        int cnt = 0;
+        for (int node : nodes)
+        {
+            residual.col(node).template segment<dim>(0) += F.template segment<dim>(cnt*dim);
+            for(int d = 0; d < dim; d++)
+            {
+                residual(dim + yarn_type, node) += F[cnt*dim + 4*dim + d] * dXdu[cnt][d];
+            }
+            cnt++;
+        }
+    });
     
     if (print_force_mag)
         std::cout << "bending force " << (residual - residual_cp).norm() << std::endl;
@@ -471,6 +565,20 @@ T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)
     
     if(!add_pbc_bending)
         return energy;
+    
+
+    iteratePBCBoundaryPairs([&](std::vector<int> nodes, int yarn_type){
+        
+        std::vector<TV> x(nodes.size());
+        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
+        getMaterialPositions(q_temp, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
+        convertxXforMaple(x, X, q_temp, nodes);
+
+        T V[1];
+        #include "Maple/YarnBendDiscreteRestCurvaturePBCV.mcg"
+        energy += V[0];
+        // std::cout << V[0] << std::endl;
+    });
 
     return energy;
 }

@@ -495,8 +495,17 @@ void EoLRodSim<T, dim>::buildPlanePeriodicBCScene3x3()
     W.setIdentity();
 
     // add curvature function
-    curvature_functions.push_back(new LineCurvature<T, dim>());
-    curvature_functions.push_back(new LineCurvature<T, dim>());
+    
+    Vector<T, dim + 1> v0 = q.col(0).template segment<dim + 1>(0);
+    Vector<T, dim + 1> v1 = q.col(1).template segment<dim + 1>(0);
+
+    Vector<T, dim + 1> v2 = q.col(2).template segment<dim + 1>(0);
+    v2[dim] = q(dim + 1, 2);
+    Vector<T, dim + 1> v3 = q.col(3).template segment<dim + 1>(0);
+    v3[dim] = q(dim + 1, 3);
+
+    curvature_functions.push_back(new LineCurvature<T, dim>(v0, v1));
+    curvature_functions.push_back(new LineCurvature<T, dim>(v2, v3));
 }
 
 template<class T, int dim>

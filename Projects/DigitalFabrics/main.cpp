@@ -462,6 +462,7 @@ int main(int argc, char *argv[])
 		{
 			selected = -1;
             eol_sim.q0 = eol_sim.q;
+            // eol_sim.q0.transpose().block(0, 0, eol_sim.n_nodes, dim)  = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, dim);
 			return true;
 		}
 	    return false;
@@ -495,18 +496,18 @@ int main(int argc, char *argv[])
                 auto zero_delta = delta_dof;
                 Eigen::VectorXd mask_dof(4); mask_dof.setZero();
                 
-                delta_dof(0) = delta_x * eol_sim.unit;
-                // delta_dof(1) = delta_y * eol_sim.unit;
+                // delta_dof(0) = delta_x * eol_sim.unit;
+                delta_dof(1) = delta_y * eol_sim.unit;
                 
-                mask_dof(0) = 1;
-                // mask_dof(1) = 1;
+                // mask_dof(0) = 1;
+                mask_dof(1) = 1;
                 mask_dof(2) = 1;
                 mask_dof(3) = 1;
                 
                 eol_sim.dirichlet_data[selected] = std::make_pair(delta_dof, mask_dof);
                 eol_sim.advanceOneStep();
                 updateScreen(viewer);
-                
+                std::cout << delta_x << " " << delta_y << std::endl;
                 return true;
             }
 

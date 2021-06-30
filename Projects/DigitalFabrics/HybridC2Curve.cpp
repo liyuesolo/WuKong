@@ -125,10 +125,8 @@ void HybridC2Curve<T, dim>::sampleCurves(std::vector<TV>& points)
             T theta = t * M_PI * 0.5;
             TV F0, F1;
             // maps to 0.5 ~ 1 for the first spline
-            // TV F0 = curve_func((theta + M_PI * 0.5)/M_PI, curve_idx);
             F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
             // maps to 0 ~ 0.5 for the second spline
-            // TV F1 = curve_func(theta/M_PI, curve_idx+1);
             F(theta/M_PI, curve_idx+1, F1);
             // equation (2)
             TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;

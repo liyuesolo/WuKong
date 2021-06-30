@@ -30,8 +30,8 @@ public:
     virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h) 
     { 
         X = starting_point.template segment<dim>(0) + 
-            u * (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0));
-        dXdu = (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0));
+            (u - starting_point[dim]) / (ending_point[dim] - starting_point[dim]) * (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0));
+        dXdu = (ending_point.template segment<dim>(0) - starting_point.template segment<dim>(0)) / (ending_point[dim] - starting_point[dim]) ;
         d2Xdu2 = TV::Zero();
     }
 };
@@ -39,10 +39,14 @@ public:
 template<class T, int dim>
 class LineCurvature : public CurvatureFunction<T, dim>
 {
+    using TV = Vector<T, dim>;
+
 public:
     LineCurvature(Vector<T, dim + 1> q0, 
                 Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
     LineCurvature() : CurvatureFunction<T, dim>(){}
+    
+    virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h);
 };
 
 template<class T, int dim>

@@ -3,6 +3,7 @@ template<class T, int dim>
 void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X, 
     TV& dXdu, TV& d2Xdu2, bool g, bool h) 
 {
+    bool debug = false;
     if (u < 0)
     {
         X = this->starting_point.template segment<dim>(0);
@@ -10,7 +11,8 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
         d2Xdu2 = TV::Zero();
         return;
     }
-    // std::cout << "getMaterialPos" << std::endl;
+    if (debug)
+        std::cout << "getMaterialPos" << std::endl;
     T dx = 1.0;
 
     int left_node = 0;
@@ -40,8 +42,8 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
         t = t * 0.5 + 0.5;
     else
         interpolate = true;
-
-    // std::cout << "t " << t << " u " << u <<  " curve idx " << curve_id << " left node " << left_node << " interpolate " << interpolate << std::endl;
+    if (debug)
+        std::cout << "t " << t << " u " << u <<  " curve idx " << curve_id << " left node " << left_node << " interpolate " << interpolate << std::endl;
     
     // curve->getPosOnCurve(curve_id, t, X, interpolate);
 
@@ -55,9 +57,23 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
 
     // T shifted = shift ? t * 0.5 + 0.5 : t * 0.5;
     // X *= 0.03;
-    // std::cout << u << " " << X.transpose() << std::endl;
-    // std::cout << "getMaterialPos done" << std::endl;
-    // std::getchar();
+    if (debug)
+    {
+        std::cout << u << " " << X.transpose() << std::endl;
+        std::cout << "getMaterialPos done" << std::endl;
+        std::getchar();
+    }
+}
+template<class T, int dim>
+void LineCurvature<T, dim>::getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h) 
+{ 
+    T scale = (this->ending_point[dim] - this->starting_point[dim]);
+    X = this->starting_point.template segment<dim>(0) + 
+        (u - this->starting_point[dim]) / scale
+         * (this->ending_point.template segment<dim>(0) - this->starting_point.template segment<dim>(0));
+    
+    dXdu = (this->ending_point.template segment<dim>(0) - this->starting_point.template segment<dim>(0)) / scale;
+    d2Xdu2 = TV::Zero();
 }
 
 template<class T, int dim>
@@ -148,6 +164,8 @@ template class SineCurvature<double, 2>;
 template class CircleCurvature<double, 3>;
 template class CircleCurvature<double, 2>;   
 
+template class LineCurvature<double, 3>;
+template class LineCurvature<double, 2>; 
 
 template class DiscreteHybridCurvature<double, 3>;
 template class DiscreteHybridCurvature<double, 2>;   
