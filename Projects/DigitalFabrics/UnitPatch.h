@@ -61,9 +61,11 @@ public:
     void buildStraightYarnScene(int sub_div);
     void buildUnitFromC2Curves(int sub_div);
 
-    void buildZigZagScene(int sub_div);
+    void buildCircleCrossScene(int sub_div);
 
-    void peanut(int sub_div);
+    // Mechanism
+    void buildDragCircleScene(int sub_div);
+    void buildGripperScene(int sub_div);
 
 
 private:
