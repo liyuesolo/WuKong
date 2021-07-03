@@ -69,26 +69,31 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
         if(tileUnit)
             eol_sim.buildPeriodicNetwork(V, F, C);
         else
-            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+        {
+            if (eol_sim.new_frame_work)
+                eol_sim.generateMeshForRendering(V, F);
+            else
+                eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+        }
         viewer.data().set_mesh(V, F);
         if(showUnit)
             viewer.data().set_colors(C);
         if (per_yarn)
         {
-            eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            viewer.data().set_colors(C);
-            if(tileUnit)
-            {
-                eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-                C.conservativeResize(F.rows(), 3);
-                tbb::parallel_for(0, eol_sim.n_rods * n_faces, [&](int i){
-                    for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/40); j++)
-                    {
-                        C.row(j * eol_sim.n_rods * n_faces + i) = C.row(i);
-                    }
-                });
-                viewer.data().set_colors(C);
-            }
+            // eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+            // viewer.data().set_colors(C);
+            // if(tileUnit)
+            // {
+            //     eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+            //     C.conservativeResize(F.rows(), 3);
+            //     tbb::parallel_for(0, eol_sim.n_rods * n_faces, [&](int i){
+            //         for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/n_faces); j++)
+            //         {
+            //             C.row(j * eol_sim.n_rods * n_faces + i) = C.row(i);
+            //         }
+            //     });
+            //     viewer.data().set_colors(C);
+            // }
         }
         if(show_original && !tileUnit)
         {
@@ -272,7 +277,10 @@ int main(int argc, char *argv[])
                     viewer.data().set_mesh(V, F);
                     if (showStretching)
                     {
-                        eol_sim.getColorFromStretching(C);
+                        if(eol_sim.new_frame_work)
+                            eol_sim.showStretching(C);
+                        else
+                            eol_sim.getColorFromStretching(C);
                         viewer.data().set_colors(C);
                     }   
                 }

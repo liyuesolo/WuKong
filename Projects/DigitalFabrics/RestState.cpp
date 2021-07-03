@@ -1,4 +1,5 @@
-#include "CurvatureFunction.h"
+#include "RestState.h"
+
 template<class T, int dim>
 void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X, 
     TV& dXdu, TV& d2Xdu2, bool g, bool h) 

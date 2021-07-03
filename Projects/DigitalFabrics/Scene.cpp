@@ -16,7 +16,7 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
             rod_shift.col(i + n_rods * tile_id).segment<2>(0) += IV2(shift, shift);
         });
     };
-    
+    int n_faces = 20;
     DOFStack q_tile = q;
     IV3Stack rods_tile = rods;
     TV3Stack normal_tile = normal;
@@ -78,7 +78,7 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
     
     C.resize(F.rows(), F.cols());
     tbb::parallel_for(0, int(F.rows()), [&](int i){
-        if (i < n_rods * (40))
+        if (i < n_rods * (n_faces))
             C.row(i) = TV3(0, 1, 0);
         else
             C.row(i) = TV3(1, 1, 0);

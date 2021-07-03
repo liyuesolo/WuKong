@@ -1,6 +1,8 @@
 #include <iostream>
 #include <utility>
 #include <fstream>
+#include <unordered_map>
+
 #include "UnitPatch.h"
 #include "HybridC2Curve.h"
 
@@ -41,6 +43,34 @@ void UnitPatch<T, dim>::addKeyPointsDoF(const std::vector<int>& key_points,
             w_entry.push_back(Entry(key_points[i] * sim.dof + d, dof_cnt++, 1.0));
     }    
     
+}
+
+template<class T, int dim>
+void UnitPatch<T, dim>::markCrossingDoF(std::vector<Eigen::Triplet<T>>& w_entry,
+        int& dof_cnt)
+{
+    for (auto& crossing : sim.rod_crossings)
+    {
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+
+        Vector<int, dim + 1> entry_rod0; 
+        sim.Rods[rods_involved.front()]->getEntry(node_idx, entry_rod0);
+
+        // push Lagrangian dof first
+        for (int d = 0; d < dim; d++)
+        {
+            w_entry.push_back(Entry(entry_rod0[d], dof_cnt++, 1.0));
+        }
+        
+        // push Eulerian dof for all rods
+        for (int rod_idx : rods_involved)
+        {
+            sim.Rods[rod_idx]->getEntry(node_idx, entry_rod0);
+            w_entry.push_back(Entry(entry_rod0[dim], dof_cnt++, 1.0));
+        }
+        
+    }
 }
 
 template<class T, int dim>
@@ -101,6 +131,7 @@ void UnitPatch<T, dim>::addStraightYarnCrossNPoints(const TV& from, const TV& to
     std::vector<int>& key_points_location, 
     int start, bool pbc)
 {
+    
     int cnt = 1;
     if ((from - passing_points[0]).norm() < 1e-6 )
     {
@@ -215,8 +246,9 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         // curve->getLinearSegments(points_on_curve);
         curve->sampleCurves(points_on_curve);
 
-        // curve->derivativeTestdF();
+        // Rod<T, dim>* r0 = new Rod<T, dim>(sim.deformed_states);
 
+        
         
         sim.n_nodes = points_on_curve.size();
         sim.n_rods = points_on_curve.size() - 1;
@@ -238,13 +270,26 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
             rod0.push_back(i);
             q(dim, i) = T(i) * (curve->data_points.size() - 1 )/ (sim.n_nodes - 1);
         }
-        
+
+        sim.deformed_states.resize(sim.n_nodes * (dim + 1));
+        for (int i = 0; i < sim.n_nodes; i++)
+        {
+            for(int d = 0; d < dim + 1; d++)
+            {
+                sim.deformed_states[i*(dim + 1) + d] = q(d, i);
+            }
+        }
+
+        // r0->indices = rod0;
         sim.dof_offsets.resize(sim.n_nodes, 0);
         // rod0 0, points_on_curve.size()
 
+        int offset_cnt = 0;
         for (int i = 0; i < sim.n_nodes; i++)
         {
             sim.dof_offsets[i] = dof_cnt;
+            // r0->offset.push_back(offset_cnt);
+            offset_cnt += 3;
             for(int d = 0; d < dim; d++)
             {
                 w_entry.push_back(Eigen::Triplet<T>(i * sim.dof + d, dof_cnt, 1.0));
@@ -319,10 +364,14 @@ void UnitPatch<T, dim>::buildUnitFromC2Curves(int sub_div)
         
         DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
             q0, q1);
-        sim.curvature_functions.push_back(curve_func);
         curve_func->setData(curve, data_points_discrete_arc_length);
+        sim.curvature_functions.push_back(curve_func);
+
+        // r0->rest_state = curve_func;
+
 
         // std::cout << q.transpose() << std::endl;
+        // sim.Rods.push_back(r0);
     }
 
     // sim.checkMaterialPositionDerivatives();
@@ -699,8 +748,13 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
 
     if constexpr (dim == 2)
     {   
+        int sub_div_2 = sub_div / 2;
+        sim.new_frame_work = true;
+
         T theta = M_PI / 4.0;
-        TV center(0.5, 0);
+        
+        TV center = TV(0.5, 0.5) * sim.unit;
+        
         HybridC2Curve<T, dim>* curve = new HybridC2Curve<T, dim>(sub_div);
         curve->data_points.push_back(TV(0.5 - 0.5 * std::cos(theta), 0.5 + 0.5 * std::sin(theta)) * sim.unit);
         curve->data_points.push_back(TV(0.5 + 0.5 * std::cos(theta), 0.5 + 0.5 * std::sin(theta)) * sim.unit);
@@ -711,209 +765,263 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         std::vector<TV> points_on_curve;
         curve->sampleCurves(points_on_curve);
 
-        sim.n_nodes = points_on_curve.size() - 1;
-        int node_cnt = sim.n_nodes;
-        sim.n_rods = points_on_curve.size() - 1;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
 
-
-        q = DOFStack(sim.dof, sim.n_nodes); q.setZero();
-        // rods = IV3Stack(3, sim.n_rods); rods.setZero();
-        // connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;
-
-        int cnt = 0, dof_cnt = 0;
-
-        std::vector<int> rod0;
-        for (int i = 0; i < sim.n_nodes; i++)
+        deformed_states.resize((points_on_curve.size() - 1) * (dim + 1));
+        
+        // rod0 is the circle
+        // there are four nodes crossed by the straight yarns        
+        Rod<T, dim>* r0 = new Rod<T, dim>(deformed_states, 0, true);
+        std::unordered_map<int, Vector<int, dim + 1>> offset_map;
+        std::vector<int> node_index_list, dof_offset;
+        std::vector<T> data_points_discrete_arc_length;
+        
+        for (int i = 0; i < points_on_curve.size() - 1; i++)
         {
-            setPos(i, points_on_curve[i], points_on_curve[i]);
-            rod0.push_back(i);
-            q(dim, i) = T(i) * (curve->data_points.size() - 1 )/ (sim.n_nodes);
+            offset_map[i] = Vector<int, dim + 1>::Zero();
+            node_cnt++;
+            node_index_list.push_back(i);
+            //push Lagrangian DoF
+            deformed_states.template segment<dim>(full_dof_cnt) = points_on_curve[i];
+            offset_map[i][0] = full_dof_cnt++;
+            offset_map[i][1] = full_dof_cnt++;
+            // push Eulerian DoF
+            deformed_states[full_dof_cnt] = T(i) * (curve->data_points.size() - 1 ) / (points_on_curve.size() - 1);
+            offset_map[i][2] = full_dof_cnt++;
+            
         }
-        rod0.push_back(0);
+        // std::cout << deformed_states << std::endl;
+        // // std::getchar();
+        // for (auto& it: offset_map) {
+        //     std::cout << it.first << " " << it.second.transpose() << std::endl;
+        // }
+        // std::getchar();
+        
 
-        sim.n_nodes += 1;
-        setPos(sim.n_nodes - 1, center, center);
+        node_index_list.push_back(0); // closed curve
+        r0->offset_map = offset_map;
+        r0->indices = node_index_list;
+    
+        for(int i = 0; i < curve->data_points.size(); i++)
+            data_points_discrete_arc_length.push_back(deformed_states[i*sub_div_2*(dim+1)+dim]);
+
+        Vector<T, dim + 1> q0, q1;
+        r0->frontDoF(q0); r0->backDoF(q1);
+
+        DiscreteHybridCurvature<T, dim>* rest_state_rod0 = new DiscreteHybridCurvature<T, dim>(q0, q1);
+        sim.curvature_functions.push_back(rest_state_rod0);
+        rest_state_rod0->setData(curve, data_points_discrete_arc_length);
+
+        r0->rest_state = rest_state_rod0;
+        r0->validCheck();
+        r0->dof_node_location = {0, 2 * sub_div_2};
+        sim.Rods.push_back(r0);
+
+        auto dof_pt0 = offset_map[0];
+        auto dof_pt2 = offset_map[sub_div_2*2];
         
-        TV dir_rod1 = (curve->data_points[1] - curve->data_points[3]).normalized();
-        TV rod1_from = curve->data_points[3] - dir_rod1 * 0.1 * sim.unit;
-        TV rod1_to = curve->data_points[1] + dir_rod1 * 0.1 * sim.unit;
+        offset_map.clear();
+        // ========================================= rod 0 is done now =========================================
         
+        // add the center
+        int center_id = node_cnt;
+        deformed_states.conservativeResize(full_dof_cnt + dim);
+        deformed_states.template segment<dim>(full_dof_cnt) = center;
+        offset_map[node_cnt] = Vector<int, dim + 1>::Zero();
+        offset_map[node_cnt][0] = full_dof_cnt++;
+        offset_map[node_cnt][1] = full_dof_cnt++;
+        node_cnt++;
+        // std::cout<< deformed_states << std::endl;
+        // std::getchar();
+
+        Rod<T, dim>* r1 = new Rod<T, dim>(deformed_states, 1);
+
+        TV dir_rod1 = (curve->data_points[2] - curve->data_points[0]).normalized();
+        TV rod1_from = curve->data_points[0] - dir_rod1 * 0.1 * sim.unit;
+        TV rod1_to = curve->data_points[2] + dir_rod1 * 0.1 * sim.unit;
+
         std::vector<int> rod1, key_points_location_rod1;
         std::vector<TV> points_rod1;
-
+        
         addStraightYarnCrossNPoints(rod1_from, rod1_to, 
-                {curve->data_points[3], center, curve->data_points[1]}, 
-                {3 * sub_div/2, sim.n_nodes - 1, sub_div / 2}, 
+                {curve->data_points[0], center, curve->data_points[2]}, 
+                {0, center_id, 2 * sub_div_2}, 
                 sub_div, 
                 points_rod1, rod1, 
                 key_points_location_rod1,
-                sim.n_nodes);
+                node_cnt);
+        // std::cout << "point1 size " << points_rod1.size() << std::endl;
+        // std::cout << "full_dof_cnt " << full_dof_cnt << std::endl;
+
+
+        // r1->dof_node_location = key_points_location_rod1;
+        r1->dof_node_location = { key_points_location_rod1.front(), key_points_location_rod1.back() };
+        for(TV pt : points_rod1)
+            std::cout << pt.transpose() << std::endl;
+
         
-        sim.n_nodes += points_rod1.size();
-        sim.n_rods += rod1.size() - 1;
-        q.conservativeResize(sim.dof, sim.n_nodes);
-          
+        deformed_states.conservativeResize(full_dof_cnt + (points_rod1.size() - 1) * (dim + 1) + 3);
+        r1->indices = rod1;
+        
         
         for (int i = 0; i < points_rod1.size(); i++)
         {
-            int idx = node_cnt + i;
-            setPos(idx, points_rod1[i], points_rod1[i]);
-            q(dim + 1, idx) = LDis(rod1.front(), idx) / (rod1_to - rod1_from).norm();
+            offset_map[node_cnt] = Vector<int, dim + 1>::Zero();
+            // dof_offset.push_back(full_dof_cnt);
+            //push Lagrangian DoF
+            deformed_states.template segment<dim>(full_dof_cnt) = points_rod1[i];
+            offset_map[node_cnt][0] = full_dof_cnt++;
+            offset_map[node_cnt][1] = full_dof_cnt++;
+            // push Eulerian DoF
+            deformed_states[full_dof_cnt] = (points_rod1[i] - rod1_from).norm() / (rod1_to - rod1_from).norm();
+            offset_map[node_cnt][2] = full_dof_cnt++;
+            node_cnt++;
         }
 
-        q(dim + 1, 3 * sub_div / 2) = LDis(rod1.front(), 3 * sub_div / 2) / (rod1_to - rod1_from).norm();
-        q(dim + 1, 1 * sub_div / 2) = LDis(rod1.front(), 1 * sub_div / 2) / (rod1_to - rod1_from).norm();
+        deformed_states[full_dof_cnt] = (center - rod1_from).norm() / (rod1_to - rod1_from).norm();
+        offset_map[center_id][dim] = full_dof_cnt++;
 
-        node_cnt = sim.n_nodes;
+        deformed_states[full_dof_cnt] = (curve->data_points[0] - rod1_from).norm() / (rod1_to - rod1_from).norm();
+        offset_map[0] = Vector<int, dim + 1>::Zero();
+        offset_map[0][dim] = full_dof_cnt++;
+        offset_map[0].template segment<dim>(0) = dof_pt0.template segment<dim>(0);
 
-        TV dir_rod2 = (curve->data_points[0] - curve->data_points[2]).normalized();
-        TV rod2_from = curve->data_points[0] - dir_rod2 * 0.1 * sim.unit;
-        TV rod2_to = curve->data_points[2] + dir_rod2 * 0.1 * sim.unit;
+        deformed_states[full_dof_cnt] = (curve->data_points[2] - rod1_from).norm() / (rod1_to - rod1_from).norm();
+        offset_map[sub_div_2 * 2] = Vector<int, dim + 1>::Zero();
+        offset_map[sub_div_2 * 2][dim] = full_dof_cnt++;
+        offset_map[sub_div_2 * 2].template segment<dim>(0) = dof_pt2.template segment<dim>(0);
+
+        // std::cout << deformed_states.rows() << std::endl;
+        // std::getchar();
+        // std::cout << deformed_states << std::endl;
+        // 
+        // std::getchar();
+        // for (int i : rod1)
+        //     std::cout << i << " ";
+        // std::cout << std::endl;
+        // for (auto& it: offset_map) {
+        //     std::cout << it.first << " " << it.second.transpose() << std::endl;
+        // }
+        r1->offset_map = offset_map;
+        r1->frontDoF(q0); r1->backDoF(q1);
         
-        std::vector<int> rod2, key_points_location_rod2;
-        std::vector<TV> points_rod2;
+        r1->rest_state = new LineCurvature<T, dim>(q0, q1);
+        r1->validCheck();
+        sim.Rods.push_back(r1);
 
-        addStraightYarnCrossNPoints(rod2_from, rod2_to, 
-                {curve->data_points[0], curve->data_points[2]}, 
-                {0, 2 * sub_div / 2}, 
-                sub_div, 
-                points_rod2, rod2, 
-                key_points_location_rod2,
-                sim.n_nodes);
+        sim.rod_crossings.push_back(new RodCrossing<T, dim>(0, {0, 1} ));
+        sim.rod_crossings.push_back(new RodCrossing<T, dim>(sub_div_2 * 2, {0, 1} ));
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        r0->markDoF(w_entry, dof_cnt);
+        r1->markDoF(w_entry, dof_cnt);
+
+        for (int d = 0; d < dim + 1; d++)
+            sim.dirichlet_dof[q0[d]] = 0;
+        for (int d = 0; d < dim + 1; d++)
+            sim.dirichlet_dof[q1[d]] = 0;
+        // std::cout << node_cnt << " " <<  full_dof_cnt << " " << dof_cnt << std::endl;
+        // std::vector<int> key_points = { rod0.front(),
+        //                                 rod1.front(),
+        //                                 rod1.back(),
+        //                                 rod2.front()
+        //                             };
+
+        // addKeyPointsDoF(key_points, w_entry, dof_cnt);
         
-        sim.n_nodes += points_rod2.size();
-        sim.n_rods += rod2.size() - 1;
+        // std::vector<int> rod0_kp_on_strand = { 0, 2 * sub_div / 2};
+        // std::vector<int> rod0_kp_global = {0, 2 * sub_div / 2};
+        // std::vector<int> rod0_kp_dof = { 0, 1};
 
-        q.conservativeResize(sim.dof, sim.n_nodes);
-        rods = IV3Stack(3, sim.n_rods); rods.setZero();
-        connections = IV4Stack(4, sim.n_nodes).setOnes() * -1;        
+        // markDoFSingleStrand(rod0, rod0_kp_on_strand,
+        //     rod0_kp_global, 
+        //     rod0_kp_dof,
+        //     w_entry, dof_cnt, WARP, true);
         
-        for (int i = 0; i < points_rod2.size(); i++)
-        {
-            int idx = node_cnt + i;
-            setPos(idx, points_rod2[i], points_rod2[i]);
-            q(dim + 1, idx) = LDis(rod2.front(), idx) / (rod2_to - rod2_from).norm();
-        }
-        q(dim + 1, 0) = LDis(rod2.front(), 0) / (rod2_to - rod2_from).norm();
-        q(dim + 1, 2 * sub_div / 2) = LDis(rod2.front(), 2 * sub_div / 2 ) / (rod2_to - rod2_from).norm();
-        // std::cout << "idx 0 " <<  q.col(0).transpose() << " idx " << 2 * sub_div / 2 << " " << q(dim + 1, 2 * sub_div / 2) << std::endl;
+        // // std::cout << "key_points_location_rod1[0] " << key_points_location_rod1[0] << std::endl;
+        // // std::cout << "key_points_location_rod1[1] " << key_points_location_rod1[1] << std::endl;
 
-        for(int idx : rod2)
-        {
-            std::cout << "idx " << idx << " " << q.col(idx).transpose() << std::endl;
-        }
-
-        sim.dof_offsets.resize(sim.n_nodes, 0);
-
-        std::vector<int> key_points = { rod0.front(),
-                                        rod1.front(),
-                                        rod1.back(),
-                                        rod2.front()
-                                    };
-
-        addKeyPointsDoF(key_points, w_entry, dof_cnt);
+        // std::vector<int> rod1_kp_on_strand = { key_points_location_rod1[0], int(rod1.size()) - 1 };
+        // std::vector<int> rod1_kp_global = { 2 * sub_div / 2, sim.n_nodes - 1};
+        // std::vector<int> rod1_kp_dof = { 1, 2 };
         
-        std::vector<int> rod0_kp_on_strand = { 0, 2 * sub_div / 2};
-        std::vector<int> rod0_kp_global = {0, 2 * sub_div / 2};
-        std::vector<int> rod0_kp_dof = { 0, 1};
+        // markDoFSingleStrand(rod1, 
+        //     rod1_kp_on_strand,
+        //     rod1_kp_global,
+        //     rod1_kp_dof,
+        //      w_entry, dof_cnt, WEFT);
 
-        markDoFSingleStrand(rod0, rod0_kp_on_strand,
-            rod0_kp_global, 
-            rod0_kp_dof,
-            w_entry, dof_cnt, WARP, true);
+        // std::vector<int> rod2_kp_on_strand = { 0, int(rod2.size()) - 1 };
+        // std::vector<int> rod2_kp_global = { node_cnt, 0};
+        // std::vector<int> rod2_kp_dof = { 3, 0 };
         
-        // std::cout << "key_points_location_rod1[0] " << key_points_location_rod1[0] << std::endl;
-        // std::cout << "key_points_location_rod1[1] " << key_points_location_rod1[1] << std::endl;
-
-        std::vector<int> rod1_kp_on_strand = { key_points_location_rod1[0], int(rod1.size()) - 1 };
-        std::vector<int> rod1_kp_global = { 2 * sub_div / 2, sim.n_nodes - 1};
-        std::vector<int> rod1_kp_dof = { 1, 2 };
-        
-        markDoFSingleStrand(rod1, 
-            rod1_kp_on_strand,
-            rod1_kp_global,
-            rod1_kp_dof,
-             w_entry, dof_cnt, WEFT);
-
-        std::vector<int> rod2_kp_on_strand = { 0, int(rod2.size()) - 1 };
-        std::vector<int> rod2_kp_global = { node_cnt, 0};
-        std::vector<int> rod2_kp_dof = { 3, 0 };
-        
-        markDoFSingleStrand(rod2, 
-            rod2_kp_on_strand,
-            rod2_kp_global,
-            rod2_kp_dof,
-             w_entry, dof_cnt, WEFT);
+        // markDoFSingleStrand(rod2, 
+        //     rod2_kp_on_strand,
+        //     rod2_kp_global,
+        //     rod2_kp_dof,
+        //      w_entry, dof_cnt, WEFT);
         
         
-        std::vector<T> data_points_discrete_arc_length;
+        // std::vector<T> data_points_discrete_arc_length;
         
-        for(int i = 0; i < curve->data_points.size(); i++)
-        {
-            data_points_discrete_arc_length.push_back(q(dim, i*sub_div/2));
-        }
+        // for(int i = 0; i < curve->data_points.size(); i++)
+        // {
+        //     data_points_discrete_arc_length.push_back(q(dim, i*sub_div/2));
+        // }
         
-        addRods(rod0, WARP, cnt, 0);
-        addRods(rod1, WEFT, cnt, 1);
-        addRods(rod2, WEFT, cnt, 2);
+        // addRods(rod0, WARP, cnt, 0);
+        // addRods(rod1, WEFT, cnt, 1);
+        // addRods(rod2, WEFT, cnt, 2);
 
-        sim.pbc_ref_unique.push_back(IV2(3 * sub_div / 2, 1 *sub_div/2));
-        sim.pbc_ref_unique.push_back(IV2(rod2.front(), rod1.back()));
+        // sim.pbc_ref_unique.push_back(IV2(3 * sub_div / 2, 1 *sub_div/2));
+        // sim.pbc_ref_unique.push_back(IV2(rod2.front(), rod1.back()));
 
-        sim.pbc_ref.push_back(std::make_pair(WARP, IV2(3 * sub_div / 2, 1 *sub_div/2)));
-        sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(rod2.front(), rod1.back())));
+        // sim.pbc_ref.push_back(std::make_pair(WARP, IV2(3 * sub_div / 2, 1 *sub_div/2)));
+        // sim.pbc_ref.push_back(std::make_pair(WEFT, IV2(rod2.front(), rod1.back())));
 
-        sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
+        // sim.is_end_nodes = std::vector<bool>(sim.n_nodes, false);
 
-        if(true)
-        {
-            // // sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-            // TVDOF mask_xyu = TVDOF::Ones(); mask_xyu[3] = 0.0;
+        // if(true)
+        // {
+        //     // // sim.dirichlet_data[rod0.back()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+        //     // TVDOF mask_xyu = TVDOF::Ones(); mask_xyu[3] = 0.0;
 
-            // sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), mask_xyu);
-            sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-            sim.dirichlet_data[rod1.front()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-            sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-            sim.dirichlet_data[rod2.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
-            // sim.dirichlet_data[sub_div / 2 * 2] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
-            // sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+        //     // sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), mask_xyu);
+        //     sim.dirichlet_data[rod0.front()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+        //     sim.dirichlet_data[rod1.front()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+        //     sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+        //     sim.dirichlet_data[rod2.front()] = std::make_pair(TVDOF::Zero(), sim.fix_all);
+        //     // sim.dirichlet_data[sub_div / 2 * 2] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
+        //     // sim.dirichlet_data[rod1.back()] = std::make_pair(TVDOF::Zero(), sim.fix_eulerian);
 
-            // TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
-            // shift_x[1] = -1.5 * sim.unit;
-            // mask_x[1] = 1; mask_x[2] = 1; mask_x[3] = 1;
-            // sim.dirichlet_data[rod1.front()] = std::make_pair(shift_x, mask_x);
-        }
+        //     // TVDOF shift_x = TVDOF::Zero(), mask_x = TVDOF::Zero();
+        //     // shift_x[1] = -1.5 * sim.unit;
+        //     // mask_x[1] = 1; mask_x[2] = 1; mask_x[3] = 1;
+        //     // sim.dirichlet_data[rod1.front()] = std::make_pair(shift_x, mask_x);
+        // }
        
 
         // sim.sliding_nodes.push_back(0);
 
-        sim.q0 = q;
-        // dof_cnt = sim.n_nodes * sim.dof;
-        sim.n_dof = dof_cnt;
-        sim.W = StiffnessMatrix(sim.n_nodes * sim.dof, sim.n_dof);
+        // sim.q0 = q;
+        // // dof_cnt = sim.n_nodes * sim.dof;
+        // sim.n_dof = dof_cnt;
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
         sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
 
+        sim.rest_states = deformed_states;
+        // std::cout << sim.W << std::endl;
 
-        sim.slide_over_n_rods = IV2(0, std::floor(sub_div * 0.3));
+        // sim.slide_over_n_rods = IV2(0, std::floor(sub_div * 0.3));
 
-        T r0 = 0;
-        T r1 = sim.q0(dim + 1, rod1[1]) - sim.q0(dim + 1, rod1[0]);
+        // T r0 = 0;
+        // T r1 = sim.q0(dim + 1, rod1[1]) - sim.q0(dim + 1, rod1[0]);
 
-        sim.tunnel_u = sim.slide_over_n_rods[0] * r0;
-        sim.tunnel_v = sim.slide_over_n_rods[1] * r1;
+        // sim.tunnel_u = sim.slide_over_n_rods[0] * r0;
+        // sim.tunnel_v = sim.slide_over_n_rods[1] * r1;
 
-
-        Vector<T, dim + 1> q0 = q.col(0).template segment<dim + 1>(0);
-        Vector<T, dim + 1> q1 = q.col(rod0.back()).template segment<dim + 1>(0);
-        
-        DiscreteHybridCurvature<T, dim>* curve_func = new DiscreteHybridCurvature<T, dim>(
-            q0, q1);
-        sim.curvature_functions.push_back(curve_func);
-        curve_func->setData(curve, data_points_discrete_arc_length);
-
-        q0.template segment<dim>(0) = rod1_from; q1.template segment<dim>(0) = rod1_to;
-        q0(dim) = q(dim + 1, rod1.front()); q1(dim) = q(dim + 1, rod1.back());
-        sim.curvature_functions.push_back(new LineCurvature<T, dim>(q0, q1));
 
         // q0.template segment<dim>(0) = rod2_from; q1.template segment<dim>(0) = rod2_to;
         // q0(dim) = q(dim + 1, rod2.front()); q1(dim) = q(dim + 1, rod2.back());
@@ -921,8 +1029,8 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         // std::cout << q0.transpose() << std::endl;
         // std::cout << q1.transpose() << std::endl;
 
-        sim.normal = TV3Stack(3, sim.n_rods);
-        sim.normal.setZero();
+        // sim.normal = TV3Stack(3, sim.n_rods);
+        // sim.normal.setZero();
 
         // std::cout << q.transpose() << std::endl;
         // std::cout << rods.transpose() << std::endl;
@@ -933,6 +1041,7 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         // std::cout << std::endl;
         // std::cout << sim.W.rows() << " " << sim.W.cols() << std::endl;
         // std::cout << sim.W << std::endl;
+        // std::exit(0);
     }
 }
 
@@ -1575,6 +1684,7 @@ void UnitPatch<T, dim>::buildSlidingTestScene(int sub_div)
         // std::cout << q.transpose() << std::endl;
         // std::cout << rods.transpose() << std::endl;
         // std::cout << sim.W << std::endl;
+        // std::cout << "build scene done" << std::endl;
     }
 
 }

@@ -11,7 +11,9 @@
 #include "VecMatDef.h"
 
 #include "UnitPatch.h"
-#include "CurvatureFunction.h"
+#include "RestState.h"
+
+#include "Rod.h"
 
 #define WARP 0
 #define WEFT 1
@@ -78,12 +80,18 @@ public:
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
 
-    // takes a Eulerian Coord and returns the curvature at rest state
+    using Offset = Vector<int, dim + 1>;
+
+    
     int N_PBC_BENDING_ELE = 5;
 
     int dof = dim + 2;
     
     DOFStack q, q0;
+
+    VectorXT deformed_states;
+    VectorXT rest_states;
+
     IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
@@ -91,7 +99,7 @@ public:
     int n_dof;
     int n_rods;
     int n_pb_cons;
-    int n_non_interp_nodes;
+    
     IV2 n_rod_uv;
     
     const static int grid_range = 3;
@@ -146,8 +154,11 @@ public:
     bool run_diff_test = false;
     bool use_discrete_rest_bending = true;
 
+    bool new_frame_work = false;
+
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
+    std::unordered_map<int, T> dirichlet_dof;
     std::vector<std::vector<int>> pbc_bending_pairs;
     std::vector<std::vector<int>> pbc_bending_bn_pairs;
     std::vector<std::vector<int>> yarns;
@@ -166,9 +177,16 @@ public:
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
 
-    std::vector<CurvatureFunction<T, dim>*> curvature_functions;
+    std::vector<RestState<T, dim>*> curvature_functions;
+
+    std::vector<Rod<T, dim>*> Rods;
+    std::vector<RodCrossing<T, dim>*> rod_crossings;
+
+    std::unordered_map<int, Vector<int, dim + 1>> offset_map;
 
     StiffnessMatrix W;
+
+
 
 public:
 
@@ -253,6 +271,13 @@ public:
     }
 
     template <class OP>
+    void iterateDirichletDoF(const OP& f) {
+        for (auto dirichlet: dirichlet_dof){
+            f(dirichlet.first, dirichlet.second);
+        } 
+    }
+
+    template <class OP>
     void iteratePBCReferencePairs(const OP& f) {
         for (auto data : pbc_ref){
             f(data.first, data.second(0), data.second(1));
@@ -286,25 +311,45 @@ public:
     T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         Eigen::Ref<const DOFStack> lambdas, T kappa, 
         bool verbose = false);
+    T computeSystemEnergy(Eigen::Ref<const VectorXT> dq, 
+        bool verbose = false);
 
     T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq,
          Eigen::Ref<const DOFStack> lambdas, T kappa);
     
+    T computeGradient(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq);
+    
     void addMassMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
+    
     bool projectDirichletEntrySystemMatrix(StiffnessMatrix& A);
+    bool projectDirichletDoFSystemMatrix(StiffnessMatrix& A);
+
+    void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
+         Eigen::Ref<const VectorXT> dq);
+         
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
          Eigen::Ref<const VectorXT> dq, T kappa);
+
     void addConstraintMatrix(std::vector<Eigen::Triplet<T>>& entry_K);
     void buildSystemMatrix(
          Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K, T kappa);
     
+    void buildSystemDoFMatrix(Eigen::Ref<const VectorXT> dq, StiffnessMatrix& K);
+
     bool linearSolve(StiffnessMatrix& K, 
         Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq);
     T newtonLineSearch(Eigen::Ref<VectorXT> dq, 
         Eigen::Ref<const VectorXT> residual, 
         Eigen::Ref<const DOFStack> lambdas, T kappa,
         int line_search_max = 100);
+
+    T lineSearchNewton(Eigen::Ref<VectorXT> dq, 
+        Eigen::Ref<const VectorXT> residual, 
+        int line_search_max = 100);
+
     void implicitUpdate(Eigen::Ref<VectorXT> dq);
+
+    void staticSolve(Eigen::Ref<VectorXT> dq);
 
     void advanceOneStep();
 
@@ -354,9 +399,11 @@ public:
     void getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn = 4);
     void getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x);
     void getColorFromStretching(Eigen::MatrixXd& C);
+    void showStretching(Eigen::MatrixXd& C);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
     void markSlidingRange(int idx, int dir, int depth, std::vector<bool>& can_slide, int root);
     
     // DerivativeTest.cpp
@@ -381,6 +428,9 @@ public:
     void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addStretchingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addStretchingEnergy(Eigen::Ref<const DOFStack> q_temp);
+    void addStretchingK(std::vector<Entry>& entry_K);  
+    void addStretchingForce(Eigen::Ref<VectorXT> residual);
+    T addStretchingEnergy();
 
     // Shearing.cpp
     void addShearingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, bool top_right);  

@@ -96,6 +96,93 @@
 //     });
 // }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+{
+    int n_div = 10;
+    
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    TV3Stack points = TV3Stack::Zero(3, n_div);
+
+    T visual_R = 0.01;
+    // bottom face vertices
+    for(int i = 0; i < n_div; i++)
+        points.col(i) = TV3(visual_R * std::cos(theta * T(i)), 0.0, visual_R*std::sin(theta*T(i)));
+    
+
+    int n_rod_total = 0;
+    for(auto& rod : Rods)
+    {
+        n_rod_total += rod->numSeg();
+    }
+    // std::cout << "n_rod_total: " << n_rod_total << std::endl;
+    int rod_offset_v = n_div * 2;
+    int rod_offset_f = n_div * 2;
+    
+    V.resize(n_rod_total * rod_offset_v, 3);
+    V.setZero();
+    F.resize(n_rod_total * rod_offset_f, 3);
+    F.setZero();
+    int rod_cnt = 0;
+    
+    for(auto& rod : Rods)
+    {
+        rod->iterateSegments([&](int node_i, int node_j){
+            int rov = rod_cnt * rod_offset_v;
+            int rof = rod_cnt * rod_offset_f;
+
+            TV vtx_from_TV, vtx_to_TV;
+            rod->x(node_i, vtx_from_TV);
+            rod->x(node_j, vtx_to_TV);
+            vtx_from_TV /= unit; vtx_to_TV /= unit;
+            // std::cout << node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
+            TV3 vtx_from = TV3::Zero();
+            TV3 vtx_to = TV3::Zero();
+            if constexpr (dim == 3)
+            {
+                vtx_from = vtx_from_TV;
+                vtx_to = vtx_to_TV;
+            }
+            else
+            {
+                vtx_from = TV3(vtx_from_TV[0], vtx_from_TV[1], 0);
+                vtx_to = TV3(vtx_to_TV[0], vtx_to_TV[1], 0);
+            }
+
+            TV3 normal_offset = TV3::Zero();
+
+            vtx_from += normal_offset * R;
+            vtx_to += normal_offset * R;
+            
+            TV3 axis_world = vtx_to - vtx_from;
+            TV3 axis_local(0, axis_world.norm(), 0);
+
+            
+            TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+            
+            for(int i = 0; i < n_div; i++)
+            {
+                for(int d = 0; d < 3; d++)
+                {
+                    V(rov + i, d) = points.col(i)[d];
+                    V(rov + i+n_div, d) = points.col(i)[d];
+                    if (d == 1)
+                        V(rov + i+n_div, d) += axis_world.norm();
+                }
+
+                // central vertex of the top and bottom face
+                V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+                V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+                
+                F.row(rof + i*2 ) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+                F.row(rof + i*2 + 1) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+            }
+            rod_cnt++;
+        });
+    }
+
+}
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -364,6 +451,49 @@ void EoLRodSim<T, dim>::getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn)
     });
 }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::showStretching(Eigen::MatrixXd& C)
+{
+    int n_faces = 20;
+    int n_rod_total = 0;
+    for(auto& rod : Rods)
+    {
+        n_rod_total += rod->numSeg();
+    }
+    C.resize(n_rod_total * n_faces, 3);
+
+    VectorXT rod_energy(n_rod_total);
+    rod_energy.setZero();
+
+    int rod_cnt = 0;
+    for (auto& rod : Rods)
+    {
+        rod->iterateSegments([&](int node_i, int node_j){
+            std::cout << "i " << node_i << " j " << node_j << std::endl;
+            TV xi, xj, Xi, Xj;
+            rod->x(node_i, xi); rod->x(node_j, xj);
+            rod->X(node_i, Xi); rod->X(node_j, Xj);
+
+            std::vector<TV> x(4);
+            x[0] = xi; x[1] = xj; x[2] = Xi; x[3] = Xj;
+            T V[1];
+            #include "Maple/YarnStretchingV.mcg"
+            rod_energy[rod_cnt++] += V[0];
+            std::cout << "Rod " << node_i << "->" << node_j << ": " << std::abs(t13/t6-1) << std::endl;
+        });
+    }
+
+    if(rod_energy.maxCoeff() > 1e-4)
+        rod_energy /= rod_energy.maxCoeff();
+    else
+        rod_energy.setZero();
+    
+    tbb::parallel_for(0, n_rod_total, [&](int rod_idx){
+        for(int i = 0; i < n_faces; i++)
+            C.row(rod_idx * n_faces + i) = Eigen::Vector3d(rod_energy[rod_idx], rod_energy[rod_idx], rod_energy[rod_idx]);
+    });
+
+}
 template<class T, int dim>
 void EoLRodSim<T, dim>::getColorFromStretching(
     Eigen::MatrixXd& C)

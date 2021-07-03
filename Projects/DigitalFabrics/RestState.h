@@ -10,18 +10,18 @@
 // #include "VecMatDef.h"
 
 template<class T, int dim>
-class CurvatureFunction
+class RestState
 {
 public:
     using TV = Vector<T, dim>;
     Vector<T, dim + 1> starting_point, ending_point;
 
 public:
-    CurvatureFunction(Vector<T, dim + 1> q0, Vector<T, dim + 1> q1)
+    RestState(Vector<T, dim + 1> q0, Vector<T, dim + 1> q1)
         : starting_point(q0), ending_point(q1) {}
-    CurvatureFunction()
+    RestState()
         : starting_point(Vector<T, dim + 1>::Zero()), ending_point(Vector<T, dim + 1>::Ones()) {}
-    ~CurvatureFunction() {}
+    ~RestState() {}
 
     virtual T value(T u) {return 0;}
     virtual void gradient(T u, T& dedu) { dedu = 0; }
@@ -37,20 +37,20 @@ public:
 };
 
 template<class T, int dim>
-class LineCurvature : public CurvatureFunction<T, dim>
+class LineCurvature : public RestState<T, dim>
 {
     using TV = Vector<T, dim>;
 
 public:
     LineCurvature(Vector<T, dim + 1> q0, 
-                Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
-    LineCurvature() : CurvatureFunction<T, dim>(){}
+                Vector<T, dim + 1> q1) : RestState<T, dim>(q0, q1) {}
+    LineCurvature() : RestState<T, dim>(){}
     
     virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h);
 };
 
 template<class T, int dim>
-class DiscreteHybridCurvature : public CurvatureFunction<T, dim>
+class DiscreteHybridCurvature : public RestState<T, dim>
 {
 public:
     using TV = Vector<T, dim>;
@@ -58,19 +58,19 @@ public:
     std::vector<T> data_points_discrete_arc_length;
 
 public:
-    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c) : CurvatureFunction<T, dim>(), curve(c) {}
+    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c) : RestState<T, dim>(), curve(c) {}
 
     // DiscreteHybridCurvature(HybridC2Curve<T, dim> c, 
     //                         std::vector<T> v,
     //                         Vector<T, dim + 1> q0, 
-    //                         Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1), 
+    //                         Vector<T, dim + 1> q1) : RestState<T, dim>(q0, q1), 
     //                         curve(c)
     //                         , data_points_discrete_arc_length(v) 
     //                         {}
-    DiscreteHybridCurvature() : CurvatureFunction<T, dim>(){}
+    DiscreteHybridCurvature() : RestState<T, dim>(){}
 
     DiscreteHybridCurvature(Vector<T, dim + 1> q0, 
-                            Vector<T, dim + 1> q1) : CurvatureFunction<T, dim>(q0, q1) {}
+                            Vector<T, dim + 1> q1) : RestState<T, dim>(q0, q1) {}
     virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h); 
 
     void setData(HybridC2Curve<T, dim>* c, const std::vector<T>& v)
@@ -82,7 +82,7 @@ public:
 };
 
 template<class T, int dim>
-class PreBendCurvaure : public CurvatureFunction<T, dim>
+class PreBendCurvaure : public RestState<T, dim>
 {
     T length;
     T theta;
@@ -95,7 +95,7 @@ public:
 };
 
 template<class T, int dim>
-class CircleCurvature : public CurvatureFunction<T, dim>
+class CircleCurvature : public RestState<T, dim>
 {
 private:
     T r;
@@ -108,7 +108,7 @@ public:
 };
 
 template<class T, int dim>
-class SineCurvature : public CurvatureFunction<T, dim>
+class SineCurvature : public RestState<T, dim>
 {
 private:
     T amp;

@@ -40,6 +40,8 @@ public:
 private:
     EoLRodSim<T, dim>& sim;
 
+    VectorXT& deformed_states = sim.deformed_states;
+    std::unordered_map<int, Vector<int, dim + 1>> offset_map;
     DOFStack& q = sim.q;
     IV3Stack& rods = sim.rods;
     IV4Stack& connections = sim.connections;
@@ -148,6 +150,11 @@ private:
     void addKeyPointsDoF(const std::vector<int>& key_points, 
         std::vector<Eigen::Triplet<T>>& w_entry,
         int& dof_cnt);
+
+    void markCrossingDoF(
+        std::vector<Eigen::Triplet<T>>& w_entry,
+        int& dof_cnt);
+    
 };
 
 #endif
