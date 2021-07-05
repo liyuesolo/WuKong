@@ -80,20 +80,32 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             viewer.data().set_colors(C);
         if (per_yarn)
         {
-            // eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            // viewer.data().set_colors(C);
-            // if(tileUnit)
-            // {
-            //     eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            //     C.conservativeResize(F.rows(), 3);
-            //     tbb::parallel_for(0, eol_sim.n_rods * n_faces, [&](int i){
-            //         for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/n_faces); j++)
-            //         {
-            //             C.row(j * eol_sim.n_rods * n_faces + i) = C.row(i);
-            //         }
-            //     });
-            //     viewer.data().set_colors(C);
-            // }
+            if (eol_sim.new_frame_work)
+            {
+                int n_rods = 0;
+                for (auto& rod : eol_sim.Rods)
+                    n_rods += rod->numSeg();
+                C.resize(n_rods * n_faces, 3);
+                tbb::parallel_for(0, n_rods, [&](int rod_idx){
+                    for(int i = 0; i < n_faces; i++)
+                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                    });
+            }
+            else
+                eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+            viewer.data().set_colors(C);
+            if(tileUnit)
+            {
+                eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+                C.conservativeResize(F.rows(), 3);
+                tbb::parallel_for(0, eol_sim.n_rods * n_faces, [&](int i){
+                    for(int j = 1; j < std::floor(F.rows()/eol_sim.n_rods/n_faces); j++)
+                    {
+                        C.row(j * eol_sim.n_rods * n_faces + i) = C.row(i);
+                    }
+                });
+                viewer.data().set_colors(C);
+            }
         }
         if(show_original && !tileUnit)
         {
@@ -446,26 +458,32 @@ int main(int argc, char *argv[])
         {
             double x = viewer.current_mouse_x;
             double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-            
-            Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2) / eol_sim.unit;
-            Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
-            rod_v.setZero();
-            rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
-
-            igl::project(rod_v, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
-
-            for(int i=0; i<pxy.rows(); ++i)
+            if(eol_sim.new_frame_work)
             {
-                if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
-                {
-                    selected = i;
-                    x0 = x;
-                    y0 = y;
-                    std::cout << "selected " << selected << std::endl;
-                    return true;
-                }
+                return false;
             }
-            return false;
+            else
+            {
+                Eigen::MatrixXd pxy = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, 2) / eol_sim.unit;
+                Eigen::MatrixXd rod_v(eol_sim.n_nodes, 3);
+                rod_v.setZero();
+                rod_v.block(0, 0, eol_sim.n_nodes, 2) = pxy;
+
+                igl::project(rod_v, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+
+                for(int i=0; i<pxy.rows(); ++i)
+                {
+                    if(abs(pxy.row(i)[0]-x)<20 && abs(pxy.row(i)[1]-y)<20)
+                    {
+                        selected = i;
+                        x0 = x;
+                        y0 = y;
+                        std::cout << "selected " << selected << std::endl;
+                        return true;
+                    }
+                }
+                return false;
+            }
         };
     
 

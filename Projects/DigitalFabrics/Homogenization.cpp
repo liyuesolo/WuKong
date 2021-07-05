@@ -54,9 +54,9 @@ template<class T, int dim>
 void Homogenization<T, dim>::initialize()
 {
     
-    sim.print_force_mag = true;
+    sim.print_force_mag = false;
     sim.disable_sliding = false;
-    sim.verbose = true;
+    sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
     sim.buildSceneFromUnitPatch(9);
     
@@ -66,8 +66,8 @@ void Homogenization<T, dim>::initialize()
     sim.use_alm = false;
     sim.add_penalty = false;
 
-    sim.add_shearing = false;
-    sim.add_pbc = false;
+    // sim.add_shearing = false;
+    // sim.add_pbc = false;
     
 
     // sim.add_pbc_bending = false;
@@ -76,7 +76,7 @@ void Homogenization<T, dim>::initialize()
     sim.newton_tol = 1e-6;
     // sim.k_pbc = 1e10;    
     // sim.k_strain = 1e5;
-    sim.ke = 1e-3;
+    sim.ke = 1e-4;
     sim.k_yc = 1e5;
     
     

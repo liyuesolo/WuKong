@@ -20,7 +20,7 @@ struct RodCrossing
     int node_idx;
     std::vector<int> rods_involved;
     std::vector<Vector<T, 2>> sliding_ranges;
-    
+
     RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved) {}
 };
 
@@ -84,6 +84,9 @@ public:
             f(indices[i], indices[i+1], indices[i-1],
              offset_map[indices[i]], offset_map[indices[i+1]], offset_map[indices[i-1]]);
         }
+        if (closed)
+            f(indices.back(), indices[1], indices[indices.size() - 2],
+             offset_map[indices.back()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]]);
     }
 
     template <class OP>
@@ -93,6 +96,8 @@ public:
         {
             f(indices[i], indices[i+1], indices[i-1]);
         }
+        if (closed)
+            f(indices.back(), indices[1], indices[indices.size() - 2]);
     }
 
     void x(int node_idx, TV& pos)

@@ -716,26 +716,31 @@ void EoLRodSim<T, dim>::advanceOneStep()
     
     VectorXT dq_projected = dq;
 
-    iterateDirichletDoF([&](int offset, T target){
-        dq_projected[offset] = target;
-    });
-
-    deformed_states = rest_states + W * dq_projected;
-
-    if(!add_penalty && !run_diff_test)
-        iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
-        {
-            int offset = dof_offsets[node_id];
-            for(int d = 0; d < dof; d++)
-                if (mask(d))
-                    // dq_projected(node_id * dof + d) = target(d);
-                    dq_projected(offset + d) = target(d);
+    if (new_frame_work)
+    {
+        iterateDirichletDoF([&](int offset, T target){
+            dq_projected[offset] = target;
         });
-    
-    
-    DOFStack dq_full(dof, n_nodes);
-    Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
-    q = q0 + dq_full;
+
+        deformed_states = rest_states + W * dq_projected;
+    }
+    else
+    {
+        if(!add_penalty && !run_diff_test)
+            iterateDirichletData([&](const auto& node_id, const auto& target, const auto& mask)
+            {
+                int offset = dof_offsets[node_id];
+                for(int d = 0; d < dof; d++)
+                    if (mask(d))
+                        // dq_projected(node_id * dof + d) = target(d);
+                        dq_projected(offset + d) = target(d);
+            });
+        
+        
+        DOFStack dq_full(dof, n_nodes);
+        Eigen::Map<VectorXT>(dq_full.data(), dq_full.size()) = W * dq_projected;
+        q = q0 + dq_full;
+    }
 
 
 

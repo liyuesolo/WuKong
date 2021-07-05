@@ -70,6 +70,7 @@ public:
 
     // Mechanism
     void buildDragCircleScene(int sub_div);
+    void buildDragCircleSceneNewFramework(int sub_div);
     void buildGripperScene(int sub_div);
 
 

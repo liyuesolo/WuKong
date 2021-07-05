@@ -5,6 +5,17 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     TV& dXdu, TV& d2Xdu2, bool g, bool h) 
 {
     bool debug = false;
+    // if (u < this->starting_point[dim])
+    // {
+    //     // X = this->starting_point.template segment<dim>(0);
+    //     // dXdu = TV::Zero();
+    //     // d2Xdu2 = TV::Zero();
+    //     // return;
+    //     u += this->ending_point[dim];
+    // }
+    // if (u > this->ending_point[dim])
+    //     u -= this->ending_point[dim];
+
     if (u < 0)
     {
         X = this->starting_point.template segment<dim>(0);
@@ -12,6 +23,7 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
         d2Xdu2 = TV::Zero();
         return;
     }
+
     if (debug)
         std::cout << "getMaterialPos" << std::endl;
     T dx = 1.0;
@@ -62,7 +74,7 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     {
         std::cout << u << " " << X.transpose() << std::endl;
         std::cout << "getMaterialPos done" << std::endl;
-        std::getchar();
+        // std::getchar();
     }
 }
 template<class T, int dim>
