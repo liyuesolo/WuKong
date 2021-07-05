@@ -21,9 +21,9 @@ void Homogenization<T, dim>::testOneSample()
     // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
     //4.52389
     // sim.setUniaxialStrain(1.27235, 1.1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(0.0, 1.1, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(1.3509, s1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(90.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.2566, 1.1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.3509, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(45.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
     
     // sim.setUniaxialStrain(1.61792, 2.2, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(M_PI/4, 1.6, strain_dir, ortho_dir);
@@ -54,26 +54,30 @@ template<class T, int dim>
 void Homogenization<T, dim>::initialize()
 {
     
-    sim.print_force_mag = false;
+    sim.print_force_mag = true;
     sim.disable_sliding = false;
-    sim.verbose = false;
-    sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    // sim.buildSceneFromUnitPatch(5);
+    sim.verbose = true;
+    // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
+    sim.buildSceneFromUnitPatch(9);
     
     // sim.buildPlanePeriodicBCScene3x3();
     sim.add_eularian_reg = true;
-    // sim.add_contact_penalty = true;
+    sim.add_contact_penalty = true;
     sim.use_alm = false;
     sim.add_penalty = false;
+
     sim.add_shearing = false;
+    sim.add_pbc = false;
+    
+
     // sim.add_pbc_bending = false;
     // sim.add_stretching = false;
     // sim.kb *= 1e4;
     sim.newton_tol = 1e-6;
     // sim.k_pbc = 1e10;    
     // sim.k_strain = 1e5;
-    sim.ke = 1e-4;
-    sim.k_yc = 1e8;
+    sim.ke = 1e-3;
+    sim.k_yc = 1e5;
     
     
     s1 = 1.1;
@@ -123,7 +127,7 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& stra
     sim.iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
         // T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
         T length = dir_id == 1 ? (Xj - Xi).norm() : (Xl - Xk).norm();
-        length /= (2.0 * sim.R);
+        // length *= (2.0 * sim.R);
         
         int bc_node = dir_id == 0 ? node_j : node_i;
         if (std::abs(length) >= 1e-6)
@@ -145,9 +149,11 @@ void Homogenization<T, dim>::computeYoungsModulusPoissonRatioBatch()
 {
     initialize();
     
-    int n_angles = 400;
+    int n_angles = 10;
     T cycle = 2. * M_PI;
-    std::vector<T> thetas, youngs_moduli, poisson_ratio;
+    std::vector<T> thetas;
+    std::vector<T> youngs_moduli;
+    std::vector<T> poisson_ratio;
     for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
     {
         T theta6 = std::round( theta * 1e4 ) / 1e4;
@@ -155,19 +161,22 @@ void Homogenization<T, dim>::computeYoungsModulusPoissonRatioBatch()
         TV2 E_nu;
         materialParametersFromUniaxialStrain(theta6, s1, E_nu);
         // std::cout << "theta: " << theta / M_PI * 180.0 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
-        std::cout << std::setprecision(6) << "theta: " << theta6 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
-        youngs_moduli.push_back(E_nu(0));
-        poisson_ratio.push_back(E_nu(1));
+        std::cout << "theta: " << theta6 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+        T E = E_nu(0); T nu = E_nu(1);
+        youngs_moduli.push_back(E);
+        // std::cout << E << " " << youngs_moduli[0] << std::endl;
+        poisson_ratio.push_back(nu);
     }
     for(T theta : thetas)
         std::cout << theta << " ";
     std::cout << std::endl;
-    for(T youngs_modulus : youngs_moduli)
-        std::cout << youngs_modulus << " ";
+    for(T E : youngs_moduli)
+        std::cout << E << " ";
     std::cout << std::endl;
     for(T nu : poisson_ratio)
         std::cout << nu << " ";
     std::cout << std::endl;
+    
 }
 
 template<class T, int dim>

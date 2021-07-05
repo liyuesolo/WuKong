@@ -2,7 +2,7 @@
 #include <Eigen/SparseCore>
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::computeSystemEnergy(Eigen::Ref<const VectorXT> dq, 
+T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         bool verbose)
 {
     VectorXT dq_projected = dq;
@@ -13,15 +13,21 @@ T EoLRodSim<T, dim>::computeSystemEnergy(Eigen::Ref<const VectorXT> dq,
             dq_projected[offset] = target;
         });
 
+   
     deformed_states = rest_states + W * dq_projected;
-
+   
     T total_energy = 0;
     T E_stretching = 0, E_bending = 0, E_shearing = 0, 
         E_eul_reg = 0, E_pbc = 0, E_penalty = 0, E_contact = 0;
     
     if (add_stretching)
         E_stretching += addStretchingEnergy();
-    
+    if (add_bending)
+        E_bending += addBendingEnergy();
+    if (add_eularian_reg)
+        E_eul_reg += addEulerianRegEnergy();
+    if (add_contact_penalty)
+        E_contact += addParallelContactEnergy();
     total_energy = E_stretching + E_bending + E_shearing + E_eul_reg + E_pbc + E_penalty + E_contact;
     
     if (verbose)
@@ -111,14 +117,19 @@ T EoLRodSim<T, dim>::computeGradient(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
 
     deformed_states = rest_states + W * dq_projected;
     
-    VectorXT full_residual(deformed_states.size());
+    VectorXT full_residual(deformed_states.rows());
     full_residual.setZero();
 
     if (add_stretching)
         addStretchingForce(full_residual);
-    
+    if (add_bending)
+        addBendingForce(full_residual);
+    if (add_eularian_reg)
+        addEulerianRegForce(full_residual);
+    if (add_contact_penalty)
+        addParallelContactForce(full_residual);
     residual = W.transpose() * full_residual;
-        
+    
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -227,6 +238,12 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry
     
     if (add_stretching)
         addStretchingK(entry_K);
+    if (add_bending)
+        addBendingK(entry_K);
+    if (add_eularian_reg)
+        addEulerianRegK(entry_K);
+    if (add_contact_penalty)
+        addParallelContactK(entry_K);
 }
 
 
@@ -406,8 +423,7 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
 {
     bool verbose = false;
     
-
-    VectorXT ddq(n_dof);
+    VectorXT ddq(W.cols());
     ddq.setZero();
 
     StiffnessMatrix K;
@@ -419,14 +435,14 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
     // std::cout << norm << std::endl;
     // if (norm < 1e-6) return norm;
     T alpha = 1;
-    T E0 = computeSystemEnergy(dq);
+    T E0 = computeTotalEnergy(dq);
     // std::cout << "E0: " << E0 << std::endl;
     int cnt = 0;
     bool set_to_gradient = true;
     while(true)
     {
         VectorXT dq_ls = dq + alpha * ddq;
-        T E1 = computeSystemEnergy(dq_ls, verbose);
+        T E1 = computeTotalEnergy(dq_ls, verbose);
         // std::cout << "E1: " << E1 << std::endl;
         if (E1 - E0 < 0) {
             dq = dq_ls;
@@ -436,10 +452,8 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
         cnt += 1;
         if (cnt > 15)
         {
-            {
-                dq = dq_ls;
-                return 1e16;
-            }
+            dq = dq_ls;
+            return 1e16;
         }
         if (cnt == line_search_max) 
             return 1e16;
@@ -540,7 +554,7 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
 
     while (true)
     {
-        VectorXT residual(n_dof);
+        VectorXT residual(W.cols());
         residual.setZero();
         
         computeGradient(residual, dq);
@@ -692,7 +706,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
 {
     // newton_tol = 1e-6;
     if (new_frame_work)
-        n_dof = deformed_states.rows();
+        n_dof = W.cols();
     VectorXT dq(n_dof);
     dq.setZero();
     if (new_frame_work)

@@ -19,11 +19,25 @@ void EoLRodSim<T, dim>::addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K)
     //         entry_K.push_back(Eigen::Triplet<T>(middle * dof + dim + 1, middle * dof + dim + 1, ke));
     //     }
     // });
-
-    iterateSlidingNodes([&](int node_id){
-        entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dim, node_id * dof + dim, ke));
-        entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dim + 1, node_id * dof + dim + 1, ke));
-    });
+    if(new_frame_work)
+    {
+        for (auto& crossing : rod_crossings)
+        {
+            int node_idx = crossing->node_idx;
+            std::vector<int> rods_involved = crossing->rods_involved;
+            for (int rod_idx : rods_involved)
+            {
+                Offset offset;
+                Rods[rod_idx]->getEntry(node_idx, offset);
+                entry_K.push_back(Entry(offset[dim], offset[dim], ke));
+            }
+        }
+    }
+    else
+        iterateSlidingNodes([&](int node_id){
+            entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dim, node_id * dof + dim, ke));
+            entry_K.push_back(Eigen::Triplet<T>(node_id * dof + dim + 1, node_id * dof + dim + 1, ke));
+        });
 
 }
 template<class T, int dim>
@@ -50,6 +64,28 @@ void EoLRodSim<T, dim>::addEulerianRegForce(Eigen::Ref<const DOFStack> q_temp, E
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::addEulerianRegForce(Eigen::Ref<VectorXT> residual)
+{
+    VectorXT residual_cp = residual;
+    for (auto& crossing : rod_crossings)
+    {
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+        for (int rod_idx : rods_involved)
+        {
+            Offset offset;
+            Rods[rod_idx]->getEntry(node_idx, offset);
+            T u, U;
+            Rods[rod_idx]->u(node_idx, u);
+            Rods[rod_idx]->U(node_idx, U);
+            residual[offset[dim]] += -ke * (u-U);
+        }
+    }
+    if(print_force_mag)
+        std::cout << "Eulerian penalty norm: " << (residual - residual_cp).norm() << std::endl;
+}
+
+template<class T, int dim>
 T EoLRodSim<T, dim>::addEulerianRegEnergy(Eigen::Ref<const DOFStack> q_temp)
 {
     T energy = 0.0;
@@ -64,6 +100,26 @@ T EoLRodSim<T, dim>::addEulerianRegEnergy(Eigen::Ref<const DOFStack> q_temp)
     return crossing_energy.sum();
 }
 
+template<class T, int dim>
+T EoLRodSim<T, dim>::addEulerianRegEnergy()
+{
+    T energy = 0.0;
+    for (auto& crossing : rod_crossings)
+    {
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+        for (int rod_idx : rods_involved)
+        {
+            Offset offset;
+            Rods[rod_idx]->getEntry(node_idx, offset);
+            T u, U;
+            Rods[rod_idx]->u(node_idx, u);
+            Rods[rod_idx]->U(node_idx, U);
+            energy += 0.5 * ke * std::pow(u - U, 2);
+        }
+    }
+    return energy;
+}
 
 template class EoLRodSim<double, 3>;
 template class EoLRodSim<double, 2>;

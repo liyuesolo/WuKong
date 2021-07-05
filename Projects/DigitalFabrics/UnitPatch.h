@@ -37,6 +37,9 @@ public:
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
 
+    using Offset = Vector<int, dim + 1>;
+    using Range = Vector<T, 2>;
+
 private:
     EoLRodSim<T, dim>& sim;
 

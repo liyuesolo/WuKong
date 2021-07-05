@@ -12,6 +12,7 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         // std::cout << "node " <<  indices.front() << " added all dof " << std::endl;
         for(int d = 0; d < dim + 1; d++)
         {
+            reduced_map[offset[d]] = dof_cnt;
             w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
         }
     }
@@ -35,14 +36,17 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
             Offset offset = offset_map[current_global_idx];
             for(int d = 0; d < dim; d++)
             {
+                reduced_map[offset[d]] = dof_cnt;
+                // std::cout << "add lagrangian entry to " << offset[d] << " " << dof_cnt << std::endl;
                 w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
             }
             // compute Eulerian weight
             T u = full_states[offset[dim]];
             T alpha = (u - ui) / (uj - ui);
             // std::cout << "alpha " << alpha << std::endl;
-            w_entry.push_back(Eigen::Triplet<T>(offset[dim], offset_left_node[dim], 1.0 - alpha));
-            w_entry.push_back(Eigen::Triplet<T>(offset[dim], offset_right_node[dim], alpha));
+            // std::cout << "add eulerian entry to " << offset[dim] << " " << reduced_map[offset_left_node[dim]] << std::endl;
+            w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_left_node[dim]], 1.0 - alpha));
+            w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_right_node[dim]], alpha));
         }
         
         loop_id = dof_node_location[i];
@@ -55,6 +59,7 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         // std::cout << "node " <<  indices.back() << " added all dof " << std::endl;
         for(int d = 0; d < dim + 1; d++)
         {
+            reduced_map[offset[d]] = dof_cnt;
             w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
         }
     }
@@ -73,6 +78,7 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         Offset offset = offset_map[current_global_idx];
         for(int d = 0; d < dim; d++)
         {
+            reduced_map[offset[d]] = dof_cnt;
             w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
         }
         // compute Eulerian weight
@@ -82,8 +88,9 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         if (closed) alpha *= -1;
         
         // std::cout << "alpha " << alpha << std::endl;
-        w_entry.push_back(Eigen::Triplet<T>(offset[dim], offset_left_node[dim], 1.0 - alpha));
-        w_entry.push_back(Eigen::Triplet<T>(offset[dim], offset_right_node[dim], alpha));
+        // std::cout << "add eulerian entry to " << offset[dim] << " " << reduced_map[offset_left_node[dim]] << std::endl;
+        w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_left_node[dim]], 1.0 - alpha));
+        w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_right_node[dim]], alpha));
     }
 }
 template class Rod<double, 3>;

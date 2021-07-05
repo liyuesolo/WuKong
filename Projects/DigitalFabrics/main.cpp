@@ -233,6 +233,11 @@ int main(int argc, char *argv[])
                 }
                 if (ImGui::Checkbox("Tunnel", &eol_sim.add_contact_penalty))
                 {
+                    if(eol_sim.add_contact_penalty)
+                        eol_sim.releaseCrossing();
+                    else
+                        eol_sim.fixCrossing();
+                    
                     eol_sim.resetScene();
                     updateScreen(viewer);
                 }
@@ -599,6 +604,7 @@ int main(int argc, char *argv[])
     // eol_sim.buildPlanePeriodicBCScene3x3();
     // homogenizer.initialize();
     // eol_sim.buildPlanePeriodicBCScene3x3();
+    // eol_sim.derivativeTest();
     // eol_sim.runDerivativeTest();
 
     // eol_sim.resetScene();

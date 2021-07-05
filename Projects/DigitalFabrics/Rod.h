@@ -19,7 +19,8 @@ struct RodCrossing
 {
     int node_idx;
     std::vector<int> rods_involved;
-
+    std::vector<Vector<T, 2>> sliding_ranges;
+    
     RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved) {}
 };
 
@@ -40,6 +41,7 @@ public:
     bool closed;
     // full states for all nodes in the system
     VectorXT& full_states;
+    VectorXT& rest_states;
     
     // which node on this rod has been marked as crossing node
     std::vector<int> dof_node_location;
@@ -47,6 +49,8 @@ public:
 
     //maps dim + 1 dof to global dof offset
     std::unordered_map<int, Offset> offset_map;
+
+    std::unordered_map<int, int> reduced_map;
 
     // global indices of nodes on this rod
     std::vector<int> indices;
@@ -72,10 +76,41 @@ public:
         }
     }
 
+    template <class OP>
+    void iterate3NodesWithOffsets(const OP& f) 
+    {
+        for (int i = 1; i < indices.size() - 1; i++)
+        {
+            f(indices[i], indices[i+1], indices[i-1],
+             offset_map[indices[i]], offset_map[indices[i+1]], offset_map[indices[i-1]]);
+        }
+    }
+
+    template <class OP>
+    void iterate3Nodes(const OP& f) 
+    {
+        for (int i = 1; i < indices.size() - 1; i++)
+        {
+            f(indices[i], indices[i+1], indices[i-1]);
+        }
+    }
+
     void x(int node_idx, TV& pos)
     {
         Offset idx = offset_map[node_idx];
         pos = full_states.template segment<dim>(idx[0]);
+    }
+
+    void u(int node_idx, T& pos)
+    {
+        Offset idx = offset_map[node_idx];
+        pos = full_states[idx[dim]];
+    }
+
+    void U(int node_idx, T& pos)
+    {
+        Offset idx = offset_map[node_idx];
+        pos = rest_states[idx[dim]];
     }
 
     void X(int node_idx, TV& pos)
@@ -111,7 +146,29 @@ public:
         idx = offset_map[node_idx];
     }
 
+    void frontOffset(Offset& idx)
+    {
+        idx = offset_map[indices.front()];
+    }
 
+    void backOffset(Offset& idx)
+    {
+        idx = offset_map[indices.back()];
+    }
+
+    void backOffsetReduced(Offset& idx)
+    {
+        idx = offset_map[indices.back()];
+        for (int d = 0; d < dim + 1; d++)
+            idx[d] = reduced_map[idx[d]];
+    }
+
+    void frontOffsetReduced(Offset& idx)
+    {
+        idx = offset_map[indices.front()];
+        for (int d = 0; d < dim + 1; d++)
+            idx[d] = reduced_map[idx[d]];
+    }
 
     void frontDoF(Vector<T, dim + 1>& q)
     {
@@ -129,6 +186,12 @@ public:
             q[d] = full_states[idx[d]];
     }
 
+    void fixEndPointEulerian(std::unordered_map<int, T>& dirichlet_data)
+    {
+        dirichlet_data[reduced_map[offset_map[indices.front()][dim]]] = 0;
+        dirichlet_data[reduced_map[offset_map[indices.back()][dim]]] = 0;
+    }
+
     void validCheck()
     {
 
@@ -142,8 +205,8 @@ public:
     void markDoF(std::vector<Entry>& w_entry, int& dof_cnt);
 
 public:
-    Rod (VectorXT& q, int id) : full_states(q), rod_id(id), closed(false) {}
-    Rod (VectorXT& q, int id, bool c) : full_states(q), rod_id(id), closed(c) {}
+    Rod (VectorXT& q, VectorXT& q0, int id) : full_states(q), rest_states(q0), rod_id(id), closed(false) {}
+    Rod (VectorXT& q, VectorXT& q0, int id, bool c) : full_states(q), rest_states(q0), rod_id(id), closed(c) {}
     ~Rod() {}
 
 // private:

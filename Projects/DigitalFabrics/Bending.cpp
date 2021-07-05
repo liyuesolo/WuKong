@@ -1,5 +1,52 @@
 #include "EoLRodSim.h"
 using std::abs;
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::addBendingK(std::vector<Eigen::Triplet<T>>& entry_K)
+{
+    for (auto& rod : Rods)
+    {
+        rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
+                Offset offset_i, Offset offset_j, Offset offset_k)
+        {
+            TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
+            rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
+            rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
+
+            std::vector<TV> x(6);
+            x[0] = xi; x[1] = xj; x[2] = xk; x[3] = Xi; x[4] = Xj; x[5] = Xk;
+            
+            T J[12][12];
+            memset(J, 0, sizeof(J));
+            #include "Maple/YarnBendDiscreteRestCurvatureJ.mcg"
+
+            std::vector<int> nodes = { node_i, node_j, node_k };
+            std::vector<TV> dXdu = { dXi, dXj, dXk };
+
+            std::vector<Offset> offsets = { offset_i, offset_j, offset_k };
+            for(int k = 0; k < nodes.size(); k++)
+                for(int l = 0; l < nodes.size(); l++)
+                    for(int i = 0; i < dim; i++)
+                        for (int j = 0; j < dim; j++)
+                            {
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][j], -J[k*dim + i][l * dim + j]));
+
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][dim], -J[k*dim + i][3 * dim + l * dim + j] * dXdu[l][j]));
+
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], offsets[l][j], -J[3 * dim + k * dim + i][l * dim + j] * dXdu[k][i]));
+
+                                
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], 
+                                                                    offsets[l][dim], 
+                                                                    -J[3 * dim + k*dim + i][3 * dim + l * dim + j] * dXdu[l][j] * dXdu[k][i]));
+
+                            }
+        });
+    }
+    if(!add_pbc_bending)
+        return;
+}
+
 template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K)
 {
@@ -360,6 +407,44 @@ void EoLRodSim<T, dim>::addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vect
 //     // std::exit(0);
 // }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<VectorXT> residual)
+{
+    VectorXT residual_cp = residual;
+    for (auto& rod : Rods)
+    {
+        rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
+                Offset offset_i, Offset offset_j, Offset offset_k)
+        {
+            TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
+            rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
+            rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
+
+            std::vector<TV> x(6);
+            x[0] = xi; x[1] = xj; x[2] = xk; x[3] = Xi; x[4] = Xj; x[5] = Xk;
+            
+            Vector<T, 12> F;
+            F.setZero();
+
+            #include "Maple/YarnBendDiscreteRestCurvatureF.mcg"
+
+            residual.template segment<dim>(offset_i[0]) += F.template segment<dim>(0);
+            residual.template segment<dim>(offset_j[0]) += F.template segment<dim>(dim);
+            residual.template segment<dim>(offset_k[0]) += F.template segment<dim>(dim + dim);
+
+            residual(offset_i[dim]) += F.template segment<dim>(3*dim).dot(dXi);
+            residual(offset_j[dim]) += F.template segment<dim>(3*dim + dim).dot(dXj);
+            residual(offset_k[dim]) += F.template segment<dim>(3*dim + 2*dim).dot(dXk);
+        });
+    }
+    if(!add_pbc_bending)
+    {
+        if (print_force_mag)
+            std::cout << "bending force " << (residual - residual_cp).norm() << std::endl;
+        return;
+    }
+
+}
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
@@ -530,6 +615,27 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen
 //     return energy;
 // }
 
+template<class T, int dim>
+T EoLRodSim<T, dim>::addBendingEnergy()
+{
+    T energy = 0.0;
+    for (auto& rod : Rods)
+    {
+        rod->iterate3Nodes([&](int node_i, int node_j, int node_k){
+            TV xi, xj, xk, Xi, Xj, Xk;
+            rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
+            rod->X(node_i, Xi); rod->X(node_j, Xj); rod->X(node_k, Xk);
+
+            std::vector<TV> x(6);
+            x[0] = xi; x[1] = xj; x[2] = xk; x[3] = Xi; x[4] = Xj; x[5] = Xk;
+            T V[1];
+            #include "Maple/YarnBendDiscreteRestCurvatureV.mcg"
+            energy += V[0];
+        });
+    }
+    if(!add_pbc_bending)
+        return energy;
+}
 
 template<class T, int dim>
 T EoLRodSim<T, dim>::addBendingEnergy(Eigen::Ref<const DOFStack> q_temp)

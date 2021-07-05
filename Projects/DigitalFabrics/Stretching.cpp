@@ -28,7 +28,7 @@ void EoLRodSim<T, dim>::addStretchingK(std::vector<Entry>& entry_K)
                     for(int i = 0; i < dim; i++)
                         for (int j = 0; j < dim; j++)
                             {
-                                entry_K.push_back(Entry(offsets[k][i], offsets[l][j] + j, -J[k*dim + i][l * dim + j]));
+                                entry_K.push_back(Entry(offsets[k][i], offsets[l][j], -J[k*dim + i][l * dim + j]));
                                 
                                 entry_K.push_back(Entry(offsets[k][i], offsets[l][dim], -J[k*dim + i][2 * dim + l * dim + j] * dXdu[l][j]));
 
@@ -125,11 +125,12 @@ void EoLRodSim<T, dim>::addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::v
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
 {
+    VectorXT residual_cp = residual;
     for (auto& rod : Rods)
     {
         rod->iterateSegmentsWithOffset([&](int node_i, int node_j, Offset offset_i, Offset offset_j)
         {
-            std::cout << "node i " << node_i << " node j " << node_j << std::endl;
+            // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
             TV xi, xj, Xi, Xj, dXi, dXj;
             rod->x(node_i, xi); rod->x(node_j, xj);
             rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj);
@@ -148,7 +149,10 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
             residual(offset_j[dim]) += F.template segment<dim>(2*dim + dim).dot(dXj);
         });
     }
+    if(print_force_mag)
+        std::cout << "stretching norm: " << (residual - residual_cp).norm() << std::endl;
 }
+
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<const DOFStack> q_temp,
      Eigen::Ref<DOFStack> residual)

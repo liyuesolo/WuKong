@@ -81,6 +81,7 @@ public:
     using Entry = Eigen::Triplet<T>;
 
     using Offset = Vector<int, dim + 1>;
+    using Range = Vector<T, 2>;
 
     
     int N_PBC_BENDING_ELE = 5;
@@ -311,7 +312,7 @@ public:
     T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         Eigen::Ref<const DOFStack> lambdas, T kappa, 
         bool verbose = false);
-    T computeSystemEnergy(Eigen::Ref<const VectorXT> dq, 
+    T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         bool verbose = false);
 
     T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq,
@@ -354,9 +355,46 @@ public:
     void advanceOneStep();
 
     void setVerbose(bool v) { verbose = v; }
-    void resetScene() { q = q0; }
+    void resetScene() 
+    { 
+        if (new_frame_work)
+            deformed_states = rest_states;
+        else
+            q = q0; 
+    }
     void fixEulerian();
     void freeEulerian();
+
+    void fixCrossing()
+    {
+        for(auto& crossing : rod_crossings)
+        {
+            int node_idx = crossing->node_idx;
+            std::vector<int> rods_involved = crossing->rods_involved;
+            for (int rod_idx : rods_involved)
+            {
+                Offset offset;
+                Rods[rod_idx]->getEntry(node_idx, offset);
+
+                dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
+            }
+        }
+    }
+
+    void releaseCrossing()
+    {
+        for(auto& crossing : rod_crossings)
+        {
+            int node_idx = crossing->node_idx;
+            std::vector<int> rods_involved = crossing->rods_involved;
+            for (int rod_idx : rods_involved)
+            {
+                Offset offset;
+                Rods[rod_idx]->getEntry(node_idx, offset);
+                dirichlet_dof.erase(Rods[rod_idx]->reduced_map[offset[dim]]);
+            }
+        }
+    }
     
 private:
 
@@ -408,10 +446,14 @@ public:
     
     // DerivativeTest.cpp
     void runDerivativeTest();
+    void derivativeTest();
     void checkGradientSecondOrderTerm(Eigen::Ref<VectorXT> dq);
     void checkHessianHigherOrderTerm(Eigen::Ref<VectorXT> dq);
     void checkGradient(Eigen::Ref<VectorXT> dq);
     void checkHessian(Eigen::Ref<VectorXT> dq);
+
+    void testGradient(Eigen::Ref<VectorXT> dq);
+    void testHessian(Eigen::Ref<VectorXT> dq);
 
     void checkMaterialPositionDerivatives();
 
@@ -423,6 +465,9 @@ public:
     void addBendingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
     void addBendingForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
     T addBendingEnergy(Eigen::Ref<const DOFStack> q_temp);
+    void addBendingK(std::vector<Eigen::Triplet<T>>& entry_K);  
+    void addBendingForce(Eigen::Ref<VectorXT> residual);
+    T addBendingEnergy();
 
     // Stretching.cpp
     void addStretchingK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
@@ -453,11 +498,18 @@ public:
     // EulerianConstraints.cpp
     T addEulerianRegEnergy(Eigen::Ref<const DOFStack> q_temp);
     void addEulerianRegForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
-    void addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K);  
+    void addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K);
+
+    T addEulerianRegEnergy();
+    void addEulerianRegForce(Eigen::Ref<VectorXT> residual);
+    
 
     // ParallelContact.cpp
+    T addParallelContactEnergy();
     T addParallelContactEnergy(Eigen::Ref<const DOFStack> q_temp);
+    void addParallelContactForce(Eigen::Ref<VectorXT> residual);
     void addParallelContactForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
+    void addParallelContactK(std::vector<Entry>& entry_K);
     void addParallelContactK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);
 };
 

@@ -28,7 +28,7 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 8)
         buildUnitFromC2Curves(64);
     else if (patch_type == 9)
-        buildCircleCrossScene(4);
+        buildCircleCrossScene(8);
 }
 
 template<class T, int dim>
@@ -60,6 +60,7 @@ void UnitPatch<T, dim>::markCrossingDoF(std::vector<Eigen::Triplet<T>>& w_entry,
         // push Lagrangian dof first
         for (int d = 0; d < dim; d++)
         {
+            sim.Rods[rods_involved.front()]->reduced_map[entry_rod0[d]] = dof_cnt;
             w_entry.push_back(Entry(entry_rod0[d], dof_cnt++, 1.0));
         }
         
@@ -67,6 +68,7 @@ void UnitPatch<T, dim>::markCrossingDoF(std::vector<Eigen::Triplet<T>>& w_entry,
         for (int rod_idx : rods_involved)
         {
             sim.Rods[rod_idx]->getEntry(node_idx, entry_rod0);
+            sim.Rods[rod_idx]->reduced_map[entry_rod0[dim]] = dof_cnt;
             w_entry.push_back(Entry(entry_rod0[dim], dof_cnt++, 1.0));
         }
         
@@ -735,8 +737,7 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
 template<class T, int dim>
 void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
 {
-    if (sim.run_diff_test)
-        sim.unit = 1;
+    
     auto unit_yarn_map = sim.yarn_map;
     sim.yarn_map.clear();
     sim.add_rotation_penalty = false;
@@ -772,7 +773,7 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         
         // rod0 is the circle
         // there are four nodes crossed by the straight yarns        
-        Rod<T, dim>* r0 = new Rod<T, dim>(deformed_states, 0, true);
+        Rod<T, dim>* r0 = new Rod<T, dim>(deformed_states, sim.rest_states, 0, true);
         std::unordered_map<int, Vector<int, dim + 1>> offset_map;
         std::vector<int> node_index_list, dof_offset;
         std::vector<T> data_points_discrete_arc_length;
@@ -797,7 +798,7 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         //     std::cout << it.first << " " << it.second.transpose() << std::endl;
         // }
         // std::getchar();
-        
+       
 
         node_index_list.push_back(0); // closed curve
         r0->offset_map = offset_map;
@@ -835,7 +836,7 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         // std::cout<< deformed_states << std::endl;
         // std::getchar();
 
-        Rod<T, dim>* r1 = new Rod<T, dim>(deformed_states, 1);
+        Rod<T, dim>* r1 = new Rod<T, dim>(deformed_states, sim.rest_states, 1);
 
         TV dir_rod1 = (curve->data_points[2] - curve->data_points[0]).normalized();
         TV rod1_from = curve->data_points[0] - dir_rod1 * 0.1 * sim.unit;
@@ -857,14 +858,16 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
 
         // r1->dof_node_location = key_points_location_rod1;
         r1->dof_node_location = { key_points_location_rod1.front(), key_points_location_rod1.back() };
-        for(TV pt : points_rod1)
-            std::cout << pt.transpose() << std::endl;
+        // for(int pt : r1->dof_node_location)
+        //     std::cout << pt << std::endl;
 
+        // std::cout << deformed_states.rows() << " " << full_dof_cnt << std::endl;
+        // std::getchar();
         
-        deformed_states.conservativeResize(full_dof_cnt + (points_rod1.size() - 1) * (dim + 1) + 3);
+        deformed_states.conservativeResize(full_dof_cnt + (points_rod1.size()) * (dim + 1) + 3);
         r1->indices = rod1;
         
-        
+        std::cout << deformed_states.rows() << std::endl;
         for (int i = 0; i < points_rod1.size(); i++)
         {
             offset_map[node_cnt] = Vector<int, dim + 1>::Zero();
@@ -878,6 +881,9 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
             offset_map[node_cnt][2] = full_dof_cnt++;
             node_cnt++;
         }
+
+        // std::cout << deformed_states.rows() << " " << full_dof_cnt << std::endl;
+        // std::getchar();
 
         deformed_states[full_dof_cnt] = (center - rod1_from).norm() / (rod1_to - rod1_from).norm();
         offset_map[center_id][dim] = full_dof_cnt++;
@@ -910,18 +916,46 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         r1->validCheck();
         sim.Rods.push_back(r1);
 
-        sim.rod_crossings.push_back(new RodCrossing<T, dim>(0, {0, 1} ));
-        sim.rod_crossings.push_back(new RodCrossing<T, dim>(sub_div_2 * 2, {0, 1} ));
+        RodCrossing<T, dim>* rc0 = new RodCrossing<T, dim>(0, {0, 1});
+        RodCrossing<T, dim>* rc1 = new RodCrossing<T, dim>(sub_div_2 * 2, {0, 1});
+
+        rc0->sliding_ranges = { Range(0, 0), Range(sub_div * 0.2 * sim.unit, sub_div * 0.2 * sim.unit) };
+        rc1->sliding_ranges = { Range(0, 0), Range(sub_div * 0.2 * sim.unit, sub_div * 0.2 * sim.unit) };
+
+        sim.rod_crossings.push_back(rc0);
+        sim.rod_crossings.push_back(rc1);
 
         int dof_cnt = 0;
         markCrossingDoF(w_entry, dof_cnt);
         r0->markDoF(w_entry, dof_cnt);
         r1->markDoF(w_entry, dof_cnt);
 
-        for (int d = 0; d < dim + 1; d++)
-            sim.dirichlet_dof[q0[d]] = 0;
-        for (int d = 0; d < dim + 1; d++)
-            sim.dirichlet_dof[q1[d]] = 0;
+        r0->fixEndPointEulerian(sim.dirichlet_dof);
+        r1->fixEndPointEulerian(sim.dirichlet_dof);
+
+        Offset ob, of; r1->backOffsetReduced(ob); r1->frontOffsetReduced(of);
+        
+        for(int d = 0; d < dim; d++)
+        {
+            sim.dirichlet_dof[ob[d]] = 0;
+        }
+        
+        // sim.fixCrossing();
+
+        // std::cout << of.transpose() << std::endl;
+        sim.dirichlet_dof[of[0]] = -0.2 * sim.unit;
+        sim.dirichlet_dof[of[1]] = -0.1 * sim.unit;
+        
+        // for(auto it : sim.dirichlet_dof)
+        //     std::cout << it.first << " " << it.second << std::endl;
+
+        sim.rest_states = sim.deformed_states;
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        // std::cout << sim.W << std::endl;
+        
+
+        // sim.checkMaterialPositionDerivatives();
         // std::cout << node_cnt << " " <<  full_dof_cnt << " " << dof_cnt << std::endl;
         // std::vector<int> key_points = { rod0.front(),
         //                                 rod1.front(),
@@ -1008,10 +1042,9 @@ void UnitPatch<T, dim>::buildCircleCrossScene(int sub_div)
         // sim.q0 = q;
         // // dof_cnt = sim.n_nodes * sim.dof;
         // sim.n_dof = dof_cnt;
-        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
-        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        
 
-        sim.rest_states = deformed_states;
+        
         // std::cout << sim.W << std::endl;
 
         // sim.slide_over_n_rods = IV2(0, std::floor(sub_div * 0.3));
