@@ -76,7 +76,7 @@ void Homogenization<T, dim>::initialize()
     sim.newton_tol = 1e-6;
     // sim.k_pbc = 1e10;    
     // sim.k_strain = 1e5;
-    sim.ke = 1e-4;
+    sim.ke = 1e-7;
     sim.k_yc = 1e5;
     
     

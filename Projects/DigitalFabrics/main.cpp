@@ -88,7 +88,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
                 C.resize(n_rods * n_faces, 3);
                 tbb::parallel_for(0, n_rods, [&](int rod_idx){
                     for(int i = 0; i < n_faces; i++)
-                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                        C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
                     });
             }
             else
@@ -159,6 +159,7 @@ int main(int argc, char *argv[])
     int n_test_case = sizeof(test_case_names)/sizeof(const char*);
     
     int selected = -1;
+    int rod_idx = -1;
     double u0 = 0.0, x0 = 0.0, y0 = 0.0;
 
     static TestCase test = BatchRendering;
@@ -460,6 +461,30 @@ int main(int argc, char *argv[])
             double y = viewer.core().viewport(3) - viewer.current_mouse_y;
             if(eol_sim.new_frame_work)
             {
+                for (auto& rod : eol_sim.Rods)
+                {
+                    for (int node_idx : rod->indices)
+                    {
+                        Vector<T, dim> xsim;
+                        rod->x(node_idx, xsim);
+                        Eigen::MatrixXd x3d(1, 3); x3d.setZero();
+                        x3d.row(0).template segment<dim>(0) = xsim / eol_sim.unit;
+
+                        Eigen::MatrixXd pxy(1, 3);
+
+                        igl::project(x3d, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+                        
+                        if(abs(pxy.row(0)[0]-x)<20 && abs(pxy.row(0)[1]-y)<20)
+                        {
+                            selected = node_idx;
+                            rod_idx = rod->rod_id;
+                            x0 = x;
+                            y0 = y;
+                            std::cout << "selected " << selected << std::endl;
+                            return true;
+                        }
+                    }
+                }
                 return false;
             }
             else
@@ -492,7 +517,10 @@ int main(int argc, char *argv[])
 		if(selected!=-1)
 		{
 			selected = -1;
-            eol_sim.q0 = eol_sim.q;
+            if (eol_sim.new_frame_work)
+                eol_sim.rest_states = eol_sim.deformed_states;
+            else
+                eol_sim.q0 = eol_sim.q;
             // eol_sim.q0.transpose().block(0, 0, eol_sim.n_nodes, dim)  = eol_sim.q.transpose().block(0, 0, eol_sim.n_nodes, dim);
 			return true;
 		}
@@ -507,7 +535,12 @@ int main(int argc, char *argv[])
         {
             double x = viewer.current_mouse_x;
             double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-        
+
+            for (auto& rod : eol_sim.Rods)
+            {
+                
+            }
+
             return false;
         };
     }
@@ -520,26 +553,39 @@ int main(int argc, char *argv[])
                 double x = viewer.current_mouse_x;
                 double y = viewer.core().viewport(3) - viewer.current_mouse_y;
             
-                double delta_x = (x - x0) / viewer.core().viewport(2);
-                double delta_y = (y - y0) / viewer.core().viewport(3);
-                // eol_sim.q(dim, 3) = u0;
-                Eigen::VectorXd delta_dof(4); delta_dof.setZero();
-                auto zero_delta = delta_dof;
-                Eigen::VectorXd mask_dof(4); mask_dof.setZero();
-                
-                // delta_dof(0) = delta_x * eol_sim.unit;
-                delta_dof(1) = delta_y * eol_sim.unit;
-                
-                // mask_dof(0) = 1;
-                mask_dof(1) = 1;
-                mask_dof(2) = 1;
-                mask_dof(3) = 1;
-                
-                eol_sim.dirichlet_data[selected] = std::make_pair(delta_dof, mask_dof);
-                eol_sim.advanceOneStep();
-                updateScreen(viewer);
-                std::cout << delta_x << " " << delta_y << std::endl;
-                return true;
+                double delta_x = (x - x0) / viewer.core().viewport(2) * eol_sim.unit;
+                double delta_y = (y - y0) / viewer.core().viewport(3) * eol_sim.unit;
+
+                if (eol_sim.new_frame_work)
+                {
+                    Vector<int, dim + 1> offset = eol_sim.Rods[rod_idx]->offset_map[selected];
+
+                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[1]]] = delta_y;
+                    eol_sim.advanceOneStep();
+                    updateScreen(viewer);
+                    return true;
+                }
+                else
+                {
+                    // eol_sim.q(dim, 3) = u0;
+                    Eigen::VectorXd delta_dof(4); delta_dof.setZero();
+                    auto zero_delta = delta_dof;
+                    Eigen::VectorXd mask_dof(4); mask_dof.setZero();
+                    
+                    // delta_dof(0) = delta_x * eol_sim.unit;
+                    delta_dof(1) = delta_y * eol_sim.unit;
+                    
+                    // mask_dof(0) = 1;
+                    mask_dof(1) = 1;
+                    mask_dof(2) = 1;
+                    mask_dof(3) = 1;
+                    
+                    eol_sim.dirichlet_data[selected] = std::make_pair(delta_dof, mask_dof);
+                    eol_sim.advanceOneStep();
+                    updateScreen(viewer);
+                    std::cout << delta_x << " " << delta_y << std::endl;
+                    return true;
+                }
             }
 
             return false;

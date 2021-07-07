@@ -159,6 +159,7 @@ private:
         std::vector<Eigen::Triplet<T>>& w_entry,
         int& dof_cnt);
     
+    void buildHemiCircleCrossScene(int sub_div);
 };
 
 #endif

@@ -562,7 +562,8 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         residual_norm = residual.norm();
         if (verbose)
             std::cout << "residual_norm " << residual_norm << std::endl;
-        
+        // std::cout << residual << std::endl;
+        // std::getchar();
         if (residual_norm < newton_tol)
             break;
         
@@ -721,8 +722,14 @@ void EoLRodSim<T, dim>::advanceOneStep()
         iterateDirichletDoF([&](int offset, T target){
             dq_projected[offset] = target;
         });
-
         deformed_states = rest_states + W * dq_projected;
+        T e_total = 0.0;
+        if (add_stretching)
+            e_total += addStretchingEnergy();
+        if (add_bending)
+            e_total += addBendingEnergy();
+        std::cout << "E total: " << e_total << std::endl;
+        
     }
     else
     {

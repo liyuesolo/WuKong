@@ -621,6 +621,7 @@ T EoLRodSim<T, dim>::addBendingEnergy()
     T energy = 0.0;
     for (auto& rod : Rods)
     {
+        T energy_current = energy;
         rod->iterate3Nodes([&](int node_i, int node_j, int node_k){
             TV xi, xj, xk, Xi, Xj, Xk;
             rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -631,8 +632,15 @@ T EoLRodSim<T, dim>::addBendingEnergy()
             T V[1];
             #include "Maple/YarnBendDiscreteRestCurvatureV.mcg"
             energy += V[0];
+            // std::cout << node_i << " " << node_j << " " << node_k << std::endl;
+            // TV xij = (xj - xi).normalized(); TV xki = (xi - xk).normalized();
+            // TV Xij = (Xj - Xi).normalized(); TV Xki = (Xi - Xk).normalized();
+            // std::cout << std::acos(xij.dot(xki)) / M_PI * 180.0 << " " << std::acos(Xij.dot(Xki)) / M_PI * 180.0 << " " << V[0] << std::endl;
+            
         });
+        // std::cout << "Rod " << rod->rod_id << " " << energy - energy_current << std::endl;
     }
+    
     if(!add_pbc_bending)
         return energy;
 }

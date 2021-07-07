@@ -6,13 +6,13 @@ void EoLRodSim<T, dim>::derivativeTest()
 {
     run_diff_test = true;
     add_regularizor = false;
-    add_stretching = false;
+    add_stretching = true;
     add_penalty =false;
-    add_bending = false;
+    add_bending = true;
     add_shearing = false;
     add_pbc = false;
-    add_contact_penalty = true;
-    add_eularian_reg = true;
+    add_contact_penalty = false;
+    add_eularian_reg = false;
     deformed_states /= unit;
     VectorXT dq(W.cols());
     // VectorXT dq(W.rows());
@@ -21,8 +21,8 @@ void EoLRodSim<T, dim>::derivativeTest()
     for (int i = 0; i < dq.rows(); i++)
         dq(i) = dq(i) * 0.5 + 0.5;
     dq *= 0.01;
-    dq(2) += 1.0;
-    dq(3) += 1.0;
+    // dq(2) += 1.0;
+    // dq(3) += 1.0;
     testGradient(dq);
     testHessian(dq);
 }

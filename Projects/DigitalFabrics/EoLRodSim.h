@@ -183,8 +183,6 @@ public:
     std::vector<Rod<T, dim>*> Rods;
     std::vector<RodCrossing<T, dim>*> rod_crossings;
 
-    std::unordered_map<int, Vector<int, dim + 1>> offset_map;
-
     StiffnessMatrix W;
 
 

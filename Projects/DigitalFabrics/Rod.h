@@ -66,6 +66,7 @@ public:
             f(indices[i], indices[i+1]);
         }
     }
+    
 
     template <class OP>
     void iterateSegmentsWithOffset(const OP& f) 
@@ -102,8 +103,13 @@ public:
 
     void x(int node_idx, TV& pos)
     {
+        pos = TV::Zero();
         Offset idx = offset_map[node_idx];
-        pos = full_states.template segment<dim>(idx[0]);
+        for (int d = 0; d < dim; d++)
+        {
+            pos[d] = full_states[idx[d]];
+        }
+        
     }
 
     void u(int node_idx, T& pos)
@@ -195,6 +201,15 @@ public:
     {
         dirichlet_data[reduced_map[offset_map[indices.front()][dim]]] = 0;
         dirichlet_data[reduced_map[offset_map[indices.back()][dim]]] = 0;
+    }
+
+    void fixEndPointLagrangian(std::unordered_map<int, T>& dirichlet_data)
+    {
+        for (int d = 0; d < dim; d++)
+        {
+            dirichlet_data[reduced_map[offset_map[indices.front()][d]]] = 0;
+            dirichlet_data[reduced_map[offset_map[indices.back()][d]]] = 0;    
+        }
     }
 
     void validCheck()

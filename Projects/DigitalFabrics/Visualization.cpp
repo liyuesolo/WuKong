@@ -99,6 +99,7 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
 {
+    // std::cout << "generate mesh for rendering" << std::endl;
     int n_div = 10;
     
     T theta = 2.0 * EIGEN_PI / T(n_div);
@@ -135,7 +136,7 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             rod->x(node_i, vtx_from_TV);
             rod->x(node_j, vtx_to_TV);
             vtx_from_TV /= unit; vtx_to_TV /= unit;
-            // std::cout << node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
+            // std::cout << rod_cnt << " " <<  node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
             TV3 vtx_from = TV3::Zero();
             TV3 vtx_to = TV3::Zero();
             if constexpr (dim == 3)
@@ -181,7 +182,7 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             rod_cnt++;
         });
     }
-
+    
 }
 
 template<class T, int dim>
