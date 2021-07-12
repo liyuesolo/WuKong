@@ -1,0 +1,13 @@
+T t6 = pow(S_entry[0]*x[0]+S_entry[1]*x[1]+S_entry[2]*x[2]+S_entry[3]*x[3]-
+b[0],2.0);
+T t12 = pow(S_entry[4]*x[0]+S_entry[5]*x[1]+S_entry[6]*x[2]+S_entry[7]*x[3]
+-b[1],2.0);
+T t18 = pow(S_entry[8]*x[0]+S_entry[9]*x[1]+S_entry[10]*x[2]+S_entry[11]*x
+[3]-b[2],2.0);
+T t24 = pow(S_entry[12]*x[0]+S_entry[13]*x[1]+S_entry[14]*x[2]+S_entry[15]*
+x[3]-b[3],2.0);
+T t26 = b[0]*b[0];
+T t27 = b[1]*b[1];
+T t28 = b[2]*b[2];
+T t29 = b[3]*b[3];
+V[0] = (t6+t12+t18+t24)/(t26+t27+t28+t29);

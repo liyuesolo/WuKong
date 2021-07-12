@@ -1,0 +1,30 @@
+
+T t1 = -x[2][2]+x[1][2];
+T t3 = x[1][0]-x[0][0];
+T t4 = t3*t3;
+T t5 = x[1][1]-x[0][1];
+T t6 = t5*t5;
+T t8 = sqrt(t4+t6);
+T t9 = 1/t8;
+T t10 = t3*t9;
+T t11 = x[0][0]-x[2][0];
+T t12 = t11*t11;
+T t13 = x[0][1]-x[2][1];
+T t14 = t13*t13;
+T t16 = sqrt(t12+t14);
+T t17 = 1/t16;
+T t18 = t13*t17;
+T t20 = t5*t9;
+T t21 = t11*t17;
+T t27 = atan2(t18*t10-t21*t20,0.1E1+t21*t10+t18*t20);
+T t32 = pow(0.4E1/t1*t27-kappa0,2.0);
+// std::cout << "node " << nodes[2] << " " << x[2].transpose() << std::endl;
+// std::cout << "node " << nodes[0] << " " << x[0].transpose() << std::endl;
+// std::cout << "node " << nodes[1] << " " << x[1].transpose() << std::endl;
+// std::cout << "theta " << t27 << " discrete " << 0.4E1/t1*t27 << " analytical " << kappa0 << std::endl;
+// // std::cout << "sin " << _sin(x[0][2]) << " gradient: " << _sin_p(x[0][2]) 
+// //     << " hessian: " << _sin_pp(x[0][2]) << " curvature " 
+// //     << _sin_pp(x[0][2]) / std::pow(1 + _sin_p(x[0][2]) * _sin_p(x[0][2]), 3.0/2.0) 
+// //     << " kappa0: " << kappa0 << std::endl;
+// std::getchar();
+V[0] = 0.5*t32*t1*kb;

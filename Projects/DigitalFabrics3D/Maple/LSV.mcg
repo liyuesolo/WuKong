@@ -1,0 +1,7 @@
+T t5 = pow(S_entry[0]*x[0]+S_entry[1]*x[1]+S_entry[2]*x[2]-b[0],2.0);
+T t10 = pow(S_entry[1]*x[0]+S_entry[3]*x[1]+S_entry[4]*x[2]-b[1],2.0);
+T t15 = pow(S_entry[2]*x[0]+S_entry[4]*x[1]+S_entry[5]*x[2]-b[2],2.0);
+T t17 = b[0]*b[0];
+T t18 = b[1]*b[1];
+T t19 = b[2]*b[2];
+V[0] = (t5+t10+t15)/(t17+t18+t19);

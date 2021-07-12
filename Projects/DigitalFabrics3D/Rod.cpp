@@ -1,0 +1,212 @@
+#include "Rod.h"
+
+
+template<class T, int dim>
+void Rod<T, dim>::setupBishopFrame()
+{
+    // rest_tangents.resize(indices.size() - 1);
+    reference_frame_us.resize(indices.size() - 1);
+    // reference_twist.resize(indices.size() - 1);
+    reference_angles = full_states.segment(theta_dof_start_offset, indices.size() - 1);
+    if constexpr (dim == 3)
+    {
+        TV prev_tangent;
+        iterateSegments([&](int node_i, int node_j, int segment){
+            TV xi, xj;
+            x(node_i, xi); x(node_j, xj);
+            TV tangent = (xj - xi).normalized();
+            // rest_tangents[segment] = tangent;
+            TV u, v;
+            if (segment == 0)
+            {
+                if(colinear(tangent, TV(0, 0, 1)))
+                    v = tangent.cross(TV(0, 1, 0));
+                else
+                    v = tangent.cross(TV(0, 0, 1));
+                u = v.cross(tangent);
+                
+            }
+            else
+            {
+                u = parallelTransportOrthonormalVector(
+                    reference_frame_us[segment - 1], 
+                    prev_tangent, 
+                    tangent);
+            }
+            prev_tangent = tangent;
+            reference_frame_us[segment] = u;
+
+
+            // std::cout << computeReferenceTwist(tangent, prev_tangent, segment) << std::endl;
+        });    
+    }
+}
+
+
+
+template<class T, int dim>
+void Rod<T, dim>::curvatureBinormal(const TV& t1, const TV& t2, TV& kb)
+{
+    if constexpr (dim == 3)
+    {
+        T denominator = 1. + t1.dot(t2);
+        if (denominator <= 0. || denominator < std::numeric_limits<T>::epsilon()) 
+        {
+            if (denominator <= 0.) 
+                denominator = 1. + t1.normalized().dot(t2.normalized());
+            
+
+            if (denominator <= 0.) 
+            {
+                std::cerr << "CurvatureBinormals::compute() denominator == "
+                            << denominator << " t1 = " << t1
+                            << " t2 = " << t2 << std::endl;
+
+                kb = TV::Constant(
+                    std::numeric_limits<T>::infinity());  // Should not be
+                                                                // accepted.
+            } 
+            else 
+            {
+                TV normal;
+                if(colinear(t1, TV(0, 0, 1)))
+                    normal = t1.cross(TV(0, 1, 0));
+                else
+                    normal = t1.cross(TV(0, 0, 1));
+                kb = 4. * std::tan(.5 * std::acos(denominator - 1.)) * normal;
+            }
+        } 
+        else 
+        {
+            kb = 2.0 * t1.cross(t2) / denominator;
+        }
+    }
+    
+  
+}
+
+template<class T, int dim>
+T Rod<T, dim>::computeReferenceTwist(const TV& tangent, const TV& prev_tangent, int rod_idx)
+{
+    if constexpr (dim == 3)
+    {
+        TV ut = parallelTransportOrthonormalVector(reference_frame_us[rod_idx-1], prev_tangent, tangent);
+        TV u = reference_frame_us[rod_idx];
+        // rotate by current value of reference twist
+        // T before_twist = reference_twist[segment];
+        T rest_twist = 0;
+        rotateAxisAngle(ut, tangent, rest_twist);
+        return rest_twist + signedAngle(ut, u, tangent);
+    }
+    return 0;
+}
+
+template<class T, int dim>
+void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
+{
+    // std::cout << "[Rod" << rod_id << "]" << std::endl;
+    int loop_id = 0;
+    if(dof_node_location.size())
+    {
+        if (dof_node_location.front() != 0)
+        {
+            // add first node
+            Offset offset = offset_map[indices.front()];
+            // std::cout << "node " <<  indices.front() << " added all dof " << std::endl;
+            for(int d = 0; d < dim + 1; d++)
+            {
+                reduced_map[offset[d]] = dof_cnt;
+                w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
+            }
+        }
+    }
+    else
+    {
+        Offset offset = offset_map[indices.front()];
+        // std::cout << "node " <<  indices.front() << " added all dof " << std::endl;
+        for(int d = 0; d < dim + 1; d++)
+        {
+            reduced_map[offset[d]] = dof_cnt;
+            w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
+        }
+    }
+    
+    // loop over each segment
+    for (int i = 0; i < dof_node_location.size(); i++)
+    {   
+        // compute weight value for in-between nodes
+        // using linear interpolation
+        // std::cout << "left node " << indices[loop_id] << " right node " << indices[dof_node_location[i]] << std::endl;
+        
+        Offset offset_left_node = offset_map[indices[loop_id]];
+        Offset offset_right_node = offset_map[indices[dof_node_location[i]]];
+        T ui = full_states[offset_left_node[dim]];
+        T uj = full_states[offset_right_node[dim]];
+
+        for (int j = loop_id + 1; j < dof_node_location[i]; j++)
+        {
+            int current_global_idx = indices[j];
+            // std::cout << "current node " << current_global_idx << std::endl;
+            //push Lagrangian DoF first
+            Offset offset = offset_map[current_global_idx];
+            for(int d = 0; d < dim; d++)
+            {
+                reduced_map[offset[d]] = dof_cnt;
+                // std::cout << "add lagrangian entry to " << offset[d] << " " << dof_cnt << std::endl;
+                w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
+            }
+            // compute Eulerian weight
+            T u = full_states[offset[dim]];
+            T alpha = (u - ui) / (uj - ui);
+            // std::cout << "alpha " << alpha << std::endl;
+            // std::cout << "add eulerian entry to " << offset[dim] << " " << reduced_map[offset_left_node[dim]] << std::endl;
+            w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_left_node[dim]], 1.0 - alpha));
+            w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_right_node[dim]], alpha));
+        }
+        
+        loop_id = dof_node_location[i];
+    }
+    // last segment
+    if (loop_id != indices.size() - 1 && !closed)
+    {
+        //last node is not a crossing node
+        Offset offset = offset_map[indices.back()];
+        // std::cout << "node " <<  indices.back() << " added all dof " << std::endl;
+        for(int d = 0; d < dim + 1; d++)
+        {
+            reduced_map[offset[d]] = dof_cnt;
+            w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
+        }
+    }
+    for (int j = loop_id + 1; j < indices.size() - 1; j++)
+    {
+        // std::cout << "left node " << indices[loop_id] << " right node " << indices.back() << std::endl;
+
+        Offset offset_left_node = offset_map[indices[loop_id]];
+        Offset offset_right_node = offset_map[indices.back()];
+
+        T ui = full_states[offset_left_node[dim]];
+        T uj = full_states[offset_right_node[dim]];
+        int current_global_idx = indices[j];
+        // std::cout << "current node " << current_global_idx << std::endl;
+        //push Lagrangian DoF first
+        Offset offset = offset_map[current_global_idx];
+        for(int d = 0; d < dim; d++)
+        {
+            reduced_map[offset[d]] = dof_cnt;
+            w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
+        }
+        // compute Eulerian weight
+        T u = full_states[offset[dim]];
+        T alpha = (u - ui) / (uj - ui);
+        
+        if (closed) alpha *= -1;
+        
+        // std::cout << "alpha " << alpha << std::endl;
+        // std::cout << "add eulerian entry to " << offset[dim] << " " << reduced_map[offset_left_node[dim]] << std::endl;
+        w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_left_node[dim]], 1.0 - alpha));
+        w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_right_node[dim]], alpha));
+    }
+}
+template class Rod<double, 3>;
+template class Rod<double, 2>; 
