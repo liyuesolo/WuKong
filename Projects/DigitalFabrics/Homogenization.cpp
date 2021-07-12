@@ -58,7 +58,7 @@ void Homogenization<T, dim>::initialize()
     sim.disable_sliding = false;
     sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    sim.buildSceneFromUnitPatch(9);
+    sim.buildSceneFromUnitPatch(12);
     
     // sim.buildPlanePeriodicBCScene3x3();
     sim.add_eularian_reg = true;
@@ -76,7 +76,7 @@ void Homogenization<T, dim>::initialize()
     sim.newton_tol = 1e-6;
     // sim.k_pbc = 1e10;    
     // sim.k_strain = 1e5;
-    sim.ke = 1e-7;
+    sim.ke = 1e-6;
     sim.k_yc = 1e5;
     
     

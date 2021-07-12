@@ -38,11 +38,11 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
             T delta_u = (u - U);
             Range range = sliding_ranges[cnt];
             // 0 is the positive side sliding range
-            if(delta_u > 0 && range[0] > 1e-6)
+            if(delta_u >= range[0] && range[0] > 1e-6)
             {
                 entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
             }
-            else if (delta_u < 0 && range[1] > 1e-6)
+            else if (delta_u <= -range[1] && range[1] > 1e-6)
             {
                 entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
             }
@@ -71,13 +71,18 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
             Rods[rod_idx]->U(node_idx, U);
             T delta_u = (u - U);
             Range range = sliding_ranges[cnt];
+            // if(rod_idx == 1)
+            //     std::cout << range.transpose() << " " << delta_u << std::endl;
             // 0 is the positive side sliding range
-            if(delta_u > 0 && range[0] > 1e-6)
+            if(delta_u >= range[0] && range[0] > 1e-6)
             {
+                // std::cout<< delta_u  << " " << range[0] << std::endl;
                 residual[offset[dim]] += -k_yc * (delta_u - range[0]);
             }
-            else if (delta_u < 0 && range[1] > 1e-6)
+            // 1 is the sliding range along the negative direction
+            else if (delta_u <= -range[1] && range[1] > 1e-6)
             {
+                // std::cout<< delta_u  << " " << range[1] << std::endl;
                 residual[offset[dim]] += -k_yc * (delta_u + range[1]);
             }
             cnt++;
@@ -133,11 +138,11 @@ T EoLRodSim<T, dim>::addParallelContactEnergy()
             T delta_u = (u - U);
             Range range = sliding_ranges[cnt];
             // 0 is the positive side sliding range
-            if(delta_u > 0 && range[0] > 1e-6)
+            if(delta_u >= range[0] && range[0] > 1e-6)
             {
                 energy += 0.5 * k_yc * std::pow(delta_u - range[0], 2);
             }
-            else if (delta_u < 0 && range[1] > 1e-6)
+            else if (delta_u <= -range[1] && range[1] > 1e-6)
             {
                 energy += 0.5 * k_yc * std::pow(delta_u + range[1], 2);
             }

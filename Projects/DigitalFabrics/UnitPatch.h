@@ -67,6 +67,8 @@ public:
     void buildUnitFromC2Curves(int sub_div);
 
     void buildCircleCrossScene(int sub_div);
+    void buildCircleCrossSceneSlidingTest(int sub_div);
+    
 
     // Mechanism
     void buildDragCircleScene(int sub_div);

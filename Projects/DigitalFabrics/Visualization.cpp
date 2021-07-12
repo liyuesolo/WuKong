@@ -136,6 +136,7 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             rod->x(node_i, vtx_from_TV);
             rod->x(node_j, vtx_to_TV);
             vtx_from_TV /= unit; vtx_to_TV /= unit;
+            
             // std::cout << rod_cnt << " " <<  node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
             TV3 vtx_from = TV3::Zero();
             TV3 vtx_to = TV3::Zero();
@@ -182,7 +183,70 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             rod_cnt++;
         });
     }
-    
+    int v_off = n_rod_total * rod_offset_v;
+    V.conservativeResize(V.rows() * 2, 3);
+    F.conservativeResize(F.rows() * 2, 3);
+    rod_cnt = 0;
+    for(auto& rod : Rods)
+    {
+        rod->iterateSegments([&](int node_i, int node_j){
+            int rov = v_off + rod_cnt * rod_offset_v;
+            int rof = v_off + rod_cnt * rod_offset_f;
+
+            TV vtx_from_TV, vtx_to_TV;
+            rod->X(node_i, vtx_from_TV);
+            rod->X(node_j, vtx_to_TV);
+            vtx_from_TV /= unit; vtx_to_TV /= unit;
+            // std::cout << rod_cnt << " " <<  node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
+            // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
+            TV3 vtx_from = TV3::Zero();
+            TV3 vtx_to = TV3::Zero();
+            if constexpr (dim == 3)
+            {
+                vtx_from = vtx_from_TV;
+                vtx_to = vtx_to_TV;
+            }
+            else
+            {
+                vtx_from = TV3(vtx_from_TV[0], vtx_from_TV[1], 0);
+                vtx_to = TV3(vtx_to_TV[0], vtx_to_TV[1], 0);
+            }
+
+            TV3 normal_offset = TV3::Zero();
+
+            vtx_from += normal_offset * R;
+            vtx_to += normal_offset * R;
+            
+            TV3 axis_world = vtx_to - vtx_from;
+            TV3 axis_local(0, axis_world.norm(), 0);
+
+            
+            TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+            
+            for(int i = 0; i < n_div; i++)
+            {
+                for(int d = 0; d < 3; d++)
+                {
+                    V(rov + i, d) = points.col(i)[d];
+                    V(rov + i+n_div, d) = points.col(i)[d];
+                    if (d == 1)
+                        V(rov + i+n_div, d) += axis_world.norm();
+                }
+
+                // central vertex of the top and bottom face
+                V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+                V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+                
+            }
+            rod_cnt++;
+        });
+    }
+    F.block(n_rod_total * rod_offset_f, 0, n_rod_total * rod_offset_f, 3) = F.block(0, 0, n_rod_total * rod_offset_f, 3);
+    for (int i = n_rod_total * rod_offset_f; i < F.rows(); i++)
+    {
+        F.row(i) += Eigen::Vector3i(n_rod_total * rod_offset_v, n_rod_total * rod_offset_v, n_rod_total * rod_offset_v);
+    }
 }
 
 template<class T, int dim>

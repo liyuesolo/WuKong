@@ -71,7 +71,9 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
         else
         {
             if (eol_sim.new_frame_work)
+            {
                 eol_sim.generateMeshForRendering(V, F);
+            }
             else
                 eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
         }
@@ -85,10 +87,14 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
                 int n_rods = 0;
                 for (auto& rod : eol_sim.Rods)
                     n_rods += rod->numSeg();
-                C.resize(n_rods * n_faces, 3);
+                C.resize(n_rods * n_faces * 2, 3);
                 tbb::parallel_for(0, n_rods, [&](int rod_idx){
                     for(int i = 0; i < n_faces; i++)
+                    {
+
                         C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                        C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
+                    }
                     });
             }
             else
