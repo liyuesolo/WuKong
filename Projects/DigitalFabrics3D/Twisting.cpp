@@ -7,7 +7,7 @@ void EoLRodSim<T, dim>::addTwistingK(std::vector<Entry>& entry_K)
         for (auto& rod : Rods)
         {
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                    Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                    Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 T kt = rod->kt;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
@@ -77,7 +77,7 @@ void EoLRodSim<T, dim>::addTwistingK(std::vector<Entry>& entry_K)
         for (auto& rod : Rods)
         {
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                    Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                    Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 T kt = rod->kt;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk, ddXi, ddXj, ddXk;
@@ -123,7 +123,7 @@ void EoLRodSim<T, dim>::addTwistingForce(Eigen::Ref<VectorXT> residual)
         for (auto& rod : Rods)
         {
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                    Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                    Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 T kt = rod->kt;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
@@ -201,7 +201,7 @@ T EoLRodSim<T, dim>::addTwistingEnergy()
         for (auto& rod : Rods)
         {
             T energy_current = energy;
-            rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second){
+            rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second, bool is_crossing){
                     T kt = rod->kt;
                     TV xi, xj, xk, Xi, Xj, Xk;
                     rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);

@@ -6,7 +6,9 @@ void Rod<T, dim>::setupBishopFrame()
 {
     // rest_tangents.resize(indices.size() - 1);
     reference_frame_us.resize(indices.size() - 1);
-    // reference_twist.resize(indices.size() - 1);
+    reference_twist.resize(indices.size() - 1);
+    prev_tangents.resize(indices.size() - 1);
+    reference_twist.setZero();
     reference_angles = full_states.segment(theta_dof_start_offset, indices.size() - 1);
     if constexpr (dim == 3)
     {
@@ -34,11 +36,48 @@ void Rod<T, dim>::setupBishopFrame()
                     tangent);
             }
             prev_tangent = tangent;
+            prev_tangents[segment] = tangent;
             reference_frame_us[segment] = u;
-
-
-            // std::cout << computeReferenceTwist(tangent, prev_tangent, segment) << std::endl;
+            if (segment)
+                reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
         });    
+    }
+}
+
+template<class T, int dim>
+void Rod<T, dim>::rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit()
+{
+    if constexpr (dim == 3)
+    {
+        TV prev_tangent;
+        iterateSegments([&](int node_i, int node_j, int segment){
+            TV xi, xj;
+            x(node_i, xi); x(node_j, xj);
+            TV tangent = (xj - xi).normalized();
+            TV tangent_last_time_step = prev_tangents[segment];
+            reference_frame_us[segment] = parallelTransportOrthonormalVector(
+                                                reference_frame_us[segment], 
+                                                tangent_last_time_step,
+                                                tangent);
+            if (segment)
+                reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
+                // std::cout << computeReferenceTwist(tangent, prev_tangent, segment) << std::endl;
+            prev_tangent = tangent;
+            prev_tangents[segment] = tangent;
+                // reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
+        });
+        // iterateSegments([&](int node_i, int node_j, int segment){
+        //     TV xi, xj;
+        //     x(node_i, xi); x(node_j, xj);
+        //     TV tangent = (xj - xi).normalized();
+        //     TV tangent_last_time_step = prev_tangents[segment];
+        //     reference_frame_us[segment] = parallelTransportOrthonormalVector(
+        //                                         reference_frame_us[segment], 
+        //                                         tangent_last_time_step,
+        //                                         tangent);
+        //     prev_tangents[segment] = tangent;
+            
+        // });
     }
 }
 
@@ -93,10 +132,11 @@ T Rod<T, dim>::computeReferenceTwist(const TV& tangent, const TV& prev_tangent, 
         TV ut = parallelTransportOrthonormalVector(reference_frame_us[rod_idx-1], prev_tangent, tangent);
         TV u = reference_frame_us[rod_idx];
         // rotate by current value of reference twist
-        // T before_twist = reference_twist[segment];
-        T rest_twist = 0;
-        rotateAxisAngle(ut, tangent, rest_twist);
-        return rest_twist + signedAngle(ut, u, tangent);
+        T before_twist = reference_twist[rod_idx];
+        rotateAxisAngle(ut, tangent, before_twist);
+        T after_twist = before_twist + signedAngle(ut, u, tangent);
+        // std::cout << after_twist << std::endl;
+        return after_twist;
     }
     return 0;
 }

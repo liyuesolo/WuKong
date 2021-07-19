@@ -20,7 +20,9 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
         rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, 
             rod->indices.size() - 1);
     }
-   
+    for (auto& crossing : rod_crossings)
+        crossing->omega = deformed_states.template segment<3>(crossing->dof_offset);
+
     T total_energy = 0;
     T E_stretching = 0, E_bending = 0, E_shearing = 0, E_twisting = 0, E_bending_twisting = 0,
         E_eul_reg = 0, E_pbc = 0, E_penalty = 0, E_contact = 0;
@@ -31,6 +33,8 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
     {
         if (add_bending && add_twisting)
             E_bending_twisting = add3DBendingAndTwistingEnergy();
+        if (add_rigid_joint)
+            E_bending_twisting += addJointBendingAndTwistingEnergy();
     }
     else if constexpr (dim == 2)
     {
@@ -70,7 +74,16 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
     {
         rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, 
             rod->indices.size() - 1);
+        rod->rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit();
     }
+
+    for (auto& crossing : rod_crossings)
+    {
+        crossing->omega = deformed_states.template segment<3>(crossing->dof_offset);
+        // crossing->updateRotation(deformed_states.template segment<3>(crossing->dof_offset));
+    }
+        // crossing->updateRotation(deformed_states.template segment<3>(crossing->dof_offset));
+
     VectorXT full_residual(deformed_states.rows());
     full_residual.setZero();
 
@@ -80,6 +93,8 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
     {
         if (add_bending && add_twisting)
             add3DBendingAndTwistingForce(full_residual);
+        if (add_rigid_joint)
+            addJointBendingAndTwistingForce(full_residual);
     }
     else if constexpr (dim == 2)
     {
@@ -104,6 +119,7 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
         {
             residual[offset] = 0;
         });
+    
     return residual.norm();
 }
 
@@ -123,12 +139,17 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry
     {
         rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, rod->indices.size() - 1);
     }
+    for (auto& crossing : rod_crossings)
+        crossing->omega = deformed_states.template segment<3>(crossing->dof_offset);
+
     if (add_stretching)
         addStretchingK(entry_K);
     if constexpr (dim == 3)
     {
         if (add_bending && add_twisting)
             add3DBendingAndTwistingK(entry_K);
+        if (add_rigid_joint)
+            addJointBendingAndTwistingK(entry_K);
     }
     else if constexpr (dim == 2)
     {
@@ -223,6 +244,13 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
     StiffnessMatrix K;
     buildSystemDoFMatrix(dq, K);
     bool success = linearSolve(K, residual, ddq);
+
+    if (residual.dot(ddq) < 1e-6)
+    {
+        // ddq = residual;
+        // std::cout << "dx dot -g < 0 " << std::endl;
+        
+    }
     
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
@@ -248,15 +276,26 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
         cnt += 1;
         if (cnt > 15)
         {
+            // std::cout << "sss" << std::endl;
             // testGradient(dq);
             // testHessian(dq);
             dq = dq_ls;
-            return 1e16;
+            break;
+            // return 1e16;
         }
         if (cnt == line_search_max) 
-            return 1e16;
+            break;
+            // return 1e16;
             
     }
+    
+    for (auto& crossing : rod_crossings)
+    {
+        Vector<T, 3> new_omega = dq.template segment<3>(crossing->reduced_dof_offset);
+        crossing->updateRotation(new_omega);
+        dq.template segment<3>(crossing->reduced_dof_offset).setZero();
+    }
+    
     // std::cout << "#ls: " << cnt << std::endl;
     return norm;   
 }
@@ -327,6 +366,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     {
         rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, 
             rod->indices.size() - 1);
+        VectorXT reference_twist = rod->reference_twist + rod->reference_angles;
         std::cout << rod->reference_angles.transpose() << std::endl;
     }
     

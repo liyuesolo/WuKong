@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
+
 #include <tbb/tbb.h>
 
 #include "VecMatDef.h"
@@ -19,9 +20,32 @@ struct RodCrossing
 {
     int node_idx;
     std::vector<int> rods_involved;
+    std::vector<int> on_rod_idx;
     std::vector<Vector<T, 2>> sliding_ranges;
+    Vector<T, 3> omega;
+    // Vector<T, 3> omega_acc;
+    // Eigen::Quaternion<T> omega_acc;
+    Vector<T, 4> omega_acc;
 
-    RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved) {}
+    Matrix<T, 3, 3> rotation_accumulated;
+
+    int dof_offset;
+    int reduced_dof_offset;
+    
+    void updateRotation(const Vector<T, 3>& new_omega)
+    {
+        Matrix<T, 3,3 > R = rotationMatrixFromEulerAngle(new_omega[2], new_omega[1], new_omega[0]);
+        rotation_accumulated = R * rotation_accumulated;   
+        omega.setZero();
+    }
+
+    RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved) 
+    {
+        omega_acc.setZero();
+        omega_acc[3] = 1.0;
+        omega.setZero();
+        rotation_accumulated.setIdentity();
+    }
 };
 
 
@@ -53,17 +77,21 @@ public:
     int rod_id;
     bool closed;
     int theta_dof_start_offset = 0;
+    int theta_reduced_dof_start_offset = 0;
     // full states for all nodes in the system
     VectorXT& full_states;
     VectorXT& rest_states;
 
     std::vector<TV> reference_frame_us;
-    // std::vector<TV> rest_tangents;
+
+    //previous tangent back after for time parallel transport
+    // -> for each Newton iterationw
+    std::vector<TV> prev_tangents;
     
     VectorXT reference_angles;
 
-    // this should be zero as we are doing staic solve
-    // VectorXT reference_twist;
+    //
+    VectorXT reference_twist;
     
     // which node on this rod has been marked as crossing node, ranging from 0 to # nodes
     std::vector<int> dof_node_location;
@@ -85,7 +113,7 @@ public:
     void setupBishopFrame();
     T computeReferenceTwist(const TV& tangent, const TV& prev_tangent, int rod_idx);
     void curvatureBinormal(const TV& t1, const TV& t2, TV& kb);
-
+    void rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit();
 
 
 public:
@@ -115,25 +143,57 @@ public:
     template <class OP>
     void iterate3NodesWithOffsets(const OP& f) 
     {
+        int cnt = 0;
         for (int i = 1; i < indices.size() - 1; i++)
         {
+            bool is_crossing = false;
+            if (cnt < dof_node_location.size())
+            {
+                if (i == dof_node_location[cnt])// || i-1 == dof_node_location[cnt] || i + 1 == dof_node_location[cnt])
+                {
+                    is_crossing = true;
+                    cnt++;
+                }
+            }
             f(indices[i], indices[i+1], indices[i-1],
-             offset_map[indices[i]], offset_map[indices[i+1]], offset_map[indices[i-1]], i);
+             offset_map[indices[i]], offset_map[indices[i+1]], offset_map[indices[i-1]], i, is_crossing);
         }
         if (closed)
+        {
+            bool is_crossing = false;
+            if (dof_node_location.size())
+                if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
+                    is_crossing = false;
             f(indices.back(), indices[1], indices[indices.size() - 2],
-             offset_map[indices.back()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]], 0);
+             offset_map[indices.back()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]], 0, is_crossing);
+        }
     }
 
     template <class OP>
     void iterate3Nodes(const OP& f) 
     {
+        int cnt = 0;
         for (int i = 1; i < indices.size() - 1; i++)
         {
-            f(indices[i], indices[i+1], indices[i-1], i);
+            bool is_crossing = false;
+            if (cnt < dof_node_location.size())
+            {
+                if (i == dof_node_location[cnt])// || i-1 == dof_node_location[cnt] || i + 1 == dof_node_location[cnt])
+                {
+                    is_crossing = true;
+                    cnt++;
+                }
+            }
+            f(indices[i], indices[i+1], indices[i-1], i, is_crossing);
         }
         if (closed)
-            f(indices.back(), indices[1], indices[indices.size() - 2], 0);
+        {
+            bool is_crossing = false;
+            if (dof_node_location.size())
+                if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
+                    is_crossing = false;
+            f(indices.back(), indices[1], indices[indices.size() - 2], 0, is_crossing);
+        }
     }
 
 // ============================== Lagrangian Eulerian value helpers ===================================
@@ -188,6 +248,16 @@ public:
     int entry(int node_idx)
     {
         return 0;
+    }
+
+    int nodeIdx(int node_pos)
+    {
+        if (node_pos == -1)
+            return indices[indices.size() -2 ];
+        else if (node_pos == indices.size())
+            return indices.front();
+        else
+            return indices[node_pos];
     }
 
     void getEntry(int node_idx, Offset& idx)

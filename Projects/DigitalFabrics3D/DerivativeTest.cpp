@@ -8,9 +8,10 @@ void EoLRodSim<T, dim>::derivativeTest()
     add_regularizor = false;
     add_stretching = false;
     add_penalty = false;
-    add_bending = true;
+    add_bending = false;
     add_shearing = false;
-    add_twisting = true;
+    add_twisting = false;
+    add_rigid_joint = true;
     add_pbc = false;
     add_contact_penalty = false;
     add_eularian_reg = false;
@@ -150,7 +151,7 @@ void EoLRodSim<T, dim>::testHessian(Eigen::Ref<VectorXT> dq)
             // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
             //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
-            std::cout << "dof " << i << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
             std::getchar();
         }
     }

@@ -33,6 +33,7 @@ public:
 
     void buildScene(int patch_type);
     void build3DtestScene(int sub_div);
+    void buildOneCrossScene(int sub_div);
 
 
 private:

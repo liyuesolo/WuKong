@@ -10,9 +10,234 @@ template<class T, int dim>
 void UnitPatch<T, dim>::buildScene(int patch_type)
 {
     if (patch_type == 0)
-        build3DtestScene(4);
+        build3DtestScene(16);
+    else if (patch_type == 1)
+        buildOneCrossScene(16);
 }
 
+template<class T, int dim>
+void UnitPatch<T, dim>::buildOneCrossScene(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        int sub_div_2 = sub_div / 2;
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.new_frame_work = true;
+
+        clearSimData();
+        std::vector<Eigen::Triplet<T>> w_entry;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        std::unordered_map<int, Offset> offset_map;
+        
+        TV from(0.0, 0.5, 0.0);
+        TV to(1.0, 0.5, 0.0);
+        from *= sim.unit; to *= sim.unit;
+
+        TV center = TV(0.5, 0.5, 0.0) * sim.unit;
+        int center_id = 0;
+        deformed_states.resize(dim);
+        deformed_states.template segment<dim>(full_dof_cnt) = center;
+        offset_map[node_cnt] = Offset::Zero();
+        for (int d = 0; d < dim; d++) offset_map[node_cnt][d] = full_dof_cnt++;
+        node_cnt++;
+        auto center_offset = offset_map[center_id];
+
+        std::vector<TV> points_on_curve;
+        std::vector<int> rod0;
+        std::vector<int> key_points_location_rod0;
+
+        addStraightYarnCrossNPoints(from, to, {center}, {0}, sub_div, points_on_curve, rod0, key_points_location_rod0, node_cnt);
+
+        deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size()) * (dim + 1));
+
+        Rod<T, dim>* r0 = new Rod<T, dim>(deformed_states, sim.rest_states, 0, false);
+
+        for (int i = 0; i < points_on_curve.size(); i++)
+        {
+            offset_map[node_cnt] = Offset::Zero();
+            
+            //push Lagrangian DoF
+            
+            deformed_states.template segment<dim>(full_dof_cnt) = points_on_curve[i];
+            
+            for (int d = 0; d < dim; d++)
+            {
+                offset_map[node_cnt][d] = full_dof_cnt++;    
+            }
+            // push Eulerian DoF
+            deformed_states[full_dof_cnt] = (points_on_curve[i] - from).norm() / (to - from).norm();
+            offset_map[node_cnt][dim] = full_dof_cnt++;
+            node_cnt++;
+        }
+        deformed_states.conservativeResize(full_dof_cnt + 1);
+        deformed_states[full_dof_cnt] = (center - from).norm() / (to - from).norm();
+        offset_map[center_id][dim] = full_dof_cnt++;
+
+        r0->offset_map = offset_map;
+        r0->indices = rod0;
+
+        Vector<T, dim + 1> q0, q1;
+        r0->frontDoF(q0); r0->backDoF(q1);
+        r0->rest_state = new LineCurvature<T, dim>(q0, q1);
+        
+        r0->dof_node_location = key_points_location_rod0;
+        sim.Rods.push_back(r0);
+
+        offset_map.clear();
+        
+        TV rod1_from(0.5, 0.0, 0.0);
+        TV rod1_to(0.5, 1.0, 0.0);
+        rod1_from *= sim.unit; rod1_to *= sim.unit;
+
+        points_on_curve.clear();
+        points_on_curve.resize(0);
+        std::vector<int> rod1;
+        std::vector<int> key_points_location_rod1;
+
+        addStraightYarnCrossNPoints(rod1_from, rod1_to, {center}, {0}, sub_div, points_on_curve, rod1, key_points_location_rod1, node_cnt);
+
+        deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size()) * (dim + 1));
+
+        Rod<T, dim>* r1 = new Rod<T, dim>(deformed_states, sim.rest_states, 1, false);
+        for (int i = 0; i < points_on_curve.size(); i++)
+        {
+            offset_map[node_cnt] = Offset::Zero();
+            //push Lagrangian DoF
+            deformed_states.template segment<dim>(full_dof_cnt) = points_on_curve[i];
+            // std::cout << points_on_curve[i].transpose() << std::endl;
+            for (int d = 0; d < dim; d++)
+            {
+                offset_map[node_cnt][d] = full_dof_cnt++;    
+            }
+            // push Eulerian DoF
+            deformed_states[full_dof_cnt] = (points_on_curve[i] - rod1_from).norm() / (rod1_to - rod1_from).norm();
+            offset_map[node_cnt][dim] = full_dof_cnt++;
+            node_cnt++;
+        }
+
+        deformed_states.conservativeResize(full_dof_cnt + 1);
+
+        deformed_states[full_dof_cnt] = (center - rod1_from).norm() / (rod1_to - rod1_from).norm();
+        offset_map[center_id] = Offset::Zero();
+        offset_map[center_id].template segment<dim>(0) = center_offset.template segment<dim>(0);
+        offset_map[center_id][dim] = full_dof_cnt++;
+
+        r1->offset_map = offset_map;
+        r1->indices = rod1;
+
+        r1->frontDoF(q0); r1->backDoF(q1);
+        r1->rest_state = new LineCurvature<T, dim>(q0, q1);
+        
+        r1->dof_node_location = key_points_location_rod1;
+        sim.Rods.push_back(r1);
+
+        RodCrossing<T, dim>* rc0 = new RodCrossing<T, dim>(0, {0, 1});
+        rc0->sliding_ranges = { Range(0, 0), Range::Zero() };
+        rc0->on_rod_idx = {key_points_location_rod0[0], key_points_location_rod1[0]};
+        sim.rod_crossings.push_back(rc0);
+
+        
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        r0->markDoF(w_entry, dof_cnt);
+        r1->markDoF(w_entry, dof_cnt);
+
+        r0->theta_dof_start_offset = full_dof_cnt;
+        r0->theta_reduced_dof_start_offset = dof_cnt;        
+        int theta_reduced_dof_offset0 = dof_cnt;
+        deformed_states.conservativeResize(full_dof_cnt + r0->indices.size() - 1);
+        for (int i = 0; i < r0->indices.size() - 1; i++)
+        {
+            w_entry.push_back(Entry(full_dof_cnt++, dof_cnt++, 1.0));
+        }   
+        deformed_states.template segment(r0->theta_dof_start_offset, 
+            r0->indices.size() - 1).setZero();
+
+        r1->theta_dof_start_offset = full_dof_cnt;
+        
+        int theta_reduced_dof_offset1 = dof_cnt;
+        r1->theta_reduced_dof_start_offset = dof_cnt;
+        deformed_states.conservativeResize(full_dof_cnt + r1->indices.size() - 1);
+        for (int i = 0; i < r1->indices.size() - 1; i++)
+        {
+            w_entry.push_back(Entry(full_dof_cnt++, dof_cnt++, 1.0));
+        }   
+        deformed_states.template segment(r1->theta_dof_start_offset, 
+            r1->indices.size() - 1).setZero();
+
+        deformed_states.conservativeResize(full_dof_cnt + sim.rod_crossings.size() * dim);
+        deformed_states.template segment(full_dof_cnt, sim.rod_crossings.size() * dim).setZero();
+
+        for (auto& crossing : sim.rod_crossings)
+        {
+            crossing->dof_offset = full_dof_cnt;
+            crossing->reduced_dof_offset = dof_cnt;
+            for (int d = 0; d < dim; d++)
+            {
+                w_entry.push_back(Entry(full_dof_cnt++, dof_cnt++, 1.0));
+            }
+        }
+        
+        sim.rest_states = sim.deformed_states;
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+
+        // std::cout << "r0->theta_dof_start_offset " << r0->theta_dof_start_offset << " sim.W.cols() " << sim.W.cols() << std::endl;
+        
+
+        Offset ob, of;
+        r0->backOffsetReduced(ob);
+        r0->frontOffsetReduced(of);
+
+        // std::cout << ob.transpose() << " " << of.transpose() << std::endl;
+        r0->fixEndPointEulerian(sim.dirichlet_dof);
+        r1->fixEndPointEulerian(sim.dirichlet_dof);
+
+        // r1->fixEndPointLagrangian(sim.dirichlet_dof);
+
+        sim.fixCrossing();
+
+        sim.dirichlet_dof[ob[0]] = -0.3 * sim.unit;
+        sim.dirichlet_dof[ob[1]] = 0.3 * sim.unit;
+        // sim.dirichlet_dof[ob[2]] = 0;
+        sim.dirichlet_dof[ob[2]] = 0.3 * sim.unit;
+
+
+        sim.dirichlet_dof[theta_reduced_dof_offset0] = 0;
+        sim.dirichlet_dof[theta_reduced_dof_offset1] = 0;
+
+        Offset ob1, of1;
+        r1->backOffsetReduced(ob1);
+        r1->frontOffsetReduced(of1);
+
+
+        sim.dirichlet_dof[ob1[0]] = 0.15 * sim.unit;
+        sim.dirichlet_dof[ob1[1]] = -0.2 * sim.unit;
+        sim.dirichlet_dof[ob1[2]] = -0.1 * sim.unit;
+
+        for (int d = 0; d < dim; d++)
+        {
+            sim.dirichlet_dof[of[d]] = 0;
+            sim.dirichlet_dof[ob1[d]] = 0;
+            sim.dirichlet_dof[of1[d]] = 0;
+        }
+
+        sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][0]]] = 0.0 * sim.unit;
+        sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][1]]] = 0.0 * sim.unit;
+        sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][2]]] = 0.0 * sim.unit;
+        
+        for (auto& rod : sim.Rods)
+        {
+            rod->setupBishopFrame();
+        }
+        
+    }
+}
 template<class T, int dim>
 void UnitPatch<T, dim>::build3DtestScene(int sub_div)
 {
@@ -112,10 +337,11 @@ void UnitPatch<T, dim>::build3DtestScene(int sub_div)
 
         // std::cout << ob.transpose() << " " << of.transpose() << std::endl;
         r0->fixEndPointEulerian(sim.dirichlet_dof);
+        
 
-        sim.dirichlet_dof[ob[0]] = -0.1 * sim.unit;
-        sim.dirichlet_dof[ob[1]] = 0.1 * sim.unit;
-        sim.dirichlet_dof[ob[2]] = 0;
+        sim.dirichlet_dof[ob[0]] = -0.3 * sim.unit;
+        sim.dirichlet_dof[ob[1]] = 0.3 * sim.unit;
+        // sim.dirichlet_dof[ob[2]] = 0;
 
 
         for (int i = theta_reduced_dof_offset; i < dof_cnt; i++)
@@ -125,7 +351,9 @@ void UnitPatch<T, dim>::build3DtestScene(int sub_div)
             // sim.dirichlet_dof[i] = T(i) * M_PI / 4;
         }
 
-        sim.dirichlet_dof[dof_cnt-1] = 0;
+        // sim.dirichlet_dof[dof_cnt-1] = M_PI / 2.0;
+        // sim.dirichlet_dof[dof_cnt-1] = M_PI;
+        // sim.dirichlet_dof[dof_cnt-1] = 0;
 
         
         // sim.dirichlet_dof[ob[0]] = -0.3 * sim.unit;
@@ -137,9 +365,9 @@ void UnitPatch<T, dim>::build3DtestScene(int sub_div)
             sim.dirichlet_dof[of[d]] = 0;
         }
 
-        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][0]]] = 0.01 * sim.unit;
-        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][1]]] = 0.01 * sim.unit;
-        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][2]]] = 0.01 * sim.unit;
+        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][0]]] = 0.0 * sim.unit;
+        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][1]]] = 0.0 * sim.unit;
+        // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[1][2]]] = 0.0 * sim.unit;
 
 
         // sim.dirichlet_dof[r0->reduced_map[r0->offset_map[node_cnt-2][0]]] = -0.19 * sim.unit;

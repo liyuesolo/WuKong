@@ -1,6 +1,7 @@
 #include "EoLRodSim.h"
 #include "EoLRodBendingAndTwisting.h"
 
+
 template<class T, int dim>
 T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
 {
@@ -10,7 +11,7 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
         for (auto& rod : Rods)
         {
             T energy_current = energy;
-            rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second){
+            rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second, bool is_crossing){
                 TV xi, xj, xk, Xi, Xj, Xk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->X(node_i, Xi); rod->X(node_j, Xj); rod->X(node_k, Xk);
@@ -19,11 +20,15 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
                 T theta1 = rod->reference_angles[second];
                 TV referenceNormal1 = rod->reference_frame_us[second - 1];
                 TV referenceNormal2 = rod->reference_frame_us[second];
+
+                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent2 = rod->prev_tangents[second];
+
                 Matrix<T, 2, 2> B = rod->bending_coeffs;
 
-                
-                energy += computeRodBendingAndTwistEnergy(B, rod->kt, 0.0, referenceNormal1,
-                    referenceNormal2, 0.0, xk, xi, xj, Xk, Xi, Xj, theta0, theta1);
+                T reference_twist = rod->reference_twist[second];
+                energy += computeRodBendingAndTwistEnergy(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                    referenceNormal2, referenceTangent2, reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1);
                 });
             
         }
@@ -39,7 +44,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
         for (auto& rod : Rods)
         {
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -49,11 +54,16 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
                 T theta1 = rod->reference_angles[second];
                 TV referenceNormal1 = rod->reference_frame_us[second - 1];
                 TV referenceNormal2 = rod->reference_frame_us[second];
+
+                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent2 = rod->prev_tangents[second];
+
                 Matrix<T, 2, 2> B = rod->bending_coeffs;
+                T reference_twist = rod->reference_twist[second];
 
                 Vector<T, 20> F;
-                computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1,
-                    referenceNormal2, 0.0, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, F);
+                computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                    referenceNormal2, referenceTangent2,  reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, F);
                 
                 F *= -1.0;
 
@@ -80,7 +90,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
         for (auto& rod : Rods)
         {
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -103,12 +113,16 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
                 TV referenceNormal1 = rod->reference_frame_us[second - 1];
                 TV referenceNormal2 = rod->reference_frame_us[second];
-                Matrix<T, 2, 2> B = rod->bending_coeffs;
 
+                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent2 = rod->prev_tangents[second];
+
+                Matrix<T, 2, 2> B = rod->bending_coeffs;
+                T reference_twist = rod->reference_twist[second];
                 Matrix<T, 20, 20> J;
                 
-                computeRodBendingAndTwistEnergyHessian(B, rod->kt, 0.0, referenceNormal1,
-                    referenceNormal2, 0.0, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, J);
+                computeRodBendingAndTwistEnergyHessian(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                    referenceNormal2, referenceTangent2,  reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, J);
 
                 J *= -1.0;
                 for(int k = 0; k < nodes.size(); k++)
@@ -129,14 +143,19 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
                                 }
                 for(int k = 0; k < nodes.size(); k++)
-                    for(int l = 0; l < nodes.size(); l++)
                     {
-                        for(int i = 0; i < dim; i++)
-                            for (int j = 0; j < 2; j++)
+                        
+                        for (int j = 0; j < 2; j++)
+                        {
+                            for(int i = 0; i < dim; i++)
                             {
                                 entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], theta_dofs[j], -J(k*dim + i, 18 + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[l][j], -J(18 + j, l * dim + i)));
+                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][i], -J(18 + j, k * dim + i)));
+
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], theta_dofs[j], -J(3 * dim + k * dim + i, 18 + j) * dXdu[k][i]));
+                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][dim], -J(18 + j, 3 * dim + k * dim + i) * dXdu[k][i]));
                             }
+                        }
                     }
                 for (int i = 0; i < 2; i++)
                     for (int j = 0; j < 2; j++)
@@ -149,7 +168,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
         {   
             // continue;
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk, ddXi, ddXj, ddXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -157,13 +176,18 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
                 T theta0 = rod->reference_angles[second - 1];
                 T theta1 = rod->reference_angles[second];
+
                 TV referenceNormal1 = rod->reference_frame_us[second - 1];
                 TV referenceNormal2 = rod->reference_frame_us[second];
-                Matrix<T, 2, 2> B = rod->bending_coeffs;
 
+                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent2 = rod->prev_tangents[second];
+
+                Matrix<T, 2, 2> B = rod->bending_coeffs;
+                T reference_twist = rod->reference_twist[second];
                 Vector<T, 20> F;
-                computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1,
-                    referenceNormal2, 0.0, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, F);
+                computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1, referenceTangent1, 
+                    referenceNormal2, referenceTangent2, reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, F);
                 
                 F *= -1.0;
 

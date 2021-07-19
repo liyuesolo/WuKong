@@ -287,6 +287,11 @@ int main(int argc, char *argv[])
                     eol_sim.resetScene();
                     updateScreen(viewer);
                 }
+                if (ImGui::Checkbox("RigidJoint", &eol_sim.add_rigid_joint))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
                 if (ImGui::Checkbox("ShowRest", &show_rest))
                 {
                     updateScreen(viewer);
@@ -583,8 +588,10 @@ int main(int argc, char *argv[])
                 if (eol_sim.new_frame_work)
                 {
                     Vector<int, dim + 1> offset = eol_sim.Rods[rod_idx]->offset_map[selected];
-
+                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[0]]] = delta_x;
                     eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[1]]] = delta_y;
+                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[2]]] = 0;
+
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
                     return true;

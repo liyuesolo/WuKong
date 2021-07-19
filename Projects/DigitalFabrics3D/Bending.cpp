@@ -7,7 +7,7 @@ void EoLRodSim<T, dim>::addBendingK(std::vector<Eigen::Triplet<T>>& entry_K)
     for (auto& rod : Rods)
     {
         rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
         {
             TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
             rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -86,7 +86,7 @@ void EoLRodSim<T, dim>::addBendingK(std::vector<Eigen::Triplet<T>>& entry_K)
     for (auto& rod : Rods)
     {
         rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
         {
             TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk, ddXi, ddXj, ddXk;
             rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -141,7 +141,7 @@ void EoLRodSim<T, dim>::addBendingForce(Eigen::Ref<VectorXT> residual)
     for (auto& rod : Rods)
     {
         rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
-                Offset offset_i, Offset offset_j, Offset offset_k, int second)
+                Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
         {
             TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
             rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
@@ -201,7 +201,7 @@ T EoLRodSim<T, dim>::addBendingEnergy()
     for (auto& rod : Rods)
     {
         T energy_current = energy;
-        rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second){
+        rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second, bool is_crossing){
                 TV xi, xj, xk, Xi, Xj, Xk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->X(node_i, Xi); rod->X(node_j, Xj); rod->X(node_k, Xk);

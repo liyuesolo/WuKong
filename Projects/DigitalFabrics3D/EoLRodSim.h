@@ -138,6 +138,7 @@ public:
     TV gravity = TV::Zero();
     bool verbose = false;
 
+    bool add_rigid_joint = true;
     bool add_stretching = true;
     bool add_bending = true;
     bool add_shearing = true;
@@ -418,6 +419,10 @@ public:
 
     // ======================== Energy Forces and Hessian Entries ========================
     //                                             so -df/dx
+    // Joint.cpp
+    void addJointBendingAndTwistingK(std::vector<Entry>& entry_K);
+    void addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
+    T addJointBendingAndTwistingEnergy();
 
     // Twisting.cpp
     void addTwistingK(std::vector<Entry>& entry_K);  

@@ -36,6 +36,26 @@ inline void rotateAxisAngle(Vector<T, 3>& v,
 }
 
 template<class T>
+Matrix<T, 3, 3> rotationMatrixFromEulerAngle(T angle_z, T angle_y, T angle_x)
+{
+  Matrix<T, 3, 3> R, yaw, pitch, roll;
+  yaw.setZero(); pitch.setZero(); roll.setZero();
+  yaw(0, 0) = cos(angle_z);	yaw(0, 1) = -sin(angle_z);
+  yaw(1, 0) = sin(angle_z);	yaw(1, 1) = cos(angle_z);
+  yaw(2, 2) = 1.0;
+  //y rotation
+  pitch(0, 0) = cos(angle_y); pitch(0, 2) = sin(angle_y);
+  pitch(1, 1) = 1.0;
+  pitch(2, 0) = -sin(angle_y); pitch(2, 2) = cos(angle_y);
+  //x rotation
+  roll(0, 0) = 1.0;
+  roll(1, 1) = cos(angle_x); roll(1, 2) = -sin(angle_x);
+  roll(2, 1) = sin(angle_x); roll(2, 2) = cos(angle_x);
+  R = yaw * pitch * roll;
+  return R;
+}
+
+template<class T>
 Vector<T, 3> parallelTransport(const Vector<T, 3>& u, const Vector<T, 3>& t0, const Vector<T, 3>& t1) 
 {
   
