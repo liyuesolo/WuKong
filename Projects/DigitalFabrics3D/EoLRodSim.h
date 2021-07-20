@@ -150,12 +150,9 @@ public:
     bool add_pbc_bending = true;
     bool add_eularian_reg = true;
     bool disable_sliding = true;
-    bool subdivide = false;
     bool print_force_mag = false;
     bool add_contact_penalty = true;
-    bool use_alm = true;
     bool run_diff_test = false;
-    bool use_discrete_rest_bending = true;
 
     bool new_frame_work = false;
 
@@ -166,16 +163,19 @@ public:
     std::vector<std::vector<int>> pbc_bending_bn_pairs;
     std::vector<std::vector<int>> yarns;
     std::unordered_map<int, int> yarn_map;
-    std::unordered_map<IV2, int, VectorHash<2>> pbc_pairs;
+    
+    std::vector<std::pair<int, std::pair<Offset, Offset>>> pbc_pairs;
+    std::unordered_map<int, std::pair<std::pair<Offset, Offset>, int>> pbc_pairs_reference;
+
     // pbc_ref[direction] = (node_i, node_j)
     std::vector<std::pair<int, IV2>> pbc_ref;
 
     std::vector<int> sliding_nodes;
     IV2 slide_over_n_rods = IV2::Zero();
 
-    std::vector<IV2> pbc_ref_unique;
+    
 
-    std::vector<std::pair<IV2, std::pair<TV, T>>> pbc_strain_data;
+    std::vector<std::pair<std::pair<Offset, Offset>, std::pair<TV, T>>> pbc_strain_data;
 
     std::vector<std::vector<int>> yarn_group;
     std::vector<bool> is_end_nodes;
@@ -288,11 +288,44 @@ public:
     template <class OP>
     void iteratePBCStrainData(const OP& f) {
         for (auto data : pbc_strain_data){
-            f(data.first(0), data.first(1), data.second.first, data.second.second);
+            f(data.first.first, data.first.second, data.second.first, data.second.second);
         } 
     }
 
-
+    template <class OP>
+    void iteratePBCPairs(const OP& f) {
+        for (auto data : pbc_pairs){
+            f(pbc_pairs_reference[data.first].first.first, 
+            pbc_pairs_reference[data.first].first.second,
+            data.second.first, data.second.second);
+        } 
+    }
+    
+    template <class OP>
+    void iterateAllLagrangianDoFs(const OP& f) {
+        for (auto& rod : Rods)
+        {
+            int cnt = 0;
+            for (int i = 0; i < rod->indices.size() - 1; i++)
+            {
+                if (cnt < rod->dof_node_location.size())
+                {
+                    if (i == rod->dof_node_location[cnt])
+                        cnt++;
+                    else
+                        f(rod->offset_map[rod->indices[i]]);
+                }
+                if (cnt == rod->dof_node_location.size())
+                {
+                    f(rod->offset_map[rod->indices[i]]);
+                }
+            }
+        }
+        for (auto& crossing : rod_crossings)
+        {
+            f(Rods[crossing->rods_involved.front()]->offset_map[crossing->node_idx]);
+        }
+    }
 
     T computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         bool verbose = false);
@@ -315,23 +348,21 @@ public:
         Eigen::Ref<const VectorXT> residual, 
         int line_search_max = 100);
 
+    void checkHessianPD(Eigen::Ref<const VectorXT> dq);
 
     void staticSolve(Eigen::Ref<VectorXT> dq);
 
     void advanceOneStep();
 
     void setVerbose(bool v) { verbose = v; }
-    void resetScene() 
-    { 
-        deformed_states = rest_states;
-      
-    }
+    void resetScene() { deformed_states = rest_states; }
 
 
     void fixCrossing()
     {
         for(auto& crossing : rod_crossings)
         {
+            crossing->is_fixed = true;
             int node_idx = crossing->node_idx;
             std::vector<int> rods_involved = crossing->rods_involved;
             for (int rod_idx : rods_involved)
@@ -386,9 +417,6 @@ public:
     void buildSceneFromUnitPatch(int patch_id);
 
     void checkConnections();
-    void build5NodeTestScene();
-    void buildLongRodForBendingTest();
-    void buildShearingTest();
     void buildPlanePeriodicBCScene3x3();
     void buildPlanePeriodicBCScene3x3Subnodes(int sub_div = 1);
     
@@ -447,15 +475,13 @@ public:
         std::vector<int>& nodes);
 
     //PeriodicBC.cpp
-    T addPBCEnergy(Eigen::Ref<const DOFStack> q_temp);
-    T addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<const DOFStack> lambdas, T kappa);
-    void addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual);
-    void addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
-         Eigen::Ref<const DOFStack> lambdas, T kappa);
-    void addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K);  
-    void addPBCKALM(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, T kappa);  
-    void buildMapleRotationPenaltyData(Eigen::Ref<const DOFStack> q_temp, 
-        std::vector<TV>& data, std::vector<int>& nodes);
+    T addPBCEnergy();
+    void addPBCForce(Eigen::Ref<VectorXT> residual);
+    void addPBCK(std::vector<Eigen::Triplet<T>>& entry_K);  
+    
+    void buildRotationPenaltyData(
+        std::vector<TV2>& data, std::vector<Offset>& offsets,
+        std::vector<TV2>& dXdu, std::vector<TV2>& d2Xdu2);
 
     // EulerianConstraints.cpp
     

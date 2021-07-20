@@ -34,13 +34,20 @@ public:
     void buildScene(int patch_type);
     void build3DtestScene(int sub_div);
     void buildOneCrossScene(int sub_div);
-
+    void buildGridScene(int sub_div);
 
 private:
     
     void clearSimData();
     
+    void appendThetaAndJointDoF(std::vector<Entry>& w_entry, 
+        int& full_dof_cnt, int& dof_cnt);
     
+    void addAStraightRod(const TV& from, const TV& to, 
+        const std::vector<TV>& passing_points, 
+        const std::vector<int>& passing_points_id, 
+        int sub_div,
+        int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
 
     void addStraightYarnCrossNPoints(const TV& from, const TV& to,
         const std::vector<TV>& passing_points, 

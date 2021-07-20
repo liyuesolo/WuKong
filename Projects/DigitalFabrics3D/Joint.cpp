@@ -2,6 +2,7 @@
 // #include "JointBendingAndTwisting.h"
 // #include "EoLRodQuaternionBendingAndTwisting.h"
 #include "EoLRodEulerAngleBendingAndTwisting.h"
+#include "EoLRodBendingAndTwisting.h"
 
 // template<class T, int dim>
 // void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
@@ -45,7 +46,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
             int node_i = crossing->node_idx;
             
             std::vector<int> rods_involved = crossing->rods_involved;
-            std::vector<int> on_rod_idx = crossing->on_rod_idx;
+            std::unordered_map<int, int> on_rod_idx = crossing->on_rod_idx;
 
             std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
             Vector<T, 3> omega = crossing->omega;
@@ -68,11 +69,14 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                 int node_k = rod->nodeIdx(on_rod_idx[rod_idx] - 1);
                 rod->getEntry(node_j, offset_j);
                 rod->getEntry(node_k, offset_k);
+                
 
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
                 
+                
+
                 int edge0 = on_rod_idx[rod_idx]-2;
                 int edge1 = on_rod_idx[rod_idx]-1;
 
@@ -90,125 +94,154 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                 TV referenceTangent1 = rod->prev_tangents[edge0];
                 TV referenceTangent2 = rod->prev_tangents[edge1];            
                 
-                Matrix<T, 16, 16> J0, J1;
-
-                // xi is the rigid body
-                // computeRodQuaternionBendingAndTwistEnergyRBFirstHessian(B, kt, 0.0, 
-                //     b, n, 
-                //     referenceTangent2, referenceNormal2, 
-                //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, J0);
-            
-                // computeRodQuaternionBendingAndTwistEnergyRBSecondHessian(B, kt, 0.0, 
-                //     referenceTangent1, referenceNormal1,
-                //     b, n, 
-                //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, J1);
-
-                computeRodEulerAngleBendingAndTwistEnergyRBFirstHessian(B, kt, 0.0, 
-                    b, n, 
-                    referenceTangent2, referenceNormal2, 
-                    reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, J0);
-            
-                computeRodEulerAngleBendingAndTwistEnergyRBSecondHessian(B, kt, 0.0, 
-                    referenceTangent1, referenceNormal1,
-                    b, n, 
-                    reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, J1);
-
-                int dof_theta0 = rod->theta_dof_start_offset + edge0;
-                int dof_theta1 = rod->theta_dof_start_offset + edge1;
-
-                Offset omega_dof;
-                omega_dof[0] = crossing->dof_offset;
-                omega_dof[1] = crossing->dof_offset + 1;
-                omega_dof[2] = crossing->dof_offset + 2;
-
-                std::vector<Offset> offsets1 = { offset_i, offset_j };
-                std::vector<Offset> offsets2 = { offset_i, offset_k };
-                std::vector<TV> dXdu1 = { dXi, dXj };
-                std::vector<TV> dXdu2 = { dXi, dXk };
-
-                for(int k = 0; k < offsets1.size(); k++)
+                if (crossing->is_fixed)
                 {
-                    //dx/dx
-                    //dx/dX dX/dx
-                    for(int l = 0; l < offsets1.size(); l++)
+                    Matrix<T, 16, 16> J0, J1;
+
+                    // xi is the rigid body
+                    // computeRodQuaternionBendingAndTwistEnergyRBFirstHessian(B, kt, 0.0, 
+                    //     b, n, 
+                    //     referenceTangent2, referenceNormal2, 
+                    //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, J0);
+                
+                    // computeRodQuaternionBendingAndTwistEnergyRBSecondHessian(B, kt, 0.0, 
+                    //     referenceTangent1, referenceNormal1,
+                    //     b, n, 
+                    //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, J1);
+
+                    computeRodEulerAngleBendingAndTwistEnergyRBFirstHessian(B, kt, 0.0, 
+                        b, n, 
+                        referenceTangent2, referenceNormal2, 
+                        reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, J0);
+                
+                    computeRodEulerAngleBendingAndTwistEnergyRBSecondHessian(B, kt, 0.0, 
+                        referenceTangent1, referenceNormal1,
+                        b, n, 
+                        reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, J1);
+
+                    int dof_theta0 = rod->theta_dof_start_offset + edge0;
+                    int dof_theta1 = rod->theta_dof_start_offset + edge1;
+
+                    Offset omega_dof;
+                    omega_dof[0] = crossing->dof_offset;
+                    omega_dof[1] = crossing->dof_offset + 1;
+                    omega_dof[2] = crossing->dof_offset + 2;
+
+                    std::vector<Offset> offsets1 = { offset_i, offset_j };
+                    std::vector<Offset> offsets2 = { offset_i, offset_k };
+                    std::vector<TV> dXdu1 = { dXi, dXj };
+                    std::vector<TV> dXdu2 = { dXi, dXk };
+
+                    for(int k = 0; k < offsets1.size(); k++)
+                    {
+                        //dx/dx
+                        //dx/dX dX/dx
+                        for(int l = 0; l < offsets1.size(); l++)
+                            for (int i = 0; i < dim; i++)
+                                for (int j = 0; j < dim; j++)
+                                {
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][j], J0(k*dim + i, l * dim + j)));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][dim], J0(k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j]));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[l][dim], offsets1[k][i], J0(2 * dim + l * dim + j, k*dim + i) * dXdu1[l][j]));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], offsets1[l][dim], J0(2 * dim + k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j] * dXdu1[k][i]));
+
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][j], J1(k*dim + i, l * dim + j)));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][dim], J1(k*dim + i, 2 * dim + l * dim + j) * dXdu2[l][j]));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[l][dim], offsets2[k][i], J1(2 * dim + l * dim + j, k*dim + i) * dXdu2[l][j]));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], offsets2[l][dim], J1(2 * dim + k*dim + i, 2 * dim + l * dim + j) * dXdu2[l][j] * dXdu2[k][i]));
+                                }
                         for (int i = 0; i < dim; i++)
+                        {
                             for (int j = 0; j < dim; j++)
                             {
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][j], J0(k*dim + i, l * dim + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][dim], J0(k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j]));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[l][dim], offsets1[k][i], J0(2 * dim + l * dim + j, k*dim + i) * dXdu1[l][j]));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], offsets1[l][dim], J0(2 * dim + k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j] * dXdu1[k][i]));
+                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], omega_dof[j], J0(k*dim + i, 4 * dim + j)));
+                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][i], J0(4 * dim + j, k*dim + i)));
+                                entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], omega_dof[j], J0(2 *dim + i, 4 * dim + j) * dXdu1[k][j]));
+                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][dim], J0(4 * dim + j, 2 *dim + i) * dXdu1[k][j]));
 
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][j], J1(k*dim + i, l * dim + j)));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], offsets2[l][dim], J1(k*dim + i, 2 * dim + l * dim + j) * dXdu2[l][j]));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[l][dim], offsets2[k][i], J1(2 * dim + l * dim + j, k*dim + i) * dXdu2[l][j]));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], offsets2[l][dim], J1(2 * dim + k*dim + i, 2 * dim + l * dim + j) * dXdu2[l][j] * dXdu2[k][i]));
+                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], omega_dof[j], J1(k*dim + i, 4 * dim + j)));
+                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][i], J1(4 * dim + j, k*dim + i)));
+                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], omega_dof[j], J1(2 *dim + i, 4 * dim + j) * dXdu2[k][j]));
+                                entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][dim], J1(4 * dim + j, 2 *dim + i) * dXdu2[k][j]));
                             }
-                    for (int i = 0; i < dim; i++)
-                    {
-                        for (int j = 0; j < dim; j++)
-                        {
-                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], omega_dof[j], J0(k*dim + i, 4 * dim + j)));
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][i], J0(4 * dim + j, k*dim + i)));
-                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], omega_dof[j], J0(2 *dim + i, 4 * dim + j) * dXdu1[k][j]));
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][dim], J0(4 * dim + j, 2 *dim + i) * dXdu1[k][j]));
 
-                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], omega_dof[j], J1(k*dim + i, 4 * dim + j)));
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][i], J1(4 * dim + j, k*dim + i)));
-                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], omega_dof[j], J1(2 *dim + i, 4 * dim + j) * dXdu2[k][j]));
-                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][dim], J1(4 * dim + j, 2 *dim + i) * dXdu2[k][j]));
+                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], dof_theta1, J0(k*dim + i, 5 * dim)));
+                            entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][i], J0(5 * dim, k*dim + i)));
+                            entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], dof_theta1, J0(2 * dim + k*dim + i, 5 * dim) * dXdu1[k][i]));
+                            entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][dim], J0(5 * dim, 2 * dim + k*dim + i) * dXdu1[k][i]));
+
+                            entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][i], J1(k*dim + i, 5 * dim)));
+                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], dof_theta0, J1(5 * dim, k*dim + i)));
+                            entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], dof_theta0, J1(2 * dim + k*dim + i, 5 * dim) * dXdu2[k][i]));
+                            entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][dim], J1(5 * dim, 2 * dim + k*dim + i) * dXdu2[k][i]));
                         }
 
-                        entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], dof_theta1, J0(k*dim + i, 5 * dim)));
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][i], J0(5 * dim, k*dim + i)));
-                        entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], dof_theta1, J0(2 * dim + k*dim + i, 5 * dim) * dXdu1[k][i]));
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][dim], J0(5 * dim, 2 * dim + k*dim + i) * dXdu1[k][i]));
-
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][i], J1(k*dim + i, 5 * dim)));
-                        entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], dof_theta0, J1(5 * dim, k*dim + i)));
-                        entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], dof_theta0, J1(2 * dim + k*dim + i, 5 * dim) * dXdu2[k][i]));
-                        entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][dim], J1(5 * dim, 2 * dim + k*dim + i) * dXdu2[k][i]));
                     }
-
-                }
-                for (int i = 0; i < dim; i++)
-                {
-                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta1, J0(4 * dim + i, 5 * dim)));
-                    entry_K.push_back(Eigen::Triplet<T>(dof_theta1, omega_dof[i], J0(5 * dim, 4 * dim + i)));
-
-                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta0, J1(4 * dim + i, 5 * dim)));
-                    entry_K.push_back(Eigen::Triplet<T>(dof_theta0, omega_dof[i], J1(5 * dim, 4 * dim + i)));
-
-                    for (int j = 0; j < dim; j++)
+                    for (int i = 0; i < dim; i++)
                     {
-                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J0(4 * dim + i, 4 * dim + j)));
-                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J1(4 * dim + i, 4 * dim + j)));
+                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta1, J0(4 * dim + i, 5 * dim)));
+                        entry_K.push_back(Eigen::Triplet<T>(dof_theta1, omega_dof[i], J0(5 * dim, 4 * dim + i)));
+
+                        entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta0, J1(4 * dim + i, 5 * dim)));
+                        entry_K.push_back(Eigen::Triplet<T>(dof_theta0, omega_dof[i], J1(5 * dim, 4 * dim + i)));
+
+                        for (int j = 0; j < dim; j++)
+                        {
+                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J0(4 * dim + i, 4 * dim + j)));
+                            entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J1(4 * dim + i, 4 * dim + j)));
+                        }
                     }
+                    entry_K.push_back(Eigen::Triplet<T>(dof_theta0, dof_theta0, J1(5 * dim, 5 * dim)));
+                    entry_K.push_back(Eigen::Triplet<T>(dof_theta1, dof_theta1, J0(5 * dim, 5 * dim)));
                 }
-                entry_K.push_back(Eigen::Triplet<T>(dof_theta0, dof_theta0, J1(5 * dim, 5 * dim)));
-                entry_K.push_back(Eigen::Triplet<T>(dof_theta1, dof_theta1, J0(5 * dim, 5 * dim)));
+                else
+                {
+                    std::vector<int> nodes = { node_k, node_i, node_j };
+                    std::vector<TV> dXdu = { dXk, dXi, dXj };
+                    std::vector<Offset> offsets = { offset_k, offset_i, offset_j };
 
-                // for (int i = 0; i < dim; i++)
-                // {
-                //     for (int j = 0; j < dim; j++)
-                //     {
-                //         entry_K.push_back(Entry(offset_i[i], offset_j[j], J0(i, j)));
-                //         entry_K.push_back(Entry(offset_i[i], offset_j[j], J0(i, j)));
-                //         entry_K.push_back(Entry(offset_i[i], offset_k[j], J1(i, j)));
-                //         entry_K.push_back(Entry(offset_i[i], offset_k[j], J1(j, i)));
-
-                //         entry_K.push_back(Entry(offset_i[i], offset_j[dim], J0(i, dim + j) * ddj[j]));
-                //         entry_K.push_back(Entry(offset_i[i], offset_k[dim], J1(i, dim + j) * ddk[j]));
-
-                //         entry_K.push_back(Entry(offset_j[dim], offset_i[i], J0(dim + j, i) * ddj[j]));
-                //         entry_K.push_back(Entry(offset_k[dim], offset_i[i], J1(dim + j, i) * ddk[j]));
-
-                //         entry_K.push_back(Entry(offset_i[i], offset_j[dim], J0(i, j)));
-
-                //     }
-                    
-                // }
                 
+                    std::vector<int> theta_dofs = {edge0, edge1};
+
+                    Matrix<T, 20, 20> J;
+                
+                    computeRodBendingAndTwistEnergyHessian(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                        referenceNormal2, referenceTangent2,  reference_twist_edge1, xk, xi, xj, Xk, Xi, Xj, reference_twist_edge0, reference_twist_edge1, J);
+
+                    J *= -1.0;
+                    for(int k = 0; k < nodes.size(); k++)
+                        for(int l = 0; l < nodes.size(); l++)
+                            for(int i = 0; i < dim; i++)
+                                for (int j = 0; j < dim; j++)
+                                    {
+                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][j], -J(k*dim + i, l * dim + j)));
+
+                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][dim], -J(k*dim + i, 3 * dim + l * dim + j) * dXdu[l][j]));
+
+                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], offsets[l][j], -J(3 * dim + k * dim + i, l * dim + j) * dXdu[k][i]));
+
+                                        
+                                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], 
+                                                                            offsets[l][dim], 
+                                                                            -J(3 * dim + k*dim + i, 3 * dim + l * dim + j) * dXdu[l][j] * dXdu[k][i]));
+
+                                    }
+                    for(int k = 0; k < nodes.size(); k++)
+                        for (int j = 0; j < 2; j++)
+                            for(int i = 0; i < dim; i++)
+                            {
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], theta_dofs[j], -J(k*dim + i, 18 + j)));
+                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][i], -J(18 + j, k * dim + i)));
+
+                                entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], theta_dofs[j], -J(3 * dim + k * dim + i, 18 + j) * dXdu[k][i]));
+                                entry_K.push_back(Eigen::Triplet<T>(theta_dofs[j], offsets[k][dim], -J(18 + j, 3 * dim + k * dim + i) * dXdu[k][i]));
+                            }
+                    for (int i = 0; i < 2; i++)
+                        for (int j = 0; j < 2; j++)
+                            entry_K.push_back(Eigen::Triplet<T>(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j)));
+                }
+                
+
                 
             }
         }
@@ -227,7 +260,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
             int node_i = crossing->node_idx;
             
             std::vector<int> rods_involved = crossing->rods_involved;
-            std::vector<int> on_rod_idx = crossing->on_rod_idx;
+            std::unordered_map<int, int> on_rod_idx = crossing->on_rod_idx;
 
             std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
             Vector<T, 3> omega = crossing->omega;
@@ -270,49 +303,71 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                 TV referenceTangent1 = rod->prev_tangents[edge0];
                 TV referenceTangent2 = rod->prev_tangents[edge1];            
                 
-                Vector<T, 16> F0, F1;
+                if (crossing->is_fixed)
+                {
+                    Vector<T, 16> F0, F1;
 
-                // xi is the rigid body
-                // computeRodQuaternionBendingAndTwistEnergyRBFirstGradient(B, kt, 0.0, 
-                //     b, n, 
-                //     referenceTangent2, referenceNormal2, 
-                //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
-            
-                // computeRodQuaternionBendingAndTwistEnergyRBSecondGradient(B, kt, 0.0, 
-                //     referenceTangent1, referenceNormal1,
-                //     b, n, 
-                //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
-
-                computeRodEulerAngleBendingAndTwistEnergyRBFirstGradient(B, kt, 0.0, 
-                    b, n, 
-                    referenceTangent2, referenceNormal2, 
-                    reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
-            
-                computeRodEulerAngleBendingAndTwistEnergyRBSecondGradient(B, kt, 0.0, 
-                    referenceTangent1, referenceNormal1,
-                    b, n, 
-                    reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
-
-                F0 *= -1;
-                F1 *= -1;
+                    // xi is the rigid body
+                    // computeRodQuaternionBendingAndTwistEnergyRBFirstGradient(B, kt, 0.0, 
+                    //     b, n, 
+                    //     referenceTangent2, referenceNormal2, 
+                    //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
                 
-                residual.template segment<dim>(offset_i[0]) += F0.template segment<dim>(0);
-                residual.template segment<dim>(offset_i[0]) += F1.template segment<dim>(0);
+                    // computeRodQuaternionBendingAndTwistEnergyRBSecondGradient(B, kt, 0.0, 
+                    //     referenceTangent1, referenceNormal1,
+                    //     b, n, 
+                    //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
 
-                residual.template segment<dim>(offset_j[0]) += F0.template segment<dim>(dim);
-                residual.template segment<dim>(offset_k[0]) += F1.template segment<dim>(dim);
+                    computeRodEulerAngleBendingAndTwistEnergyRBFirstGradient(B, kt, 0.0, 
+                        b, n, 
+                        referenceTangent2, referenceNormal2, 
+                        reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
+                
+                    computeRodEulerAngleBendingAndTwistEnergyRBSecondGradient(B, kt, 0.0, 
+                        referenceTangent1, referenceNormal1,
+                        b, n, 
+                        reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
 
-                residual(offset_i[dim]) += F0.template segment<dim>(2*dim).dot(dXi);
-                residual(offset_i[dim]) += F1.template segment<dim>(2*dim).dot(dXi);
+                    F0 *= -1;
+                    F1 *= -1;
+                    
+                    residual.template segment<dim>(offset_i[0]) += F0.template segment<dim>(0);
+                    residual.template segment<dim>(offset_i[0]) += F1.template segment<dim>(0);
 
-                residual(offset_j[dim]) += F0.template segment<dim>(3*dim).dot(dXj);
-                residual(offset_k[dim]) += F1.template segment<dim>(3*dim).dot(dXk);
+                    residual.template segment<dim>(offset_j[0]) += F0.template segment<dim>(dim);
+                    residual.template segment<dim>(offset_k[0]) += F1.template segment<dim>(dim);
 
-                residual.template segment<dim>(crossing->dof_offset) += F0.template segment<dim>(4*dim);
-                residual.template segment<dim>(crossing->dof_offset) += F1.template segment<dim>(4*dim);
+                    residual(offset_i[dim]) += F0.template segment<dim>(2*dim).dot(dXi);
+                    residual(offset_i[dim]) += F1.template segment<dim>(2*dim).dot(dXi);
 
-                residual[rod->theta_dof_start_offset + edge1] += F0[5*dim];
-                residual[rod->theta_dof_start_offset + edge0] += F1[5*dim];
+                    residual(offset_j[dim]) += F0.template segment<dim>(3*dim).dot(dXj);
+                    residual(offset_k[dim]) += F1.template segment<dim>(3*dim).dot(dXk);
+
+                    residual.template segment<dim>(crossing->dof_offset) += F0.template segment<dim>(4*dim);
+                    residual.template segment<dim>(crossing->dof_offset) += F1.template segment<dim>(4*dim);
+
+                    residual[rod->theta_dof_start_offset + edge1] += F0[5*dim];
+                    residual[rod->theta_dof_start_offset + edge0] += F1[5*dim];
+                }
+                else
+                {
+                    Vector<T, 20> F;
+                    computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                        referenceNormal2, referenceTangent2,  reference_twist_edge1, xk, xi, xj, Xk, Xi, Xj, theta_edge0, theta_edge1, F);
+                    
+                    F *= -1.0;
+
+                    residual.template segment<dim>(offset_k[0]) += F.template segment<dim>(0);
+                    residual.template segment<dim>(offset_i[0]) += F.template segment<dim>(dim);
+                    residual.template segment<dim>(offset_j[0]) += F.template segment<dim>(dim + dim);
+
+                    residual(offset_k[dim]) += F.template segment<dim>(3*dim).dot(dXk);
+                    residual(offset_i[dim]) += F.template segment<dim>(3*dim + dim).dot(dXi);
+                    residual(offset_j[dim]) += F.template segment<dim>(3*dim + 2*dim).dot(dXj);
+
+                    residual.template segment<2>(rod->theta_dof_start_offset + (edge0)) += 
+                        F.template segment<2>(18);
+                }
 
                 
             }
@@ -334,7 +389,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy()
             int node_i = crossing->node_idx;
             
             std::vector<int> rods_involved = crossing->rods_involved;
-            std::vector<int> on_rod_idx = crossing->on_rod_idx;
+            std::unordered_map<int, int> on_rod_idx = crossing->on_rod_idx;
 
             std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
             Vector<T, 3> omega = crossing->omega;
@@ -368,6 +423,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy()
 
                 Matrix<T, 2, 2> B = rod->bending_coeffs * 1e3;
                 T kt = rod->kt * 1e3;
+
                 T reference_twist_edge0 = rod->reference_twist[edge0];
                 T reference_twist_edge1 = rod->reference_twist[edge1];
 
@@ -375,28 +431,45 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy()
                 TV referenceNormal2 = rod->reference_frame_us[edge1];
 
                 TV referenceTangent1 = rod->prev_tangents[edge0];
-                TV referenceTangent2 = rod->prev_tangents[edge1];            
+                TV referenceTangent2 = rod->prev_tangents[edge1];       
 
-                // xi is the rigid body
-                // energy += computeRodQuaternionBendingAndTwistEnergyRBFirst(B, kt, 0.0, 
-                //     b, n, 
-                //     referenceTangent2, referenceNormal2, 
-                //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1);
-            
-                // energy += computeRodQuaternionBendingAndTwistEnergyRBSecond(B, kt, 0.0, 
-                //     referenceTangent1, referenceNormal1,
-                //     b, n, 
-                //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0);
+                
 
-                energy += computeRodEulerAngleBendingAndTwistEnergyRBFirst(B, kt, 0.0, 
-                    b, n, 
-                    referenceTangent2, referenceNormal2, 
-                    reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1);
-            
-                energy += computeRodEulerAngleBendingAndTwistEnergyRBSecond(B, kt, 0.0, 
-                    referenceTangent1, referenceNormal1,
-                    b, n, 
-                    reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0);
+                if (crossing->is_fixed)
+                {
+                    // xi is the rigid body
+                    // energy += computeRodQuaternionBendingAndTwistEnergyRBFirst(B, kt, 0.0, 
+                    //     b, n, 
+                    //     referenceTangent2, referenceNormal2, 
+                    //     reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1);
+                
+                    // energy += computeRodQuaternionBendingAndTwistEnergyRBSecond(B, kt, 0.0, 
+                    //     referenceTangent1, referenceNormal1,
+                    //     b, n, 
+                    //     reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0);
+
+                    energy += computeRodEulerAngleBendingAndTwistEnergyRBFirst(B, kt, 0.0, 
+                        b, n, 
+                        referenceTangent2, referenceNormal2, 
+                        reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1);
+                
+                    energy += computeRodEulerAngleBendingAndTwistEnergyRBSecond(B, kt, 0.0, 
+                        referenceTangent1, referenceNormal1,
+                        b, n, 
+                        reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0);
+                }
+                else
+                {
+                    // cout3Nodes(node_i, node_j, node_k);
+                    // std::cout << reference_twist_edge1 << " " << xk.transpose() << " " << xi.transpose() << " " << xj.transpose() << std::endl;
+                    // std::cout << offset_i.transpose() << " " << offset_j.transpose() << " " << offset_k.transpose() << std::endl;
+                    // std::cout << rod_idx << " " << on_rod_idx[rod_idx] << std::endl;
+                    T E = computeRodBendingAndTwistEnergy(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                        referenceNormal2, referenceTangent2, reference_twist_edge1, xk, xi, xj, Xk, Xi, Xj, theta_edge0, theta_edge1);
+                    // std::cout << E << std::endl;
+                    // std::getchar();
+                    energy += E;
+                }
                 
                 cnt++;
             }

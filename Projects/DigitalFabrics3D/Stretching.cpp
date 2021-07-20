@@ -118,7 +118,7 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
             F.setZero();
             if constexpr (dim == 2)
             {
-                #include "Maple/YarnStretchingF.mcg"
+                // #include "Maple/YarnStretchingF.mcg"
             }
             else if constexpr (dim == 3)
             {
@@ -159,7 +159,7 @@ T EoLRodSim<T, dim>::addStretchingEnergy()
             T V[1];
             if constexpr (dim == 2)
             {
-                #include "Maple/YarnStretchingV.mcg"
+                // #include "Maple/YarnStretchingV.mcg"
             }
             else if constexpr (dim == 3)
             {

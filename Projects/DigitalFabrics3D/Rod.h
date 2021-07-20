@@ -19,8 +19,10 @@ template<class T, int dim>
 struct RodCrossing
 {
     int node_idx;
+    bool is_fixed;
+    
     std::vector<int> rods_involved;
-    std::vector<int> on_rod_idx;
+    std::unordered_map<int, int> on_rod_idx;
     std::vector<Vector<T, 2>> sliding_ranges;
     Vector<T, 3> omega;
     // Vector<T, 3> omega_acc;
@@ -39,7 +41,7 @@ struct RodCrossing
         omega.setZero();
     }
 
-    RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved) 
+    RodCrossing(int id, std::vector<int> involved) : node_idx(id), rods_involved(involved), is_fixed(false) 
     {
         omega_acc.setZero();
         omega_acc[3] = 1.0;
@@ -90,7 +92,6 @@ public:
     
     VectorXT reference_angles;
 
-    //
     VectorXT reference_twist;
     
     // which node on this rod has been marked as crossing node, ranging from 0 to # nodes

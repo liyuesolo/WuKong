@@ -1,384 +1,220 @@
 #include "EoLRodSim.h"
+#include "RotationPenalty.h"
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::addPBCK(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K)
+void EoLRodSim<T, dim>::addPBCK(std::vector<Entry>& entry_K)
 {
     
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
+    iteratePBCStrainData([&](Offset offset_i, Offset offset_j, TV strain_dir, T Dij){
+
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
         T dij = (xj - xi).dot(strain_dir);
         TM Hessian = strain_dir * strain_dir.transpose();
+
         for(int i = 0; i < dim; i++)
         {
             for(int j = 0; j < dim; j++)
             {
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_strain * Hessian(i, j)));
+                entry_K.push_back(Entry(offset_i[i], offset_i[j], k_strain * Hessian(i, j)));
+                entry_K.push_back(Entry(offset_i[i], offset_j[j], -k_strain * Hessian(i, j)));
+                entry_K.push_back(Entry(offset_j[i], offset_i[j], -k_strain * Hessian(i, j)));
+                entry_K.push_back(Entry(offset_j[i], offset_j[j], k_strain * Hessian(i, j)));
             }
         }
     });
-    if constexpr (dim == 2)
-    {
-        if (add_rotation_penalty)
-        {
-            std::vector<TV> data;
-            std::vector<int> nodes(4);
-            buildMapleRotationPenaltyData(q_temp, data, nodes);
-            T J[8][8];
-            memset(J, 0, sizeof(J));
-            #include "Maple/RotationPenaltyJ.mcg"
-            for (int i = 0; i < 4; i++)
-                for (int j = 0; j < 4; j++)
-                    for (int k = 0; k < dim; k++)
-                        for (int l = 0; l < dim; l++)
-                            entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -J[i*dim + k][j*dim+l]));
-        }
-
-        // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-        //     TV xj = q_temp.col(node_j).template segment<dim>(0);
-
-        //     Vector<T, 12> dedx;
-        //     nodes.push_back(node_i); nodes.push_back(node_j);
-        //     data.push_back(xi); data.push_back(xj);
-
-        //     T J[12][12];
-        //     memset(J, 0, sizeof(J));
-        //     #include "Maple/UniAxialStrainJ.mcg"
-        //     for (int i = 0; i < 6; i++)
-        //         for (int j = 0; j < 6; j++)
-        //             for (int k = 0; k < dim; k++)
-        //                 for (int l = 0; l < dim; l++)
-        //                     entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -kr * J[i*dim + k][j*dim+l]));
-        //     data.pop_back(); data.pop_back();
-        //     nodes.pop_back(); nodes.pop_back();
-        // });
-        // return;
-        iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
-            int ref_i = pbc_ref_unique[yarn_type](0);
-            int ref_j = pbc_ref_unique[yarn_type](1);
-
-            TVDOF qi = q_temp.col(node_i);
-            TVDOF qj = q_temp.col(node_j);
-            TVDOF qi_ref = q_temp.col(ref_i);
-            TVDOF qj_ref = q_temp.col(ref_j);
-
-            if (ref_i == node_i && ref_j == node_j)
-                return;
-
-            
-            std::vector<int> nodes = {node_i, node_j, ref_i, ref_j};
-            std::vector<T> sign_J = {-1, 1, 1, -1};
-            std::vector<T> sign_F = {1, -1, -1, 1};
-
-            for(int k = 0; k < 4; k++)
-                for(int l = 0; l < 4; l++)
-                    for(int i = 0; i < dof; i++)
-                            entry_K.push_back(Eigen::Triplet<T>(nodes[k]*dof + i, nodes[l] * dof + i, -k_pbc *sign_F[k]*sign_J[l]));
-
-        });
-    }
     
-}
 
-template<class T, int dim>
-void EoLRodSim<T, dim>::addPBCKALM(Eigen::Ref<const DOFStack> q_temp, std::vector<Eigen::Triplet<T>>& entry_K, T kappa)
-{
-    
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
-
-        T dij = (xj - xi).dot(strain_dir);
-        TM Hessian = strain_dir * strain_dir.transpose();
-        for(int i = 0; i < dim; i++)
-        {
-            for(int j = 0; j < dim; j++)
-            {
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_i * dof + j, k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_i * dof + i, node_j * dof + j, -k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_i * dof + j, -k_strain * Hessian(i, j)));
-                entry_K.push_back(Eigen::Triplet<T>(node_j * dof + i, node_j * dof + j, k_strain * Hessian(i, j)));
-            }
-        }
-    });
-    if constexpr (dim == 2)
+    if (add_rotation_penalty)
     {
-        std::vector<TV> data;
-        std::vector<int> nodes(4);
-        buildMapleRotationPenaltyData(q_temp, data, nodes);
-        T J[8][8];
-        memset(J, 0, sizeof(J));
-        #include "Maple/RotationPenaltyJ.mcg"
+        std::vector<TV2> data, dXdu, d2Xdu2;
+        std::vector<Offset> offsets(4);
+        buildRotationPenaltyData(data, offsets, dXdu, d2Xdu2);
+
+        Matrix<T, 16, 16> J;
+        computeRotationPenaltyEnergyHessian(kr, data[0], data[1], data[2], data[3],
+                                            data[4], data[5], data[6], data[7], J);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
-                for (int k = 0; k < dim; k++)
-                    for (int l = 0; l < dim; l++)
-                        entry_K.push_back(Eigen::Triplet<T>(nodes[i]*dof + k, nodes[j] * dof + l, -J[i*dim + k][j*dim+l]));
+                for (int k = 0; k < 2; k++)
+                    for (int l = 0; l < 2; l++)
+                    {
+                        entry_K.push_back(Entry(offsets[i][k], offsets[j][l], J(i*2 + k,j*2+l)));
+                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][dim], J(k*2 + i, 4 * 2 + l * 2 + j) * dXdu[l][j]));
 
-        iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
-            int ref_i = pbc_ref_unique[yarn_type](0);
-            int ref_j = pbc_ref_unique[yarn_type](1);
+                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], offsets[l][j], J(4 * 2 + k * 2 + i, l * 2 + j) * dXdu[k][i]));
 
-            TVDOF qi = q_temp.col(node_i);
-            TVDOF qj = q_temp.col(node_j);
-            TVDOF qi_ref = q_temp.col(ref_i);
-            TVDOF qj_ref = q_temp.col(ref_j);
-
-            if (ref_i == node_i && ref_j == node_j)
-                return;
-
-            std::vector<int> nodes = {node_i, node_j, ref_i, ref_j};
-            std::vector<T> sign_J = {-1, 1, 1, -1};
-            std::vector<T> sign_F = {1, -1, -1, 1};
-
-            for(int k = 0; k < 4; k++)
-                for(int l = 0; l < 4; l++)
-                    for(int i = 0; i < dim + 2; i++)
-                            entry_K.push_back(Eigen::Triplet<T>(nodes[k]*dof + i, nodes[l] * dof + i, -kappa *sign_F[k]*sign_J[l]));
-
-        });
+                        
+                        entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], 
+                                                            offsets[l][dim], 
+                                                            J(4 * 2 + k*2 + i, 4 * 2 + l * 2 + j) * dXdu[l][j] * dXdu[k][i]));
+                    }
     }
-    
-}
 
-template<class T, int dim>
-void EoLRodSim<T, dim>::addPBCForceALM(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual,
-         Eigen::Ref<const DOFStack> lambdas, T kappa)
-{
-    
-    DOFStack residual_cp = residual;
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
-
-        T dij = (xj - xi).dot(strain_dir);
-        
-        residual.col(node_i).template segment<dim>(0) += k_strain * strain_dir * (dij - Dij);
-        residual.col(node_j).template segment<dim>(0) += -k_strain * strain_dir * (dij - Dij);
-    });
-    if (add_rotation_penalty)
+    iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j)
     {
-        std::vector<TV> data;
-        std::vector<int> nodes(4);
-        buildMapleRotationPenaltyData(q_temp, data, nodes);
-        Vector<T, 8> dedx;
-        #include "Maple/RotationPenaltyF.mcg"
-        for (int i = 0; i < 4; i++)
-            residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
-    }
+        
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
-    int cons_cnt = 0;
-    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
-        int ref_i = pbc_ref_unique[yarn_type](0);
-        int ref_j = pbc_ref_unique[yarn_type](1);
+        TV xj_ref = deformed_states.template segment<dim>(offset_ref_j[0]);
+        TV xi_ref = deformed_states.template segment<dim>(offset_ref_i[0]);
 
-        TVDOF qi = q_temp.col(node_i);
-        TVDOF qj = q_temp.col(node_j);
-        TVDOF qi_ref = q_temp.col(ref_i);
-        TVDOF qj_ref = q_temp.col(ref_j);
+        std::vector<Offset> offsets = {offset_i, offset_j, offset_ref_i, offset_ref_j};
+        std::vector<T> sign_J = {-1, 1, 1, -1};
+        std::vector<T> sign_F = {1, -1, -1, 1};
 
-        if (ref_i == node_i && ref_j == node_j)
+        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
             return;
-            
-        TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
 
-        residual.col(node_i) += kappa * pair_dis_vec - lambdas.col(cons_cnt);
-        residual.col(node_j) += -kappa *pair_dis_vec + lambdas.col(cons_cnt);
-
-        residual.col(ref_i) += -kappa  *pair_dis_vec + lambdas.col(cons_cnt);
-        residual.col(ref_j) += kappa *pair_dis_vec - lambdas.col(cons_cnt);
-        cons_cnt ++;
+        for(int k = 0; k < 4; k++)
+            for(int l = 0; l < 4; l++)
+                for(int i = 0; i < dim; i++)
+                    entry_K.push_back(Entry(offsets[k][i], offsets[l][i], -k_pbc *sign_F[k]*sign_J[l]));
     });
-    if (print_force_mag)
-        std::cout << "pbc force " << (residual - residual_cp).norm() << std::endl;
+    
 }
 
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<const DOFStack> q_temp, Eigen::Ref<DOFStack> residual)
+void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
 {
     
-    DOFStack residual_cp = residual;
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
+    VectorXT residual_cp = residual;
+    iteratePBCStrainData([&](Offset offset_i, Offset offset_j, TV strain_dir, T Dij){
+
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
         T dij = (xj - xi).dot(strain_dir);
         
-        residual.col(node_i).template segment<dim>(0) += k_strain * strain_dir * (dij - Dij);
-        residual.col(node_j).template segment<dim>(0) += -k_strain * strain_dir * (dij - Dij);
+        residual.template segment<dim>(offset_i[0]) += k_strain * strain_dir * (dij - Dij);
+        residual.template segment<dim>(offset_j[0]) += -k_strain * strain_dir * (dij - Dij);
     });
     
     if (add_rotation_penalty)
     {
-        std::vector<TV> data;
-        std::vector<int> nodes(4);
-        buildMapleRotationPenaltyData(q_temp, data, nodes);
-        Vector<T, 8> dedx;
-        #include "Maple/RotationPenaltyF.mcg"
+        std::vector<TV2> data, dXdu, d2Xdu2;
+        std::vector<Offset> offsets(4);
+        buildRotationPenaltyData(data, offsets, dXdu, d2Xdu2);
+        Vector<T, 16> F;
+        computeRotationPenaltyEnergyGradient(kr, data[0], data[1], data[2], data[3],
+                                            data[4], data[5], data[6], data[7], F);
         for (int i = 0; i < 4; i++)
-            residual.col(nodes[i]).template segment<dim>(0) += dedx.template segment<dim>(i*dim);
+        {
+            residual.template segment<2>(offsets[i][0]) += -F.template segment<2>(i*2);
+
+            residual[offsets[i][dim]] += -F.template segment<2>(4*2+ i*2).dot(dXdu[i]);
+        }
     }
-
-    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
-
-    //     Vector<T, 12> dedx;
-    //     dedx.setZero();
-    //     nodes.push_back(node_i);
-    //     nodes.push_back(node_j);
-    //     data.push_back(xi); data.push_back(xj);
-    //     #include "Maple/UniAxialStrainF.mcg"
-    //     for (int i = 0; i < 6; i++)
-    //         residual.col(nodes[i]).template segment<dim>(0) += kr * dedx.template segment<dim>(i*dim);
-    //     data.pop_back(); data.pop_back();
-    //     nodes.pop_back(); nodes.pop_back();
-    // });
-    // return;
-    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
-        // cout3Nodes(node_i, node_j, yarn_type);
-        int ref_i = pbc_ref_unique[yarn_type](0);
-        int ref_j = pbc_ref_unique[yarn_type](1);
-
-        TVDOF qi = q_temp.col(node_i);
-        TVDOF qj = q_temp.col(node_j);
-        TVDOF qi_ref = q_temp.col(ref_i);
-        TVDOF qj_ref = q_temp.col(ref_j);
-
-        if (ref_i == node_i && ref_j == node_j)
-            return;
-            
-        TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
+    
+    iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j){
         
-        residual.col(node_i) += k_pbc *pair_dis_vec;
-        residual.col(node_j) += -k_pbc *pair_dis_vec;
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
-        residual.col(ref_i) += -k_pbc  *pair_dis_vec;
-        residual.col(ref_j) += k_pbc *pair_dis_vec;
+        TV xj_ref = deformed_states.template segment<dim>(offset_ref_j[0]);
+        TV xi_ref = deformed_states.template segment<dim>(offset_ref_i[0]);
+
+
+        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
+            return;
+
+        TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
+        residual.template segment<dim>(offset_i[0]) += k_pbc *pair_dis_vec;
+        residual.template segment<dim>(offset_j[0]) += -k_pbc *pair_dis_vec;
+        residual.template segment<dim>(offset_ref_i[0]) += -k_pbc *pair_dis_vec;
+        residual.template segment<dim>(offset_ref_j[0]) += k_pbc *pair_dis_vec;
     });
+
+
     if (print_force_mag)
         std::cout << "pbc force " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::buildMapleRotationPenaltyData(Eigen::Ref<const DOFStack> q_temp, 
-    std::vector<TV>& data, std::vector<int>& nodes)
+void EoLRodSim<T, dim>::buildRotationPenaltyData(
+    std::vector<TV2>& data, std::vector<Offset>& offsets, 
+    std::vector<TV2>& dXdu, std::vector<TV2>& d2Xdu2)
 {
-    IV2 ref0 = pbc_ref_unique[0];
-    IV2 ref1 = pbc_ref_unique[1];
+    auto ref0 = pbc_pairs_reference[0];
+    auto ref1 = pbc_pairs_reference[1];
 
-    data.resize(8);
-    data[0] = q_temp.col(ref0[0]).template segment<dim>(0);
-    data[1] = q_temp.col(ref0[1]).template segment<dim  >(0);
-    data[2] = q_temp.col(ref1[0]).template segment<dim>(0);
-    data[3] = q_temp.col(ref1[1]).template segment<dim>(0);
-    data[4] = q0.col(ref0[0]).template segment<dim>(0);
-    data[5] = q0.col(ref0[1]).template segment<dim>(0);
-    data[6] = q0.col(ref1[0]).template segment<dim>(0);
-    data[7] = q0.col(ref1[1]).template segment<dim>(0);
+    data.resize(8); dXdu.resize(4); d2Xdu2.resize(4);
+    data[0] = deformed_states.template segment<2>(ref0.first.first[0]);
+    data[1] = deformed_states.template segment<2>(ref0.first.second[0]);
+    data[2] = deformed_states.template segment<2>(ref1.first.first[0]);
+    data[3] = deformed_states.template segment<2>(ref1.first.second[0]);
+    data[4] = rest_states.template segment<2>(ref0.first.first[0]);
+    data[5] = rest_states.template segment<2>(ref0.first.second[0]);
+    data[6] = rest_states.template segment<2>(ref1.first.first[0]);
+    data[7] = rest_states.template segment<2>(ref1.first.second[0]);
 
-    nodes[0] = ref0[0];
-    nodes[1] = ref0[1];
-    nodes[2] = ref1[0];
-    nodes[3] = ref1[1];
+    offsets[0] = ref0.first.first;
+    offsets[1] = ref0.first.second;
+    offsets[2] = ref1.first.first;
+    offsets[3] = ref1.first.second;
+    
+    TV pos, dpos, ddpos;
+    T u = deformed_states[ref0.first.first[dim]];
+    Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    dXdu[0] = dpos.template segment<2>(0);
+    d2Xdu2[0] = ddpos.template segment<2>(0);
+
+    u = deformed_states[ref0.first.second[dim]];
+    Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    dXdu[1] = dpos.template segment<2>(0);
+    d2Xdu2[1] = ddpos.template segment<2>(0);
+
+    u = deformed_states[ref1.first.first[dim]];
+    Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    dXdu[2] = dpos.template segment<2>(0);
+    d2Xdu2[2] = ddpos.template segment<2>(0);
+
+    u = deformed_states[ref1.first.second[dim]];
+    Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    dXdu[3] = dpos.template segment<2>(0);
+    d2Xdu2[3] = ddpos.template segment<2>(0);
+
 }
 
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::addPBCEnergy(Eigen::Ref<const DOFStack> q_temp)
+T EoLRodSim<T, dim>::addPBCEnergy()
 {
     T energy_pbc = 0.0;
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
+    iteratePBCStrainData([&](Offset offset_i, Offset offset_j, TV strain_dir, T Dij){
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
         T dij = (xj - xi).dot(strain_dir);
         energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
     });
 
     if (add_rotation_penalty)
     {
-        std::vector<TV> data;
-        std::vector<int> nodes(4);
-        buildMapleRotationPenaltyData(q_temp, data, nodes);
-        T V[1];
-        #include "Maple/RotationPenaltyV.mcg"
-        energy_pbc += V[0];
+        std::vector<TV2> data, dXdu, d2Xdu2;
+        std::vector<Offset> offsets(4);
+        buildRotationPenaltyData(data, offsets, dXdu, d2Xdu2);
+        energy_pbc += computeRotationPenaltyEnergy(kr, data[0], data[1], data[2], data[3],
+                                                    data[4], data[5], data[6], data[7]);
     }
     
-    // iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-    //     TV xi = q_temp.col(node_i).template segment<dim>(0);
-    //     TV xj = q_temp.col(node_j).template segment<dim>(0);
-    //     data.push_back(xi); data.push_back(xj);
-    //     #include "Maple/UniAxialStrainV.mcg"
-    //     energy_pbc+= kr * V[0];
-    //     data.pop_back(); data.pop_back();
-    // });
 
-    
-
-    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
+    iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j){
         
-        int ref_i = pbc_ref_unique[yarn_type](0);
-        int ref_j = pbc_ref_unique[yarn_type](1);
+        TV xj = deformed_states.template segment<dim>(offset_j[0]);
+        TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
-        TVDOF qi = q_temp.col(node_i);
-        TVDOF qj = q_temp.col(node_j);
-        TVDOF qi_ref = q_temp.col(ref_i);
-        TVDOF qj_ref = q_temp.col(ref_j);
+        TV xj_ref = deformed_states.template segment<dim>(offset_ref_j[0]);
+        TV xi_ref = deformed_states.template segment<dim>(offset_ref_i[0]);
 
-        if (ref_i == node_i && ref_j == node_j)
+
+        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
             return;
 
-        TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
+        TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
         energy_pbc += 0.5  *k_pbc * pair_dis_vec.dot(pair_dis_vec);
-    });
-
-    return energy_pbc;
-}
-
-template<class T, int dim>
-T EoLRodSim<T, dim>::addPBCEnergyALM(Eigen::Ref<const DOFStack> q_temp, 
-    Eigen::Ref<const DOFStack> lambdas, T kappa)
-{
-    T energy_pbc = 0.0;
-    iteratePBCStrainData([&](int node_i, int node_j, TV strain_dir, T Dij){
-        TV xi = q_temp.col(node_i).template segment<dim>(0);
-        TV xj = q_temp.col(node_j).template segment<dim>(0);
-        T dij = (xj - xi).dot(strain_dir);
-        energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
-    });
-
-    std::vector<TV> data;
-    std::vector<int> nodes(4);
-    buildMapleRotationPenaltyData(q_temp, data, nodes);
-    T V[1];
-    #include "Maple/RotationPenaltyV.mcg"
-    energy_pbc += V[0];
-
-    int cons_cnt = 0;
-    iteratePBCReferencePairs([&](int yarn_type, int node_i, int node_j){
-        
-        int ref_i = pbc_ref_unique[yarn_type](0);
-        int ref_j = pbc_ref_unique[yarn_type](1);
-
-        TVDOF qi = q_temp.col(node_i);
-        TVDOF qj = q_temp.col(node_j);
-        TVDOF qi_ref = q_temp.col(ref_i);
-        TVDOF qj_ref = q_temp.col(ref_j);
-
-        if (ref_i == node_i && ref_j == node_j)
-            return;
-
-        TVDOF pair_dis_vec = qj - qi - (qj_ref - qi_ref);
-        energy_pbc += 0.5  * kappa * pair_dis_vec.dot(pair_dis_vec) - lambdas.col(cons_cnt).dot(pair_dis_vec);
-        cons_cnt ++;
     });
 
     return energy_pbc;

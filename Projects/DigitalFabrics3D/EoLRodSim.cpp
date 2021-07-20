@@ -36,13 +36,8 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
         if (add_rigid_joint)
             E_bending_twisting += addJointBendingAndTwistingEnergy();
     }
-    else if constexpr (dim == 2)
-    {
-        if (add_bending)
-            E_bending += addBendingEnergy();
-        if (add_twisting)
-            E_twisting += addTwistingEnergy();
-    }
+    if (add_pbc)
+        E_pbc += addPBCEnergy();
     if (add_eularian_reg)
         E_eul_reg += addEulerianRegEnergy();
     if (add_contact_penalty)
@@ -96,13 +91,8 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
         if (add_rigid_joint)
             addJointBendingAndTwistingForce(full_residual);
     }
-    else if constexpr (dim == 2)
-    {
-        if (add_bending)
-            addBendingForce(full_residual);
-        if (add_twisting)
-            addTwistingForce(full_residual);
-    }
+    if (add_pbc)
+        addPBCForce(full_residual);
     if (add_eularian_reg)
         addEulerianRegForce(full_residual);
     if (add_contact_penalty)
@@ -151,13 +141,8 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry
         if (add_rigid_joint)
             addJointBendingAndTwistingK(entry_K);
     }
-    else if constexpr (dim == 2)
-    {
-        if (add_bending)
-            addBendingK(entry_K);
-        if (add_twisting)
-            addTwistingK(entry_K);
-    }
+    if (add_pbc)
+        addPBCK(entry_K);
     if (add_eularian_reg)
         addEulerianRegK(entry_K);
     if (add_contact_penalty)
@@ -336,6 +321,30 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
 }
 
+template<class T, int dim>
+void EoLRodSim<T, dim>::checkHessianPD(Eigen::Ref<const VectorXT> dq)
+{
+    StiffnessMatrix K;
+    buildSystemDoFMatrix(dq, K);
+    
+    Eigen::SimplicialLLT<StiffnessMatrix> solver;
+    solver.compute(K);
+
+    Eigen::MatrixXd A_dense = K;
+    Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+
+    eigen_solver.compute(A_dense, /* computeEigenvectors = */ false);
+    auto eigen_values = eigen_solver.eigenvalues();
+    T min_ev = 1e10;
+    for (int i = 0; i < K.cols(); i++)
+        if (eigen_values[i].real() < min_ev)
+            min_ev = eigen_values[i].real();
+    std::cout << min_ev << std::endl;
+    if (solver.info() == Eigen::NumericalIssue)
+        std::cout << "Indefinite Hessian at Equilibrium" << std::endl;
+    else
+        std::cout << "Definite Hessian at Equilibrium" << std::endl;
+}
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::advanceOneStep()
@@ -358,16 +367,16 @@ void EoLRodSim<T, dim>::advanceOneStep()
         e_total += addStretchingEnergy();
     if constexpr (dim == 3)
         e_total += add3DBendingAndTwistingEnergy();
-    else if constexpr (dim == 2)
-        e_total += addBendingEnergy();
     std::cout << "E total: " << e_total << std::endl;
+
+    checkHessianPD(dq);
 
     for (auto& rod : Rods)
     {
         rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, 
             rod->indices.size() - 1);
         VectorXT reference_twist = rod->reference_twist + rod->reference_angles;
-        std::cout << rod->reference_angles.transpose() << std::endl;
+        // std::cout << rod->reference_angles.transpose() << std::endl;
     }
     
 }

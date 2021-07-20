@@ -4,101 +4,107 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::setUniaxialStrain(T theta, T s, TV& strain_dir, TV& ortho_dir)
 {
     this->theta = theta;
-    pbc_strain_data.clear();
-    pbc_strain_data.resize(0);
+    // pbc_strain_data.clear();
+    // pbc_strain_data.resize(0);
     strain_dir = TV::Zero();
     if constexpr (dim == 2)
     {
         strain_dir = TV(std::cos(theta), std::sin(theta));
         ortho_dir = TV(-std::sin(theta), std::cos(theta));
     }
-    iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-        TV Xj = q0.col(node_j).template segment<dim>(0);
-        TV Xi = q0.col(node_i).template segment<dim>(0);
-        if constexpr (dim == 2)
-        {
-            T Dij = (Xj - Xi).dot(strain_dir);
-            T dij = Dij * s;
-            // std::cout << Dij << " " << dij << std::endl;
-            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
-        }
+    else if constexpr (dim == 3)
+    {
+        strain_dir = TV(std::cos(theta), std::sin(theta), 0.0);
+        ortho_dir = TV(-std::sin(theta), std::cos(theta), 0.0);
+    }
+
+    iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j)
+    {
+        
+        TV Xj = rest_states.template segment<dim>(offset_j[0]);
+        TV Xi = rest_states.template segment<dim>(offset_i[0]);
+        T Dij = (Xj - Xi).dot(strain_dir);
+        T dij = Dij * s;
+        // std::cout << Dij << " " << dij << std::endl;
+        pbc_strain_data.push_back(std::make_pair(std::make_pair(offset_i, offset_j), std::make_pair(strain_dir, dij)));
     });
+
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::setBiaxialStrain(T theta1, T s1, T theta2, T s2, TV& strain_dir, TV& ortho_dir)
 {
-    pbc_strain_data.clear();
-    pbc_strain_data.resize(0);
-    if constexpr (dim == 2)
-    {
-        strain_dir = TV(std::cos(theta1), std::sin(theta1));
-        ortho_dir = TV(-std::sin(theta1), std::cos(theta1));
-    }
-    iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-        TV Xj = q0.col(node_j).template segment<dim>(0);
-        TV Xi = q0.col(node_i).template segment<dim>(0);
-        if constexpr (dim == 2)
-        {
-            T Dij = (Xj - Xi).dot(strain_dir);
-            T dij = Dij * s1;
-            // std::cout << Dij << " " << dij << std::endl;
-            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
+    // pbc_strain_data.clear();
+    // pbc_strain_data.resize(0);
+    // if constexpr (dim == 2)
+    // {
+    //     strain_dir = TV(std::cos(theta1), std::sin(theta1));
+    //     ortho_dir = TV(-std::sin(theta1), std::cos(theta1));
+    // }
+    // iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
+    //     TV Xj = q0.col(node_j).template segment<dim>(0);
+    //     TV Xi = q0.col(node_i).template segment<dim>(0);
+    //     if constexpr (dim == 2)
+    //     {
+    //         T Dij = (Xj - Xi).dot(strain_dir);
+    //         T dij = Dij * s1;
+    //         // std::cout << Dij << " " << dij << std::endl;
+    //         pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
 
-            Dij = (Xj - Xi).dot(ortho_dir);
-            dij = Dij * s2;
-            // std::cout << Dij << " " << dij << std::endl;
-            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(ortho_dir, dij)));
-        }
-    });
+    //         Dij = (Xj - Xi).dot(ortho_dir);
+    //         dij = Dij * s2;
+    //         // std::cout << Dij << " " << dij << std::endl;
+    //         pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(ortho_dir, dij)));
+    //     }
+    // });
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::setBiaxialStrainWeighted(T theta1, T s1, T theta2, T s2, T w)
 {
-    pbc_strain_data.clear();
-    pbc_strain_data.resize(0);
-    TV strain_dir1 = TV::Zero();
-    TV strain_dir2 = TV::Zero();
-    if constexpr (dim == 2)
-    {
-        strain_dir1 = TV(std::cos(theta1), std::sin(theta1));
-        strain_dir2 = TV(-std::sin(theta1), std::cos(theta1));
-    }
-    iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-        TV Xj = q0.col(node_j).template segment<dim>(0);
-        TV Xi = q0.col(node_i).template segment<dim>(0);
-        if constexpr (dim == 2)
-        {
-            T Dij = (Xj - Xi).dot(strain_dir1);
-            T dij = Dij * s1;
-            // std::cout << Dij << " " << dij << std::endl;
-            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir1, dij)));
+    // pbc_strain_data.clear();
+    // pbc_strain_data.resize(0);
+    // TV strain_dir1 = TV::Zero();
+    // TV strain_dir2 = TV::Zero();
+    // if constexpr (dim == 2)
+    // {
+    //     strain_dir1 = TV(std::cos(theta1), std::sin(theta1));
+    //     strain_dir2 = TV(-std::sin(theta1), std::cos(theta1));
+    // }
+    // iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
+    //     TV Xj = q0.col(node_j).template segment<dim>(0);
+    //     TV Xi = q0.col(node_i).template segment<dim>(0);
+    //     if constexpr (dim == 2)
+    //     {
+    //         T Dij = (Xj - Xi).dot(strain_dir1);
+    //         T dij = Dij * s1;
+    //         // std::cout << Dij << " " << dij << std::endl;
+    //         pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir1, dij)));
 
-            Dij = (Xj - Xi).dot(strain_dir2);
-            dij = Dij * s2;
-            // std::cout << Dij << " " << dij << std::endl;
-            pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir2, dij)));
-        }
-    });
+    //         Dij = (Xj - Xi).dot(strain_dir2);
+    //         dij = Dij * s2;
+    //         // std::cout << Dij << " " << dij << std::endl;
+    //         pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir2, dij)));
+    //     }
+    // });
 }
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::computeDeformationGradientUnitCell()
 {
-    IV2 ref0 = pbc_ref_unique[0];
-    IV2 ref1 = pbc_ref_unique[1];
+    // IV2 ref0 = pbc_ref_unique[0];
+    // IV2 ref1 = pbc_ref_unique[1];
     
-    TM x, X;
-    X.col(0) = q0.col(ref0[1]).template segment<dim>(0) - q0.col(ref0[0]).template segment<dim>(0);
-    X.col(1) = q0.col(ref1[1]).template segment<dim>(0) - q0.col(ref1[0]).template segment<dim>(0);
-    x.col(0) = q.col(ref0[1]).template segment<dim>(0) - q.col(ref0[0]).template segment<dim>(0);
-    x.col(1) = q.col(ref1[1]).template segment<dim>(0) - q.col(ref1[0]).template segment<dim>(0);
+    // TM x, X;
+    // X.col(0) = q0.col(ref0[1]).template segment<dim>(0) - q0.col(ref0[0]).template segment<dim>(0);
+    // X.col(1) = q0.col(ref1[1]).template segment<dim>(0) - q0.col(ref1[0]).template segment<dim>(0);
+    // x.col(0) = q.col(ref0[1]).template segment<dim>(0) - q.col(ref0[0]).template segment<dim>(0);
+    // x.col(1) = q.col(ref1[1]).template segment<dim>(0) - q.col(ref1[0]).template segment<dim>(0);
 
-    TM F = x * X.inverse();
+    // TM F = x * X.inverse();
     
-    std::cout << "F from ref pairs: " << F << std::endl;
-    // std::cout << "F-FT: " << F - F.transpose() << std::endl;
+    // std::cout << "F from ref pairs: " << F << std::endl;
+    // // std::cout << "F-FT: " << F - F.transpose() << std::endl;
 }
 
 

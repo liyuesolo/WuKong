@@ -65,11 +65,12 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             TV3 axis_local(0, axis_world.norm(), 0);
 
             
-            TM3 R_local = Eigen::AngleAxis<T>(rod->reference_angles[rod_cnt], axis_local.normalized()).toRotationMatrix();
+            TM3 R_local = Eigen::AngleAxis<T>(rod->reference_angles[rod_idx] + rod->reference_twist[rod_idx], axis_local.normalized()).toRotationMatrix();
         
             TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
             
             R =  R_local.transpose() * R;
+            
 
             
             for(int i = 0; i < n_div; i++)
@@ -456,11 +457,11 @@ void EoLRodSim<T, dim>::showStretching(Eigen::MatrixXd& C)
             T V[1];
             if constexpr (dim == 2)
             {
-                #include "Maple/YarnStretchingV.mcg"
+                // #include "Maple/YarnStretchingV.mcg"
             }
             else if constexpr (dim == 3)
             {
-                #include "Maple/RodStretching3DV.mcg"
+                // #include "Maple/RodStretching3DV.mcg"
             }
             rod_energy[rod_cnt++] += V[0];
             std::cout << "Rod " << node_i << "->" << node_j << ": " << V[0] << std::endl;
@@ -509,12 +510,12 @@ void EoLRodSim<T, dim>::getColorFromStretching(
         T V[1];
         
         
-        #include "Maple/YarnStretchingV.mcg"
+        // #include "Maple/YarnStretchingV.mcg"
         
         
         rod_energy[rod_idx] += V[0];
         
-        std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(t13/t6-1) << std::endl;
+        // std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(t13/t6-1) << std::endl;
 
     }
     // });
