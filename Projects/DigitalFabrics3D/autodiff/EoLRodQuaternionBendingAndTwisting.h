@@ -1,7 +1,7 @@
 #ifndef EOL_ROD_QUATERNION_BENDING_AND_TWISTING_ENERGY_H
 #define EOL_ROD_QUATERNION_BENDING_AND_TWISTING_ENERGY_H
 
-#include "VecMatDef.h"
+#include "../VecMatDef.h"
 
 template<class T>
 T computeRodQuaternionBendingAndTwistEnergyRBSecond(const Matrix<T,2,2> & bendingStiffness, T twistStiffness, T undeformedTwist, const Matrix<T,3,1> & referenceTangent1, const Matrix<T,3,1> & referenceNormal1, 

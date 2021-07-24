@@ -8,47 +8,9 @@ void Homogenization<T, dim>::testOneSample()
     initialize();
     // sim.disable_sliding = false;
     TV strain_dir, ortho_dir;
-    // sim.setUniaxialStrain(0.298451, 1.1, strain_dir);
-    // sim.setUniaxialStrain(M_PI/4 + 0.1, 1.1, strain_dir);
     
-    // sim.setUniaxialStrain(0.08333, 1.01, strain_dir);
-    // sim.setUniaxialStrain(6.04757, 1.01, strain_dir);
-    // sim.setBiaxialStrain(6.04757, 1.1, 6.04757, 0.9915);
-    // sim.setBiaxialStrain(M_PI/4 + 0.1, 1.1, M_PI/4 + 0.1, 1.0, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(6.07898, 1.001, strain_dir);
-    // sim.setUniaxialStrain(0.0, 1.01, strain_dir);
-
-    // sim.setUniaxialStrain(M_PI/2 - 0.1, 1.01, strain_dir, ortho_dir);
-    //4.52389
-    // sim.setUniaxialStrain(1.27235, 1.1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(1.2566, 1.1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(1.3509, s1, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(45.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
-    sim.setUniaxialStrain(65.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
-    
-    // sim.setUniaxialStrain(1.61792, 2.2, strain_dir, ortho_dir);
-    // sim.setUniaxialStrain(M_PI/4, 1.6, strain_dir, ortho_dir);
-    // // sim.setBiaxialStrain(M_PI/4 - 0.1, 1.01, M_PI/4 - 0.1, 1.0, strain_dir, ortho_dir);
-    // // strain_dir.normalize();
-    // // ortho_dir.normalize();
-    // sim.advanceOneStep();
-    // TM stress, strain;
-    // computeMacroStressStrain(stress, strain);
-    // T stretch_in_d = strain_dir.dot(strain * strain_dir);
-    // TV2 E_nu;
-    // E_nu(0) = strain_dir.dot(stress * strain_dir) / stretch_in_d;
-    // E_nu(1) = -ortho_dir.dot(strain * ortho_dir) / stretch_in_d;
-    // std::cout << "stress" << std::endl;
-    // std::cout << stress << std::endl;
-    // std::cout << "strain" << std::endl;
-    // std::cout << strain << std::endl;
-    // std::cout << ortho_dir.dot(strain * ortho_dir) << " " << stretch_in_d << std::endl;
-    // std::cout << "Young's modulus: " << E_nu(0) << " Poisson Ratio " << E_nu(1) << std::endl;
-    // strain_dir.normalize(); 
-    // TM sigma;
-    // sim.computeMacroStress(sigma, strain_dir);
-    // T youngs_modulus = strain_dir.dot(sigma * strain_dir);
-    // std::cout << youngs_modulus << std::endl;
+    sim.setUniaxialStrain(50.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(0.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
 }
 
 template<class T, int dim>
@@ -66,16 +28,15 @@ void Homogenization<T, dim>::initialize()
     sim.add_contact_penalty = true;
     sim.add_penalty = false;
 
+
     sim.add_shearing = false;
-    
-    // sim.add_pbc = false;
-    
+
 
     // sim.add_pbc_bending = false;
     // sim.add_stretching = false;
-    // sim.kb *= 1e4;
-    sim.newton_tol = 1e-8;
-    // sim.k_pbc = 1e10;    
+    
+    sim.newton_tol = 1e-6;
+    sim.k_pbc = 1e5;    
     // sim.k_strain = 1e5;
     
     sim.ke = 1e-4;

@@ -1,5 +1,5 @@
 #include "EoLRodSim.h"
-#include "RotationPenalty.h"
+#include "autodiff/RotationPenalty.h"
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::addPBCK(std::vector<Entry>& entry_K)
@@ -65,8 +65,12 @@ void EoLRodSim<T, dim>::addPBCK(std::vector<Entry>& entry_K)
         std::vector<T> sign_J = {-1, 1, 1, -1};
         std::vector<T> sign_F = {1, -1, -1, 1};
 
-        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
+        if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
+        {
+            entry_K.push_back(Entry(offset_i[dim-1], offset_i[dim-1], k_pbc));
+            entry_K.push_back(Entry(offset_j[dim-1], offset_j[dim-1], k_pbc));
             return;
+        }
 
         for(int k = 0; k < 4; k++)
             for(int l = 0; l < 4; l++)
@@ -118,8 +122,12 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
         TV xi_ref = deformed_states.template segment<dim>(offset_ref_i[0]);
 
 
-        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
+        if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
+        {
+            residual[offset_i[dim - 1]] += -k_pbc * xi[dim-1];
+            residual[offset_j[dim - 1]] += -k_pbc * xj[dim-1];
             return;
+        }
 
         TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
         residual.template segment<dim>(offset_i[0]) += k_pbc *pair_dis_vec;
@@ -142,14 +150,11 @@ void EoLRodSim<T, dim>::buildRotationPenaltyData(
     auto ref1 = pbc_pairs_reference[1];
 
     data.resize(8); dXdu.resize(4); d2Xdu2.resize(4);
+
     data[0] = deformed_states.template segment<2>(ref0.first.first[0]);
     data[1] = deformed_states.template segment<2>(ref0.first.second[0]);
     data[2] = deformed_states.template segment<2>(ref1.first.first[0]);
     data[3] = deformed_states.template segment<2>(ref1.first.second[0]);
-    data[4] = rest_states.template segment<2>(ref0.first.first[0]);
-    data[5] = rest_states.template segment<2>(ref0.first.second[0]);
-    data[6] = rest_states.template segment<2>(ref1.first.first[0]);
-    data[7] = rest_states.template segment<2>(ref1.first.second[0]);
 
     offsets[0] = ref0.first.first;
     offsets[1] = ref0.first.second;
@@ -159,21 +164,25 @@ void EoLRodSim<T, dim>::buildRotationPenaltyData(
     TV pos, dpos, ddpos;
     T u = deformed_states[ref0.first.first[dim]];
     Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    data[4] = pos.template segment<2>(0);
     dXdu[0] = dpos.template segment<2>(0);
     d2Xdu2[0] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref0.first.second[dim]];
     Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    data[5] = pos.template segment<2>(0);
     dXdu[1] = dpos.template segment<2>(0);
     d2Xdu2[1] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref1.first.first[dim]];
     Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    data[6] = pos.template segment<2>(0);
     dXdu[2] = dpos.template segment<2>(0);
     d2Xdu2[2] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref1.first.second[dim]];
     Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    data[7] = pos.template segment<2>(0);
     dXdu[3] = dpos.template segment<2>(0);
     d2Xdu2[3] = ddpos.template segment<2>(0);
 
@@ -189,6 +198,7 @@ T EoLRodSim<T, dim>::addPBCEnergy()
         TV xi = deformed_states.template segment<dim>(offset_i[0]);
         T dij = (xj - xi).dot(strain_dir);
         energy_pbc += 0.5 * k_strain * (dij - Dij) * (dij - Dij);
+        
     });
 
     if (add_rotation_penalty)
@@ -196,23 +206,30 @@ T EoLRodSim<T, dim>::addPBCEnergy()
         std::vector<TV2> data, dXdu, d2Xdu2;
         std::vector<Offset> offsets(4);
         buildRotationPenaltyData(data, offsets, dXdu, d2Xdu2);
-        energy_pbc += computeRotationPenaltyEnergy(kr, data[0], data[1], data[2], data[3],
-                                                    data[4], data[5], data[6], data[7]);
+        T E_rotation = computeRotationPenaltyEnergy(kr, data[0], data[1], data[2], data[3],
+                                                    data[4], data[5], data[6], data[7]); 
+        energy_pbc += E_rotation;
     }
     
 
     iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j){
         
+        
         TV xj = deformed_states.template segment<dim>(offset_j[0]);
         TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
+        
         TV xj_ref = deformed_states.template segment<dim>(offset_ref_j[0]);
         TV xi_ref = deformed_states.template segment<dim>(offset_ref_i[0]);
 
-
-        if ((offset_ref_j - offset_j).sum() < 1e-6 && (offset_ref_i - offset_i).sum() < 1e-6)
+        
+        if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
+        {            
+            energy_pbc += 0.5 * k_pbc * std::pow(xi[dim-1], 2);
+            energy_pbc += 0.5 * k_pbc * std::pow(xj[dim-1], 2);
             return;
-
+        }
+        
         TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
         energy_pbc += 0.5  *k_pbc * pair_dis_vec.dot(pair_dis_vec);
     });

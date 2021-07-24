@@ -1,8 +1,8 @@
 #include "EoLRodSim.h"
 // #include "JointBendingAndTwisting.h"
 // #include "EoLRodQuaternionBendingAndTwisting.h"
-#include "EoLRodEulerAngleBendingAndTwisting.h"
-#include "EoLRodBendingAndTwisting.h"
+#include "autodiff/EoLRodEulerAngleBendingAndTwisting.h"
+#include "autodiff/EoLRodBendingAndTwisting.h"
 
 // template<class T, int dim>
 // void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
@@ -83,8 +83,8 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                 T theta_edge0 = rod->reference_angles[edge0];
                 T theta_edge1 = rod->reference_angles[edge1];
 
-                Matrix<T, 2, 2> B = rod->bending_coeffs * 1e3;
-                T kt = rod->kt * 1e3;
+                Matrix<T, 2, 2> B = rod->bending_coeffs ;
+                T kt = rod->kt;
                 T reference_twist_edge0 = rod->reference_twist[edge0];
                 T reference_twist_edge1 = rod->reference_twist[edge1];
 
@@ -292,8 +292,8 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                 T theta_edge0 = rod->reference_angles[edge0];
                 T theta_edge1 = rod->reference_angles[edge1];
 
-                Matrix<T, 2, 2> B = rod->bending_coeffs * 1e3;
-                T kt = rod->kt * 1e3;
+                Matrix<T, 2, 2> B = rod->bending_coeffs ;
+                T kt = rod->kt;
                 T reference_twist_edge0 = rod->reference_twist[edge0];
                 T reference_twist_edge1 = rod->reference_twist[edge1];
 
@@ -421,8 +421,8 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy()
                 T theta_edge0 = rod->reference_angles[edge0];
                 T theta_edge1 = rod->reference_angles[edge1];
 
-                Matrix<T, 2, 2> B = rod->bending_coeffs * 1e3;
-                T kt = rod->kt * 1e3;
+                Matrix<T, 2, 2> B = rod->bending_coeffs ;
+                T kt = rod->kt;
 
                 T reference_twist_edge0 = rod->reference_twist[edge0];
                 T reference_twist_edge1 = rod->reference_twist[edge1];

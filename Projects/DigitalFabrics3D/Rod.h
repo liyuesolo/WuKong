@@ -266,6 +266,11 @@ public:
         idx = offset_map[node_idx];
     }
 
+    void getEntryByLocation(int node_location, Offset& idx)
+    {
+        idx = offset_map[indices[node_location]];
+    }
+
     void frontOffset(Offset& idx)
     {
         idx = offset_map[indices.front()];
@@ -312,6 +317,13 @@ public:
         dirichlet_data[reduced_map[offset_map[indices.back()][dim]]] = 0;
     }
 
+    void fixPointLagrangian(int node_idx, TV delta, 
+        std::unordered_map<int, T>& dirichlet_data)
+    {
+        for (int d = 0; d < dim; d++)
+            dirichlet_data[reduced_map[offset_map[indices[node_idx]][d]]] = delta[d];
+    }
+
     void fixEndPointLagrangian(std::unordered_map<int, T>& dirichlet_data)
     {
         for (int d = 0; d < dim; d++)
@@ -342,8 +354,8 @@ public:
     }
 
 public:
-    Rod (VectorXT& q, VectorXT& q0, int id) : full_states(q), rest_states(q0), rod_id(id), closed(false) { initCoeffs(); }
-    Rod (VectorXT& q, VectorXT& q0, int id, bool c) : full_states(q), rest_states(q0), rod_id(id), closed(c) { initCoeffs(); }
+    Rod (VectorXT& q, VectorXT& q0, int id, T _a, T _b) : full_states(q), rest_states(q0), rod_id(id), a(_a), b(_b), closed(false) { initCoeffs(); }
+    Rod (VectorXT& q, VectorXT& q0, int id, bool c, T _a, T _b) : full_states(q), rest_states(q0), rod_id(id), closed(c), a(_a), b(_b) { initCoeffs(); }
     ~Rod() {}
 
 // private:

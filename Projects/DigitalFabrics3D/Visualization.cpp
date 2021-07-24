@@ -2,8 +2,10 @@
 #include "igl/colormap.h"
 #include "igl/readOBJ.h"
 
+#include "autodiff/EoLRodStretchingEnergy.h"
+
 template<class T, int dim>
-void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, bool show_rest_shape)
+void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, TV shift, bool show_rest_shape)
 {
     // std::cout << "generate mesh for rendering" << std::endl;
     int n_div = 10;
@@ -41,6 +43,8 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             TV vtx_from_TV, vtx_to_TV;
             rod->x(node_i, vtx_from_TV);
             rod->x(node_j, vtx_to_TV);
+            vtx_from_TV += shift;
+            vtx_to_TV += shift;
             vtx_from_TV /= unit; vtx_to_TV /= unit;
             // std::cout << rod_cnt << " " <<  node_i << " " << vtx_from_TV.transpose() << " node j " << node_j << " " << vtx_to_TV.transpose() << std::endl;
             TV3 vtx_from = TV3::Zero();
@@ -462,9 +466,11 @@ void EoLRodSim<T, dim>::showStretching(Eigen::MatrixXd& C)
             else if constexpr (dim == 3)
             {
                 // #include "Maple/RodStretching3DV.mcg"
+                V[0] = addStretchingEnergy();   
             }
             rod_energy[rod_cnt++] += V[0];
-            std::cout << "Rod " << node_i << "->" << node_j << ": " << V[0] << std::endl;
+            // std::cout << "Rod " << node_i << "->" << node_j << ": " << V[0] << std::endl;
+            std::cout << "Rod " << node_i << "->" << node_j << ": " << (xi - xj).norm() / (Xi - Xj).norm() << std::endl;
         });
     }
 
@@ -479,70 +485,6 @@ void EoLRodSim<T, dim>::showStretching(Eigen::MatrixXd& C)
     });
 
 }
-template<class T, int dim>
-void EoLRodSim<T, dim>::getColorFromStretching(
-    Eigen::MatrixXd& C)
-{
-    int n_faces = 20;
-    C.resize(n_rods * n_faces, 3);
-    
-    VectorXT rod_energy(n_rods);
-    rod_energy.setZero();
-    // tbb::parallel_for(0, n_rods, [&](int rod_idx){
-    for (int rod_idx = 0; rod_idx < n_rods; rod_idx++) {
-        int node0 = rods.col(rod_idx)[0];
-        int node1 = rods.col(rod_idx)[1];
-        TV x0 = q.col(node0).template segment<dim>(0);
-        TV x1 = q.col(node1).template segment<dim>(0);
-    
 
-        std::vector<TV> X; std::vector<TV> dXdu; std::vector<TV> d2Xdu2;
-        int yarn_type = rods.col(rod_idx)[2];
-        std::vector<int> nodes = { node0, node1 };
-        getMaterialPositions(q, nodes, X, yarn_type, dXdu, d2Xdu2, false, false);
-
-        // std::cout << "X: " << X[0].transpose() << " x " << x0.transpose() << std::endl;
-        // std::cout << "X: " << X[1].transpose() << " x " << x1.transpose() << std::endl;
-
-        std::vector<TV> x(4);
-        x[0] = x0; x[1] = x1; x[2] = X[0]; x[3] = X[1];
-
-        T V[1];
-        
-        
-        // #include "Maple/YarnStretchingV.mcg"
-        
-        
-        rod_energy[rod_idx] += V[0];
-        
-        // std::cout << "Rod " << node0 << "->" << node1 << ": " << std::abs(t13/t6-1) << std::endl;
-
-    }
-    // });
-
-    // iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-    //     TV xj = q.col(node_j).template segment<dim>(0);
-    //     TV xi = q.col(node_i).template segment<dim>(0);
-    //     if constexpr (dim == 2)
-    //     {
-    //         T theta = 0.285;
-    //         TV strain_dir = TV(std::cos(theta), std::sin(theta));
-    //         T dij = (xj - xi).dot(strain_dir);
-    //         std::cout  << dij << std::endl;
-    //         // pbc_strain_data.push_back(std::make_pair(IV2(node_i, node_j), std::make_pair(strain_dir, dij)));
-    //     }
-    // });
-
-    if(rod_energy.maxCoeff() > 1e-4)
-        rod_energy /= rod_energy.maxCoeff();
-    else
-        rod_energy.setZero();
-    
-    tbb::parallel_for(0, n_rods, [&](int rod_idx){
-        for(int i = 0; i < n_faces; i++)
-            C.row(rod_idx * n_faces + i) = Eigen::Vector3d(rod_energy[rod_idx], rod_energy[rod_idx], rod_energy[rod_idx]);
-    });
-
-}
 template class EoLRodSim<double, 3>;
 template class EoLRodSim<double, 2>;

@@ -5,16 +5,6 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     TV& dXdu, TV& d2Xdu2, bool g, bool h) 
 {
     bool debug = false;
-    // if (u < this->starting_point[dim])
-    // {
-    //     // X = this->starting_point.template segment<dim>(0);
-    //     // dXdu = TV::Zero();
-    //     // d2Xdu2 = TV::Zero();
-    //     // return;
-    //     u += this->ending_point[dim];
-    // }
-    // if (u > this->ending_point[dim])
-    //     u -= this->ending_point[dim];
 
     if (u < 0)
     {
@@ -60,7 +50,16 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     
     // curve->getPosOnCurve(curve_id, t, X, interpolate);
 
-    curve->getPosOnCurveWithDerivatives(curve_id, t, X, dXdu, d2Xdu2, g, h, interpolate);
+    if constexpr (dim == 3)
+    {
+        TV2 _X, _dXdu, _d2Xdu2;
+        curve->getPosOnCurveWithDerivatives(curve_id, t, _X, _dXdu, _d2Xdu2, g, h, interpolate);
+        X = TV(_X[0], _X[1], 0);
+        dXdu = TV(_dXdu[0], _dXdu[1], 0);
+        d2Xdu2 = TV(_d2Xdu2[0], _d2Xdu2[1], 0);
+    }
+    else if constexpr (dim == 2)
+        curve->getPosOnCurveWithDerivatives(curve_id, t, X, dXdu, d2Xdu2, g, h, interpolate);
 
     if ( left_node == 0 || left_node == curve->data_points.size() - 2)
     {

@@ -1,5 +1,5 @@
 #include "EoLRodSim.h"
-#include "EoLRodBendingAndTwisting.h"
+#include "autodiff/EoLRodBendingAndTwisting.h"
 
 
 template<class T, int dim>

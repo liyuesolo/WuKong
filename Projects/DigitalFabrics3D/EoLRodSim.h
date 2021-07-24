@@ -159,7 +159,10 @@ public:
     TVDOF fix_all, fix_eulerian, fix_lagrangian, fix_u, fix_v;
     std::unordered_map<int, std::pair<TVDOF, TVDOF>> dirichlet_data;
     std::unordered_map<int, T> dirichlet_dof;
-    std::vector<std::vector<int>> pbc_bending_pairs;
+    
+    std::vector<std::vector<Offset>> pbc_bending_pairs;
+    std::vector<std::vector<int>> pbc_bending_pairs_rod_id;
+
     std::vector<std::vector<int>> pbc_bending_bn_pairs;
     std::vector<std::vector<int>> yarns;
     std::unordered_map<int, int> yarn_map;
@@ -236,12 +239,10 @@ public:
 
     template <class OP>
     void iteratePBCBendingPairs(const OP& f) {
-        for (auto pair : pbc_bending_pairs){
-            std::vector<int> node_ids;
-            for(int i = 0; i < pair.size() - 1; i++)
-                node_ids.push_back(pair[i]);
-            f(node_ids, pair[pair.size() - 1]);
-        } 
+        for (int i = 0; i < pbc_bending_pairs.size(); i++)
+        {
+            f(pbc_bending_pairs[i], pbc_bending_pairs_rod_id[i]);
+        }
     }
 
     template <class OP>
@@ -392,16 +393,6 @@ public:
     
 private:
 
-    void toMapleNodesVector(std::vector<Vector<T, dim + 1>>& x, Eigen::Ref<const DOFStack> q_temp,
-        std::vector<int>& nodes, int yarn_type);
-    void convertxXforMaple(std::vector<TV>& x, 
-        const std::vector<TV>& X,
-        Eigen::Ref<const DOFStack> q_temp,
-        std::vector<int>& nodes);
-    void getMaterialPositions(Eigen::Ref<const DOFStack> q_temp, 
-        const std::vector<int>& nodes, std::vector<TV>& X, int uv_offset,
-        std::vector<TV>& dXdu, std::vector<TV>& d2Xdu2, bool g, bool h);
-
     
 public:
     // Elasticity.cpp
@@ -415,30 +406,23 @@ public:
 
     // Scene.cpp 
     void buildSceneFromUnitPatch(int patch_id);
-
-    void checkConnections();
-    void buildPlanePeriodicBCScene3x3();
-    void buildPlanePeriodicBCScene3x3Subnodes(int sub_div = 1);
-    
-    void subdivideRods(int sub_div);
-    void subdivideRodIntoWeightMatrix(int div);
-    void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool show_rest);
     
     //Visualization.cpp
     void getColorPerYarn(Eigen::MatrixXd& C, int n_rod_per_yarn = 4);
     void getEulerianDisplacement(Eigen::MatrixXd& X, Eigen::MatrixXd& x);
-    void getColorFromStretching(Eigen::MatrixXd& C);
     void showStretching(Eigen::MatrixXd& C);
     void buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::Ref<const DOFStack> q_display, Eigen::Ref<const IV3Stack> rods_display,
         Eigen::Ref<const TV3Stack> normal_tile);
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, bool show_rest_shape = true);
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, TV shift = TV::Zero(), bool show_rest_shape = true);
     void markSlidingRange(int idx, int dir, int depth, std::vector<bool>& can_slide, int root);
     
     // DerivativeTest.cpp
     
     void derivativeTest();
-    
+    void testGradient2ndOrderTerm(Eigen::Ref<VectorXT> dq);
+    void testHessian2ndOrderTerm(Eigen::Ref<VectorXT> dq);
     void testGradient(Eigen::Ref<VectorXT> dq);
     void testHessian(Eigen::Ref<VectorXT> dq);
 
@@ -452,10 +436,17 @@ public:
     void addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
     T addJointBendingAndTwistingEnergy();
 
-    // Twisting.cpp
-    void addTwistingK(std::vector<Entry>& entry_K);  
-    void addTwistingForce(Eigen::Ref<VectorXT> residual);
-    T addTwistingEnergy();
+    //PBCBendingAndTwisting.cpp
+    void buildPBCData(
+        std::vector<TV>& data, 
+        const std::vector<Offset>& offsets, 
+        const std::vector<int>& rod_id,
+        std::vector<TV>& dXdu, std::vector<TV>& d2Xdu2,
+        bool g = false, bool f = false);
+
+    T add3DPBCBendingAndTwistingEnergy();
+    void add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
+    void add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K);
 
     // Bending.cpp
     void addBendingK(std::vector<Eigen::Triplet<T>>& entry_K);  
@@ -482,6 +473,8 @@ public:
     void buildRotationPenaltyData(
         std::vector<TV2>& data, std::vector<Offset>& offsets,
         std::vector<TV2>& dXdu, std::vector<TV2>& d2Xdu2);
+    
+
 
     // EulerianConstraints.cpp
     
@@ -498,6 +491,7 @@ public:
     T add3DBendingAndTwistingEnergy();
     void add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
     void add3DBendingAndTwistingK(std::vector<Entry>& entry_K);
+
 };
 
 #endif

@@ -69,15 +69,17 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     else
     {
         if(tileUnit)
-            eol_sim.buildPeriodicNetwork(V, F, C);
+        {
+            eol_sim.buildPeriodicNetwork(V, F, C, show_rest);
+            viewer.data().set_mesh(V, F);     
+            viewer.data().set_colors(C);
+            return;
+        }
         else
         {
-            if (eol_sim.new_frame_work)
-                eol_sim.generateMeshForRendering(V, F, show_rest);
-            else
-                eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
+            eol_sim.generateMeshForRendering(V, F, Vector<T, dim>::Zero(), show_rest);
+            viewer.data().set_mesh(V, F); 
         }
-        viewer.data().set_mesh(V, F);
         if(showUnit)
             viewer.data().set_colors(C);
         if (per_yarn)
@@ -300,19 +302,19 @@ int main(int argc, char *argv[])
                 {
                     updateScreen(viewer);
                 }
-                if (ImGui::Checkbox("ShowIndex", &show_index))
-                {
-                    if(show_index)
-                    {
-                        for (int i = 0; i < eol_sim.n_nodes; i++)
-                            viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i), eol_sim.q(1, i), 0), std::to_string(i));
-                        viewer.data().show_custom_labels = true;
-                    }
-                }
-                if (ImGui::Checkbox("ShowEulerianRest", &show_original))
-                {   
-                    updateScreen(viewer);
-                }
+                // if (ImGui::Checkbox("ShowIndex", &show_index))
+                // {
+                //     if(show_index)
+                //     {
+                //         for (int i = 0; i < eol_sim.n_nodes; i++)
+                //             viewer.data().add_label(Eigen::Vector3d(eol_sim.q(0, i), eol_sim.q(1, i), 0), std::to_string(i));
+                //         viewer.data().show_custom_labels = true;
+                //     }
+                // }
+                // if (ImGui::Checkbox("ShowEulerianRest", &show_original))
+                // {   
+                //     updateScreen(viewer);
+                // }
             }
             if (ImGui::CollapsingHeader("ColorScheme", ImGuiTreeNodeFlags_DefaultOpen))
             {
@@ -322,10 +324,7 @@ int main(int argc, char *argv[])
                     viewer.data().set_mesh(V, F);
                     if (showStretching)
                     {
-                        if(eol_sim.new_frame_work)
-                            eol_sim.showStretching(C);
-                        else
-                            eol_sim.getColorFromStretching(C);
+                        eol_sim.showStretching(C);
                         viewer.data().set_colors(C);
                     }   
                 }
@@ -587,10 +586,18 @@ int main(int argc, char *argv[])
 
                 if (eol_sim.new_frame_work)
                 {
-                    Vector<int, dim + 1> offset = eol_sim.Rods[rod_idx]->offset_map[selected];
-                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[0]]] = delta_x;
-                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[1]]] = delta_y;
-                    eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[2]]] = 0;
+                    // Vector<int, dim + 1> offset = eol_sim.Rods[rod_idx]->offset_map[selected];
+                    // eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[0]]] = delta_x;
+                    // eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[1]]] = delta_y;
+                    // eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[2]]] = 0;
+
+
+                    eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 2, 
+                            Vector<T, dim>(delta_x, delta_y, 0.0), 
+                            eol_sim.dirichlet_dof);
+                    eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 1, 
+                            Vector<T, dim>(delta_x, delta_y, 0.0), 
+                            eol_sim.dirichlet_dof); 
 
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
@@ -629,47 +636,6 @@ int main(int argc, char *argv[])
     
     if (test_current == BatchRendering)
     {
-        RGBMat R(width,height), G(width,height), B(width,height), A(width,height);
-
-        T s = 1.1;
-        int n_angles = 40;
-        T cycle = 2.0 * M_PI;
-        int cnt = 0;
-        // viewer.core().camera_eye += Eigen::Vector3f(1, 1, 0);
-        // std::cout << viewer.core().camera_eye.transpose() << std::endl;
-        // for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
-        T theta = strtod(argv[1], NULL);
-        {
-            eol_sim.buildPlanePeriodicBCScene3x3Subnodes();
-            // viewer.data().set_mesh(V, F);
-            viewer.data().set_face_based(true);
-            viewer.data().clear();
-            viewer.launch_init();
-            // viewer.draw();
-            per_yarn = false;
-            Vector<T, dim> strain_dir, ortho_dir;
-            eol_sim.setUniaxialStrain(theta, s, strain_dir, ortho_dir);
-            eol_sim.advanceOneStep();
-            eol_sim.buildMeshFromRodNetwork(V, F, eol_sim.q, eol_sim.rods, eol_sim.normal);
-            
-            viewer.data().clear();
-            viewer.data().set_mesh(V, F);
-            eol_sim.getColorPerYarn(C, n_rod_per_yarn);
-            // eol_sim.getColorFromStretching(C);
-            viewer.data().set_colors(C);   
-            
-            viewer.data().shininess = 1.0;
-            
-            // viewer.draw();
-            
-            viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
-            // Save it to a PNG
-            igl::png::writePNG(R,G,B,A,"output/strain_"+std::to_string(theta)+".png");
-            
-            eol_sim.resetScene();
-            cnt++;
-            viewer.launch_shut();
-        }
         
     }
     else if (test_current == StaticSolve)

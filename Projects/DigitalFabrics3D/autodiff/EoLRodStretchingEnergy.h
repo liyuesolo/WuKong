@@ -1,7 +1,7 @@
 #ifndef EOL_ROD_STRETCHING_ENERGY_H
 #define EOL_ROD_STRETCHING_ENERGY_H
 
-#include "VecMatDef.h"
+#include "../VecMatDef.h"
 
 template <class T>
 T stretchingEnergyLocal(T ks, const Matrix<T,3,1> & X1, const Matrix<T,3,1> & X2, const Matrix<T,3,1> & x1, const Matrix<T,3,1> & x2)

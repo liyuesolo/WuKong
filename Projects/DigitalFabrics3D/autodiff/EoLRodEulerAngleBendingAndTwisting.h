@@ -1,7 +1,7 @@
 #ifndef EOL_ROD_EULER_ANGLE_BENDING_AND_TWISTING_ENERGY_H
 #define EOL_ROD_EULER_ANGLE_BENDING_AND_TWISTING_ENERGY_H
 
-#include "VecMatDef.h"
+#include "../VecMatDef.h"
 template<class T>
 T computeRodEulerAngleBendingAndTwistEnergyRBSecond(const Matrix<T,2,2> & bendingStiffness, T twistStiffness, T undeformedTwist, const Matrix<T,3,1> & referenceTangent1, const Matrix<T,3,1> & referenceNormal1, 
 	const Matrix<T,3,1> & referenceTangent2, const Matrix<T,3,1> & referenceNormal2, T referenceTwist, const Matrix<T,3,1> & xRB, const Matrix<T,3,1> & x1, 

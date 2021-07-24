@@ -14,6 +14,8 @@ class RestState
 {
 public:
     using TV = Vector<T, dim>;
+    using TV2 = Vector<T, 2>;
+
     Vector<T, dim + 1> starting_point, ending_point;
 
 public:
@@ -54,26 +56,18 @@ class DiscreteHybridCurvature : public RestState<T, dim>
 {
 public:
     using TV = Vector<T, dim>;
-    HybridC2Curve<T, dim>* curve;
+    using TV2 = Vector<T, 2>;
+    HybridC2Curve<T, 2>* curve;
     std::vector<T> data_points_discrete_arc_length;
 
 public:
-    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c) : RestState<T, dim>(), curve(c) {}
-
-    // DiscreteHybridCurvature(HybridC2Curve<T, dim> c, 
-    //                         std::vector<T> v,
-    //                         Vector<T, dim + 1> q0, 
-    //                         Vector<T, dim + 1> q1) : RestState<T, dim>(q0, q1), 
-    //                         curve(c)
-    //                         , data_points_discrete_arc_length(v) 
-    //                         {}
     DiscreteHybridCurvature() : RestState<T, dim>(){}
 
     DiscreteHybridCurvature(Vector<T, dim + 1> q0, 
                             Vector<T, dim + 1> q1) : RestState<T, dim>(q0, q1) {}
     virtual void getMaterialPos(T u, TV& X, TV& dXdu, TV& d2Xdu2, bool g, bool h); 
 
-    void setData(HybridC2Curve<T, dim>* c, const std::vector<T>& v)
+    void setData(HybridC2Curve<T, 2>* c, const std::vector<T>& v)
     {
         curve = c;
         data_points_discrete_arc_length = v;

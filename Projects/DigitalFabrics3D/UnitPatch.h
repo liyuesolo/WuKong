@@ -11,6 +11,7 @@ class UnitPatch
 {
 public:
     using TV = Vector<T, dim>;
+    using TV2 = Vector<T, 2>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 
@@ -36,6 +37,9 @@ public:
     void buildOneCrossScene(int sub_div);
     void buildGridScene(int sub_div);
 
+    void buildOmegaScene(int sub_div);
+    void buildStraightRodScene(int sub_div);
+
 private:
     
     void clearSimData();
@@ -48,6 +52,9 @@ private:
         const std::vector<int>& passing_points_id, 
         int sub_div,
         int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
+    
+    void addCurvedRod(const std::vector<TV2>& data_points,
+        int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
 
     void addStraightYarnCrossNPoints(const TV& from, const TV& to,
         const std::vector<TV>& passing_points, 
