@@ -6,6 +6,8 @@
 #include "UnitPatch.h"
 #include "HybridC2Curve.h"
 
+#include "IsohedraTiling/IsohedralTilingTemplate.h"
+
 static double ROD_A = 1e-4;
 static double ROD_B = 1e-4;
 
@@ -427,7 +429,9 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         }
         
 
-        
+        T dv = 1.0 / n_row;
+        T du = 1.0 / n_col;
+
         for (int row = 0; row < n_row; row++)
         {
             for (int col = 0; col < n_col; col++)
@@ -438,14 +442,16 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
 
                 // std::cout << row << " " << n_row + col << std::endl;
 
-                crossing->sliding_ranges = { Range(0.2, 0.2), Range(0.2, 0.2)};
+                crossing->sliding_ranges = { Range(0.4 * du, 0.4 * du), Range(0.4 * dv, 0.4 * dv)};
                 
                 // std::cout << sim.Rods[row]->dof_node_location[col] << " "
                 //             << sim.Rods[n_row + col]->dof_node_location[row] << std::endl;
 
                 crossing->on_rod_idx[row] = sim.Rods[row]->dof_node_location[col];
                 crossing->on_rod_idx[n_row + col] = sim.Rods[n_row + col]->dof_node_location[row];
-                crossing->is_fixed = true;
+                
+                if (sim.disable_sliding)
+                    crossing->is_fixed = true;
                 sim.rod_crossings.push_back(crossing);
             }
         }    
@@ -459,11 +465,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         
         sim.rest_states = deformed_states;
 
-        // sim.iterateAllLagrangianDoFs([&](Offset offset)
-        // {
-        //     T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
-        //     sim.rest_states[offset[dim - 1]] += 0.001 * (r - 0.5) * sim.unit;
-        // });
+        
         for (auto& crossing : sim.rod_crossings)
         {
             Offset off;
@@ -484,14 +486,6 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         {
             // rod->kt = 0.0;
             rod->fixEndPointEulerian(sim.dirichlet_dof);
-            // if (cnt)
-                // rod->fixEndPointLagrangian(sim.dirichlet_dof);
-            // for (int i = 0; i < rod->indices.size() - 1; i++)
-            // {   
-            //     sim.dirichlet_dof[rod->theta_reduced_dof_start_offset + i] = 0;  
-            // }
-            // sim.dirichlet_dof[rod->theta_reduced_dof_start_offset] = 0;  
-
             rod->setupBishopFrame();
             cnt++;
             Offset end0, end1;
@@ -538,7 +532,18 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         sim.Rods[n_row]->frontOffset(end0); sim.Rods[n_row]->backOffset(end1);
         sim.pbc_pairs_reference[1] = std::make_pair(std::make_pair(end0, end1), n_row);
 
-        sim.fixCrossing();
+        if (sim.disable_sliding)
+            sim.fixCrossing();
+        else
+        {
+            for (auto& crossing : sim.rod_crossings)
+            {
+                for (int d = 0; d < dim; d++)
+                {   
+                    sim.dirichlet_dof[crossing->reduced_dof_offset + d] = 0;    
+                }
+            }
+        }
         
     }
 }

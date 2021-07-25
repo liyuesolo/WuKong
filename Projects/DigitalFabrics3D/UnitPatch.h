@@ -37,6 +37,8 @@ public:
     void buildOneCrossScene(int sub_div);
     void buildGridScene(int sub_div);
 
+    void loadFromTiles(int sub_div);
+
     void buildOmegaScene(int sub_div);
     void buildStraightRodScene(int sub_div);
 

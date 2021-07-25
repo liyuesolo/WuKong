@@ -4,3 +4,4 @@ ext/cache/*
 CMakeLists.txt.user
 .gcode
 output/
+Projects/DigitalFabrics3D/IsohedraTiling

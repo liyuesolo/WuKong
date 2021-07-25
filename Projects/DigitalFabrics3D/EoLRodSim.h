@@ -478,9 +478,9 @@ public:
 
     // EulerianConstraints.cpp
     
-    void addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K);
-    T addEulerianRegEnergy();
-    void addEulerianRegForce(Eigen::Ref<VectorXT> residual);
+    void addRegularizingK(std::vector<Eigen::Triplet<T>>& entry_K);
+    T addRegularizingEnergy();
+    void addRegularizingForce(Eigen::Ref<VectorXT> residual);
     
 
     // ParallelContact.cpp

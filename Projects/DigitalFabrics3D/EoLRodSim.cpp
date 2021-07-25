@@ -44,7 +44,7 @@ T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq,
     if (add_pbc)
         E_pbc += addPBCEnergy();
     if (add_eularian_reg)
-        E_eul_reg += addEulerianRegEnergy();
+        E_eul_reg += addRegularizingEnergy();
     if (add_contact_penalty)
         E_contact += addParallelContactEnergy();
     total_energy = E_stretching + E_bending + E_shearing + E_twisting + E_bending_twisting + E_eul_reg + E_pbc + E_penalty + E_contact;
@@ -105,7 +105,7 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
     if (add_pbc)
         addPBCForce(full_residual);
     if (add_eularian_reg)
-        addEulerianRegForce(full_residual);
+        addRegularizingForce(full_residual);
     if (add_contact_penalty)
         addParallelContactForce(full_residual);
     
@@ -159,7 +159,7 @@ void EoLRodSim<T, dim>::addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry
     if (add_pbc)
         addPBCK(entry_K);
     if (add_eularian_reg)
-        addEulerianRegK(entry_K);
+        addRegularizingK(entry_K);
     if (add_contact_penalty)
         addParallelContactK(entry_K);
 }

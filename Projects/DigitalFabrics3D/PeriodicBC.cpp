@@ -67,8 +67,15 @@ void EoLRodSim<T, dim>::addPBCK(std::vector<Entry>& entry_K)
 
         if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
         {
+            // entry_K.push_back(Entry(offset_i[dim-1], offset_i[dim-1], k_pbc));
+            // entry_K.push_back(Entry(offset_j[dim-1], offset_j[dim-1], k_pbc));
+
+            
+
             entry_K.push_back(Entry(offset_i[dim-1], offset_i[dim-1], k_pbc));
             entry_K.push_back(Entry(offset_j[dim-1], offset_j[dim-1], k_pbc));
+            entry_K.push_back(Entry(offset_i[dim-1], offset_j[dim-1], -k_pbc));
+            entry_K.push_back(Entry(offset_j[dim-1], offset_i[dim-1], -k_pbc));
             return;
         }
 
@@ -124,8 +131,11 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
 
         if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
         {
-            residual[offset_i[dim - 1]] += -k_pbc * xi[dim-1];
-            residual[offset_j[dim - 1]] += -k_pbc * xj[dim-1];
+            // residual[offset_i[dim - 1]] += -k_pbc * xi[dim-1];
+            // residual[offset_j[dim - 1]] += -k_pbc * xj[dim-1];
+            T dx = xj[dim-1] - xi[dim-1];
+            residual[offset_i[dim - 1]] += k_pbc * dx;
+            residual[offset_j[dim - 1]] += -k_pbc * dx;
             return;
         }
 
@@ -225,8 +235,9 @@ T EoLRodSim<T, dim>::addPBCEnergy()
         
         if ((offset_ref_j - offset_j).cwiseAbs().sum() < 1e-6 && (offset_ref_i - offset_i).cwiseAbs().sum() < 1e-6)
         {            
-            energy_pbc += 0.5 * k_pbc * std::pow(xi[dim-1], 2);
-            energy_pbc += 0.5 * k_pbc * std::pow(xj[dim-1], 2);
+            // energy_pbc += 0.5 * k_pbc * std::pow(xi[dim-1], 2);
+            // energy_pbc += 0.5 * k_pbc * std::pow(xj[dim-1], 2);
+            energy_pbc += 0.5 * k_pbc * std::pow(xj[dim-1] - xi[dim-1], 2);
             return;
         }
         

@@ -1,7 +1,7 @@
 #include "EoLRodSim.h"
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K)
+void EoLRodSim<T, dim>::addRegularizingK(std::vector<Eigen::Triplet<T>>& entry_K)
 {
     for (auto& crossing : rod_crossings)
         {
@@ -15,10 +15,18 @@ void EoLRodSim<T, dim>::addEulerianRegK(std::vector<Eigen::Triplet<T>>& entry_K)
             }
         }
 
+    for (auto& rod : Rods)
+    {
+        for (int i = 0; i < rod->numSeg(); i++)
+        {
+            entry_K.push_back(Entry(rod->theta_dof_start_offset + i, rod->theta_dof_start_offset + i, ke));
+        }
+    }
+    
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::addEulerianRegForce(Eigen::Ref<VectorXT> residual)
+void EoLRodSim<T, dim>::addRegularizingForce(Eigen::Ref<VectorXT> residual)
 {
     VectorXT residual_cp = residual;
     for (auto& crossing : rod_crossings)
@@ -35,13 +43,21 @@ void EoLRodSim<T, dim>::addEulerianRegForce(Eigen::Ref<VectorXT> residual)
             residual[offset[dim]] += -ke * (u-U);
         }
     }
+    for (auto& rod : Rods)
+    {
+        for (int i = 0; i < rod->numSeg(); i++)
+        {
+            residual[rod->theta_dof_start_offset + i] += -ke * rod->reference_angles[i];
+        }
+    }
+
     if(print_force_mag)
         std::cout << "Eulerian penalty norm: " << (residual - residual_cp).norm() << std::endl;
 }
 
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::addEulerianRegEnergy()
+T EoLRodSim<T, dim>::addRegularizingEnergy()
 {
     T energy = 0.0;
     for (auto& crossing : rod_crossings)
@@ -58,6 +74,15 @@ T EoLRodSim<T, dim>::addEulerianRegEnergy()
             energy += 0.5 * ke * std::pow(u - U, 2);
         }
     }
+
+    for (auto& rod : Rods)
+    {
+        for (int i = 0; i < rod->numSeg(); i++)
+        {
+            energy += 0.5 * ke * rod->reference_angles[i] * rod->reference_angles[i];
+        }
+    }
+
     return energy;
 }
 
