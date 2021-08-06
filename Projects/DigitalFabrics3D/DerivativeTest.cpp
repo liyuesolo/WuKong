@@ -6,13 +6,15 @@ void EoLRodSim<T, dim>::derivativeTest()
 {
     run_diff_test = true;
     add_regularizor = false;
-    add_stretching = true;
+    add_stretching = false;
     add_penalty = false;
-    add_bending = true;
+    add_bending = false;
     add_shearing = false;
-    add_twisting = true;
-    add_rigid_joint = false;
-    add_pbc = false;
+    add_twisting = false;
+    add_rigid_joint = true;
+    add_pbc_bending = false;
+    add_rotation_penalty = false;
+    add_pbc = true;
     add_contact_penalty = false;
     add_eularian_reg = false;
     deformed_states /= unit;
@@ -138,16 +140,16 @@ void EoLRodSim<T, dim>::testHessian2ndOrderTerm(Eigen::Ref<VectorXT> dq)
 template<class T, int dim>
 void EoLRodSim<T, dim>::testGradient(Eigen::Ref<VectorXT> dq)
 {
-    run_diff_test = true;
-    add_regularizor = false;
-    add_stretching = false;
-    add_pbc = false;
-    add_pbc_bending = true;
-    add_bending = false;
-    add_twisting = false;
-    add_rigid_joint = false;
-    add_rotation_penalty = false;
-    add_pbc = false;
+    // run_diff_test = true;
+    // add_regularizor = false;
+    // add_stretching = false;
+    // add_pbc = false;
+    // add_pbc_bending = true;
+    // add_bending = false;
+    // add_twisting = false;
+    // add_rigid_joint = false;
+    // add_rotation_penalty = false;
+    // add_pbc = false;
 
     std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
     T epsilon = 1e-6;
@@ -192,11 +194,11 @@ void EoLRodSim<T, dim>::testGradient(Eigen::Ref<VectorXT> dq)
         std::getchar();
         cnt++;   
     }
-     run_diff_test = false;
-    add_regularizor = true;
-    add_stretching = true;
-    add_bending = true;
-    add_twisting = true;
+    //  run_diff_test = false;
+    // add_regularizor = true;
+    // add_stretching = true;
+    // add_bending = true;
+    // add_twisting = true;
 }
 
 template<class T, int dim>
@@ -204,13 +206,13 @@ void EoLRodSim<T, dim>::testHessian(Eigen::Ref<VectorXT> dq)
 {
     
 
-    run_diff_test = true;
-    add_regularizor = false;
-    add_stretching = false;
-    add_pbc = false;
-    add_pbc_bending = true;
-    add_bending = false;
-    add_twisting = false;
+    // run_diff_test = true;
+    // add_regularizor = false;
+    // add_stretching = false;
+    // add_pbc = false;
+    // add_pbc_bending = true;
+    // add_bending = false;
+    // add_twisting = false;
 
     std::cout << "======================== CHECK HESSIAN ========================" << std::endl;
     T epsilon = 1e-6;
@@ -244,11 +246,11 @@ void EoLRodSim<T, dim>::testHessian(Eigen::Ref<VectorXT> dq)
         }
     }
 
-    run_diff_test = false;
-    add_regularizor = true;
-    add_stretching = true;
-    add_bending = true;
-    add_twisting = true;
+    // run_diff_test = false;
+    // add_regularizor = true;
+    // add_stretching = true;
+    // add_bending = true;
+    // add_twisting = true;
 }
 
 

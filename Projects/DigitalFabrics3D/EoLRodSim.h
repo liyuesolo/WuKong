@@ -10,7 +10,6 @@
 #include <tbb/tbb.h>
 #include "VecMatDef.h"
 
-#include "UnitPatch.h"
 #include "RestState.h"
 
 #include "Rod.h"
@@ -148,6 +147,7 @@ public:
     bool add_regularizor = false;
     bool add_pbc = true;
     bool add_pbc_bending = true;
+    bool add_pbc_twisting = true;
     bool add_eularian_reg = true;
     bool disable_sliding = true;
     bool print_force_mag = false;
@@ -168,7 +168,7 @@ public:
     std::unordered_map<int, int> yarn_map;
     
     std::vector<std::pair<int, std::pair<Offset, Offset>>> pbc_pairs;
-    std::unordered_map<int, std::pair<std::pair<Offset, Offset>, int>> pbc_pairs_reference;
+    std::unordered_map<int, std::pair<std::pair<Offset, Offset>, std::pair<int, int>>> pbc_pairs_reference;
 
     // pbc_ref[direction] = (node_i, node_j)
     std::vector<std::pair<int, IV2>> pbc_ref;
@@ -356,14 +356,29 @@ public:
     void advanceOneStep();
 
     void setVerbose(bool v) { verbose = v; }
-    void resetScene() { deformed_states = rest_states; }
+    
+    void resetScene() 
+    { 
+        deformed_states = rest_states; 
+        for (auto& rod : Rods)
+        {
+            rod->reference_twist.setZero();
+            rod->reference_angles.setZero();
+        }
+        for (auto& crossing : rod_crossings)
+        {
+            crossing->omega.setZero();
+            crossing->rotation_accumulated.setIdentity();
+        }
+    }
 
 
     void fixCrossing()
     {
         for(auto& crossing : rod_crossings)
         {
-            crossing->is_fixed = true;
+            if (!crossing->is_fixed)
+                return;
             int node_idx = crossing->node_idx;
             std::vector<int> rods_involved = crossing->rods_involved;
             for (int rod_idx : rods_involved)
@@ -434,7 +449,7 @@ public:
     // Joint.cpp
     void addJointBendingAndTwistingK(std::vector<Entry>& entry_K);
     void addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
-    T addJointBendingAndTwistingEnergy();
+    T addJointBendingAndTwistingEnergy(bool bending = true, bool twisting = true);
 
     //PBCBendingAndTwisting.cpp
     void buildPBCData(
@@ -444,9 +459,9 @@ public:
         std::vector<TV>& dXdu, std::vector<TV>& d2Xdu2,
         bool g = false, bool f = false);
 
-    T add3DPBCBendingAndTwistingEnergy();
-    void add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
-    void add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K);
+    T add3DPBCBendingAndTwistingEnergy(bool bending = true, bool twisting = true);
+    void add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> residual, bool bending = true, bool twisting = true);
+    void add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K, bool bending = true, bool twisting = true);
 
     // Bending.cpp
     void addBendingK(std::vector<Eigen::Triplet<T>>& entry_K);  
@@ -488,7 +503,7 @@ public:
     void addParallelContactForce(Eigen::Ref<VectorXT> residual);
     void addParallelContactK(std::vector<Entry>& entry_K);
 
-    T add3DBendingAndTwistingEnergy();
+    T add3DBendingAndTwistingEnergy(bool bending = true, bool twisting = true);
     void add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
     void add3DBendingAndTwistingK(std::vector<Entry>& entry_K);
 

@@ -173,25 +173,25 @@ void EoLRodSim<T, dim>::buildRotationPenaltyData(
     
     TV pos, dpos, ddpos;
     T u = deformed_states[ref0.first.first[dim]];
-    Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    Rods[ref0.second.first]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
     data[4] = pos.template segment<2>(0);
     dXdu[0] = dpos.template segment<2>(0);
     d2Xdu2[0] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref0.first.second[dim]];
-    Rods[ref0.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    Rods[ref0.second.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
     data[5] = pos.template segment<2>(0);
     dXdu[1] = dpos.template segment<2>(0);
     d2Xdu2[1] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref1.first.first[dim]];
-    Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    Rods[ref1.second.first]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
     data[6] = pos.template segment<2>(0);
     dXdu[2] = dpos.template segment<2>(0);
     d2Xdu2[2] = ddpos.template segment<2>(0);
 
     u = deformed_states[ref1.first.second[dim]];
-    Rods[ref1.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
+    Rods[ref1.second.second]->rest_state->getMaterialPos(u, pos, dpos, ddpos, true, true);
     data[7] = pos.template segment<2>(0);
     dXdu[3] = dpos.template segment<2>(0);
     d2Xdu2[3] = ddpos.template segment<2>(0);

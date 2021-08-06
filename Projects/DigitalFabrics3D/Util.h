@@ -3,6 +3,131 @@
 
 #include "VecMatDef.h"
 
+
+template<class T>
+inline T cross2D(const Vector<T, 2> x1, const Vector<T, 2> x2)
+{
+	 return x1[0] * x2[1] - x1[1]*x2[0];
+}
+
+//https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+template<class T>
+bool lineSegementsIntersect2D(const Vector<T, 2>& p, const Vector<T, 2>& p2, const Vector<T, 2>& q, const Vector<T, 2>& q2, 
+    Vector<T, 2>& intersection, bool considerCollinearOverlapAsIntersect = true)
+{
+  using TV = Vector<T, 2>;
+
+  intersection = TV::Zero();
+
+  TV r = p2 - p;
+  TV s = q2 - q;
+  TV qmp = q - p;
+
+  T rxs = cross2D(r, s);
+  T qpxr = cross2D(qmp, r);
+
+  if (std::abs(rxs) < 1e-6 && std::abs(qpxr) < 1e-6)
+  {
+      // 1. If either  0 <= (q - p) * r <= r * r or 0 <= (p - q) * s <= * s
+      // then the two lines are overlapping,
+      if (considerCollinearOverlapAsIntersect)
+          if ((0 <= (q - p).dot(r) && (q - p).dot(r) <= r.dot(r)) || (0 <= (p - q).dot(s) && (p - q).dot(s) <= s.dot(s)))
+              return true;
+
+      // 2. If neither 0 <= (q - p) * r = r * r nor 0 <= (p - q) * s <= s * s
+      // then the two lines are collinear but disjoint.
+      // No need to implement this expression, as it follows from the expression above.
+      return false;
+  }
+
+  // 3. If r x s = 0 and (q - p) x r != 0, then the two lines are parallel and non-intersecting.
+  if (std::abs(rxs) < 1e-6 && std::abs(qpxr) > 1e-6)
+      return false;
+
+  // t = (q - p) x s / (r x s)
+  T t = cross2D(qmp, s)/rxs;
+
+  // u = (q - p) x r / (r x s)
+
+  T u = cross2D(qmp, r) / rxs;
+
+  // 4. If r x s != 0 and 0 <= t <= 1 and 0 <= u <= 1
+  // the two line segments meet at the point p + t r = q + u s.
+  if (std::abs(rxs) > 1e-6 && (0 <= t && t <= 1) && (0 <= u && u <= 1))
+  {
+      // We can calculate the intersection point using either t or u.
+      intersection = p + t*r;
+      // An intersection was found.
+      return true;
+  }
+
+  // 5. Otherwise, the two line segments are not parallel but do not intersect.
+  return false;
+}
+
+
+template<class T>
+inline double Det(const Vector<T, 2> x1, const Vector<T, 2> x2)
+{
+	return x1[0] * x2[1] - x1[1]*x2[0];
+}
+
+///Calculate intersection of two lines.
+///\return true if found, false if not found or error
+template<class T>
+bool lineLineIntersect(const Vector<T, 2>& x1, //Line 1 start
+	const Vector<T, 2>& x2, //Line 1 end
+	const Vector<T, 2>& x3, //Line 2 start
+	const Vector<T, 2>& x4, //Line 2 end
+	Vector<T, 2>& intersection) //Output 
+{
+	//http://mathworld.wolfram.com/Line-LineIntersection.html
+
+	T detL1 = Det(x1, x2);
+	T detL2 = Det(x3, x4);
+	T x1mx2 = x1[0] - x2[0];
+	T x3mx4 = x3[0] - x4[0];
+	T y1my2 = x1[1] - x2[1];
+	T y3my4 = x3[1] - x4[1];
+
+	T xnom = Det(Vector<T, 2>(detL1, x1mx2), Vector<T, 2>(detL2, x3mx4));
+	T ynom = Det(Vector<T, 2>(detL1, y1my2), Vector<T, 2>(detL2, y3my4));
+	T denom = Det(Vector<T, 2>(x1mx2, y1my2), Vector<T, 2>(x3mx4, y3my4));
+	if(denom == 0.0)//Lines don't seem to cross
+	{
+		intersection = Vector<T, 2>(NAN, NAN);
+		return false;
+	}
+
+	intersection[0] = xnom / denom;	
+	intersection[1] = ynom / denom;
+	if(!std::isfinite(intersection[0]) || !std::isfinite(intersection[1])) //Probably a numerical issue
+		return false;
+
+	return true; //All OK
+}
+
+//https://www.codeproject.com/Tips/84226/Is-a-Point-inside-a-Polygon
+template<class T>
+bool insidePolygon(const std::vector<Vector<T, 2>>& parallogram, const Vector<T, 2>& test)
+{
+    int nvert = parallogram.size();
+    int i, j;
+    bool c = false;
+    for (i = 0, j = nvert-1; i < nvert; j = i++) {
+        if ( ((parallogram[i][1]>test[1]) != (parallogram[j][1]>test[1])) &&
+        (test[0] < (parallogram[j][0]-parallogram[i][0]) * (test[1]-parallogram[i][1]) / (parallogram[j][1]-parallogram[i][1]) + parallogram[i][0]) )
+        c = !c;
+    }
+    return c;
+}
+
+template<class VectorType>
+inline void appendToEnd(std::vector<VectorType>& a, const std::vector<VectorType>& b)
+{
+    a.insert(a.end(), b.begin(), b.end());
+}
+
 template<class T>
 inline T signedAngle(const Vector<T, 3>& u, const Vector<T, 3>& v, const Vector<T, 3>& n) {
   Vector<T, 3> w = u.cross(v);

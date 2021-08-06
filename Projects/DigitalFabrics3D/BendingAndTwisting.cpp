@@ -3,7 +3,7 @@
 
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
+T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy(bool bending, bool twisting)
 {
     if constexpr (dim == 3)
     {
@@ -24,10 +24,11 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
                 TV referenceTangent1 = rod->prev_tangents[second - 1];
                 TV referenceTangent2 = rod->prev_tangents[second];
 
-                Matrix<T, 2, 2> B = rod->bending_coeffs;
+                Matrix<T, 2, 2> B = bending ? rod->bending_coeffs : Matrix<T, 2, 2>::Zero();
+                T kt = twisting ? rod->kt : 0.0;
 
                 T reference_twist = rod->reference_twist[second];
-                energy += computeRodBendingAndTwistEnergy(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
+                energy += computeRodBendingAndTwistEnergy(B, kt, 0.0, referenceNormal1, referenceTangent1,
                     referenceNormal2, referenceTangent2, reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1);
                 });
             
@@ -39,6 +40,7 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy()
 template<class T, int dim>
 void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residual)
 {
+    VectorXT residual_cp = residual;
     if constexpr (dim == 3)
     {
         for (auto& rod : Rods)
@@ -80,6 +82,8 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
             });
         }
     }
+    if(print_force_mag)
+        std::cout << "bending and twist norm: " << (residual - residual_cp).norm() << std::endl;
 }
 
 template<class T, int dim>

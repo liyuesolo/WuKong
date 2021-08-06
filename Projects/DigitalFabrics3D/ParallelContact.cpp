@@ -3,6 +3,8 @@
 template<class T, int dim>
 void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
 {
+    if (!add_contact_penalty)
+        return;
     for (auto& crossing : rod_crossings)
     {
         int node_idx = crossing->node_idx;
@@ -36,6 +38,8 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
 template<class T, int dim>
 void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
 {
+    if (!add_contact_penalty)
+        return;
     VectorXT residual_cp = residual;
     for (auto& crossing : rod_crossings)
     {
@@ -77,6 +81,8 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
 template<class T, int dim>
 T EoLRodSim<T, dim>::addParallelContactEnergy()
 {
+    if (!add_contact_penalty)
+        return 0.0;
     T energy = 0.0;
     for (auto& crossing : rod_crossings)
     {

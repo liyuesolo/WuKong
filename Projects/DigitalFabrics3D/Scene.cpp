@@ -1,4 +1,5 @@
 #include "EoLRodSim.h"
+#include "UnitPatch.h"
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 

@@ -66,6 +66,7 @@ void Rod<T, dim>::rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit()
             prev_tangents[segment] = tangent;
                 // reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
         });
+        
         // iterateSegments([&](int node_i, int node_j, int segment){
         //     TV xi, xj;
         //     x(node_i, xi); x(node_j, xj);
@@ -141,6 +142,7 @@ T Rod<T, dim>::computeReferenceTwist(const TV& tangent, const TV& prev_tangent, 
     return 0;
 }
 
+// the following codes assume all dof node has been added/marked
 template<class T, int dim>
 void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
 {

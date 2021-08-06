@@ -70,13 +70,12 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
 
             
             TM3 R_local = Eigen::AngleAxis<T>(rod->reference_angles[rod_idx] + rod->reference_twist[rod_idx], axis_local.normalized()).toRotationMatrix();
+            // TM3 R_local = Eigen::AngleAxis<T>(rod->reference_angles[rod_idx], axis_local.normalized()).toRotationMatrix();
         
-            TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+            TM3 R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world.normalized(), axis_local.normalized()).toRotationMatrix();
             
-            R =  R_local.transpose() * R;
-            
-
-            
+            // R =  R_local.transpose() * R;
+                        
             for(int i = 0; i < n_div; i++)
             {
                 for(int d = 0; d < 3; d++)
@@ -96,6 +95,7 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             }
             rod_cnt++;
         });
+        
     }
     if (!show_rest_shape)
         return;

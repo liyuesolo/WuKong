@@ -26,7 +26,7 @@ void EoLRodSim<T, dim>::buildPBCData(std::vector<TV>& data,
 }
 
 template<class T, int dim>
-T EoLRodSim<T, dim>::add3DPBCBendingAndTwistingEnergy()
+T EoLRodSim<T, dim>::add3DPBCBendingAndTwistingEnergy(bool bending, bool twisting)
 {
     T energy = 0.0;
     if constexpr (dim == 3)
@@ -48,9 +48,11 @@ T EoLRodSim<T, dim>::add3DPBCBendingAndTwistingEnergy()
             
             T reference_twist = Rods[rod_id.front()]->reference_twist[0];
             
+            Matrix<T, 2, 2> bending_coeffs = bending ? Rods[rod_id.front()]->bending_coeffs : Matrix<T, 2, 2>::Zero();
+            T kt = twisting ? Rods[rod_id.front()]->kt : 0.0;
             energy += computeRodBendingAndTwistPBCEnergy(
-                Rods[rod_id.front()]->bending_coeffs, 
-                Rods[rod_id.front()]->kt, 0.0, 
+                bending_coeffs, 
+                kt, 0.0, 
                 referenceNormal1, referenceTangent1, 
                 referenceNormal2, referenceTangent2,
                 reference_twist, data[0], data[1], data[2], data[3],
@@ -62,7 +64,7 @@ T EoLRodSim<T, dim>::add3DPBCBendingAndTwistingEnergy()
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> residual)
+void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> residual, bool bending, bool twisting)
 {
     VectorXT residual_cp = residual;
     if constexpr (dim == 3)
@@ -79,20 +81,35 @@ void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> res
             TV referenceTangent1 = Rods[rod_id.front()]->prev_tangents.front();
             TV referenceTangent2 = Rods[rod_id.back()]->prev_tangents.back();
 
+        
+
             T theta0 = Rods[rod_id.front()]->reference_angles[0];
             T theta1 = Rods[rod_id.back()]->reference_angles[int(Rods[rod_id.back()]->indices.size()) - 2];
             
             T reference_twist = Rods[rod_id.front()]->reference_twist[0];
+
+            Matrix<T, 2, 2> bending_coeffs = bending ? Rods[rod_id.front()]->bending_coeffs : Matrix<T, 2, 2>::Zero();
+            T kt = twisting ? Rods[rod_id.front()]->kt : 0.0;
             
             Vector<T, 26> F;
+            F.setZero();
             computeRodBendingAndTwistPBCEnergyGradient(
-                Rods[rod_id.front()]->bending_coeffs, 
-                Rods[rod_id.front()]->kt, 0.0, 
+                bending_coeffs, 
+                kt, 0.0, 
                 referenceNormal1, referenceTangent1, 
                 referenceNormal2, referenceTangent2,
                 reference_twist, data[0], data[1], data[2], data[3],
                 data[4], data[5], data[6], data[7], theta0, theta1, F
             );
+            // std::cout << "F" << std::endl;
+            // std::cout << F << std::endl;
+            // std::cout << "x" << std::endl;
+            // // for(TV& x : data)
+            // //     std::cout << x.transpose() << std::endl;
+            // std::cout << (data[1] - data[0]).normalized().transpose() << std::endl;
+            // std::cout << (data[3] - data[2]).normalized().transpose() << std::endl;
+            // std::cout << referenceTangent1.transpose() << " " << referenceTangent2.transpose() << std::endl;
+            // std::getchar();
 
             for (int i = 0; i < 4; i++)
             {
@@ -110,7 +127,7 @@ void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingForce(Eigen::Ref<VectorXT> res
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K)
+void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K, bool bending, bool twisting)
 {
     if constexpr (dim == 3)
     {
@@ -130,11 +147,15 @@ void EoLRodSim<T, dim>::add3DPBCBendingAndTwistingK(std::vector<Entry>& entry_K)
             T theta1 = Rods[rod_id.back()]->reference_angles[int(Rods[rod_id.back()]->indices.size()) - 2];
             
             T reference_twist = Rods[rod_id.front()]->reference_twist[0];
+
+            Matrix<T, 2, 2> bending_coeffs = bending ? Rods[rod_id.front()]->bending_coeffs : Matrix<T, 2, 2>::Zero();
+            T kt = twisting ? Rods[rod_id.front()]->kt : 0.0;
             
             Matrix<T, 26, 26> J;
+            J.setZero();
             computeRodBendingAndTwistPBCEnergyHessian(
-                Rods[rod_id.front()]->bending_coeffs, 
-                Rods[rod_id.front()]->kt, 0.0, 
+                bending_coeffs, 
+                kt, 0.0, 
                 referenceNormal1, referenceTangent1, 
                 referenceNormal2, referenceTangent2,
                 reference_twist, data[0], data[1], data[2], data[3],

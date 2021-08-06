@@ -51,10 +51,30 @@ static bool show_data_points = true;
 static float theta_pbc = 0;
 static float strain = 1.0;
 static int n_rod_per_yarn = 4;
+static int modes = 9;
+
+bool reset = false;
+double t = 0.0;
 
 int n_faces = 20;
 
 std::vector<HybridC2Curve<T, dim>> hybrid_curves;
+
+Eigen::VectorXd deformed_backup;
+
+Eigen::MatrixXd evectors;
+auto loadEigenVectors = [&]()
+{
+    std::ifstream in("/home/yueli/Documents/ETH/WuKong/eigen_vectors.txt");
+    int row, col;
+    in >> row >> col;
+    evectors.resize(row, col);
+    double entry;
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < col; j++)
+            in >> evectors(i, j);
+    in.close();
+};
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
@@ -150,8 +170,75 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
         else
         {
             eol_sim.advanceOneStep();   
+            // deformed_backup = eol_sim.deformed_states;
+            
+            // eol_sim.rest_states = eol_sim.deformed_states;
+            // eol_sim.resetScene();
+
+            // Eigen::VectorXd dq(eol_sim.W.cols());
+            // std::ifstream in("/home/yueli/Documents/ETH/WuKong/eigen_vector.txt");
+            // double value;
+            // int cnt = 0;
+            // while(in >> value)
+            // {
+            //     dq[cnt++] = value;
+            // }
+            // in.close();
+            // for (int i = eol_sim.Rods[0]->theta_reduced_dof_start_offset; i < eol_sim.W.cols(); i++)
+            // {
+            //     eol_sim.dirichlet_dof[i] = dq[i];
+            // }
+            
         }
         updateScreen(viewer);
+        return true;
+    }
+    else if (key == 'a')
+    {
+        viewer.core().is_animating = !viewer.core().is_animating;
+        return true;
+    }
+    else if (key == '1')
+    {
+        modes -= 1;
+        modes = (modes + evectors.cols()) % evectors.cols();
+        std::cout << "modes " << evectors.cols() - modes << std::endl;
+        return true;
+    }
+    else if (key == '2')
+    {
+        if (reset)
+        {
+            Eigen::VectorXd dq(eol_sim.W.cols());
+            std::ifstream in("/home/yueli/Documents/ETH/WuKong/eigen_vector.txt");
+            double value;
+            int cnt = 0;
+            while(in >> value)
+            {
+                dq[cnt++] = value;
+            }
+            in.close();
+            std::cout << dq.norm() << std::endl;
+            std::cout << (eol_sim.W * dq).norm() << std::endl;
+            eol_sim.deformed_states = deformed_backup + eol_sim.W * dq;
+        }
+        else
+        {
+            eol_sim.deformed_states = deformed_backup;
+        }
+        if (tileUnit)
+        {
+            eol_sim.buildPeriodicNetwork(V, F, C, show_rest);
+            viewer.data().set_mesh(V, F);     
+            viewer.data().set_colors(C);
+        }
+        else
+        {
+            eol_sim.generateMeshForRendering(V, F, Vector<T, dim>::Zero(), show_rest);
+            viewer.data().set_mesh(V, F); 
+        }
+        reset = !reset;
+        return true;
     }
     return false;
 }
@@ -628,9 +715,34 @@ int main(int argc, char *argv[])
 
             return false;
         };
+
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating)
+        {
+            eol_sim.deformed_states = deformed_backup + eol_sim.W * evectors.col(modes) * std::sin(t);
+            // Eigen::VectorXd dq = eol_sim.W.transpose() * (eol_sim.deformed_states - eol_sim.rest_states);
+            // std::cout << eol_sim.computeTotalEnergy(dq) << std::endl;
+            t += 0.1;
+            if (tileUnit)
+            {
+                eol_sim.buildPeriodicNetwork(V, F, C, show_rest);
+                viewer.data().set_mesh(V, F);     
+                viewer.data().set_colors(C);
+            }
+            else
+            {
+                eol_sim.generateMeshForRendering(V, F, Vector<T, dim>::Zero(), show_rest);
+                viewer.data().set_mesh(V, F); 
+            }
+            // std::cout << " per frame" << std::endl;
+        }
+        return false;
+    };
     //================== Run GUI ==================
     
     
+    loadEigenVectors();
 
     int width = 800, height = 800;
     
@@ -646,6 +758,7 @@ int main(int argc, char *argv[])
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
         viewer.core().align_camera_center(V);
+        viewer.core().animation_max_fps = 24.;
         key_down(viewer,'0',0);
         viewer.launch();
     }

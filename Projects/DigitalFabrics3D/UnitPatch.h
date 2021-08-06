@@ -33,17 +33,32 @@ public:
     ~UnitPatch() {}
 
     void buildScene(int patch_type);
+
+    //Mechanisim
+    void buildFingerScene(int sub_div);
+
     void build3DtestScene(int sub_div);
     void buildOneCrossScene(int sub_div);
     void buildGridScene(int sub_div);
 
     void loadFromTiles(int sub_div);
+    void buildTactiles(int sub_div);
 
     void buildOmegaScene(int sub_div);
     void buildStraightRodScene(int sub_div);
 
 private:
     
+    void fetchOneFamily(std::vector<TV2>& data_points, int IH, 
+                        TV2& T1, TV2& T2, bool random = true);
+    
+    void cropTranslationalUnitByparallelogram(const std::vector<std::vector<TV2>>& input_points,
+    std::vector<TV2>& output_points, const TV2& top_left, const TV2& top_right,
+    const TV2& bottom_right, const TV2& bottom_left, std::vector<Vector<int, 2>>& edge_pairs,
+    std::unordered_map<int, std::vector<int>>& crossing_tracker,
+    std::vector<std::vector<Vector<int, 2>>>& boundary_pairs,
+    std::vector<std::vector<int>>& boundary_pair_rod_idx);
+
     void clearSimData();
     
     void appendThetaAndJointDoF(std::vector<Entry>& w_entry, 
@@ -71,7 +86,7 @@ private:
         std::vector<Eigen::Triplet<T>>& w_entry,
         int& dof_cnt);
     
-
+    void addPoint(const TV& point, int& full_dof_cnt, int& node_cnt);
 };
 
 #endif

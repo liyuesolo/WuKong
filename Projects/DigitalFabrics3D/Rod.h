@@ -22,6 +22,7 @@ struct RodCrossing
     bool is_fixed;
     
     std::vector<int> rods_involved;
+    std::vector<Vector<T, 2>> undeformed_twist;
     std::unordered_map<int, int> on_rod_idx;
     std::vector<Vector<T, 2>> sliding_ranges;
     Vector<T, 3> omega;
@@ -73,6 +74,7 @@ public:
     T a = 1e-4, b = 1e-4;
 
     T E = 3.5e9;
+    // T E = 1e5;
     T ks;
     T kt;
 
@@ -254,9 +256,21 @@ public:
     int nodeIdx(int node_pos)
     {
         if (node_pos == -1)
-            return indices[indices.size() -2 ];
+        {
+            if (closed)
+                return indices[indices.size() -2 ];
+            else
+                return -1;
+        }
+            
         else if (node_pos == indices.size())
-            return indices.front();
+        {
+            if (closed)
+                return indices.front();
+            else
+                return -1;
+        }
+            
         else
             return indices[node_pos];
     }
@@ -346,10 +360,17 @@ public:
         B[0][0] = coeff * a * a; B[0][1] = 0; 
         B[1][0] = 0; B[1][1] = coeff * b*b;
 
-        bending_coeffs << coeff * a * a, 0, 0, coeff * b*b;
+        // bending_coeffs << coeff * a * a, 0, 0, coeff * b*b;
+        bending_coeffs.setZero();
+        bending_coeffs(0, 0) = coeff * a * a;
+        bending_coeffs(1, 1) = coeff * b * b;
         
         ks = E * M_PI * a * b;
+
         T G = E/T(2)/(1.0 + 0.42);
+
+        // T G = 1e7;
+
         kt = 0.25 * G  * M_PI * a * b * (a*a + b*b);
     }
 
