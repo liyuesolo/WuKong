@@ -7,6 +7,8 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
         return;
     for (auto& crossing : rod_crossings)
     {
+        if (crossing->is_fixed)
+            continue;
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
@@ -43,6 +45,8 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
     VectorXT residual_cp = residual;
     for (auto& crossing : rod_crossings)
     {
+        if (crossing->is_fixed)
+            continue;
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
@@ -86,6 +90,8 @@ T EoLRodSim<T, dim>::addParallelContactEnergy()
     T energy = 0.0;
     for (auto& crossing : rod_crossings)
     {
+        if (crossing->is_fixed)
+            continue;
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;

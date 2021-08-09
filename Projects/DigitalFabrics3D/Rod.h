@@ -18,11 +18,14 @@ template<class T, int dim> class Rod;
 template<class T, int dim>
 struct RodCrossing
 {
+    using TV = Vector<T, dim>;
     int node_idx;
     bool is_fixed;
     
     std::vector<int> rods_involved;
     std::vector<Vector<T, 2>> undeformed_twist;
+    
+    
     std::unordered_map<int, int> on_rod_idx;
     std::vector<Vector<T, 2>> sliding_ranges;
     Vector<T, 3> omega;
@@ -87,6 +90,9 @@ public:
     VectorXT& rest_states;
 
     std::vector<TV> reference_frame_us;
+    
+    std::vector<TV> rest_tangents;
+    std::vector<TV> rest_normals;
 
     //previous tangent back after for time parallel transport
     // -> for each Newton iterationw

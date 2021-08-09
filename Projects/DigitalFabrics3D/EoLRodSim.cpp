@@ -6,6 +6,31 @@
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::fixCrossing()
+{
+    for(auto& crossing : rod_crossings)
+    {
+        if (!crossing->is_fixed)
+        {
+            for (int d = 0; d < dim; d++) 
+                dirichlet_dof[crossing->reduced_dof_offset + d] = 0;
+            continue;
+        }
+            
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+        for (int rod_idx : rods_involved)
+        {
+            Offset offset;
+            Rods[rod_idx]->getEntry(node_idx, offset);
+
+            dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
+        }
+        
+    }
+}
+
+template<class T, int dim>
 T EoLRodSim<T, dim>::computeTotalEnergy(Eigen::Ref<const VectorXT> dq, 
         bool verbose)
 {
@@ -229,27 +254,12 @@ bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K,
     
     if ((K*ddq - residual).norm() > 1e-6)
     {
-        int nmodes = 10;
-        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(H);
-        double shift = -1e-1;
-        Spectra::SymEigsShiftSolver<T, Spectra::LARGEST_MAGN, Spectra::SparseSymShiftSolve<T, Eigen::Upper> > eigs(&op, nmodes, 2 * nmodes, shift);
-        eigs.init();
-
-        int nconv = eigs.compute();
-
-        if (eigs.info() == Spectra::SUCCESSFUL)
-        {
-            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-            std::cout << eigen_values << std::endl;
-        }
-        else
-        {
-            std::cout << "Eigen decomposition failed" << std::endl;
-        }
-
+        // K = H + mu * I;        
+        // mu *= 10;
+        // solver.compute(K);
+        // ddq = solver.solve(residual);
         std::cout << "solving Ax=b failed ||Ax-b||: " << (K*ddq - residual).norm() << std::endl;
-        return false;    
+        // return false;    
     }
 
     // if(solver.info()!=Eigen::Success) 
@@ -351,12 +361,15 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         {
             
             for (auto& crossing : rod_crossings)
+            // for (int i = 0; i < 10; i++)
             {
+                // auto crossing = rod_crossings[i];
                 Offset off;
                 Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
                 T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
                 int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
                 dq[z_off] += 0.001 * (r - 0.5) * unit;
+                // dq[z_off] += 0.001 * r * unit;
                 
             }
             
@@ -367,7 +380,7 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         if (verbose)
             std::cout << "residual_norm " << residual_norm << std::endl;
         
-        // std::cout << residual << std::endl;
+        // std::cout << residual_norm << std::endl;
         // std::getchar();
 
         if (residual_norm < newton_tol)
@@ -428,76 +441,76 @@ void EoLRodSim<T, dim>::checkHessianPD(Eigen::Ref<const VectorXT> dq)
     }
 
 
-    Eigen::MatrixXd A_dense = K;
-    int x_dof = Rods[0]->theta_reduced_dof_start_offset;
-    // int x_dof = rod_crossings[0]->reduced_dof_offset;
-    int total_dof = K.cols();
-    Eigen::MatrixXd Kmm = A_dense.template block(0, 0, x_dof, x_dof);
-    Eigen::MatrixXd Kms = A_dense.template block(0, x_dof, x_dof, total_dof - x_dof);
-    Eigen::MatrixXd Kss = A_dense.template block(x_dof, x_dof, total_dof - x_dof, total_dof - x_dof);
+    // Eigen::MatrixXd A_dense = K;
+    // int x_dof = Rods[0]->theta_reduced_dof_start_offset;
+    // // int x_dof = rod_crossings[0]->reduced_dof_offset;
+    // int total_dof = K.cols();
+    // Eigen::MatrixXd Kmm = A_dense.template block(0, 0, x_dof, x_dof);
+    // Eigen::MatrixXd Kms = A_dense.template block(0, x_dof, x_dof, total_dof - x_dof);
+    // Eigen::MatrixXd Kss = A_dense.template block(x_dof, x_dof, total_dof - x_dof, total_dof - x_dof);
 
-    // A_dense = Kmm - Kms * Kss.inverse() * Kms.transpose();
-
-    
-    
-    A_dense = Kss - Kms.transpose() * Kmm.inverse() * Kms;
-
-
-
-    Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
-    // // Eigen::VectorXcd eigen_vector;
-    // std::cout << A_dense << std::endl;
-    eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
-    auto eigen_values = eigen_solver.eigenvalues();
-    auto eigen_vectors = eigen_solver.eigenvectors();
-
-    Eigen::VectorXcd smallest_eigen_vector, second_smallest;
-    T min_ev = 1e10;
-    T second_min_ev = 1e10;
-    for (int i = 0; i < A_dense.cols(); i++)
-        if (eigen_values[i].real() < min_ev)
-        {
-            min_ev = eigen_values[i].real();
-            smallest_eigen_vector = eigen_vectors.col(i);        
-        }
-    
-    for (int i = 0; i < A_dense.cols(); i++)
-        if (eigen_values[i].real() < second_min_ev && eigen_values[i].real() > min_ev)
-        {
-            second_min_ev = eigen_values[i].real();
-            second_smallest = eigen_vectors.col(i);        
-        }
-    
-    Eigen::VectorXd ds = smallest_eigen_vector.real();
-    Eigen::VectorXd dm = -Kmm.colPivHouseholderQr().solve(Kms * ds);
-    // std::cout << min_ev << std::endl;
-    
-    std::vector<T> ev_all(A_dense.cols());
-    for (int i = 0; i < A_dense.cols(); i++)
-    {
-        ev_all[i] = eigen_values[i].real();
-    }
-    std::sort(ev_all.begin(), ev_all.end());
-    for (int i = 0; i < 10; i++)
-        std::cout << ev_all[i] << " ";
-    std::cout << std::endl;
+    // // A_dense = Kmm - Kms * Kss.inverse() * Kms.transpose();
 
     
-    std::cout << K.cols() << " " << dm.rows() << " " << ds.rows() << std::endl;
-    std::ofstream out("eigen_vector.txt");
-    // for (int i = 0; i < Kss.cols(); i++)
+    
+    // A_dense = Kss - Kms.transpose() * Kmm.inverse() * Kms;
+
+
+
+    // Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+    // // // Eigen::VectorXcd eigen_vector;
+    // // std::cout << A_dense << std::endl;
+    // eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
+    // auto eigen_values = eigen_solver.eigenvalues();
+    // auto eigen_vectors = eigen_solver.eigenvectors();
+
+    // Eigen::VectorXcd smallest_eigen_vector, second_smallest;
+    // T min_ev = 1e10;
+    // T second_min_ev = 1e10;
+    // for (int i = 0; i < A_dense.cols(); i++)
+    //     if (eigen_values[i].real() < min_ev)
+    //     {
+    //         min_ev = eigen_values[i].real();
+    //         smallest_eigen_vector = eigen_vectors.col(i);        
+    //     }
+    
+    // for (int i = 0; i < A_dense.cols(); i++)
+    //     if (eigen_values[i].real() < second_min_ev && eigen_values[i].real() > min_ev)
+    //     {
+    //         second_min_ev = eigen_values[i].real();
+    //         second_smallest = eigen_vectors.col(i);        
+    //     }
+    
+    // Eigen::VectorXd ds = smallest_eigen_vector.real();
+    // Eigen::VectorXd dm = -Kmm.colPivHouseholderQr().solve(Kms * ds);
+    // // std::cout << min_ev << std::endl;
+    
+    // std::vector<T> ev_all(A_dense.cols());
+    // for (int i = 0; i < A_dense.cols(); i++)
     // {
-    //     out << double(smallest_eigen_vector[i].real()) << std::endl;
+    //     ev_all[i] = eigen_values[i].real();
     // }
-    for (int i = 0; i < dm.rows(); i++)
-    {
-        out << dm[i] << std::endl;
-    }
-    for (int i = 0; i < ds.rows(); i++)
-    {
-        out << ds[i] << std::endl;
-    }
-    out.close();
+    // std::sort(ev_all.begin(), ev_all.end());
+    // for (int i = 0; i < 10; i++)
+    //     std::cout << ev_all[i] << " ";
+    // std::cout << std::endl;
+
+    
+    // std::cout << K.cols() << " " << dm.rows() << " " << ds.rows() << std::endl;
+    // std::ofstream out("eigen_vector.txt");
+    // // for (int i = 0; i < Kss.cols(); i++)
+    // // {
+    // //     out << double(smallest_eigen_vector[i].real()) << std::endl;
+    // // }
+    // for (int i = 0; i < dm.rows(); i++)
+    // {
+    //     out << dm[i] << std::endl;
+    // }
+    // for (int i = 0; i < ds.rows(); i++)
+    // {
+    //     out << ds[i] << std::endl;
+    // }
+    // out.close();
 }
 
 template<class T, int dim>
@@ -538,7 +551,8 @@ void EoLRodSim<T, dim>::advanceOneStep()
     std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
                                     add3DPBCBendingAndTwistingEnergy(false, true) + 
                                     addJointBendingAndTwistingEnergy(false, true) << std::endl;
-
+    
+    
     // checkHessianPD(dq);
 
     // VectorXT force(W.rows()); force.setZero();
@@ -556,7 +570,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
     //         rod->indices.size() - 1);
     //     VectorXT reference_twist = rod->reference_twist + rod->reference_angles;
     //     // std::cout << rod->reference_angles.transpose() << std::endl;
-    //     std::cout << reference_twist.transpose() << std::endl;
+    //     // std::cout << reference_twist.transpose() << std::endl;
     // }
 
     // for (auto& crossing : rod_crossings)

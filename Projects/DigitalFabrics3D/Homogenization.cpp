@@ -9,7 +9,7 @@ void Homogenization<T, dim>::testOneSample()
     // sim.disable_sliding = false;
     TV strain_dir, ortho_dir;
     
-    // sim.setUniaxialStrain(90/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(50/180.0 * M_PI, s1, strain_dir, ortho_dir);
     // sim.setUniaxialStrain(0.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
 }
 
@@ -18,7 +18,7 @@ void Homogenization<T, dim>::initialize()
 {
     
     sim.print_force_mag = false;
-    sim.disable_sliding = false;
+    sim.disable_sliding = true;
     sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
     sim.buildSceneFromUnitPatch(7);
@@ -38,11 +38,11 @@ void Homogenization<T, dim>::initialize()
     
     
     sim.k_yc = 1e8;
-    sim.k_pbc = 1e6;
+    sim.k_pbc = 1e8;
     sim.kr = 1e4;
     
     
-    s1 = 1.01;
+    s1 = 1.1;
     s2 = 1.0;
 }
 

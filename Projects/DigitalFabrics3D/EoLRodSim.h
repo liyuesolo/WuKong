@@ -373,23 +373,7 @@ public:
     }
 
 
-    void fixCrossing()
-    {
-        for(auto& crossing : rod_crossings)
-        {
-            if (!crossing->is_fixed)
-                return;
-            int node_idx = crossing->node_idx;
-            std::vector<int> rods_involved = crossing->rods_involved;
-            for (int rod_idx : rods_involved)
-            {
-                Offset offset;
-                Rods[rod_idx]->getEntry(node_idx, offset);
-
-                dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
-            }
-        }
-    }
+    void fixCrossing();
 
     void releaseCrossing()
     {

@@ -4,38 +4,6 @@
 #include "autodiff/EoLRodEulerAngleBendingAndTwisting.h"
 #include "autodiff/EoLRodBendingAndTwisting.h"
 
-// template<class T, int dim>
-// void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
-// {
-//     for (auto& crossing : rod_crossings)
-//     {
-//         int node_idx = crossing->node_idx;
-//         std::vector<int> rods_involved = crossing->rods_involved;
-//         std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
-
-//         int cnt = 0;
-//         for (int rod_idx : rods_involved)
-//         {
-//             Offset offset;
-//             Rods[rod_idx]->getEntry(node_idx, offset);
-//             T u, U;
-//             Rods[rod_idx]->u(node_idx, u);
-//             Rods[rod_idx]->U(node_idx, U);
-//             T delta_u = (u - U);
-//             Range range = sliding_ranges[cnt];
-//             // 0 is the positive side sliding range
-//             if(delta_u >= range[0] && range[0] > 1e-6)
-//             {
-//                 entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
-//             }
-//             else if (delta_u <= -range[1] && range[1] > 1e-6)
-//             {
-//                 entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
-//             }
-//             cnt++;
-//         }
-//     }
-// }
 template<class T, int dim>
 void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
 {
@@ -50,18 +18,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
 
             std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
             Vector<T, 3> omega = crossing->omega;
-            // Vector<T, 3> omega_acc = crossing->omega_acc;
-            // Vector<T, 4> omega_acc = crossing->omega_acc;
-
             Matrix<T, 3, 3> omega_acc = crossing->rotation_accumulated;
-
-
-            // TV b(1, 0, 0);
-            // TV n(0, 0, 1);
-
-            TV b = TV(1.1, 0.2, 0);
-            b.normalize();
-            TV n = b.cross(TV(0, 1, 0));
 
             int cnt = 0;
             for (int rod_idx : rods_involved)
@@ -105,6 +62,11 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                 TV referenceTangent1 = rod->prev_tangents[edge0];
                 TV referenceTangent2 = rod->prev_tangents[edge1];            
                 
+                TV rest_tangent1 = rod->rest_tangents[edge0];
+                TV rest_tangent2 = rod->rest_tangents[edge1];
+                TV rest_normal1 = rod->rest_normals[edge0];
+                TV rest_normal2 = rod->rest_normals[edge1];
+
                 if (crossing->is_fixed)
                 {
                     Matrix<T, 16, 16> J0, J1;
@@ -123,15 +85,15 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                     std::vector<Offset> offsets2 = { offset_i, offset_k };
                     std::vector<TV> dXdu1 = { dXi, dXj };
                     std::vector<TV> dXdu2 = { dXi, dXk };
-
-                    auto undeformed_twist = crossing->undeformed_twist[cnt];
-                    // if (edge1 < rod->numSeg() && edge1 > -1)
+                    
+                    int entry_cnt = 0;
                     if (node_j != -1)
                     {
-                        computeRodEulerAngleBendingAndTwistEnergyRBFirstHessian(B, kt, undeformed_twist[1], 
-                            b, n, 
+                        computeRodEulerAngleBendingAndTwistEnergyRBFirstHessian(B, kt, 0.0, 
+                            rest_tangent1, rest_normal1, 
                             referenceTangent2, referenceNormal2, 
                             reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, J0);
+                        
                         J0 *= 0.5;
                         for(int k = 0; k < offsets1.size(); k++)
                         {
@@ -143,8 +105,10 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                                     {
                                         entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][j], J0(k*dim + i, l * dim + j)));
                                         entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], offsets1[l][dim], J0(k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j]));
-                                        entry_K.push_back(Eigen::Triplet<T>(offsets1[l][dim], offsets1[k][i], J0(2 * dim + l * dim + j, k*dim + i) * dXdu1[l][j]));
+                                        // entry_K.push_back(Eigen::Triplet<T>(offsets1[l][dim], offsets1[k][i], J0(2 * dim + l * dim + j, k*dim + i) * dXdu1[l][j]));
+                                        entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], offsets1[l][j], J0(2 * dim + k * dim + i, l*dim + j) * dXdu1[k][i]));
                                         entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], offsets1[l][dim], J0(2 * dim + k*dim + i, 2 * dim + l * dim + j) * dXdu1[l][j] * dXdu1[k][i]));
+                                        entry_cnt+=4;
                                     }
                             for (int i = 0; i < dim; i++)
                             {
@@ -152,14 +116,18 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                                 {
                                     entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], omega_dof[j], J0(k*dim + i, 4 * dim + j)));
                                     entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][i], J0(4 * dim + j, k*dim + i)));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], omega_dof[j], J0(2 *dim + i, 4 * dim + j) * dXdu1[k][j]));
-                                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][dim], J0(4 * dim + j, 2 *dim + i) * dXdu1[k][j]));
+
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], omega_dof[j], J0(2 *dim + k*dim + i, 4 * dim + j) * dXdu1[k][i]));
+                                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets1[k][dim], J0(4 * dim + j, 2 *dim + k*dim + i) * dXdu1[k][i]));
+                                    entry_cnt+=4;
                                 }
 
                                 entry_K.push_back(Eigen::Triplet<T>(offsets1[k][i], dof_theta1, J0(k*dim + i, 5 * dim)));
                                 entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][i], J0(5 * dim, k*dim + i)));
+
                                 entry_K.push_back(Eigen::Triplet<T>(offsets1[k][dim], dof_theta1, J0(2 * dim + k*dim + i, 5 * dim) * dXdu1[k][i]));
                                 entry_K.push_back(Eigen::Triplet<T>(dof_theta1, offsets1[k][dim], J0(5 * dim, 2 * dim + k*dim + i) * dXdu1[k][i]));
+                                entry_cnt+=4;
                             }
 
                         }
@@ -167,20 +135,26 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                         {
                             entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], dof_theta1, J0(4 * dim + i, 5 * dim)));
                             entry_K.push_back(Eigen::Triplet<T>(dof_theta1, omega_dof[i], J0(5 * dim, 4 * dim + i)));
+                            entry_cnt+=2;
                             for (int j = 0; j < dim; j++)
                             {
                                 entry_K.push_back(Eigen::Triplet<T>(omega_dof[i], omega_dof[j], J0(4 * dim + i, 4 * dim + j)));
+                                entry_cnt+=1;
                             }
                         }
                         entry_K.push_back(Eigen::Triplet<T>(dof_theta1, dof_theta1, J0(5 * dim, 5 * dim)));
+                        entry_cnt+=1;
+
+                        // std::cout << 16 * 16 << " " << entry_cnt << std::endl;
+                        // std::getchar();
                     }
                     if (node_k != -1)
-                    // if (edge0 > -1 && edge0 < rod->numSeg())
                     {
-                        computeRodEulerAngleBendingAndTwistEnergyRBSecondHessian(B, kt, undeformed_twist[0], 
+                        computeRodEulerAngleBendingAndTwistEnergyRBSecondHessian(B, kt, 0.0, 
                             referenceTangent1, referenceNormal1,
-                            b, n, 
+                            rest_tangent2, rest_normal2, 
                             reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, J1);
+                        
                         J1 *= 0.5;
                         for(int k = 0; k < offsets1.size(); k++)
                         {
@@ -201,12 +175,13 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                                 {
                                     entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], omega_dof[j], J1(k*dim + i, 4 * dim + j)));
                                     entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][i], J1(4 * dim + j, k*dim + i)));
-                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], omega_dof[j], J1(2 *dim + i, 4 * dim + j) * dXdu2[k][j]));
-                                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][dim], J1(4 * dim + j, 2 *dim + i) * dXdu2[k][j]));
+                                    entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], omega_dof[j], J1(2 *dim + k*dim + i, 4 * dim + j) * dXdu2[k][i]));
+                                    entry_K.push_back(Eigen::Triplet<T>(omega_dof[j], offsets2[k][dim], J1(4 * dim + j, 2 *dim + k*dim + i) * dXdu2[k][i]));
                                 }
 
-                                entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][i], J1(k*dim + i, 5 * dim)));
-                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], dof_theta0, J1(5 * dim, k*dim + i)));
+                                entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][i], J1(5 * dim, k*dim + i)));
+                                entry_K.push_back(Eigen::Triplet<T>(offsets2[k][i], dof_theta0, J1(k*dim + i, 5 * dim)));
+
                                 entry_K.push_back(Eigen::Triplet<T>(offsets2[k][dim], dof_theta0, J1(2 * dim + k*dim + i, 5 * dim) * dXdu2[k][i]));
                                 entry_K.push_back(Eigen::Triplet<T>(dof_theta0, offsets2[k][dim], J1(5 * dim, 2 * dim + k*dim + i) * dXdu2[k][i]));
                             }
@@ -224,22 +199,25 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                         }
                         entry_K.push_back(Eigen::Triplet<T>(dof_theta0, dof_theta0, J1(5 * dim, 5 * dim)));
                     }
+                    // std::cout << "here here" << std::endl;
+                    // std::getchar();
                 }
                 else
                 {
-                    if (edge1 < rod->numSeg() && edge0 > -1)
+                    if (node_k != -1 && node_j != -1)
                     {
+                        // std::cout << node_i << std::endl;
                         std::vector<int> nodes = { node_k, node_i, node_j };
                         std::vector<TV> dXdu = { dXk, dXi, dXj };
                         std::vector<Offset> offsets = { offset_k, offset_i, offset_j };
 
-                    
-                        std::vector<int> theta_dofs = {edge0, edge1};
+                        
+                        std::vector<int> theta_dofs = {rod->theta_dof_start_offset + edge0, rod->theta_dof_start_offset + edge1};
 
                         Matrix<T, 20, 20> J;
                     
                         computeRodBendingAndTwistEnergyHessian(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
-                            referenceNormal2, referenceTangent2,  reference_twist_edge1, xk, xi, xj, Xk, Xi, Xj, reference_twist_edge0, reference_twist_edge1, J);
+                            referenceNormal2, referenceTangent2,  reference_twist_edge1, xk, xi, xj, Xk, Xi, Xj, theta_edge0, theta_edge1, J);
 
                         J *= -1.0;
                         for(int k = 0; k < nodes.size(); k++)
@@ -250,7 +228,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                                             entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][j], -J(k*dim + i, l * dim + j)));
 
                                             entry_K.push_back(Eigen::Triplet<T>(offsets[k][i], offsets[l][dim], -J(k*dim + i, 3 * dim + l * dim + j) * dXdu[l][j]));
-
+                                            
                                             entry_K.push_back(Eigen::Triplet<T>(offsets[k][dim], offsets[l][j], -J(3 * dim + k * dim + i, l * dim + j) * dXdu[k][i]));
 
                                             
@@ -273,6 +251,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                             for (int j = 0; j < 2; j++)
                                 entry_K.push_back(Eigen::Triplet<T>(theta_dofs[i], theta_dofs[j], -J(18 + i, 18 + j)));
                     }
+                    
                 }
                 
 
@@ -302,13 +281,6 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
             Matrix<T, 3, 3> omega_acc = crossing->rotation_accumulated;
             // Vector<T, 3> omega_acc = crossing->omega_acc;
 
-            // TV b(1, 0, 0);
-            // TV n(0, 0, 1);
-
-            TV b = TV(1.1, 0.2, 0);
-            b.normalize();
-            TV n = b.cross(TV(0, 1, 0));
-
             int cnt = 0;
             for (int rod_idx : rods_involved)
             {
@@ -349,22 +321,29 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                 TV referenceNormal2 = rod->reference_frame_us[edge1];
 
                 TV referenceTangent1 = rod->prev_tangents[edge0];
-                TV referenceTangent2 = rod->prev_tangents[edge1];            
+                TV referenceTangent2 = rod->prev_tangents[edge1];       
+
+                TV rest_tangent1 = rod->rest_tangents[edge0];
+                TV rest_tangent2 = rod->rest_tangents[edge1];
+                TV rest_normal1 = rod->rest_normals[edge0];
+                TV rest_normal2 = rod->rest_normals[edge1];
                 
                 if (crossing->is_fixed)
                 {
                     Vector<T, 16> F0, F1;
                     F0.setZero(); F1.setZero();
                     // xi is the rigid body
-                    auto undeformed_twist = crossing->undeformed_twist[cnt];
-                    // if (edge1 < rod->numSeg() && edge1 > -1)
+                    
                     if (node_j != -1)
                     {
-                        computeRodEulerAngleBendingAndTwistEnergyRBFirstGradient(B, kt, undeformed_twist[1], 
-                            b, n, 
+                        
+                        computeRodEulerAngleBendingAndTwistEnergyRBFirstGradient(B, kt, 0.0, 
+                            rest_tangent1, rest_normal1, 
                             referenceTangent2, referenceNormal2, 
                             reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
+
                         
+
                         F0 *= -0.5;
                         residual.template segment<dim>(offset_i[0]) += F0.template segment<dim>(0);
                         residual.template segment<dim>(offset_j[0]) += F0.template segment<dim>(dim);
@@ -374,12 +353,16 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                         residual[rod->theta_dof_start_offset + edge1] += F0[5*dim];
                     }
                     if (node_k != -1)
-                    // if (edge0 > -1 && edge0 < rod->numSeg())
+                    
                     {
-                        computeRodEulerAngleBendingAndTwistEnergyRBSecondGradient(B, kt, undeformed_twist[0], 
+                        
+
+                        computeRodEulerAngleBendingAndTwistEnergyRBSecondGradient(B, kt, 0.0, 
                             referenceTangent1, referenceNormal1,
-                            b, n, 
+                            rest_tangent2, rest_normal2, 
                             reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
+
+                        
                         
                         F1 *= -0.5;
                         residual.template segment<dim>(offset_i[0]) += F1.template segment<dim>(0);
@@ -393,7 +376,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                 }
                 else
                 {
-                    if (edge1 < rod->numSeg() && edge0 > -1)
+                    if (node_k != -1 && node_j != -1)
                     {
                         Vector<T, 20> F;
                         computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
@@ -439,11 +422,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
             std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
             Vector<T, 3> omega = crossing->omega;
             Matrix<T, 3, 3> omega_acc = crossing->rotation_accumulated;
-            
-
-            TV b = TV(1.1, 0.2, 0);
-            b.normalize();
-            TV n = b.cross(TV(0, 1, 0));
+        
             
             int cnt = 0;
             for (int rod_idx : rods_involved)
@@ -490,29 +469,35 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
                 TV referenceTangent1 = rod->prev_tangents[edge0];
                 TV referenceTangent2 = rod->prev_tangents[edge1];       
 
-                auto undeformed_twist = crossing->undeformed_twist[cnt];
+                TV rest_tangent1 = rod->rest_tangents[edge0];
+                TV rest_tangent2 = rod->rest_tangents[edge1];
+                TV rest_normal1 = rod->rest_normals[edge0];
+                TV rest_normal2 = rod->rest_normals[edge1];
 
                 if (crossing->is_fixed)
                 {
                     // xi is the rigid body
                     if (node_j != -1)
                     {
-                        T E = 0.5 * computeRodEulerAngleBendingAndTwistEnergyRBFirst(B, kt, undeformed_twist[1], 
-                            b, n, 
+                        T E = 0.5 * computeRodEulerAngleBendingAndTwistEnergyRBFirst(B, kt, 0.0, 
+                            rest_tangent1, rest_normal1, 
                             referenceTangent2, referenceNormal2, 
                             reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1);
                         energy += E;
+                        
                         // std::cout << E << std::endl;
                         // std::getchar();
                     }
                     if (node_k != -1)
                     {
-                        T E = 0.5 * computeRodEulerAngleBendingAndTwistEnergyRBSecond(B, kt, undeformed_twist[0], 
+                        T E = 0.5 * computeRodEulerAngleBendingAndTwistEnergyRBSecond(B, kt, 0.0, 
                             referenceTangent1, referenceNormal1,
-                            b, n, 
+                            rest_tangent2, rest_normal2, 
                             reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0);
                        energy += E;
                     }
+
+                    
                 }
                 else
                 {

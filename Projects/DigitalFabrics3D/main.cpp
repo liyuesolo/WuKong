@@ -170,7 +170,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
         else
         {
             eol_sim.advanceOneStep();   
-            // deformed_backup = eol_sim.deformed_states;
+            deformed_backup = eol_sim.deformed_states;
             
             // eol_sim.rest_states = eol_sim.deformed_states;
             // eol_sim.resetScene();
@@ -679,12 +679,16 @@ int main(int argc, char *argv[])
                     // eol_sim.dirichlet_dof[eol_sim.Rods[rod_idx]->reduced_map[offset[2]]] = 0;
 
 
-                    eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 2, 
-                            Vector<T, dim>(delta_x, delta_y, 0.0), 
+                    // eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 2, 
+                    //         Vector<T, dim>(delta_x, delta_y, 0.0), 
+                    //         eol_sim.dirichlet_dof);
+                    // eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 1, 
+                    //         Vector<T, dim>(delta_x, delta_y, 0.0), 
+                    //         eol_sim.dirichlet_dof); 
+
+                    eol_sim.Rods[16]->fixPointLagrangian(eol_sim.Rods[16]->indices.size() - 1, 
+                            Vector<T, dim>(0, delta_y, 0.0), 
                             eol_sim.dirichlet_dof);
-                    eol_sim.Rods[0]->fixPointLagrangian(eol_sim.Rods[0]->indices.size() - 1, 
-                            Vector<T, dim>(delta_x, delta_y, 0.0), 
-                            eol_sim.dirichlet_dof); 
 
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);

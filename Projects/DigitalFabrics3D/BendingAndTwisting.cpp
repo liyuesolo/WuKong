@@ -170,7 +170,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
         for (auto& rod : Rods)
         {   
-            // continue;
+            continue;
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
                 Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {

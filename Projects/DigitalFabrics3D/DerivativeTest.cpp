@@ -5,18 +5,19 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::derivativeTest()
 {
     run_diff_test = true;
-    add_regularizor = false;
+    // add_regularizor = false;
     add_stretching = false;
-    add_penalty = false;
+    // add_penalty = false;
     add_bending = false;
-    add_shearing = false;
+    // add_shearing = false;
     add_twisting = false;
     add_rigid_joint = true;
     add_pbc_bending = false;
     add_rotation_penalty = false;
-    add_pbc = true;
+    // add_pbc = true;
     add_contact_penalty = false;
     add_eularian_reg = false;
+    
     deformed_states /= unit;
     VectorXT dq(W.cols());
     // VectorXT dq(W.rows());
@@ -27,10 +28,10 @@ void EoLRodSim<T, dim>::derivativeTest()
     dq *= 0.01;
     // dq(2) += 1.0;
     // dq(3) += 1.0;
-    testGradient(dq);
-    testHessian(dq);
-    // testGradient2ndOrderTerm(dq);
-    // testHessian2ndOrderTerm(dq);
+    // testGradient(dq);
+    // testHessian(dq);
+    testGradient2ndOrderTerm(dq);
+    testHessian2ndOrderTerm(dq);
 }
 
 
@@ -215,6 +216,21 @@ void EoLRodSim<T, dim>::testHessian(Eigen::Ref<VectorXT> dq)
     // add_twisting = false;
 
     std::cout << "======================== CHECK HESSIAN ========================" << std::endl;
+    
+    int n_seg = 0;
+    for (auto& rod : Rods)
+        n_seg += rod->numSeg();
+    int n_crossing = 0;
+    for (auto& crossing : rod_crossings)
+        n_crossing += 3;
+    std::cout << "n crossing " << n_crossing << std::endl;
+    std::cout << "n seg " << n_seg << std::endl;
+    std::cout << "rod crosing dof begin " << rod_crossings[0]->reduced_dof_offset << std::endl;
+    std::cout << "rod crosing dof end " << rod_crossings.back()->reduced_dof_offset + 3 << std::endl;
+    std::cout << "rod theta dof begin " << Rods[0]->theta_reduced_dof_start_offset << std::endl;
+    std::cout << "rod theta dof ends " << Rods.back()->theta_reduced_dof_start_offset + Rods.back()->numSeg() << std::endl;
+    std::cout << W.rows() << " " << W.cols() << std::endl;
+
     T epsilon = 1e-6;
     StiffnessMatrix A;
     buildSystemDoFMatrix(dq, A);

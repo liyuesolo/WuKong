@@ -42,6 +42,8 @@ void Rod<T, dim>::setupBishopFrame()
                 reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
         });    
     }
+    rest_tangents = prev_tangents;
+    rest_normals = reference_frame_us;
 }
 
 template<class T, int dim>

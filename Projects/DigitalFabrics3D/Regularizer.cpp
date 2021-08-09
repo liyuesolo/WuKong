@@ -4,25 +4,18 @@ template<class T, int dim>
 void EoLRodSim<T, dim>::addRegularizingK(std::vector<Eigen::Triplet<T>>& entry_K)
 {
     for (auto& crossing : rod_crossings)
-        {
-            int node_idx = crossing->node_idx;
-            std::vector<int> rods_involved = crossing->rods_involved;
-            for (int rod_idx : rods_involved)
-            {
-                Offset offset;
-                Rods[rod_idx]->getEntry(node_idx, offset);
-                entry_K.push_back(Entry(offset[dim], offset[dim], ke));
-            }
-        }
-
-    for (auto& rod : Rods)
     {
-        for (int i = 0; i < rod->numSeg(); i++)
+        if (crossing->is_fixed)
+            continue;
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+        for (int rod_idx : rods_involved)
         {
-            entry_K.push_back(Entry(rod->theta_dof_start_offset + i, rod->theta_dof_start_offset + i, ke));
+            Offset offset;
+            Rods[rod_idx]->getEntry(node_idx, offset);
+            entry_K.push_back(Entry(offset[dim], offset[dim], ke));
         }
     }
-    
 }
 
 template<class T, int dim>
@@ -31,6 +24,8 @@ void EoLRodSim<T, dim>::addRegularizingForce(Eigen::Ref<VectorXT> residual)
     VectorXT residual_cp = residual;
     for (auto& crossing : rod_crossings)
     {
+        if (crossing->is_fixed)
+            continue;
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         for (int rod_idx : rods_involved)
@@ -43,13 +38,7 @@ void EoLRodSim<T, dim>::addRegularizingForce(Eigen::Ref<VectorXT> residual)
             residual[offset[dim]] += -ke * (u-U);
         }
     }
-    for (auto& rod : Rods)
-    {
-        for (int i = 0; i < rod->numSeg(); i++)
-        {
-            residual[rod->theta_dof_start_offset + i] += -ke * rod->reference_angles[i];
-        }
-    }
+    
 
     if(print_force_mag)
         std::cout << "Eulerian penalty norm: " << (residual - residual_cp).norm() << std::endl;
@@ -62,6 +51,8 @@ T EoLRodSim<T, dim>::addRegularizingEnergy()
     T energy = 0.0;
     for (auto& crossing : rod_crossings)
     {
+        if (crossing->is_fixed)
+            continue;
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         for (int rod_idx : rods_involved)
@@ -75,13 +66,6 @@ T EoLRodSim<T, dim>::addRegularizingEnergy()
         }
     }
 
-    for (auto& rod : Rods)
-    {
-        for (int i = 0; i < rod->numSeg(); i++)
-        {
-            energy += 0.5 * ke * rod->reference_angles[i] * rod->reference_angles[i];
-        }
-    }
 
     return energy;
 }
