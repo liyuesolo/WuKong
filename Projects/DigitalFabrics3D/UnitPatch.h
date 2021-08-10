@@ -36,6 +36,9 @@ public:
 
     //Mechanisim
     void buildFingerScene(int sub_div);
+    void buildGripperScene(int sub_div);
+
+    void buildShelterScene(int sub_div);
 
     void build3DtestScene(int sub_div);
     void buildOneCrossScene(int sub_div);
@@ -68,9 +71,11 @@ private:
         const std::vector<TV>& passing_points, 
         const std::vector<int>& passing_points_id, 
         int sub_div,
-        int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
+        int& full_dof_cnt, int& node_cnt, int& rod_cnt);
     
     void addCurvedRod(const std::vector<TV2>& data_points,
+        const std::vector<TV>& passing_points, 
+        const std::vector<int>& passing_points_id, 
         int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed);
 
     void addStraightYarnCrossNPoints(const TV& from, const TV& to,

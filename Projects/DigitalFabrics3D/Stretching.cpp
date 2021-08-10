@@ -100,7 +100,7 @@ void EoLRodSim<T, dim>::addStretchingK(std::vector<Entry>& entry_K)
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
 {
-
+    
     VectorXT residual_cp = residual;
     for (auto& rod : Rods)
     {
@@ -110,7 +110,7 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
             TV xi, xj, Xi, Xj, dXi, dXj;
             rod->x(node_i, xi); rod->x(node_j, xj);
             rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj);
-
+            
             std::vector<TV> x(4);
             x[0] = xi; x[1] = xj; x[2] = Xi; x[3] = Xj;
 
@@ -124,8 +124,8 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
             {
                 // #include "Maple/RodStretching3DF.mcg"
                 computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
-
                 F *= -1.0;
+                
             }
 
             residual.template segment<dim>(offset_i[0]) += F.template segment<dim>(0);

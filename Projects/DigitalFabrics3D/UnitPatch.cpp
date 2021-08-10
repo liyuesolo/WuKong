@@ -8,6 +8,7 @@
 
 #include "tactile/tiling.hpp"
 #include "IO.h"
+#include "GCodeGenerator.h"
 
 
 
@@ -56,251 +57,121 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
         loadFromTiles(2);
     else if (patch_type == 7)
         buildFingerScene(8);
+    else if (patch_type == 8)
+        buildShelterScene(16);
+    else if (patch_type == 9)
+        buildGripperScene(16);
 }
+#include "autodiff/EoLRodStretchingEnergy.h"
+template<class T, int dim>
+void UnitPatch<T, dim>::buildGripperScene(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.add_pbc_twisting = false;
+        sim.add_pbc = false;
 
-// template<class T, int dim>
-// void UnitPatch<T, dim>::buildFingerScene(int sub_div)
-// {
-//     if constexpr (dim == 3)
-//     {
-//         auto unit_yarn_map = sim.yarn_map;
-//         sim.yarn_map.clear();
-//         sim.add_rotation_penalty = false;
-//         sim.add_pbc_bending = false;
-//         sim.add_pbc_twisting = false;
-//         sim.add_pbc = false;
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
 
-//         sim.add_contact_penalty=true;
-//         sim.new_frame_work = true;
-//         sim.add_eularian_reg = true;
+        sim.ke = 1e-4;
+
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        int rod_cnt = 0;
+
+        std::vector<Entry> w_entry;
+
+        TV v0 = TV(0.5, 0.0, 0.0) * sim.unit;
+        TV v1 = TV(0.5, -0.5, 0.0) * sim.unit;
+        addPoint(v0, full_dof_cnt, node_cnt);
+        addPoint(v1, full_dof_cnt, node_cnt);
         
-//         sim.ke = 1e-2;
+        T theta = M_PI / 4.0;
+        std::vector<TV2> data_points;
+        data_points.push_back(TV2(0.5, -0.5) * sim.unit);
+        data_points.push_back(TV2(0, 0) * sim.unit);
+        data_points.push_back(TV2(0.5 - 0.5 * std::cos(theta), 0.5 + 0.5 * std::sin(theta)) * sim.unit);
+        data_points.push_back(TV2(0.5, 0.0) * sim.unit);
+        data_points.push_back(TV2(0.5 + 0.5 * std::cos(theta), 0.5 + 0.5 * std::sin(theta)) * sim.unit);
+        data_points.push_back(TV2(1.0, 0.0) * sim.unit);
+        data_points.push_back(TV2(0.5, -0.5) * sim.unit);        
 
-//         clearSimData();
-        
-//         int full_dof_cnt = 0;
-//         int node_cnt = 0;
-//         int rod_cnt = 0;
+        std::vector<TV> passing_points = {v0, v1};
+        std::vector<int> passing_points_id = {0, 1};
 
-//         std::vector<Entry> w_entry;
-
-//         std::vector<std::vector<TV>> passing_points(3, std::vector<TV>());
-//         std::vector<std::vector<int>> passing_points_id(3, std::vector<int>());
-
-//         for (int i = 0; i < 4; i++)
-//         {
-//             for (int j = 0; j < 3; j++)
-//             {
-//                 TV v0 = TV(0.25 * (j+1), 1.0 - 0.25 * i, 0.0) * sim.unit;
-//                 addPoint(v0, full_dof_cnt, node_cnt);
-//                 passing_points_id[j].push_back(i * 3 + j);
-//                 passing_points[j].push_back(v0);
-//             }
-//         }
-
-//         // for (int i = 0; i < 4; i++)
-//         // {
-//         //     for (int j = 0; j < 3; j++)
-//         //     {
-//         //         TV v0 = TV(0.25 * (j+1), 1.0 - 0.25 * i, -0.1) * sim.unit;
-//         //         addPoint(v0, full_dof_cnt, node_cnt);
-//         //         passing_points_id[3 + j].push_back(12 + i * 3 + j);
-//         //         passing_points[3 + j].push_back(v0);
-//         //     }
-//         // }
-        
-//         for (int i = 0; i < 4; i++)
-//         {
-//             TV from = deformed_states.template segment<dim>(i * 3 * dim);
-//             TV middle = deformed_states.template segment<dim>((i * 3 + 1) * dim);
-//             TV to = deformed_states.template segment<dim>((i * 3 + 2) * dim);
-//             std::vector<TV> points = { from, middle, to };
-//             std::vector<int> ids = { i * 3, i * 3 + 1, i * 3 + 2 };
-//             addAStraightRod(from, to, points, ids, 
-//                 sub_div, full_dof_cnt, node_cnt, rod_cnt, false);            
-//         }
-
-//         // for (int i = 0; i < 4; i++)
-//         // {
-//         //     TV from = deformed_states.template segment<dim>((12 + i * 3) * dim);
-//         //     TV middle = deformed_states.template segment<dim>((12 + i * 3 + 1) * dim);
-//         //     TV to = deformed_states.template segment<dim>((12 + i * 3 + 2) * dim);
-//         //     std::vector<TV> points = { from, middle, to };
-//         //     std::vector<int> ids = { 12 + i * 3, 12 + i * 3 + 1, 12 + i * 3 + 2 };
-//         //     addAStraightRod(from, to, points, ids, 
-//         //         sub_div, full_dof_cnt, node_cnt, rod_cnt, false);            
-//         // }
-
-//         addAStraightRod(passing_points[0].front(), passing_points[0].back(), passing_points[0], passing_points_id[0], 
-//             sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-
-//         TV from = passing_points[1].front();
-//         TV to = TV(0.5, 0, 0) * sim.unit;
-//         addAStraightRod(from, to, passing_points[1], passing_points_id[1], 
-//             sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-        
-        
-//         addAStraightRod(passing_points[2].front(), passing_points[2].back(), passing_points[2], passing_points_id[2], 
-//             sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-
-//         // addAStraightRod(passing_points[3].front(), passing_points[3].back(), passing_points[3], passing_points_id[3], 
-//         //     sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-
-//         // addAStraightRod(passing_points[4].front(), passing_points[4].back(), passing_points[4], passing_points_id[4], 
-//         //     sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-        
-//         // addAStraightRod(passing_points[5].front(), passing_points[5].back(), passing_points[5], passing_points_id[5], 
-//         //     sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
-
-
-//         // for (int i = 0; i < 4; i++)
-//         // {
-//         //     for (int j = 0; j < 3; j++)
-//         //     {
-//         //         if (j == 1)
-//         //             continue;
-//         //         TV from = deformed_states.template segment<dim>((12 + i * 3 + j) * dim);
-//         //         TV to = deformed_states.template segment<dim>((i * 3 + j) * dim);
-//         //         std::vector<TV> points = { from, to };
-//         //         std::vector<int> ids = { 12 + i * 3 + j , i * 3 + j};
-//         //         addAStraightRod(from, to, points, ids, 
-//         //             sub_div, full_dof_cnt, node_cnt, rod_cnt, false);            
-//         //     }
-//         // }
-
-//         for (int i = 0; i < 4; i++)
-//         {
-//             for (int j = 0; j < 3; j++)
-//             {
-                
-//                 RodCrossing<T, dim>* crossing = 
-//                         new RodCrossing<T, dim>(i * 3 + j, {i, 4 + j});
-                            
-//                 crossing->undeformed_twist.push_back(Vector<T, 2>(0, 0)); 
-//                 crossing->undeformed_twist.push_back(Vector<T, 2>(0, 0)); 
-                
-//                 crossing->on_rod_idx[i] = sim.Rods[i]->dof_node_location[j];
-//                 crossing->on_rod_idx[4 + j] = sim.Rods[4+j]->dof_node_location[i];
-                
-//                 if (i == 3 && j==1 )
-//                 {
-                    
-//                     crossing->is_fixed = false;
-//                     crossing->sliding_ranges.push_back(Range(0, 0));
-//                     crossing->sliding_ranges.push_back(Range(0.05, 0.05));
-//                 }
-//                 else if (i == 2 && j == 1)
-//                 {
-//                     crossing->is_fixed = false;
-//                     crossing->sliding_ranges.push_back(Range(0, 0));
-//                     crossing->sliding_ranges.push_back(Range(0.0, 0.0));
-//                 }
-//                 else
-//                 {
-//                     crossing->is_fixed = true;
-//                     crossing->sliding_ranges.push_back(Range(0, 0));
-//                     crossing->sliding_ranges.push_back(Range(0, 0));
-//                 }
-                
-//                 sim.rod_crossings.push_back(crossing);
-//             }
-            
-//         }
-
-//         // for (int i = 0; i < 4; i++)
-//         // {
-//         //     for (int j = 0; j < 3; j++)
-//         //     {
-//         //         for (int k = 0; k < 2; k++)
-//         //         {
-//         //             if (j == 1)
-//         //             {
-//         //                 RodCrossing<T, dim>* crossing = 
-//         //                     new RodCrossing<T, dim>(i * 3 + j + k * 12, {i, 4 + j});
-                                
-//         //                 crossing->undeformed_twist.push_back(Vector<T, 2>(0, 0)); 
-//         //                 crossing->undeformed_twist.push_back(Vector<T, 2>(0, 0)); 
-                        
-//         //                 crossing->on_rod_idx[i] = sim.Rods[i]->dof_node_location[j];
-//         //                 crossing->on_rod_idx[4 + j] = sim.Rods[4+j]->dof_node_location[i];
-                        
-//         //                 if (i == 3 && j==1 )
-//         //                 {
-                            
-//         //                     crossing->is_fixed = false;
-//         //                     crossing->sliding_ranges.push_back(Range(0, 0));
-//         //                     crossing->sliding_ranges.push_back(Range(0.05, 0.05));
-//         //                 }
-//         //                 else if (i == 2 && j == 1)
-//         //                 {
-//         //                     crossing->is_fixed = false;
-//         //                     crossing->sliding_ranges.push_back(Range(0, 0));
-//         //                     crossing->sliding_ranges.push_back(Range(0.0, 0.0));
-//         //                 }
-//         //                 else
-//         //                 {
-//         //                     crossing->is_fixed = true;
-//         //                     crossing->sliding_ranges.push_back(Range(0, 0));
-//         //                     crossing->sliding_ranges.push_back(Range(0, 0));
-//         //                 }
-                        
-//         //                 sim.rod_crossings.push_back(crossing);
-//         //             }
-//         //             else
-//         //             {
-
-//         //             }
-                    
-//         //         }
-//         //     }
-            
-//         // }
-        
-//         int dof_cnt = 0;
-//         markCrossingDoF(w_entry, dof_cnt);
-        
-//         for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
-        
-//         appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
-        
-//         sim.rest_states = deformed_states;
-
-//         sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
-//         sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
-//         for (auto& rod : sim.Rods)
-//         {
-//             rod->fixEndPointEulerian(sim.dirichlet_dof);
-//             rod->setupBishopFrame();
-//         }
-
-//         Offset offset;
-//         sim.Rods[5]->getEntry(10, offset);
-//         for (int d = 0; d < dim; d++)
-//         {        
-//             sim.dirichlet_dof[sim.Rods[5]->reduced_map[offset[d]]] = 0;
-//         }
+        addCurvedRod(data_points, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
 
         
-    
-//         sim.Rods[5]->backOffsetReduced(offset);
-//         sim.dirichlet_dof[offset[0]] = 0;
-//         sim.dirichlet_dof[offset[1]] = -sim.unit * 0.5;
-//         sim.dirichlet_dof[offset[2]] = 0;
 
-//         sim.Rods[4]->backOffsetReduced(offset);
-//         sim.dirichlet_dof[offset[0]] = 0;
-//         sim.dirichlet_dof[offset[1]] = 0;
-//         sim.dirichlet_dof[offset[2]] = 0;
+        TV to = TV(0.5, -1, 0.0) * sim.unit;
+        addAStraightRod(v0, to, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
 
-//         sim.Rods[6]->backOffsetReduced(offset);
-//         sim.dirichlet_dof[offset[0]] = 0;
-//         sim.dirichlet_dof[offset[1]] = 0;
-//         sim.dirichlet_dof[offset[2]] = 0;
+        for (int i = 0; i < 2; i++)
+        {
+            RodCrossing<T, dim>* crossing = 
+                    new RodCrossing<T, dim>(i, {0, 1});
+            crossing->on_rod_idx[0] = sim.Rods[0]->dof_node_location[1 - i];
+            crossing->on_rod_idx[1] = sim.Rods[1]->dof_node_location[i];
+            if (i == 0)
+            // if(true)
+            {
+                crossing->is_fixed = true;
+                crossing->sliding_ranges.push_back(Range(0, 0));
+                crossing->sliding_ranges.push_back(Range(0, 0));
+            }
+            else
+            {
+                crossing->is_fixed = false;
+                crossing->sliding_ranges.push_back(Range(0, 0));
+                crossing->sliding_ranges.push_back(Range(0.4, 0.4));
+            }
+            sim.rod_crossings.push_back(crossing);
+        }
         
-//         sim.fixCrossing();
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
         
-//     }
-// }
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+
+        sim.fixCrossing();
+        
+        
+
+        Offset offset;
+        sim.Rods[0]->getEntry(1, offset);
+        for (int d = 0; d < dim; d++)
+        {        
+            sim.dirichlet_dof[sim.Rods[0]->reduced_map[offset[d]]] = 0;
+        }
+        sim.Rods[0]->fixPointLagrangian(1, TV::Zero(), sim.dirichlet_dof);
+        sim.Rods[0]->fixPointLagrangian(sim.Rods[0]->indices.size() - 2, TV::Zero(), sim.dirichlet_dof);
+        sim.Rods[1]->backOffsetReduced(offset);
+        sim.dirichlet_dof[offset[0]] = 0;
+        sim.dirichlet_dof[offset[1]] = -0.3 * sim.unit;
+        sim.dirichlet_dof[offset[2]] = 0;
+
+        sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset] = 0;
+        sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset + sim.Rods[0]->numSeg()-1] = 0;
+    }
+}
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildFingerScene(int sub_div)
@@ -356,7 +227,7 @@ void UnitPatch<T, dim>::buildFingerScene(int sub_div)
                 std::vector<TV> points = { from, middle, to };
                 std::vector<int> ids = { 12 * j + i * 3, 12 * j + i * 3 + 1, 12 * j + i * 3 + 2 };
                 addAStraightRod(from, to, points, ids, 
-                    sub_div, full_dof_cnt, node_cnt, rod_cnt, false);            
+                    sub_div, full_dof_cnt, node_cnt, rod_cnt);            
             }
         }
 
@@ -371,7 +242,7 @@ void UnitPatch<T, dim>::buildFingerScene(int sub_div)
                 if (j == 1)
                     continue;
                 addAStraightRod(from, to, points, ids, 
-                    sub_div, full_dof_cnt, node_cnt, rod_cnt, false);            
+                    sub_div, full_dof_cnt, node_cnt, rod_cnt);            
             }
         }
 
@@ -381,12 +252,12 @@ void UnitPatch<T, dim>::buildFingerScene(int sub_div)
         TV from = passing_points[1].front();
         TV to = TV(0.5, 0, 0) * sim.unit;
         addAStraightRod(from, to, passing_points[1], passing_points_id[1], 
-            sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
+            sub_div * 2, full_dof_cnt, node_cnt, rod_cnt);
         
         for (int i = 3; i < 6; i++)
         {
             addAStraightRod(passing_points[i].front(), passing_points[i].back(), passing_points[i], passing_points_id[i], 
-                sub_div * 2, full_dof_cnt, node_cnt, rod_cnt, false);
+                sub_div * 2, full_dof_cnt, node_cnt, rod_cnt);
         }
 
         for (int k = 0; k < 2; k++)
@@ -731,7 +602,10 @@ void UnitPatch<T, dim>::buildTactiles(int sub_div)
             data_points.push_back(TV2(p3[0], p3[1]) * sim.unit);
         }
         
-        addCurvedRod(data_points, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
+        std::vector<TV> passing_points = {};
+        std::vector<int> passing_points_id = {};
+
+        addCurvedRod(data_points, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
         
     }
     
@@ -1136,7 +1010,7 @@ void UnitPatch<T, dim>::loadFromTiles(int sub_div)
             }
 
             addAStraightRod(from, to, passing_points, passing_points_id, 
-                sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
+                sub_div, full_dof_cnt, node_cnt, rod_cnt);
 
             if (is_crossing[v1] && !is_crossing[v2])
             {
@@ -1273,38 +1147,6 @@ void UnitPatch<T, dim>::loadFromTiles(int sub_div)
         }
     }
 
-    // if constexpr (dim == 3)
-    // {
-    //     TV b(1, 0, 0);
-    //     TV n(0, 0, 1);
-
-    //     for (auto& crossing : sim.rod_crossings)
-    //     {
-    //         Matrix<T, 3, 3> rb_frames = Matrix<T, 3, 3>::Identity();
-            
-    //         rb_frames = crossing->rotation_accumulated * rb_frames;
-    //         for(int rod_idx : crossing->rods_involved)
-    //         {
-    //             int node_loc = crossing->on_rod_idx[rod_idx];
-    
-    //             auto rod = sim.Rods[rod_idx];
-    //             T udt0 = 0, udt1 = 0;
-    //             if (node_loc > -1 && node_loc < rod->numSeg() - 1)
-    //             {
-    //                 TV ut = parallelTransportOrthonormalVector(n, b, rod->prev_tangents[node_loc]);
-    //                 udt1 = signedAngle(ut, rod->reference_frame_us[node_loc], rod->prev_tangents[node_loc]);
-    //             }
-    //             if (node_loc < rod->numSeg() && node_loc > 0)
-    //             {
-    //                 TV ut = parallelTransportOrthonormalVector(rod->reference_frame_us[node_loc - 1], rod->prev_tangents[node_loc - 1], b);
-    //                 udt0 = signedAngle(ut, n, b);
-    //             }
-                       
-    //             crossing->undeformed_twist.push_back(Vector<T, 2>(udt0, udt1)); 
-    //         }
-    //     }
-    // }
-
     if (sim.disable_sliding)
     {
         sim.fixCrossing();
@@ -1369,7 +1211,7 @@ void UnitPatch<T, dim>::buildStraightRodScene(int sub_div)
         std::vector<TV> passing_points;
 
         addAStraightRod(from, to, passing_points, passing_points_id, 
-                sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
+                sub_div, full_dof_cnt, node_cnt, rod_cnt);
         
         int dof_cnt;
         for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
@@ -1416,61 +1258,120 @@ void UnitPatch<T, dim>::buildStraightRodScene(int sub_div)
 
 template<class T, int dim>
 void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
+        const std::vector<TV>& passing_points, 
+        const std::vector<int>& passing_points_id, 
         int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed)
 {
+    int first_node_idx = node_cnt;
     int sub_div_2 = sub_div / 2;
     HybridC2Curve<T, 2>* curve = new HybridC2Curve<T, 2>(sub_div);
     for (const auto& pt : data_points)
         curve->data_points.push_back(pt);
-
+    
     std::vector<TV2> points_on_curve;
     curve->sampleCurves(points_on_curve);
 
-    deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size()) * (dim + 1));
+    std::unordered_map<int, int> dof_node_location;
+    if (closed)
+        deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size() - 1 - passing_points_id.size()) * (dim + 1));
+    else
+        deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size() - passing_points_id.size()) * (dim + 1));
     
-    Rod<T, dim>* r0 = new Rod<T, dim>(deformed_states, sim.rest_states, rod_cnt, closed, ROD_A, ROD_B);
+    Rod<T, dim>* rod = new Rod<T, dim>(deformed_states, sim.rest_states, rod_cnt, closed, ROD_A, ROD_B);
     std::unordered_map<int, Offset> offset_map;
     std::vector<int> node_index_list;
     std::vector<T> data_points_discrete_arc_length;
     
     for (int i = 0; i < points_on_curve.size(); i++)
     {
-        offset_map[i] = Offset::Zero();
-        node_index_list.push_back(i);
-        //push Lagrangian DoF
+        
         TV2 pt = points_on_curve[i];
         if constexpr (dim == 3)
             deformed_states.template segment<dim>(full_dof_cnt) = TV(pt[0], pt[1], pt[2]);
         else if constexpr (dim == 2)
             deformed_states.template segment<dim>(full_dof_cnt) = pt;
+        
+        TV pt_search = deformed_states.template segment<dim>(full_dof_cnt);
 
-        offset_map[i][0] = full_dof_cnt++;
-        offset_map[i][1] = full_dof_cnt++;
-        offset_map[i][2] = full_dof_cnt++;
-        // push Eulerian DoF
-        deformed_states[full_dof_cnt] = T(i) * (curve->data_points.size() - 1) / (points_on_curve.size() - 1);
-        offset_map[i][3] = full_dof_cnt++;
+        //if points already added as crossings
+        auto find_node_iter = std::find_if(passing_points.begin(), passing_points.end(), 
+            [&pt_search](TV pt_in_vec)
+            { return (pt_search - pt_in_vec).norm() < 1e-6; }
+        );
+        
+        if (find_node_iter == passing_points.end())
+        {
+            if (closed && i == points_on_curve.size() - 1)
+            {
+                node_index_list.push_back(first_node_idx);
+                break;
+            }
+            offset_map[node_cnt] = Offset::Zero();
+            node_index_list.push_back(node_cnt);
+            //push Lagrangian DoF
+            
+            for (int d = 0; d < dim; d++) offset_map[node_cnt][d] = full_dof_cnt++;  
+            // push Eulerian DoF
+            deformed_states[full_dof_cnt] = T(i) * (curve->data_points.size() - 1) / (points_on_curve.size() - 1);
+            
+            offset_map[node_cnt][dim] = full_dof_cnt++;
 
-        node_cnt++;
+            node_cnt++;
+        }
+        else
+        {
+            int dof_loc = std::distance(passing_points.begin(), find_node_iter);
+            node_index_list.push_back(passing_points_id[dof_loc]);
+            dof_node_location[dof_loc] = i;
+            if (closed && i == points_on_curve.size() - 1)
+                dof_node_location[dof_loc] = 0;
+        }
+           
     }
 
-    r0->offset_map = offset_map;
-    r0->indices = node_index_list;
+    // now we add the Eulerian Dof of the passing points
+    deformed_states.conservativeResize(full_dof_cnt + passing_points.size());
+
+    for (int i = 0; i < passing_points.size(); i++)
+    {
+        offset_map[passing_points_id[i]] = Offset::Zero();
+        for (int d = 0; d < dim; d++)
+            offset_map[passing_points_id[i]][d] = passing_points_id[i] * dim + d;
+        
+        deformed_states[full_dof_cnt] = T(dof_node_location[i]) * (curve->data_points.size() - 1) / (points_on_curve.size() - 1);
+        
+        offset_map[passing_points_id[i]][dim] = full_dof_cnt++; 
+    }
+    
+    rod->offset_map = offset_map;
+    rod->indices = node_index_list;
     
     for(int i = 0; i < curve->data_points.size(); i++)
-        data_points_discrete_arc_length.push_back(deformed_states[i*sub_div_2*(dim+1)]);
-    
+    {
+        int node_idx = rod->indices[i * sub_div_2];        
+        data_points_discrete_arc_length.push_back(deformed_states[offset_map[node_idx][dim]]);
+    }
+
     Vector<T, dim + 1> q0, q1;
-    r0->frontDoF(q0); r0->backDoF(q1);
+    rod->frontDoF(q0); rod->backDoF(q1);
 
     DiscreteHybridCurvature<T, dim>* rest_state_rod0 = new DiscreteHybridCurvature<T, dim>(q0, q1);
     sim.curvature_functions.push_back(rest_state_rod0);
     rest_state_rod0->setData(curve, data_points_discrete_arc_length);
+    
 
-    r0->rest_state = rest_state_rod0;
-    r0->dof_node_location = {};
-    sim.Rods.push_back(r0);
+    rod->rest_state = rest_state_rod0;
+    std::vector<int> ordered_location(dof_node_location.size());
+    for (auto item : dof_node_location)
+        ordered_location.push_back(item.second);
+    std::sort(ordered_location.begin(), ordered_location.end());
+        
+    rod->dof_node_location = ordered_location;
+
+    sim.Rods.push_back(rod);
+
     rod_cnt++;
+    
 }
 
 template<class T, int dim>
@@ -1499,8 +1400,11 @@ void UnitPatch<T, dim>::buildOmegaScene(int sub_div)
         data_points.push_back(TV2(0.8, 0.3) * sim.unit);
         data_points.push_back(TV2(0.6, 0.0) * sim.unit);
         data_points.push_back(TV2(1.0, 0.0) * sim.unit);
+        
+        std::vector<TV> passing_points = {};
+        std::vector<int> passing_points_id = {};
 
-        addCurvedRod(data_points, sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
+        addCurvedRod(data_points, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
 
         int dof_cnt = 0;
         // markCrossingDoF(w_entry, dof_cnt);
@@ -1559,7 +1463,7 @@ template<class T, int dim>
 void UnitPatch<T, dim>::addAStraightRod(const TV& from, const TV& to, 
         const std::vector<TV>& passing_points, 
         const std::vector<int>& passing_points_id, 
-        int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed)
+        int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt)
 {
     
     std::unordered_map<int, Offset> offset_map;
@@ -1574,7 +1478,7 @@ void UnitPatch<T, dim>::addAStraightRod(const TV& from, const TV& to,
 
     deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size()) * (dim + 1));
 
-    Rod<T, dim>* rod = new Rod<T, dim>(deformed_states, sim.rest_states, rod_cnt, closed, ROD_A, ROD_B);
+    Rod<T, dim>* rod = new Rod<T, dim>(deformed_states, sim.rest_states, rod_cnt, false, ROD_A, ROD_B);
 
     for (int i = 0; i < points_on_curve.size(); i++)
     {
@@ -1660,6 +1564,192 @@ void UnitPatch<T, dim>::appendThetaAndJointDoF(std::vector<Entry>& w_entry,
 }
 
 template<class T, int dim>
+void UnitPatch<T, dim>::buildShelterScene(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.add_pbc_twisting = false;
+        sim.add_pbc = false;
+
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
+
+        clearSimData();
+
+        sim.unit = 0.03;
+        
+        
+        std::vector<Eigen::Triplet<T>> w_entry;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+
+        int n_row = 4, n_col = 4;
+
+        // push crossings first 
+        T dy = 1.0 / n_row * sim.unit;
+        T dx = 1.0 / n_col * sim.unit;
+        
+        //num of crossing
+        deformed_states.resize(n_col * n_row * dim);
+        
+        std::unordered_map<int, Offset> crossing_offset_copy;
+
+        auto getXY = [=](int row, int col, T& x, T& y)
+        {
+            if (row == 0) y = 0.5 * dy;
+            else if (row == n_row) y = n_row * dy;
+            else y = 0.5 * dy + (row ) * dy;
+            if (col == 0) x = 0.5 * dx;
+            else if (col == n_col) x = n_col * dx;
+            else x = 0.5 * dx + (col ) * dx;
+        };
+
+        for (int row = 0; row < n_row; row++)
+        {
+            for (int col = 0; col < n_col; col++)
+            {
+                T x, y;
+                getXY(row, col, x, y);
+                deformed_states.template segment<dim>(node_cnt * dim) = TV(x, y, 0);
+                
+                full_dof_cnt += dim;
+                node_cnt ++;       
+            }
+        }
+
+        int rod_cnt = 0;
+        for (int row = 0; row < n_row; row++)
+        {
+            T x0 = 0.0, x1 = 1.0 * sim.unit;
+            T x, y;
+            
+            std::vector<int> passing_points_id;
+            std::vector<TV> passing_points;
+            
+            for (int col = 0; col < n_col; col++)
+            {
+                int node_idx = row * n_col + col;
+                passing_points_id.push_back(node_idx);
+                passing_points.push_back(deformed_states.template segment<dim>(node_idx * dim));
+            }
+
+            getXY(row, 0, x, y);
+
+            TV from = TV(x0, y, 0);
+            TV to = TV(x1, y, 0);
+        
+            addAStraightRod(from, to, passing_points, passing_points_id, 
+                sub_div, full_dof_cnt, node_cnt, rod_cnt);
+            
+        }
+        
+        for (int col = 0; col < n_col; col++)
+        {
+            T y0 = 0.0, y1 = 1.0 * sim.unit;
+            T x, y;
+            std::vector<int> passing_points_id;
+            std::vector<TV> passing_points;
+            getXY(0, col, x, y);
+            for (int row = 0; row < n_row; row++)
+            {
+                int node_idx = row * n_col + col;
+                passing_points_id.push_back(node_idx);
+                passing_points.push_back(deformed_states.template segment<dim>(node_idx * dim));
+            }
+            
+            TV from = TV(x, y0, 0);
+            TV to = TV(x, y1, 0);
+
+            addAStraightRod(from, to, passing_points, passing_points_id, sub_div, 
+                            full_dof_cnt, node_cnt, rod_cnt);
+            
+        }
+        
+
+        T dv = 1.0 / n_row;
+        T du = 1.0 / n_col;
+
+        for (int row = 0; row < n_row; row++)
+        {
+            for (int col = 0; col < n_col; col++)
+            {
+                int node_idx = row * n_col + col;
+                RodCrossing<T, dim>* crossing = 
+                    new RodCrossing<T, dim>(node_idx, {row, n_row + col});
+
+                // crossing->sliding_ranges = { Range(0.4 * du, 0.4 * du), Range(0.4 * dv, 0.4 * dv)};
+                
+
+                crossing->on_rod_idx[row] = sim.Rods[row]->dof_node_location[col];
+                crossing->on_rod_idx[n_row + col] = sim.Rods[n_row + col]->dof_node_location[row];
+                
+                if (row < 3 && (col == n_col - 1 || col == 0))
+                {
+                    crossing->is_fixed = false;
+                    crossing->sliding_ranges.push_back(Range(0, 0));
+                    crossing->sliding_ranges.push_back(Range(0.2, 0.01));
+                }
+                else
+                {
+                    crossing->is_fixed = true;
+                    crossing->sliding_ranges.push_back(Range(0, 0));
+                    crossing->sliding_ranges.push_back(Range(0, 0));
+                }
+                sim.rod_crossings.push_back(crossing);
+            }
+        }    
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+
+        
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        
+        // std::cout << sim.W << std::endl;
+
+        
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+        
+    
+        //drag
+        Offset offset;
+        sim.Rods.front()->fixEndPointLagrangian(sim.dirichlet_dof);
+
+        for (int i = 0; i < n_col; i ++)
+            sim.Rods.front()->fixPointLagrangianByID(i, TV::Zero(), sim.dirichlet_dof);
+
+        sim.Rods.back()->frontOffsetReduced(offset);
+        sim.dirichlet_dof[offset[0]] = 0;
+        sim.dirichlet_dof[offset[1]] = -sim.unit * 0.1;
+        sim.dirichlet_dof[offset[2]] = 0;
+
+        sim.Rods[n_row]->frontOffsetReduced(offset);
+        sim.dirichlet_dof[offset[0]] = 0;
+        sim.dirichlet_dof[offset[1]] = -sim.unit * 0.2;
+        sim.dirichlet_dof[offset[2]] = 0;
+
+        sim.fixCrossing();
+        
+    }
+}
+
+template<class T, int dim>
 void UnitPatch<T, dim>::buildGridScene(int sub_div)
 {
     if constexpr (dim == 3)
@@ -1738,7 +1828,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
             TV to = TV(x1, y, 0);
         
             addAStraightRod(from, to, passing_points, passing_points_id, 
-                sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
+                sub_div, full_dof_cnt, node_cnt, rod_cnt);
             // rod_cnt ++;
         }
         
@@ -1760,7 +1850,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
             TV to = TV(x, y1, 0);
 
             addAStraightRod(from, to, passing_points, passing_points_id, sub_div, 
-                            full_dof_cnt, node_cnt, rod_cnt, false);
+                            full_dof_cnt, node_cnt, rod_cnt);
             // rod_cnt ++;
         }
         

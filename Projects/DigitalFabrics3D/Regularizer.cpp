@@ -21,11 +21,13 @@ void EoLRodSim<T, dim>::addRegularizingK(std::vector<Eigen::Triplet<T>>& entry_K
 template<class T, int dim>
 void EoLRodSim<T, dim>::addRegularizingForce(Eigen::Ref<VectorXT> residual)
 {
+    
     VectorXT residual_cp = residual;
     for (auto& crossing : rod_crossings)
     {
         if (crossing->is_fixed)
             continue;
+        
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
         for (int rod_idx : rods_involved)
@@ -35,6 +37,7 @@ void EoLRodSim<T, dim>::addRegularizingForce(Eigen::Ref<VectorXT> residual)
             T u, U;
             Rods[rod_idx]->u(node_idx, u);
             Rods[rod_idx]->U(node_idx, U);
+            
             residual[offset[dim]] += -ke * (u-U);
         }
     }

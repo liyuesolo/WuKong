@@ -172,7 +172,7 @@ public:
             bool is_crossing = false;
             if (dof_node_location.size())
                 if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
-                    is_crossing = false;
+                    is_crossing = true;
             f(indices.back(), indices[1], indices[indices.size() - 2],
              offset_map[indices.back()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]], 0, is_crossing);
         }
@@ -200,7 +200,7 @@ public:
             bool is_crossing = false;
             if (dof_node_location.size())
                 if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
-                    is_crossing = false;
+                    is_crossing = true;
             f(indices.back(), indices[1], indices[indices.size() - 2], 0, is_crossing);
         }
     }
@@ -342,6 +342,13 @@ public:
     {
         for (int d = 0; d < dim; d++)
             dirichlet_data[reduced_map[offset_map[indices[node_idx]][d]]] = delta[d];
+    }
+
+    void fixPointLagrangianByID(int node_idx, TV delta, 
+        std::unordered_map<int, T>& dirichlet_data)
+    {
+        for (int d = 0; d < dim; d++)
+            dirichlet_data[reduced_map[offset_map[node_idx][d]]] = delta[d];
     }
 
     void fixEndPointLagrangian(std::unordered_map<int, T>& dirichlet_data)

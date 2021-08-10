@@ -12,6 +12,8 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy(bool bending, bool twisting)
         {
             T energy_current = energy;
             rod->iterate3Nodes([&](int node_i, int node_j, int node_k, int second, bool is_crossing){
+                if (is_crossing)
+                    return;
                 TV xi, xj, xk, Xi, Xj, Xk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->X(node_i, Xi); rod->X(node_j, Xj); rod->X(node_k, Xk);
@@ -48,6 +50,8 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
                 Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
+                if (is_crossing)
+                    return;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
@@ -96,6 +100,8 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
                 Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
+                if (is_crossing)
+                    return;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
@@ -174,6 +180,8 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
             rod->iterate3NodesWithOffsets([&](int node_i, int node_j, int node_k, 
                 Offset offset_i, Offset offset_j, Offset offset_k, int second, bool is_crossing)
             {
+                if (is_crossing)
+                    return;
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk, ddXi, ddXj, ddXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->XdXddX(node_i, Xi, dXi, ddXi); rod->XdXddX(node_j, Xj, dXj, ddXj); rod->XdXddX(node_k, Xk, dXk, ddXk);

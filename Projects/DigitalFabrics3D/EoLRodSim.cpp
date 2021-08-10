@@ -10,21 +10,24 @@ void EoLRodSim<T, dim>::fixCrossing()
 {
     for(auto& crossing : rod_crossings)
     {
-        if (!crossing->is_fixed)
-        {
-            for (int d = 0; d < dim; d++) 
-                dirichlet_dof[crossing->reduced_dof_offset + d] = 0;
-            continue;
-        }
-            
         int node_idx = crossing->node_idx;
         std::vector<int> rods_involved = crossing->rods_involved;
+
+        int cnt = 0;    
         for (int rod_idx : rods_involved)
         {
             Offset offset;
             Rods[rod_idx]->getEntry(node_idx, offset);
-
-            dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
+            if (crossing->is_fixed)
+                dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
+            else
+            {
+                for (int d = 0; d < dim; d++) 
+                    dirichlet_dof[crossing->reduced_dof_offset + d] = 0;
+                if ((crossing->sliding_ranges[cnt] - TV2::Zero()).norm() < 1e-6)
+                    dirichlet_dof[Rods[rod_idx]->reduced_map[offset[dim]]] = 0;
+            }
+            cnt++;
         }
         
     }
@@ -133,6 +136,7 @@ T EoLRodSim<T, dim>::computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<c
     }
     if (add_pbc)
         addPBCForce(full_residual);
+    
     if (add_eularian_reg)
         addRegularizingForce(full_residual);
     if (add_contact_penalty)
@@ -320,7 +324,9 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
         cnt += 1;
         if (cnt > 15)
         {
+            // checkHessianPD(dq);
             // std::cout << "sss" << std::endl;
+            // std::getchar();
             // testGradient(dq);
             // testHessian(dq);
             dq = dq_ls;
@@ -553,7 +559,7 @@ void EoLRodSim<T, dim>::advanceOneStep()
                                     addJointBendingAndTwistingEnergy(false, true) << std::endl;
     
     
-    // checkHessianPD(dq);
+    checkHessianPD(dq);
 
     // VectorXT force(W.rows()); force.setZero();
     // addPBCForce(force);

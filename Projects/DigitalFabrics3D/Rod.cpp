@@ -148,6 +148,7 @@ T Rod<T, dim>::computeReferenceTwist(const TV& tangent, const TV& prev_tangent, 
 template<class T, int dim>
 void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
 {
+    
     // std::cout << "[Rod" << rod_id << "]" << std::endl;
     int loop_id = 0;
     if(dof_node_location.size())
@@ -209,6 +210,7 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         }
         
         loop_id = dof_node_location[i];
+        
     }
     // last segment
     if (loop_id != indices.size() - 1 && !closed)
@@ -222,8 +224,12 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
             w_entry.push_back(Eigen::Triplet<T>(offset[d], dof_cnt++, 1.0));
         }
     }
+    
     for (int j = loop_id + 1; j < indices.size() - 1; j++)
     {
+        // std::cout << "rod id " << rod_id << std::endl;
+        // std::cout << j << " " <<  indices.size() - 1 << std::endl;
+
         // std::cout << "left node " << indices[loop_id] << " right node " << indices.back() << std::endl;
 
         Offset offset_left_node = offset_map[indices[loop_id]];
