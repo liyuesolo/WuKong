@@ -37,6 +37,7 @@ public:
     //Mechanisim
     void buildFingerScene(int sub_div);
     void buildGripperScene(int sub_div);
+    void buildGridLayoutGripper(int sub_div);
 
     void buildShelterScene(int sub_div);
 

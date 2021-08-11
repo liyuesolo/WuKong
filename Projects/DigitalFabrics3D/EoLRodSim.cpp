@@ -366,18 +366,22 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         if (cnt == 0)
         {
             
-            for (auto& crossing : rod_crossings)
-            // for (int i = 0; i < 10; i++)
-            {
-                // auto crossing = rod_crossings[i];
-                Offset off;
-                Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
-                T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
-                int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
-                dq[z_off] += 0.001 * (r - 0.5) * unit;
-                // dq[z_off] += 0.001 * r * unit;
+            // for (auto& crossing : rod_crossings)
+            // // for (int i = 0; i < 10; i++)
+            // {
+            //     // auto crossing = rod_crossings[i];
+            //     Offset off;
+            //     Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+            //     T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+            //     int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+            //     dq[z_off] += 0.001 * (r - 0.5) * unit;
+            //     // dq[z_off] += 0.001 * r * unit;
                 
-            }
+            // }
+            dq.setRandom();
+            dq *= 1.0 / dq.norm();
+            dq -= 0.5 * VectorXT::Ones(dq.rows());
+            dq *= 0.001 * unit;
             
         }
         computeResidual(residual, dq);

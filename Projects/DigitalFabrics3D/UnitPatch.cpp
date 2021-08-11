@@ -62,7 +62,13 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 9)
         buildGripperScene(16);
 }
-#include "autodiff/EoLRodStretchingEnergy.h"
+
+template<class T, int dim>
+void UnitPatch<T, dim>::buildGridLayoutGripper(int sub_div)
+{
+
+}
+
 template<class T, int dim>
 void UnitPatch<T, dim>::buildGripperScene(int sub_div)
 {
@@ -170,6 +176,9 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
 
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset] = 0;
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset + sim.Rods[0]->numSeg()-1] = 0;
+
+        GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRods();
+        
     }
 }
 
