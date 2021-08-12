@@ -21,24 +21,42 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 }
 
 template<class T, int dim>
-void GCodeGenerator<T, dim>::generateGCodeFromRods()
+void GCodeGenerator<T, dim>::scaleAndShift(TV& x)
+{
+    x *= 1e3;
+    x.template segment<2>(0) += Vector<T, 2>(50, 50);
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T height)
+{
+    if constexpr (dim == 3)
+    {
+        TV3 mid_point = TV3::Zero();
+        mid_point.template segment<dim>(0) = 0.5 * (from + to);
+        mid_point[2] += height;    
+        moveTo(from);
+        writeLine(from, mid_point, false);
+        writeLine(mid_point, to, false);
+    }
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeFromRodsCurveGripperHardCoded()
 {
     writeHeader();
     for (auto& rod : sim.Rods)
     {
         TV x0; rod->x(rod->indices.front(), x0);
-        x0 *= 1e3;
-        x0.template segment<2>(0) += Vector<T, 2>(50, 50);
+        scaleAndShift(x0);
         x0[dim - 1] = first_layer_height;
         moveTo(x0);
         rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
         {
             TV xi, xj;
             rod->x(node_i, xi); rod->x(node_j, xj);
-            // to millimeters
-            xi *= 1e3; xj *= 1e3;
-            xi.template segment<2>(0) += Vector<T, 2>(50, 50);
-            xj.template segment<2>(0) += Vector<T, 2>(50, 50);
+            
+            scaleAndShift(xi); scaleAndShift(xj);
             if (rod->rod_id == 0 || rod_idx == rod->numSeg() - 1)
             {
                 xi[dim - 1] = first_layer_height;
@@ -52,6 +70,15 @@ void GCodeGenerator<T, dim>::generateGCodeFromRods()
             writeLine(xi, xj, true);
         });
     }
+    int n0 = sim.Rods[0]->indices[1];
+    int n1 = sim.Rods[0]->indices[sim.Rods[0]->indices.size()-2];
+    TV left, right;
+    sim.Rods[0]->x(n0, left);
+    sim.Rods[0]->x(n1, right);
+    scaleAndShift(left); scaleAndShift(right);
+    left[dim - 1] = first_layer_height;
+    right[dim - 1] = first_layer_height;
+    addSingleTunnel(left, right, 2.0);
     writeFooter();
 }
 
@@ -64,10 +91,16 @@ void GCodeGenerator<T, dim>::writeLine(const TV& from, const TV& to, bool is_fir
     amount *= cross_section_area / (M_PI * filament_diameter * filament_diameter * 0.25);
     T current_amount = extrusion_mode == Absolute ? current_E + amount : amount;
     std::string cmd;
-    cmd += "G1 F" + std::to_string(feed_rate_print) + " X" + 
+    if constexpr (dim == 3)
+        cmd += "G1 F" + std::to_string(feed_rate_print) + " X" + 
+            std::to_string(to[0]) + " Y" + std::to_string(to[1]) +
+            " Z" + std::to_string(to[2]) +
+            " E" + std::to_string(current_amount) + "\n";
+    else if constexpr (dim == 2)
+        cmd += "G1 F" + std::to_string(feed_rate_print) + " X" + 
         std::to_string(to[0]) + " Y" + std::to_string(to[1]) +
-        " Z" + std::to_string(to[2]) +
-         " E" + std::to_string(current_amount) + "\n";
+            " Z" + std::to_string(first_layer_height) +
+            " E" + std::to_string(current_amount) + "\n";
     if (extrusion_mode == Absolute)
         current_E += amount;
     gcode << cmd;
@@ -139,7 +172,6 @@ void GCodeGenerator<T, dim>::writeHeader()
         gcode << "G1 Y-3.0 F1000.0 ; go outside print area\n";
         gcode << "G92 E0.0 ; reset extruder distance position\n";
         gcode << "G1 X100.0 E9.0 F1000.0 ; intro line\n";
-        // gcode << "G1 X60.0 E12.5.0 F1000.0 ; intro line\n";
         gcode << "G92 E0.0 ; reset extruder distance position\n";
         if (extrusion_mode == Absolute)
             gcode << "M82 ;absolute extrusion mode\n";
@@ -164,7 +196,6 @@ void GCodeGenerator<T, dim>::writeFooter()
 {
     if (printer == PrusaI3)
     {
-        // gcode << "G1 E-0.8 F2100 ; retract\n";
         gcode << "M107\n";
         gcode << "G4 ; wait\n";
         gcode << "M221 S100 ; reset flow\n";

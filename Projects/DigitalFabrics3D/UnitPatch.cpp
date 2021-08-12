@@ -60,13 +60,281 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 8)
         buildShelterScene(16);
     else if (patch_type == 9)
-        buildGripperScene(16);
+        buildGripperScene(128);
+    else if (patch_type == 10)
+        buildGridLayoutGripper(128);
 }
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildGridLayoutGripper(int sub_div)
 {
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.add_pbc_twisting = false;
+        sim.add_pbc = false;
 
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
+
+        sim.ke = 1e-1;
+
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        int rod_cnt = 0;
+
+        std::vector<Entry> w_entry;
+
+        // int n_row = 3, n_col = 4;
+        int n_row = 3, n_col = 7;
+
+        //n_row +=2 
+        //n_col = 4, 7, 13, 25
+
+        int half_row = std::floor(n_row / 2);
+        int first_quator_col = n_col % 2 == 1 ? std::ceil(n_col / 4)  + 1 : std::ceil(n_col / 4);
+        int second_quator_col = first_quator_col * 2;
+
+        T dx = 1.0 / T(n_col);
+        T dy = 1.0 / T(n_row);
+
+        for (int row = 0; row < n_row; row++)
+        {
+            for (int col = 0; col < n_col; col++)
+            {
+                if (row > half_row && col > first_quator_col && col < second_quator_col)
+                    continue;
+                TV pt = TV(col * dx, row * dy, 0.0) * sim.unit;
+                addPoint(pt, full_dof_cnt, node_cnt);
+            }
+        }
+
+        int temp_cnt  = node_cnt;
+        
+        // for (int row = 0; row <= half_row; row++)
+        // {
+        //     TV pt = TV(0.5, row * dy, 0.0) * sim.unit;
+        //     addPoint(pt, full_dof_cnt, node_cnt);
+        // }
+
+        auto node = [&](int idx)
+        {
+            return deformed_states.template segment<dim>(idx * dim);
+        };
+
+        std::unordered_map<int, int> offset_map;
+
+        // add horizontal rods
+        int offset_cnt = 0;
+        
+        for (int row = 0; row < n_row; row++)
+        {
+            std::vector<TV> passing_points;
+            std::vector<int> passing_points_id;
+            int row_offset_cnt = 0;
+            for (int col = 0; col < n_col; col++)
+            {
+                if (row > half_row && col > first_quator_col && col < second_quator_col)
+                {
+                    offset_cnt ++;
+                    offset_map[row * n_col + col] = offset_cnt;
+                    row_offset_cnt++;
+                    continue;
+                }
+                offset_map[row * n_col + col] = offset_cnt;
+                passing_points.push_back(node(row * n_col + col - offset_cnt));
+                passing_points_id.push_back(row * n_col + col - offset_cnt);
+            }
+            if (row <= half_row)
+            {   
+                addAStraightRod(passing_points.front(), passing_points.back(), 
+                    passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+                
+            }
+            else
+            {
+                
+                addAStraightRod(passing_points.front(), passing_points[first_quator_col], 
+                    std::vector<TV>(passing_points.begin(), passing_points.begin() + first_quator_col + 1), 
+                    std::vector<int>(passing_points_id.begin(), passing_points_id.begin() + first_quator_col + 1), 
+                    (int)std::floor(sub_div / 3), full_dof_cnt, node_cnt, rod_cnt);
+
+                
+                int start = second_quator_col - row_offset_cnt;
+                addAStraightRod(passing_points[start], passing_points.back(), 
+                    std::vector<TV>(passing_points.begin() + start, passing_points.end()), 
+                    std::vector<int>(passing_points_id.begin() + start, passing_points_id.end()), 
+                    (int)std::floor(sub_div / 3), full_dof_cnt, node_cnt, rod_cnt);
+            }
+        }
+        int n_h_rod = rod_cnt;
+        
+        
+        // add vertical rods
+        for (int col = 0; col < n_col; col++)
+        {
+            std::vector<TV> passing_points;
+            std::vector<int> passing_points_id;
+
+            for (int row = 0; row < n_row; row++)
+            {
+                offset_cnt = offset_map[row * n_col + col];
+                if (row > half_row && col > first_quator_col && col < second_quator_col)
+                {
+                    continue;
+                }
+                passing_points.push_back(node(row * n_col + col - offset_cnt));
+                passing_points_id.push_back(row * n_col + col - offset_cnt);
+            }
+            
+            if ((col <= first_quator_col || col >= second_quator_col))
+            {
+                addAStraightRod(passing_points.front(), passing_points.back(), 
+                    passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+            }
+            else
+            {
+                TV from = passing_points.front() - TV(0.0, 0.5, 0) * sim.unit;
+                // addAStraightRod(passing_points.front(), passing_points.back(), 
+                //     passing_points, passing_points_id, sub_div / 2, full_dof_cnt, node_cnt, rod_cnt);
+                addAStraightRod(from, passing_points.back(), 
+                    passing_points, passing_points_id, sub_div / 2, full_dof_cnt, node_cnt, rod_cnt);
+            }
+
+        }
+        
+        offset_cnt = 0;
+        
+        int row_offset_cnt = 0;
+        for (int row = 0; row < n_row; row++)
+        {
+            int col_offset_cnt = 0;
+            if (row > half_row)
+                row_offset_cnt++;
+            for (int col = 0; col < n_col; col++)
+            {
+                
+                if (col > first_quator_col && col < second_quator_col && row > half_row)
+                    col_offset_cnt++;
+                if (row > half_row && col > first_quator_col && col < second_quator_col)
+                {
+                    offset_cnt++;
+                    continue;
+                }
+                
+                int node_id = row * n_col + col - offset_cnt;
+                int h_rod;
+                if (row <= half_row)
+                    h_rod = row;
+                else if (col <= first_quator_col && row > half_row)
+                    h_rod = half_row + row_offset_cnt;
+                else if (col >= second_quator_col && row > half_row)
+                {
+                    if (col == second_quator_col)
+                        row_offset_cnt++;
+                    h_rod = half_row + row_offset_cnt;
+                }
+
+                int v_rod = col;
+
+                std::vector<int> rods_involved = {h_rod, n_h_rod + v_rod};
+                // std::cout << "node " << node_id << " hrod " << h_rod << " v_rod " << n_h_rod + v_rod << " col_offset_cnt " << col_offset_cnt << std::endl;
+                // std::cout << "node " << node_id << " hrod " << h_rod << " v_rod " << v_rod << " col_offset_cnt " << col_offset_cnt << std::endl;
+                RodCrossing<T, dim>* crossing = 
+                    new RodCrossing<T, dim>(node_id, rods_involved);
+                if (row < half_row && col > first_quator_col && col < second_quator_col)
+                
+                // if(false)
+                {
+                    crossing->is_fixed = false;
+                    crossing->sliding_ranges.push_back(Range(0.0, 0.0));
+                    crossing->sliding_ranges.push_back(Range(0.3, 0.1));
+                }
+                else
+                {
+                    crossing->is_fixed = true;
+                    crossing->sliding_ranges.push_back(Range(0, 0));
+                    crossing->sliding_ranges.push_back(Range(0, 0));
+                }
+
+                if (row <= half_row)
+                    crossing->on_rod_idx[h_rod] = sim.Rods[h_rod]->dof_node_location[v_rod];
+                else if (row > half_row && col <= first_quator_col)
+                    crossing->on_rod_idx[h_rod] = sim.Rods[h_rod]->dof_node_location[v_rod];
+                else if (row > half_row && col >= second_quator_col)
+                    crossing->on_rod_idx[h_rod] = sim.Rods[h_rod]->dof_node_location[v_rod - second_quator_col];
+
+                if (sim.Rods[n_h_rod + v_rod]->dof_node_location.size() > row)
+                    crossing->on_rod_idx[n_h_rod + v_rod] = sim.Rods[n_h_rod + v_rod]->dof_node_location[row];
+                
+                // std::cout << h_rod << " "  << v_rod << " " << v_rod - second_quator_col << std::endl;
+                // std::cout << n_h_rod + v_rod << " "  << row << std::endl;
+                sim.rod_crossings.push_back(crossing);
+                
+            }
+        }
+
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+
+        sim.fixCrossing();
+
+        for (auto& crossing : sim.rod_crossings)
+            if(!crossing->is_fixed)
+                std::cout << "free" << std::endl;
+
+        Offset offset;
+
+        sim.Rods[7]->frontOffsetReduced(offset);
+        sim.dirichlet_dof[offset[0]] = 0;
+        sim.dirichlet_dof[offset[1]] = -0.3 * sim.unit;
+        sim.dirichlet_dof[offset[2]] = 0;
+
+        for (int i = 3; i < 4; i++)
+        {
+            sim.Rods[0]->getEntry(i, offset);
+            for (int d = 0; d < dim; d++)
+                sim.dirichlet_dof[sim.Rods[0]->reduced_map[offset[d]]] = 0;
+            int loc = sim.Rods[0]->dof_node_location[3];
+            sim.Rods[0]->getEntryByLocation(loc + 1, offset);
+            for (int d = 0; d < dim; d++)
+                sim.dirichlet_dof[sim.Rods[0]->reduced_map[offset[d]]] = 0;
+            sim.Rods[0]->getEntryByLocation(loc - 1, offset);
+            for (int d = 0; d < dim; d++)
+                sim.dirichlet_dof[sim.Rods[0]->reduced_map[offset[d]]] = 0;
+
+            sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset+loc] = 0;
+            sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset+loc-1] = 0;
+
+            
+        }   
+
+        
+        
+        
+        // sim.Rods[0]->fixEndPointLagrangian(sim.dirichlet_dof);
+        // GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRods();
+        
+    }
 }
 
 template<class T, int dim>
@@ -177,7 +445,7 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset] = 0;
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset + sim.Rods[0]->numSeg()-1] = 0;
 
-        GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRods();
+        GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRodsCurveGripperHardCoded();
         
     }
 }

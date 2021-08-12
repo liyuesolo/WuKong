@@ -211,6 +211,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
                                         offset_j[dim], -F[2*dim + 3*dim + d] * ddXj[d]));
                     entry_K.push_back(Eigen::Triplet<T>(offset_k[dim], 
                                         offset_k[dim], -F[0*dim + 3*dim + d] * ddXk[d]));
+                    std::cout << ddXk[d] << std::endl;
                 }
             });
         }

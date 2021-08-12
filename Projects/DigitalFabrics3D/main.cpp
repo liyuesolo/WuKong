@@ -692,7 +692,11 @@ int main(int argc, char *argv[])
                     //         eol_sim.dirichlet_dof);
 
                     //3d gripper
-                    eol_sim.Rods[1]->fixPointLagrangian(eol_sim.Rods[1]->indices.size() - 1, 
+                    // eol_sim.Rods[1]->fixPointLagrangian(eol_sim.Rods[1]->indices.size() - 1, 
+                    //         Vector<T, dim>(0, delta_y, 0.0), 
+                    //         eol_sim.dirichlet_dof);
+
+                    eol_sim.Rods[7]->fixPointLagrangian(eol_sim.Rods[7]->indices.front(), 
                             Vector<T, dim>(0, delta_y, 0.0), 
                             eol_sim.dirichlet_dof);
 

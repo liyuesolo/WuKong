@@ -28,8 +28,8 @@ void EoLRodSim<T, dim>::derivativeTest()
     dq *= 0.01;
     // dq(2) += 1.0;
     // dq(3) += 1.0;
-    // testGradient(dq);
-    // testHessian(dq);
+    testGradient(dq);
+    testHessian(dq);
     testGradient2ndOrderTerm(dq);
     testHessian2ndOrderTerm(dq);
 }

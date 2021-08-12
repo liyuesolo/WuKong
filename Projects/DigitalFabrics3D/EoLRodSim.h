@@ -351,6 +351,8 @@ public:
 
     void checkHessianPD(Eigen::Ref<const VectorXT> dq);
 
+    void computeSmallestEigenVector(const StiffnessMatrix& K, Eigen::Ref<VectorXT> eigen_vector);
+
     void staticSolve(Eigen::Ref<VectorXT> dq);
 
     void advanceOneStep();

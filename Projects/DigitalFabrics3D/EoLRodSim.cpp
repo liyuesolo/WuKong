@@ -229,6 +229,41 @@ bool EoLRodSim<T, dim>::projectDirichletDoFSystemMatrix(StiffnessMatrix& A)
     });
 }
 
+// template<class T, int dim>
+// bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K, 
+//     Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq)
+// {
+    
+//     StiffnessMatrix I(K.rows(), K.cols());
+//     I.setIdentity();
+
+//     StiffnessMatrix H = K;
+//     Eigen::SimplicialLLT<StiffnessMatrix> solver;
+//     // std::cout << H << std::endl;
+//     T mu = 10e-6;
+//     while(true)
+//     {
+//         solver.compute(K);
+//         if (solver.info() == Eigen::NumericalIssue)
+//         {
+//             // std::cout<< "indefinite" << std::endl;
+//             K = H + mu * I;        
+//             mu *= 10;
+//         }
+//         else
+//             break;
+//     }
+    
+//     ddq = solver.solve(residual);
+    
+//     if(solver.info()!=Eigen::Success) 
+//     {
+//         std::cout << "solving Ax=b failed ||Ax-b||: " << (K*ddq - residual).norm() << std::endl;
+//         return false;
+//     }
+//     return true;
+// }
+
 template<class T, int dim>
 bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K, 
     Eigen::Ref<const VectorXT> residual, Eigen::Ref<VectorXT> ddq)
@@ -238,48 +273,58 @@ bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K,
     I.setIdentity();
 
     StiffnessMatrix H = K;
-    Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    // std::cout << H << std::endl;
+    // Eigen::SimplicialLLT<StiffnessMatrix> solver;
+    Eigen::SimplicialLDLT<StiffnessMatrix> solver;
+    
     T mu = 10e-6;
-    while(true)
+    solver.analyzePattern(K);
+    for (int i = 0; i < 50; i++)
     {
-        solver.compute(K);
+        solver.factorize(K);
         if (solver.info() == Eigen::NumericalIssue)
         {
-            // std::cout<< "indefinite" << std::endl;
+            K = H + mu * I;        
+            mu *= 10;
+            continue;
+        }
+        ddq = solver.solve(residual);
+
+        T dot_dx_g = ddq.normalized().dot(residual.normalized());
+
+        VectorXT d_vector = solver.vectorD();
+        int num_negative_eigen_values = 0;
+
+        for (int i = 0; i < d_vector.size(); i++)
+        {
+            if (d_vector[i] < 0)
+            {
+                num_negative_eigen_values++;
+                break;
+            }
+        
+        }
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        bool solve_success = (K*ddq - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+
+        if (positive_definte && search_dir_correct_sign && solve_success)
+            break;
+        else
+        {
             K = H + mu * I;        
             mu *= 10;
         }
-        else
-            break;
     }
-    
-    ddq = solver.solve(residual);
-    
-    if ((K*ddq - residual).norm() > 1e-6)
-    {
-        // K = H + mu * I;        
-        // mu *= 10;
-        // solver.compute(K);
-        // ddq = solver.solve(residual);
-        std::cout << "solving Ax=b failed ||Ax-b||: " << (K*ddq - residual).norm() << std::endl;
-        // return false;    
-    }
-
-    // if(solver.info()!=Eigen::Success) 
-    // {
-    //     std::cout << "solving Ax=b failed ||Ax-b||: " << (K*ddq - residual).norm() << std::endl;
-    //     return false;
-    // }
 
     return true;
 }
-
+// #include <iomanip>
 template<class T, int dim>
 T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq, 
         Eigen::Ref<const VectorXT> residual, 
         int line_search_max)
 {
+    bool debug = true;
     bool verbose = false;
     
     VectorXT ddq(W.cols());
@@ -290,15 +335,7 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
     bool success = linearSolve(K, residual, ddq);
     if (!success)
         return 1e16;
-    if (residual.dot(ddq) < 1e-6)
-    {
-        // return 1e16;
-        // std::cout << "dx dot -g = " << residual.dot(ddq) << std::endl;
-        // std::cout << residual.norm() << " " << ddq.norm() << std::endl;
-        // testGradient2ndOrderTerm(dq);
-        // testHessian2ndOrderTerm(dq);
-    }
-    
+
     // T norm = ddq.cwiseAbs().maxCoeff();
     T norm = ddq.norm();
     // std::cout << norm << std::endl;
@@ -308,10 +345,13 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
     // std::cout << "E0: " << E0 << std::endl;
     int cnt = 0;
     bool set_to_gradient = true;
+    std::vector<T> Es;
     while(true)
     {
         VectorXT dq_ls = dq + alpha * ddq;
         T E1 = computeTotalEnergy(dq_ls, verbose);
+        if (debug)
+            Es.push_back(E1);
         // std::cout << "E1: " << E1 << std::endl;
         if (E1 - E0 < 0) {
             dq = dq_ls;
@@ -324,14 +364,46 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
         cnt += 1;
         if (cnt > 15)
         {
+            
             // checkHessianPD(dq);
-            // std::cout << "sss" << std::endl;
+            // for(T a = 1.0; a > 1e-8; a*=0.5)
+            // {
+            //     T E_grad = computeTotalEnergy(dq + a * residual, verbose);
+            //     if (E_grad < E0)
+            //         std::cout << "take gradient" << std::endl;
+            //         // dq_ls = dq + a * residual;
+            //     // std::cout << "E_grad " << std::setprecision(15) << E_grad << std::endl;
+            // }
+            
+            // std::cout << "E0 " << std::setprecision(15) << E0 << std::endl;
+            // for (T E : Es)
+            //     std::cout << std::setprecision(15) << E << " ";
+            // std::cout << std::endl;
+            // std::cout << residual.norm() << std::endl;
             // std::getchar();
             // testGradient(dq);
             // testHessian(dq);
+            // return 1e16;
+            // computeSmallestEigenVector(K, dq_ls);
+            // std::cout << ddq.norm() << std::endl;
+            // std::cout << ddq.normalized().dot(residual.normalized()) << std::endl;
+            // std::cout << residual.norm() << std::endl;
+            // std::getchar();
+            // for (auto& crossing : rod_crossings)
+            // // for (int i = 0; i < 10; i++)
+            // {
+            //     // auto crossing = rod_crossings[i];
+            //     Offset off;
+            //     Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+            //     T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+            //     int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+            //     dq_ls[z_off] += 0.001 * (r - 0.5) * unit;
+            //     // break;
+            //     // dq[z_off] += 0.001 * r * unit;
+                
+            // }
             dq = dq_ls;
             break;
-            // return 1e16;
         }
         if (cnt == line_search_max) 
             break;
@@ -366,22 +438,23 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         if (cnt == 0)
         {
             
-            // for (auto& crossing : rod_crossings)
-            // // for (int i = 0; i < 10; i++)
-            // {
-            //     // auto crossing = rod_crossings[i];
-            //     Offset off;
-            //     Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
-            //     T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
-            //     int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
-            //     dq[z_off] += 0.001 * (r - 0.5) * unit;
-            //     // dq[z_off] += 0.001 * r * unit;
+            for (auto& crossing : rod_crossings)
+            // for (int i = 0; i < 10; i++)
+            {
+                // auto crossing = rod_crossings[i];
+                Offset off;
+                Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+                T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+                int z_off = Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+                dq[z_off] += 0.001 * (r - 0.5) * unit;
+                // break;
+                // dq[z_off] += 0.001 * r * unit;
                 
-            // }
-            dq.setRandom();
-            dq *= 1.0 / dq.norm();
-            dq -= 0.5 * VectorXT::Ones(dq.rows());
-            dq *= 0.001 * unit;
+            }
+            // dq.setRandom();
+            // dq *= 1.0 / dq.norm();
+            // dq -= 0.5 * VectorXT::Ones(dq.rows());
+            // dq *= 0.01 * unit;
             
         }
         computeResidual(residual, dq);
@@ -405,6 +478,41 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
     
     // if (verbose)
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::computeSmallestEigenVector(const StiffnessMatrix& K, 
+    Eigen::Ref<VectorXT> eigen_vector)
+{
+    int nmodes = 2;
+    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+
+    double shift = -1e-1;
+    Spectra::SymEigsShiftSolver<T, Spectra::LARGEST_MAGN, Spectra::SparseSymShiftSolve<T, Eigen::Upper> > eigs(&op, nmodes, 20, shift);
+    eigs.init();
+
+    int nconv = eigs.compute();
+
+    if (eigs.info() == Spectra::SUCCESSFUL)
+    {
+        Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+        // Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+        eigen_vector = eigen_vectors.row(nmodes - 1);
+
+    }
+    else
+    {
+        eigen_vector = VectorXT::Zero(K.cols());
+    }
+
+    // Eigen::MatrixXd A_dense = K;
+
+    // Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+    
+    // eigen_solver.compute(A_dense, /* computeEigenvectors = */ false);
+    // auto eigen_values = eigen_solver.eigenvalues().real();
+    // // auto eigen_vectors = eigen_solver.eigenvectors().real();
+    // std::cout << eigen_values << std::endl;
 }
 
 template<class T, int dim>

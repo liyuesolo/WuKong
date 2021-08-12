@@ -22,6 +22,8 @@ class GCodeGenerator
 {
 public:
     using TV = Vector<T, dim>;
+    using TV3 = Vector<T, 3>;
+    using TV2 = Vector<T, 2>;
 private:
     const EoLRodSim<T, dim>& sim;
     std::string gcode_file;
@@ -45,10 +47,12 @@ public:
     ~GCodeGenerator() {}
 
 public:
-    void generateGCodeFromRods();
+    void generateGCodeFromRodsCurveGripperHardCoded();
 
     void writeLine(const TV& from, const TV& to, bool is_first_layer);
     void moveTo(const TV& to);
+
+    void addSingleTunnel(const TV& from, const TV& to, T height);
 
 private:
     T computeExtrusionAmount() const;
@@ -57,6 +61,9 @@ private:
     void retract(T E);
     void writeHeader();
     void writeFooter();
+
+    // to millimeters and shift towards center
+    void scaleAndShift(TV& x);
     
 };
 

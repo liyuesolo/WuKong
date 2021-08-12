@@ -335,6 +335,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
 
                 TV rest_tangent1 = rod->rest_tangents[edge0];
                 TV rest_tangent2 = rod->rest_tangents[edge1];
+                
                 TV rest_normal1 = rod->rest_normals[edge0];
                 TV rest_normal2 = rod->rest_normals[edge1];
                 
@@ -352,7 +353,13 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                             referenceTangent2, referenceNormal2, 
                             reference_twist_edge1, xi, xj, Xi, Xj, omega_acc, omega, theta_edge1, F0);
 
-                        
+                        // std::cout << node_i << " " << node_j << " " << node_k << std::endl;
+                        // std::cout << xi.transpose() << " "<< xj.transpose() << " "<< xk.transpose() << std::endl;
+                        // std::cout << Xi.transpose() << " "<< Xj.transpose() << " "<< Xk.transpose() << std::endl;
+                        // std::cout << referenceTangent2.transpose() << " " << referenceTangent1.transpose() << " "<< referenceNormal1.transpose() << " "<< referenceNormal2.transpose() << std::endl;
+                        // std::cout << "F0" << std::endl;
+                        // std::cout << F0 << std::endl;
+                        // std::getchar();
 
                         F0 *= -0.5;
                         residual.template segment<dim>(offset_i[0]) += F0.template segment<dim>(0);
@@ -362,8 +369,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                         residual.template segment<dim>(crossing->dof_offset) += F0.template segment<dim>(4*dim);
                         residual[rod->theta_dof_start_offset + edge1] += F0[5*dim];
                     }
-                    if (node_k != -1)
-                    
+                    if (node_k != -1)                    
                     {
                         
 
@@ -372,7 +378,13 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                             rest_tangent2, rest_normal2, 
                             reference_twist_edge0, xi, xk, Xi, Xk, omega_acc, omega, theta_edge0, F1);
 
-                        
+                        // std::cout << node_i << " " << node_k << " " << node_k << std::endl;
+                        // std::cout << xi.transpose() << " "<< xj.transpose() << " "<< xk.transpose() << std::endl;
+                        // std::cout << Xi.transpose() << " "<< Xj.transpose() << " "<< Xk.transpose() << std::endl;
+                        // std::cout << referenceTangent2.transpose() << " " << referenceTangent1.transpose() << " "<< referenceNormal1.transpose() << " "<< referenceNormal2.transpose() << std::endl;
+                        // std::cout << "F1" << std::endl;
+                        // std::cout << F1 << std::endl;
+                        // std::getchar();
                         
                         F1 *= -0.5;
                         residual.template segment<dim>(offset_i[0]) += F1.template segment<dim>(0);
@@ -396,7 +408,9 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                         // std::cout << xi.transpose() << " "<< xj.transpose() << " "<< xk.transpose() << std::endl;
                         // std::cout << Xi.transpose() << " "<< Xj.transpose() << " "<< Xk.transpose() << std::endl;
                         // std::cout << referenceTangent2.transpose() << " " << referenceTangent1.transpose() << " "<< referenceNormal1.transpose() << " "<< referenceNormal2.transpose() << std::endl;
+                        // std::cout << "F" << std::endl;
                         // std::cout << F << std::endl;
+                        // std::getchar();
 
                         F *= -1.0;
 
@@ -446,7 +460,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
                 Offset offset_i, offset_j, offset_k;
                 TV xi = TV::Zero(), xj = TV::Zero(), xk = TV::Zero(), 
                     Xi = TV::Zero(), Xj = TV::Zero(), Xk = TV::Zero();
-                
+
                 auto rod = Rods[rod_idx];
                 rod->getEntry(node_i, offset_i);
                 rod->x(node_i, xi); rod->X(node_i, Xi);
@@ -460,6 +474,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
                     rod->getEntry(node_j, offset_j);
                     rod->x(node_j, xj);
                     rod->X(node_j, Xj);
+                    edge1 = on_rod_idx[rod_idx];
                     if(rod->closed && on_rod_idx[rod_idx] == rod->numSeg())
                         edge1 = 0;
                 }
@@ -468,6 +483,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
                     rod->getEntry(node_k, offset_k);
                     rod->x(node_k, xk);
                     rod->X(node_k, Xk);
+                    edge0 = on_rod_idx[rod_idx]-1;
                     if(rod->closed && on_rod_idx[rod_idx] == 0)
                         edge0 = rod->numSeg() - 1;
                 }
