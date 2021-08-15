@@ -24,6 +24,10 @@ public:
     using TV = Vector<T, dim>;
     using TV3 = Vector<T, 3>;
     using TV2 = Vector<T, 2>;
+    using Range = Vector<T, 2>;
+    using Offset = Vector<int, dim + 1>;
+
+// generic printing stuff
 private:
     const EoLRodSim<T, dim>& sim;
     std::string gcode_file;
@@ -41,6 +45,10 @@ private:
     T current_E;
 
     std::ofstream gcode;
+
+// specific parameters
+private:
+    T tunnel_height = 0.2; //0.2mm
 public:
     GCodeGenerator(const EoLRodSim<T, dim>& _sim) : sim(_sim), gcode_file("./rod.gcode") {}
     GCodeGenerator(const EoLRodSim<T, dim>& _sim, const std::string& filename);
@@ -49,21 +57,38 @@ public:
 public:
     void generateGCodeFromRodsCurveGripperHardCoded();
 
-    void writeLine(const TV& from, const TV& to, bool is_first_layer);
-    void moveTo(const TV& to);
+    void generateGCodeFromRodsGridGripperHardCoded();
+    void generateGCodeFromRodsFixedGridGripperHardCoded();
+
+    void generateGCodeFromRodsNoTunnel();
+
+    void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 1000.0);
+    void moveTo(const TV& to, T speed = 3000.0);
 
     void addSingleTunnel(const TV& from, const TV& to, T height);
 
+    void addSingleTunnelOnCrossing(int crossing_id, const TV3& heights, 
+        int direction, std::function<void(TV&)> scaleAndShift);
+    
+    void addSingleTunnelOnCrossingWithFixedRange(int crossing_id, const TV3& heights, 
+        int direction, std::function<void(TV&)> scaleAndShift,
+        const Range& range);
+
+    void generateCodeSingleRod(int rod_idx, std::function<void(TV&)> scaleAndShift, 
+        bool is_first_layer,
+        T bd_height = 0.3, T inner_height = 0.3);
 private:
+
     T computeExtrusionAmount() const;
+    T crossSectionAreaFromRod(T rod_radius) const;
+
     T extrusionWidth() const;
     T crossSectionArea(bool is_first_layer) const;
     void retract(T E);
+    void extrude(T E);
     void writeHeader();
     void writeFooter();
 
-    // to millimeters and shift towards center
-    void scaleAndShift(TV& x);
     
 };
 

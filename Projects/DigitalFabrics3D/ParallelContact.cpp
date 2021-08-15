@@ -38,6 +38,55 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::parallelContactdfdp(Eigen::Ref<VectorXT> dfdp)
+{
+    dfdp.setZero();
+    if (!add_contact_penalty)
+        return;
+
+    int offset_cnt = 0;
+    for (auto& crossing : rod_crossings)
+    {
+        if (crossing->is_fixed)
+        {
+            offset_cnt += 2 * crossing->rods_involved.size();    
+            continue;
+        }
+        int node_idx = crossing->node_idx;
+        std::vector<int> rods_involved = crossing->rods_involved;
+        std::vector<Vector<T, 2>> sliding_ranges = crossing->sliding_ranges;
+
+        int cnt = 0;
+        for (int rod_idx : rods_involved)
+        {
+            Offset offset;
+            Rods[rod_idx]->getEntry(node_idx, offset);
+            T u, U;
+            Rods[rod_idx]->u(node_idx, u);
+            Rods[rod_idx]->U(node_idx, U);
+            T delta_u = (u - U);
+            Range range = sliding_ranges[cnt];
+            // std::cout << "du " << delta_u << " range " << range.transpose() << std::endl;
+            if(delta_u >= range[0])
+            {
+                dfdp[offset[dim] + (offset_cnt) * deformed_states.rows()] += k_yc;
+                // std::cout << "larger " << std::endl;
+            }
+            
+            else if (delta_u <= -range[1])
+            {
+                dfdp[offset[dim] + (offset_cnt + 1) * deformed_states.rows()] += -k_yc;
+                // std::cout << "smaller " << std::endl;             
+                
+            }
+            cnt++;
+            offset_cnt += 2;
+        }
+    }   
+    // std::cout << dfdp.norm() << std::endl;
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
 {
     if (!add_contact_penalty)
@@ -118,6 +167,9 @@ T EoLRodSim<T, dim>::addParallelContactEnergy()
                 // std::cout << delta_u << " " << u << " " << U << std::endl;
                 energy += 0.5 * k_yc * std::pow(delta_u + range[1], 2);
             }
+            
+            
+
             cnt++;
         }
     }

@@ -54,6 +54,16 @@ static int n_rod_per_yarn = 4;
 static int modes = 9;
 
 bool reset = false;
+enum TestCase{
+    DrawUnit, StaticSolve, BatchRendering, InverseDesign
+};
+
+const char* test_case_names[] = {
+    "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign"
+};
+
+TestCase test_current = StaticSolve;
+
 double t = 0.0;
 
 int n_faces = 20;
@@ -167,7 +177,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
             hybrid_curve.getLinearSegments(points_on_curve);
             appendCylinderMesh<dim>(viewer, V_drawing, F_drawing, points_on_curve, true);
         }
-        else
+        else if(test_current == StaticSolve)
         {
             eol_sim.advanceOneStep();   
             deformed_backup = eol_sim.deformed_states;
@@ -189,6 +199,10 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
             //     eol_sim.dirichlet_dof[i] = dq[i];
             // }
             
+        }
+        else if (test_current == InverseDesign)
+        {
+            eol_sim.inverse();
         }
         updateScreen(viewer);
         return true;
@@ -243,13 +257,6 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
     return false;
 }
 
-enum TestCase{
-    DrawUnit, StaticSolve, BatchRendering
-};
-
-const char* test_case_names[] = {
-    "DrawUnit", "StaticSolve", "BatchRendering"
-};
 
 
 int main(int argc, char *argv[])
@@ -265,7 +272,9 @@ int main(int argc, char *argv[])
     double u0 = 0.0, x0 = 0.0, y0 = 0.0;
 
     static TestCase test = BatchRendering;
-    TestCase test_current = StaticSolve; // set to be a different from above or change the above one to be a random one
+    // TestCase test_current = StaticSolve; // set to be a different from above or change the above one to be a random one
+
+    // test_current = InverseDesign;
 
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {   
@@ -277,6 +286,13 @@ int main(int argc, char *argv[])
         else if (test_current == StaticSolve)
         {
             homogenizer.testOneSample();
+            draw_unit = false;
+        }
+        else if (test_current == InverseDesign)
+        {
+            // eol_sim.inverse();
+            homogenizer.initialize();
+            // eol_sim.inverse();
             draw_unit = false;
         }
         updateScreen(viewer);
@@ -292,7 +308,7 @@ int main(int argc, char *argv[])
             viewer.core().align_camera_center(viewer.data().V, viewer.data().F);
         };
     }
-    else if (test_current == StaticSolve)
+    else if (test_current == StaticSolve || test_current == InverseDesign)
     {
         viewer.plugins.push_back(&menu);
         
@@ -764,7 +780,7 @@ int main(int argc, char *argv[])
     {
         
     }
-    else if (test_current == StaticSolve)
+    else if (test_current == StaticSolve || test_current == InverseDesign)
     {
         viewer.data().set_face_based(true);
         viewer.data().shininess = 1.0;

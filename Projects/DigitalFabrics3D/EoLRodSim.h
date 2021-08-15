@@ -92,6 +92,8 @@ public:
     VectorXT deformed_states;
     VectorXT rest_states;
 
+    VectorXT perturb;
+
     IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
@@ -359,20 +361,7 @@ public:
 
     void setVerbose(bool v) { verbose = v; }
     
-    void resetScene() 
-    { 
-        deformed_states = rest_states; 
-        for (auto& rod : Rods)
-        {
-            rod->reference_twist.setZero();
-            rod->reference_angles.setZero();
-        }
-        for (auto& crossing : rod_crossings)
-        {
-            crossing->omega.setZero();
-            crossing->rotation_accumulated.setIdentity();
-        }
-    }
+    void resetScene();
 
 
     void fixCrossing();
@@ -391,6 +380,11 @@ public:
             }
         }
     }
+
+    void forward(Eigen::Ref<VectorXT> dq);
+    void inverse();
+
+    void fixRegion(std::function<bool(const TV&)> inside_region);
     
 private:
 
@@ -488,6 +482,7 @@ public:
     T addParallelContactEnergy();
     void addParallelContactForce(Eigen::Ref<VectorXT> residual);
     void addParallelContactK(std::vector<Entry>& entry_K);
+    void parallelContactdfdp(Eigen::Ref<VectorXT> dfdp);
 
     T add3DBendingAndTwistingEnergy(bool bending = true, bool twisting = true);
     void add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
