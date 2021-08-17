@@ -10,6 +10,10 @@ void Homogenization<T, dim>::testOneSample()
     TV strain_dir, ortho_dir;
     
     // sim.setUniaxialStrain(50/180.0 * M_PI, s1, strain_dir, ortho_dir);
+
+    // TV2 E_nu;
+    // materialParametersFromUniaxialStrain(50/180.0 * M_PI, s1, E_nu);
+    // std::cout << "theta: " << 50 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
     // sim.setUniaxialStrain(0.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
 }
 
@@ -18,10 +22,10 @@ void Homogenization<T, dim>::initialize()
 {
     
     sim.print_force_mag = false;
-    sim.disable_sliding = true;
+    sim.disable_sliding = false;
     sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    sim.buildSceneFromUnitPatch(8);
+    sim.buildSceneFromUnitPatch(12);
     
     // sim.buildPlanePeriodicBCScene3x3();
     
@@ -36,7 +40,6 @@ void Homogenization<T, dim>::initialize()
     sim.k_strain = 1e8;
     
     
-    
     sim.k_yc = 1e8;
     sim.k_pbc = 1e8;
     sim.kr = 1e4;
@@ -47,61 +50,65 @@ void Homogenization<T, dim>::initialize()
 }
 
 template<class T, int dim>
-void Homogenization<T, dim>::computeMacroStressStrain(TM& stress_marco, TM& strain_marco)
+void Homogenization<T, dim>::computeMacroStressStrain(TM2& stress_marco, TM2& strain_marco)
 {
-    // TV xj = sim.q.col(sim.pbc_ref_unique[0](1)).template segment<dim>(0);
-    // TV xi = sim.q.col(sim.pbc_ref_unique[0](0)).template segment<dim>(0);
-    // TV xl = sim.q.col(sim.pbc_ref_unique[1](1)).template segment<dim>(0);
-    // TV xk = sim.q.col(sim.pbc_ref_unique[1](0)).template segment<dim>(0);
 
-    // TV Xj = sim.q0.col(sim.pbc_ref_unique[0](1)).template segment<dim>(0);
-    // TV Xi = sim.q0.col(sim.pbc_ref_unique[0](0)).template segment<dim>(0);
-    // TV Xl = sim.q0.col(sim.pbc_ref_unique[1](1)).template segment<dim>(0);
-    // TV Xk = sim.q0.col(sim.pbc_ref_unique[1](0)).template segment<dim>(0);
+    TV xi = deformed_states.template segment<dim>(sim.pbc_pairs_reference[0].first.first[0]);
+    TV xj = deformed_states.template segment<dim>(sim.pbc_pairs_reference[0].first.second[0]);
+    TV xk = deformed_states.template segment<dim>(sim.pbc_pairs_reference[1].first.first[0]);
+    TV xl = deformed_states.template segment<dim>(sim.pbc_pairs_reference[1].first.second[0]);
 
-    // TM X = TM::Zero(), x = TM::Zero();
-    // X.col(0) = Xi - Xj;
-    // X.col(1) = Xk - Xl;
+    TV Xi = rest_states.template segment<dim>(sim.pbc_pairs_reference[0].first.first[0]);
+    TV Xj = rest_states.template segment<dim>(sim.pbc_pairs_reference[0].first.second[0]);
+    TV Xk = rest_states.template segment<dim>(sim.pbc_pairs_reference[1].first.first[0]);
+    TV Xl = rest_states.template segment<dim>(sim.pbc_pairs_reference[1].first.second[0]);
 
-    // x.col(0) = xi - xj;
-    // x.col(1) = xk - xl;
+    TM2 X = TM2::Zero(), x = TM2::Zero();
+    X.col(0) = (Xi - Xj).template segment<2>(0);
+    X.col(1) = (Xk - Xl).template segment<2>(0);
 
-    // TM F_macro = x * X.inverse();
+    x.col(0) = (xi - xj).template segment<2>(0);
+    x.col(1) = (xk - xl).template segment<2>(0);
+
+
+    TM2 F_macro = x * X.inverse();
     
-    // strain_marco = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+    strain_marco = 0.5 * (F_macro.transpose() + F_macro) - TM2::Identity();
 
-    // TM R90 = TM::Zero();
-    // if constexpr (dim == 2)
-    // {
-    //     R90.row(0) = TV(0, -1);
-    //     R90.row(1) = TV(1, 0);
-    // }
-
-    // TV n0 = (R90 * (xj - xi)).normalized(), n1 = (R90 * (xl - xk)).normalized();
+    TM2 R90 = TM2::Zero();
     
 
-    // DOFStack f(sim.dof, sim.n_nodes);
-    // f.setZero(); 
-    // sim.addPBCForce(sim.q, f);
-    // f *= -1;
-    // std::vector<TV> f_bc(2, TV::Zero());
+    R90.row(0) = TV2(0, -1);
+    R90.row(1) = TV2(1, 0);
 
-    // sim.iteratePBCReferencePairs([&](int dir_id, int node_i, int node_j){
-    //     // T length = dir_id == 1 ? (xj - xi).norm() : (xl - xk).norm();
-    //     T length = dir_id == 1 ? (Xj - Xi).norm() : (Xl - Xk).norm();
-    //     // length *= (2.0 * sim.R);
+    TV2 n0 = (R90 * (xj - xi).template segment<2>(0)).normalized(), 
+        n1 = (R90 * (xl - xk).template segment<2>(0)).normalized();
+    
+    VectorXT f(deformed_states.rows());
+    f.setZero(); 
+    sim.addPBCForce(f);
+    f *= -1;
+    std::vector<TV> f_bc(2, TV::Zero());
+
+    
+    sim.iteratePBCPairsWithDirection([&](int direction, Offset offset_i, Offset offset_j)
+    {
         
-    //     int bc_node = dir_id == 0 ? node_j : node_i;
-    //     if (std::abs(length) >= 1e-6)
-    //         f_bc[dir_id].template segment<dim>(0) += f.col(bc_node).template segment<dim>(0) / length;
+        TV Xj_bc = rest_states.template segment<dim>(offset_j[0]);
+        TV Xi_bc = rest_states.template segment<dim>(offset_i[0]);
+
+        T length = (Xj_bc - Xi_bc).norm();
+        Offset bc_node = direction == 0 ? offset_j : offset_i;
+        if (std::abs(length) >= 1e-6)
+            f_bc[direction].template segment<dim>(0) += f.template segment<dim>(bc_node[0]);
         
-    // });
+    });
 
-    // TM F_bc = TM::Zero(), n_bc = TM::Zero();
-    // F_bc.col(0) = f_bc[0]; F_bc.col(1) = f_bc[1];
-    // n_bc.col(0) = n1; n_bc.col(1) = n0;
+    TM2 F_bc = TM2::Zero(), n_bc = TM2::Zero();
+    F_bc.col(0) = f_bc[0].template segment<2>(0); F_bc.col(1) = f_bc[1].template segment<2>(0);
+    n_bc.col(0) = n1; n_bc.col(1) = n0;
 
-    // stress_marco = F_bc * n_bc.inverse();
+    stress_marco = F_bc * n_bc.inverse();
     
     
 }
@@ -111,52 +118,52 @@ void Homogenization<T, dim>::computeYoungsModulusPoissonRatioBatch()
 {
     initialize();
     
-    // int n_angles = 10;
-    // T cycle = 2. * M_PI;
-    // std::vector<T> thetas;
-    // std::vector<T> youngs_moduli;
-    // std::vector<T> poisson_ratio;
-    // for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
-    // {
-    //     T theta6 = std::round( theta * 1e4 ) / 1e4;
-    //     thetas.push_back(theta6);
-    //     TV2 E_nu;
-    //     materialParametersFromUniaxialStrain(theta6, s1, E_nu);
-    //     // std::cout << "theta: " << theta / M_PI * 180.0 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
-    //     std::cout << "theta: " << theta6 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
-    //     T E = E_nu(0); T nu = E_nu(1);
-    //     youngs_moduli.push_back(E);
-    //     // std::cout << E << " " << youngs_moduli[0] << std::endl;
-    //     poisson_ratio.push_back(nu);
-    // }
-    // for(T theta : thetas)
-    //     std::cout << theta << " ";
-    // std::cout << std::endl;
-    // for(T E : youngs_moduli)
-    //     std::cout << E << " ";
-    // std::cout << std::endl;
-    // for(T nu : poisson_ratio)
-    //     std::cout << nu << " ";
-    // std::cout << std::endl;
+    int n_angles = 400;
+    T cycle = 2. * M_PI;
+    std::vector<T> thetas;
+    std::vector<T> youngs_moduli;
+    std::vector<T> poisson_ratio;
+    for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+    {
+        T theta6 = std::round( theta * 1e4 ) / 1e4;
+        thetas.push_back(theta6);
+        TV2 E_nu;
+        materialParametersFromUniaxialStrain(theta6, s1, E_nu);
+        // std::cout << "theta: " << theta / M_PI * 180.0 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+        std::cout << "theta: " << theta6 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+        T E = E_nu(0); T nu = E_nu(1);
+        youngs_moduli.push_back(E);
+        // std::cout << E << " " << youngs_moduli[0] << std::endl;
+        poisson_ratio.push_back(nu);
+    }
+    for(T theta : thetas)
+        std::cout << theta << " ";
+    std::cout << std::endl;
+    for(T E : youngs_moduli)
+        std::cout << E << " ";
+    std::cout << std::endl;
+    for(T nu : poisson_ratio)
+        std::cout << nu << " ";
+    std::cout << std::endl;
     
 }
 
 template<class T, int dim>
 void Homogenization<T, dim>::materialParametersFromUniaxialStrain(T theta, T s, TV2& E_nu)
 {
-    // TV strain_dir, ortho_dir;
-    // sim.setUniaxialStrain(theta, s, strain_dir, ortho_dir);
+    TV strain_dir, ortho_dir;
+    sim.setUniaxialStrain(theta, s, strain_dir, ortho_dir);
     
-    // // sim.setBiaxialStrain(theta, s, theta, 1.0, , strain_dir, ortho_dir);
-    // sim.advanceOneStep();
+    // sim.setBiaxialStrain(theta, s, theta, 1.0, , strain_dir, ortho_dir);
+    sim.advanceOneStep();
     
-    // E_nu = TV2::Zero();
-    // TM stress, strain;
-    // computeMacroStressStrain(stress, strain);
-    // T stretch_in_d = strain_dir.dot(strain * strain_dir);
-    // E_nu(0) = strain_dir.dot(stress * strain_dir) / stretch_in_d;
-    // E_nu(1) = -ortho_dir.dot(strain * ortho_dir) / stretch_in_d;
-    // sim.resetScene();
+    E_nu = TV2::Zero();
+    TM2 stress, strain;
+    computeMacroStressStrain(stress, strain);
+    T stretch_in_d = strain_dir.template segment<2>(0).dot(strain * strain_dir.template segment<2>(0));
+    E_nu(0) = strain_dir.template segment<2>(0).dot(stress * strain_dir.template segment<2>(0)) / stretch_in_d;
+    E_nu(1) = ortho_dir.template segment<2>(0).dot(strain * ortho_dir.template segment<2>(0)) / stretch_in_d;
+    sim.resetScene();
     
 }
 

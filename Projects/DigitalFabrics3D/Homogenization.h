@@ -15,6 +15,7 @@ class Homogenization
     using TV2 = Vector<T, 2>;
     using TV = Vector<T, dim>;
     using TM = Matrix<T, dim, dim>;
+    using TM2 = Matrix<T, 2, 2>;
     using CDoF2D = Vector<T, 6>;
     using CHessian2D = Matrix<T, 6, 6>;
     using ComplianceTensor = Matrix<T, 3 * (dim - 1), 3 * (dim - 1)>;
@@ -24,11 +25,14 @@ class Homogenization
     using TVEntryFull = Vector<T, dim * dim>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
-
+    using Offset = Vector<int, dim + 1>;
 
 public:
     EoLRodSim<T, dim>& sim;
     
+    const VectorXT& rest_states = sim.rest_states;
+    const VectorXT& deformed_states = sim.deformed_states;
+
     T s1 = 1.01;
     T s2 = 1.0;
 
@@ -45,7 +49,7 @@ public:
     void materialParametersFromUniaxialStrain(T theta, T s, TV2& E_nu);
     void computeYoungsModulusPoissonRatioBatch();
 
-    void computeMacroStressStrain(TM& stress_marco, TM& strain_marco);
+    void computeMacroStressStrain(TM2& stress_marco, TM2& strain_marco);
     
     void fitComplianceTensor();
     void fitComplianceFullTensor();

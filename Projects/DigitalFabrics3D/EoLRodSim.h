@@ -303,6 +303,13 @@ public:
             data.second.first, data.second.second);
         } 
     }
+
+    template <class OP>
+    void iteratePBCPairsWithDirection(const OP& f) {
+        for (auto data : pbc_pairs){
+            f(data.first, data.second.first, data.second.second);
+        } 
+    }
     
     template <class OP>
     void iterateAllLagrangianDoFs(const OP& f) {
@@ -385,6 +392,17 @@ public:
     void inverse();
 
     void fixRegion(std::function<bool(const TV&)> inside_region);
+    void fixRegionalDisplacement(std::function<bool(const TV&, TV&, Vector<bool, dim>&)> helper);
+
+    
+    void getCrossingPosition(int crossing_idx, TV& x)
+    {
+        auto crossing = rod_crossings[crossing_idx];
+        auto rod = Rods[crossing->rods_involved.front()];
+        rod->x(crossing->node_idx, x);
+    }
+
+    void computeBoundingBox(TV& bottom_left, TV& top_right);
     
 private:
 

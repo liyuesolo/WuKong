@@ -36,10 +36,12 @@ public:
 
     //Mechanisim
     void buildFingerScene(int sub_div);
+    void buildSaddleScene(int sub_div);
     void buildGripperScene(int sub_div);
     void buildGridLayoutGripper(int sub_div);
 
     void buildShelterScene(int sub_div);
+    void buildGridScene2(int sub_div);
 
     void build3DtestScene(int sub_div);
     void buildOneCrossScene(int sub_div);

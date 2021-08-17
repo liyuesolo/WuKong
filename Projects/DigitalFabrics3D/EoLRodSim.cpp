@@ -6,6 +6,28 @@
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::computeBoundingBox(TV& bottom_left, TV& top_right)
+{
+    bottom_left.setConstant(1e6);
+    top_right.setConstant(-1e6);
+
+    for (auto& rod : Rods)
+    {
+        int cnt = 0;
+        for (int idx : rod->indices)
+        {
+            TV x;
+            rod->x(idx, x);
+            for (int d = 0; d < dim; d++)
+            {
+                top_right[d] = std::max(top_right[d], x[d]);
+                bottom_left[d] = std::min(bottom_left[d], x[d]);
+            }
+        }
+    }   
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::fixRegion(std::function<bool(const TV&)> inside_region)
 {
     for (auto& rod : Rods)
@@ -38,6 +60,49 @@ void EoLRodSim<T, dim>::fixRegion(std::function<bool(const TV&)> inside_region)
         if (inside_region(x))
         {
             for (int d = 0; d < dim; d++)
+                dirichlet_dof[crossing->reduced_dof_offset + d] = 0.0;
+        }
+    }
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::fixRegionalDisplacement(
+    std::function<bool(const TV&, TV&,Vector<bool, dim>&)> helper)
+{
+    for (auto& rod : Rods)
+    {
+        int cnt = 0;
+        for (int idx : rod->indices)
+        {
+            TV x;
+            rod->x(idx, x);
+            Offset offset;
+            TV dx;
+            Vector<bool, dim> mask;
+            if (helper(x, dx, mask))
+            {
+                rod->getEntry(idx, offset);
+                for (int d = 0; d < dim; d++)
+                    if (mask[d])
+                        dirichlet_dof[rod->reduced_map[offset[d]]] = dx[d];
+                
+                if (cnt < rod->numSeg())
+                    dirichlet_dof[rod->theta_reduced_dof_start_offset + cnt] = 0;
+            }
+            cnt++;
+        }
+    }
+    for (auto& crossing : rod_crossings)
+    {
+        auto rod = Rods[crossing->rods_involved.front()];
+        TV x;
+        rod->x(crossing->node_idx, x);
+        TV dx;
+        Vector<bool, dim> mask;
+        if (helper(x, dx, mask))
+        {
+            for (int d = 0; d < dim; d++)
+                
                 dirichlet_dof[crossing->reduced_dof_offset + d] = 0.0;
         }
     }
@@ -707,22 +772,21 @@ void EoLRodSim<T, dim>::advanceOneStep()
         e_total += add3DBendingAndTwistingEnergy();
         if (add_pbc)
             e_total += add3DPBCBendingAndTwistingEnergy();
-        if (add_rigid_joint)
-            e_total += addJointBendingAndTwistingEnergy();
+        e_total += addJointBendingAndTwistingEnergy();
     }
 
     std::cout << "E total: " << e_total << std::endl;
-    std::cout << "total stretching " << addStretchingEnergy() << std::endl;
-    std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
-                                    add3DPBCBendingAndTwistingEnergy(true, false) + 
-                                    addJointBendingAndTwistingEnergy(true, false) << std::endl;
+    // std::cout << "total stretching " << addStretchingEnergy() << std::endl;
+    // std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
+    //                                 add3DPBCBendingAndTwistingEnergy(true, false) + 
+    //                                 addJointBendingAndTwistingEnergy(true, false) << std::endl;
 
-    std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
-                                    add3DPBCBendingAndTwistingEnergy(false, true) + 
-                                    addJointBendingAndTwistingEnergy(false, true) << std::endl;
+    // std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
+    //                                 add3DPBCBendingAndTwistingEnergy(false, true) + 
+    //                                 addJointBendingAndTwistingEnergy(false, true) << std::endl;
     
     
-    checkHessianPD(dq);
+    // checkHessianPD(dq);
 
     // VectorXT force(W.rows()); force.setZero();
     // addPBCForce(force);

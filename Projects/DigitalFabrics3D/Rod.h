@@ -105,6 +105,8 @@ public:
     // which node on this rod has been marked as crossing node, ranging from 0 to # nodes
     std::vector<int> dof_node_location;
 
+    std::vector<bool> fixed_by_crossing;
+
     //maps dim + 1 dof to global dof offset
     std::unordered_map<int, Offset> offset_map;
     
@@ -386,6 +388,8 @@ public:
 
         kt = 0.25 * G  * M_PI * a * b * (a*a + b*b);
     }
+
+    bool isFixedNodeForPrinting(int node_idx, int rod_idx);
 
 public:
     Rod (VectorXT& q, VectorXT& q0, int id, T _a, T _b) : full_states(q), rest_states(q0), rod_id(id), a(_a), b(_b), closed(false) { initCoeffs(); }

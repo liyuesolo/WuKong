@@ -258,5 +258,29 @@ void Rod<T, dim>::markDoF(std::vector<Entry>& w_entry, int& dof_cnt)
         w_entry.push_back(Eigen::Triplet<T>(offset[dim], reduced_map[offset_right_node[dim]], alpha));
     }
 }
+
+template<class T, int dim>
+bool Rod<T, dim>::isFixedNodeForPrinting(int node_idx, int rod_idx)
+{
+    std::vector<int> dof_node_idx;
+    for (int location : dof_node_location)
+        dof_node_idx.push_back(indices[location]);
+    
+    // if (dof_node_location.size())
+    // {
+    //     if (rod_idx < dof_node_location.front())
+    //         return true;
+    //     if (rod_idx >= dof_node_location.back())
+    //         return true;
+    // }
+    
+    auto iter = std::find(dof_node_idx.begin(), dof_node_idx.end(), node_idx);
+    if (iter == dof_node_idx.end())
+        return false;
+    int location = std::distance(dof_node_idx.begin(), iter);
+    if (fixed_by_crossing[location])
+        return true;
+    return false;
+}
 template class Rod<double, 3>;
 template class Rod<double, 2>; 

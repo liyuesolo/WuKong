@@ -21,6 +21,291 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 }
 
 
+
+// template<class T, int dim>
+// void GCodeGenerator<T, dim>::crossingTest()
+// {
+//     if constexpr (dim == 3)
+//     {
+//         layer_height = 0.3;
+//         writeHeader();
+//         TV from = TV(20, 40, layer_height);
+//         TV to = TV(60, 40, layer_height);
+//         TV extend = TV(80, 40, layer_height);
+
+//         TV left(38, 40, layer_height);
+//         TV right(42, 40, layer_height);
+
+//         moveTo(from);
+//         writeLine(from, to, layer_height, 300);
+//         moveTo(extend);
+//         extend[dim - 1] += 4.0;
+//         moveTo(extend);
+//         extend[dim - 1] -= 4.0;
+
+//         left[dim - 1] += 2.0;
+//         moveTo(left);
+//         left[dim - 1] -= 2.0;
+//         addSingleTunnel(left, right, 2.0);
+        
+//         right[dim - 1] += 4.0;
+//         moveTo(right);
+//         right[dim - 1] -= 4.0;
+        
+//         for (int i = 0; i < 3; i++)
+//         {
+//             from[dim - 1] += layer_height;
+//             left[dim - 1] += layer_height;
+            
+//             from[dim - 1] += 4.0;
+//             moveTo(from);
+//             from[dim - 1] -= 4.0;
+//             moveTo(from);
+
+//             writeLine(from, left, layer_height, 300);
+//             left[dim - 1] += 2.0;
+//             moveTo(left);
+//             left[dim - 1] -= 2.0;
+//         }
+
+//         for (int i = 0; i < 3; i++)
+//         {
+//             to[dim - 1] += layer_height;
+//             right[dim - 1] += layer_height;
+            
+//             right[dim - 1] += 4.0;
+//             moveTo(right);
+//             right[dim - 1] -= 4.0;
+//             moveTo(right);
+            
+//             writeLine(right, to, layer_height, 300);
+//             to[dim - 1] += 2.0;
+//             moveTo(to);
+//             to[dim - 1] -= 2.0;
+//         }
+
+//         from[dim - 1] += 4.0;
+//         moveTo(from);
+//         from[dim - 1] -= 4.0;
+        
+
+//         moveTo(from);
+//         writeLine(from, to, layer_height, 300);
+//         moveTo(extend);
+//         extend[dim - 1] += 4.0;
+//         moveTo(extend);
+//         extend[dim - 1] -= 4.0;
+
+//         left[dim - 1] += 2.0;
+//         moveTo(left);
+//         left[dim - 1] -= 2.0;
+//         addSingleTunnel(left, right, 3.0);
+        
+//         right[dim - 1] += 4.0;
+//         moveTo(right);
+//         right[dim - 1] -= 4.0;
+        
+//         for (int i = 0; i < 3; i++)
+//         {
+//             from[dim - 1] += layer_height;
+//             left[dim - 1] += layer_height;
+            
+//             from[dim - 1] += 4.0;
+//             moveTo(from);
+//             from[dim - 1] -= 4.0;
+//             moveTo(from);
+
+//             writeLine(from, left, layer_height, 300);
+//             left[dim - 1] += 2.0;
+//             moveTo(left);
+//             left[dim - 1] -= 2.0;
+//         }
+
+//         for (int i = 0; i < 3; i++)
+//         {
+//             to[dim - 1] += layer_height;
+//             right[dim - 1] += layer_height;
+            
+//             right[dim - 1] += 4.0;
+//             moveTo(right);
+//             right[dim - 1] -= 4.0;
+//             moveTo(right);
+            
+//             writeLine(right, to, layer_height, 300);
+//             to[dim - 1] += 2.0;
+//             moveTo(to);
+//             to[dim - 1] -= 2.0;
+//         }
+
+//         from[dim - 1] += 4.0;
+//         moveTo(from);
+//         from[dim - 1] -= 4.0;
+//         moveTo(from);
+
+        
+//         writeLine(from, to, layer_height, 300);
+//         moveTo(extend);
+//         extend[dim - 1] += 4.0;
+//         moveTo(extend);
+//         extend[dim - 1] -= 4.0;
+
+//         left[dim - 1] += 2.0;
+//         moveTo(left);
+//         left[dim - 1] -= 2.0;
+//         addSingleTunnel(left, right, 4.0);
+        
+//         right[dim - 1] += 4.0;
+//         moveTo(right);
+//         right[dim - 1] -= 4.0;
+        
+//         for (int i = 0; i < 3; i++)
+//         {
+//             from[dim - 1] += layer_height;
+//             left[dim - 1] += layer_height;
+            
+//             from[dim - 1] += 4.0;
+//             moveTo(from);
+//             from[dim - 1] -= 4.0;
+//             moveTo(from);
+
+//             writeLine(from, left, layer_height, 300);
+//             left[dim - 1] += 2.0;
+//             moveTo(left);
+//             left[dim - 1] -= 2.0;
+//         }
+
+//         for (int i = 0; i < 3; i++)
+//         {
+//             to[dim - 1] += layer_height;
+//             right[dim - 1] += layer_height;
+            
+//             right[dim - 1] += 4.0;
+//             moveTo(right);
+//             right[dim - 1] -= 4.0;
+//             moveTo(right);
+            
+//             writeLine(right, to, layer_height, 300);
+//             to[dim - 1] += 2.0;
+//             moveTo(to);
+//             to[dim - 1] -= 2.0;
+//         }
+        
+//         writeFooter();
+//     }
+// }
+
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded()
+{
+    
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::crossingTest()
+{
+    if constexpr (dim == 3)
+    {
+        layer_height = 0.3;
+        writeHeader();
+        TV from = TV(20, 40, layer_height);
+        TV to = TV(60, 40, layer_height);
+        TV extend = TV(80, 40, layer_height);
+
+        TV left(38, 40, layer_height);
+        TV right(42, 40, layer_height);
+
+        moveTo(from);
+        writeLine(from, to, layer_height, 300);
+        moveTo(extend);
+        extend[dim - 1] += 4.0;
+        moveTo(extend);
+        extend[dim - 1] -= 4.0;
+
+        left[dim - 1] += 2.0;
+        moveTo(left);
+        left[dim - 1] -= 2.0;
+        // addSingleTunnel(left, right, 2.0);
+        
+        right[dim - 1] += 4.0;
+        moveTo(right);
+        right[dim - 1] -= 4.0;
+        
+        for (int i = 0; i < 9; i++)
+        {
+            from[dim - 1] += layer_height;
+            left[dim - 1] += layer_height;
+            
+            from[dim - 1] += 4.0;
+            moveTo(from);
+            from[dim - 1] -= 4.0;
+            moveTo(from);
+
+            writeLine(from, left, layer_height, 300);
+            left[dim - 1] += 2.0;
+            moveTo(left);
+            left[dim - 1] -= 2.0;
+        }
+
+        for (int i = 0; i < 9; i++)
+        {
+            to[dim - 1] += layer_height;
+            right[dim - 1] += layer_height;
+            
+            right[dim - 1] += 4.0;
+            moveTo(right);
+            right[dim - 1] -= 4.0;
+            moveTo(right);
+            
+            writeLine(right, to, layer_height, 300);
+            to[dim - 1] += 2.0;
+            moveTo(to);
+            to[dim - 1] -= 2.0;
+        }
+
+        
+
+        from = TV(40, 20, layer_height);
+        to = TV(40, 60, layer_height);
+        extend = TV(40, 80, layer_height);
+
+        TV middle = TV(40, 40, layer_height * 4);
+        TV middle0 = TV(40, 30, layer_height);
+        TV middle1 = TV(40, 50, layer_height);
+        
+        for (int i = 0; i < 9; i++)
+        {
+            from[dim - 1] += layer_height;
+            to[dim - 1] += layer_height;
+            middle[dim - 1] += layer_height;
+            middle0[dim - 1] += layer_height;
+            middle1[dim - 1] += layer_height;
+
+            from[dim - 1] += 4.0;
+            moveTo(from);
+            from[dim - 1] -= 4.0;
+            moveTo(from);
+
+            writeLine(from, middle0, layer_height, 300);
+            writeLine(middle0, middle, layer_height, 300);
+            writeLine(middle, middle1, layer_height, 300);
+            writeLine(middle1, to, layer_height, 300);
+
+            to[dim - 1] += 2.0;
+            moveTo(to);
+            to[dim - 1] -= 2.0;
+        }
+    
+        left[dim - 1] += 8.0;
+        moveTo(left);
+        left[dim - 1] -= 8.0;
+        right[0] += 5;
+        addSingleTunnel(left, right, 3.0);
+        
+        writeFooter();
+    }
+}
+
 template<class T, int dim>
 void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T height)
 {
@@ -31,8 +316,8 @@ void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T hei
         mid_point[2] += height;    
         moveTo(from);
         
-        writeLine(from, mid_point, tunnel_height);
-        writeLine(mid_point, to, tunnel_height);
+        writeLine(from, mid_point, 0.3, 100);
+        writeLine(mid_point, to, 0.3, 200);
     }
 }
 
@@ -53,21 +338,49 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     TV extend = back + (back - front).normalized() * 0.3 * (front - back).norm();
     scaleAndShift(extend);
 
-    //move slightly out of domain
+    //move slightly out of domain in case it doesn't stick at the beginning
     x0 -= (back - front).normalized() * 0.2 * (front - back).norm();
     scaleAndShift(x0);
     TV front_scaled = front;
     scaleAndShift(front_scaled);
     front_scaled[dim-1] = bd_height;
+
+    // 2.0 is to avoid nozzle touching existing rods
     x0[dim - 1] = 2.0;
     moveTo(x0);
 
+    // 0.2 is used for better sticking at the beginning
     x0[dim - 1] = 0.2;
     moveTo(x0, 100);
 
-    writeLine(x0, front_scaled, rod_radius_in_mm);
+    writeLine(x0, front_scaled, rod_radius_in_mm, 100);
 
     // writeLine(x0, front_scaled, rod_radius_in_mm);
+    int running_cnt =0;
+
+    std::vector<bool> is_fused;
+    rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
+    {
+        is_fused.push_back(rod->isFixedNodeForPrinting(node_i, rod_idx));
+        if (rod_idx == rod->numSeg() - 1)
+            is_fused.push_back(rod->isFixedNodeForPrinting(node_j, rod_idx));        
+    }); 
+
+    for (int i = 0; i < is_fused.size(); i++)
+    {
+        if (!is_fused[i])
+        {
+            for (int j = i - 3 ; j < i + 4; j++)
+            {
+                if (j >= 0 && j < rod->numSeg())
+                {
+                    is_fused[j] = false;
+                }
+            }
+        }
+    }
+
+    int node_cnt = 0;
     rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
     {
         TV xi, xj;
@@ -75,25 +388,38 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
         // if (rod_idx == rod->numSeg() - 1)
         //     xj += (back - front).normalized() * 0.05 * (front - back).norm();
         scaleAndShift(xi); scaleAndShift(xj);
-        if (rod_idx > rod->numSeg() - 2 || rod_idx < 2)
-        {
-            xi[dim - 1] = bd_height;
-            xj[dim - 1] = bd_height;
-        }
-        else
-        {
-            xi[dim - 1] = inner_height;
-            xj[dim - 1] = inner_height;
-        }
+        if (is_fused[node_cnt]) xi[dim - 1] = bd_height;
+        else xi[dim - 1] = inner_height; 
+        
+        if (is_fused[node_cnt + 1]) xj[dim - 1] = bd_height;
+        else xj[dim - 1] = inner_height; 
+        node_cnt++;
+
+        // if (rod_idx > rod->numSeg() - 2 || rod_idx < 2)
+        // {
+        //     xi[dim - 1] = bd_height;
+        //     xj[dim - 1] = bd_height;
+        // }
+        // else
+        // {
+        //     xi[dim - 1] = inner_height;
+        //     xj[dim - 1] = inner_height;
+        // }
         writeLine(xi, xj, rod_radius_in_mm);
     });
-
+    
+    
+    TV xn = back + (back - front).normalized() * 0.2 * (front - back).norm();
+    // 
+    scaleAndShift(xn);
     scaleAndShift(back);
-    back[dim - 1] += 0.2;
-    moveTo(back, 100);
-    back[dim - 1] = 2.0;
-    moveTo(back, 100);
+    xn[dim - 1] += 0.2;
+    // moveTo(xn, 100);
+    writeLine(back, xn, rod_radius_in_mm, 100);
+    xn[dim - 1] = 2.0;
+    moveTo(xn, 100);
 
+    // move nozzle along printing direction to avoid detaching of current print
     extend[dim - 1] = 2.0;
     moveTo(extend);
 }
@@ -133,7 +459,7 @@ void GCodeGenerator<T, dim>::addSingleTunnelOnCrossingWithFixedRange(int crossin
         moveTo(left, 100);
         
         writeLine(left, mid_point, tunnel_height, 200);
-        writeLine(mid_point, right, tunnel_height, 1000);
+        writeLine(mid_point, right, tunnel_height, 600);
         right[dim - 1] += 2.0;
         moveTo(right);
     }
@@ -183,6 +509,37 @@ void GCodeGenerator<T, dim>::addSingleTunnelOnCrossing(int crossing_id, const TV
 }
 
 template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeFromRodsShelterHardCoded()
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 50);
+    };
+
+    writeHeader();
+
+    T rod_radius_in_mm = sim.Rods[0]->a * 1e3;
+    for (int rod_idx  : {0, 1, 2, 3})
+        generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+    
+    for (int rod_idx  : {5, 6})
+        generateCodeSingleRod(rod_idx, scaleAndShift, true,  0.8 * rod_radius_in_mm, 1.2 * rod_radius_in_mm);
+
+    for (int rod_idx  : {4, 7})
+        generateCodeSingleRod(rod_idx, scaleAndShift, true,  0.8 * rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+    
+    TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+
+    for (int crossing_id : {0, 3, 4, 7, 8, 11})
+    {
+        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+    }
+
+    writeFooter();
+}
+
+template<class T, int dim>
 void GCodeGenerator<T, dim>::generateGCodeFromRodsFixedGridGripperHardCoded()
 {
     auto scaleAndShift = [](TV& x)->void
@@ -219,7 +576,7 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsFixedGridGripperHardCoded()
     // }
 
     // addSingleTunnelOnCrossingWithFixedRange(3, heights, 1, scaleAndShift, Range(0.08, 0.08));
-    addSingleTunnelOnCrossingWithFixedRange(10, heights, 1, scaleAndShift, Range(0.04, 0.04));
+    // addSingleTunnelOnCrossingWithFixedRange(10, heights, 1, scaleAndShift, Range(0.04, 0.04));
 
     writeFooter();
 
@@ -273,21 +630,6 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridGripperHardCoded()
         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
     }
 
-    for (int crossing_id : {23, 24})
-    {
-        auto crossing = sim.rod_crossings[crossing_id];
-        Offset offset;
-        sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, offset);
-        TV x = sim.deformed_states.template segment<dim>(offset[0]);
-        scaleAndShift(x);
-        x[dim - 1] = rod_radius_in_mm + 2.0;
-        moveTo(x);
-        x[dim - 1] = rod_radius_in_mm;
-        moveTo(x);
-        extrude(0.2);
-        x[dim - 1] += rod_radius_in_mm + 2.0;
-        moveTo(x);
-    }
     
     writeFooter();
 }
@@ -415,12 +757,12 @@ void GCodeGenerator<T, dim>::moveTo(const TV& to, T speed)
     std::string cmd;
     if (extrusion_mode == Absolute)
     {
-        retract(current_E - 0.6);
+        retract(current_E - 0.2);
         cmd += "G1 F" + std::to_string(speed) + " X" + 
             std::to_string(to[0]) + " Y" + std::to_string(to[1]) +
             " Z" + std::to_string(to[2]) + "\n";
         gcode << cmd;
-        retract(current_E + 0.6);
+        retract(current_E + 0.2);
     }
     else if (extrusion_mode == Relative)
     {

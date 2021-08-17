@@ -55,10 +55,15 @@ public:
     ~GCodeGenerator() {}
 
 public:
+    void crossingTest();
+
     void generateGCodeFromRodsCurveGripperHardCoded();
 
     void generateGCodeFromRodsGridGripperHardCoded();
     void generateGCodeFromRodsFixedGridGripperHardCoded();
+
+    void generateGCodeFromRodsShelterHardCoded();
+    void generateGCodeFromRodsGridHardCoded();
 
     void generateGCodeFromRodsNoTunnel();
 
