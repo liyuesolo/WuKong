@@ -21,6 +21,9 @@ public:
 
     using Offset = Vector<int, dim + 1>;
     using Range = Vector<T, 2>;
+    using Mask = Vector<bool, dim>;
+    using Mask2 = Vector<bool, 2>;
+
 
 private:
     EoLRodSim<T, dim>& sim;
@@ -39,6 +42,13 @@ public:
     void buildSaddleScene(int sub_div);
     void buildGripperScene(int sub_div);
     void buildGridLayoutGripper(int sub_div);
+    void buildSquareCrossJointScene(int sub_div);
+    
+    void buildActiveTextileScene(int sub_div);
+    
+    
+    void buildTestJoint(int sub_div);
+    void buildXJointsScene(int sub_div);
 
     void buildShelterScene(int sub_div);
     void buildGridScene2(int sub_div);

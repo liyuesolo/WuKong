@@ -19,9 +19,6 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 {
 
 }
-
-
-
 // template<class T, int dim>
 // void GCodeGenerator<T, dim>::crossingTest()
 // {
@@ -201,6 +198,158 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded()
     
 }
 
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::activeTexticleGCode(bool fused)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(40, 80);
+    };
+
+
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3;
+
+        if (fused)
+        {
+            // step one bottom layers
+            for (int rod_idx  : {0, 1, 2, 3, 4, 5, 6, 8, 9})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+            
+            for (int rod_idx  : {7})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+                    4.0 * rod_radius_in_mm);
+
+            
+            TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+
+            std::vector<int> crossings = {7, 12, 17, 22};
+
+            for (int crossing_id : crossings)
+            {
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+            }
+
+            
+        }
+        else
+        {
+            // step one bottom layers
+            for (int rod_idx  : {0, 1, 2, 3, 4, 5, 9})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+            
+            for (int rod_idx  : {6, 7, 8})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+                    4.0 * rod_radius_in_mm);
+
+            
+            TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+
+            std::vector<int> crossings = {6, 7, 8, 11, 12, 13, 16, 17, 18, 21, 22, 23};
+
+            for (int crossing_id : crossings)
+            {
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+            }
+        }
+        writeFooter();
+    }
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::activeTexticleGCode2(bool fused)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(40, 80);
+    };
+
+
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3;
+
+        // if (fused)
+        // {
+        //     for (int rod_idx  : {5})
+        //         generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+        //             rod_radius_in_mm);
+
+        //     // step one bottom layers
+        //     for (int rod_idx  : {0, 1, 2, 3, 4, 6, 8, 9})
+        //         generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+            
+        //     for (int rod_idx  : {7})
+        //         generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+        //             4.0 * rod_radius_in_mm);
+
+        //     TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+
+        //     std::vector<int> crossings = {7, 12, 17, 22};
+
+        //     for (int crossing_id : crossings)
+        //     {
+        //         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+        //     }
+
+        //     crossings = {10};
+        //     for (int crossing_id : crossings)
+        //     {
+        //         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.03, 0.03));
+        //     }
+            
+        // }
+        if (fused)
+        {
+            // step one bottom layers
+            for (int rod_idx  : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+               
+        }
+        else
+        {
+
+            for (int rod_idx  : {5})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+                    rod_radius_in_mm);
+
+            // step one bottom layers
+            for (int rod_idx  : {0, 1, 2, 3, 4})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+
+            for (int rod_idx  : {9})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+            
+            for (int rod_idx  : {6, 7, 8})
+                generateCodeSingleRod(rod_idx, scaleAndShift, true, rod_radius_in_mm, 
+                    4.0 * rod_radius_in_mm);
+
+            
+            TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+
+            std::vector<int> crossings = {6, 7, 8, 11, 12, 13, 16, 17, 18, 21, 22, 23};
+
+            for (int crossing_id : crossings)
+            {
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+            }
+
+            crossings = {5, 10, 15};
+            for (int crossing_id : crossings)
+            {
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.03, 0.03));
+            }
+        }
+        writeFooter();
+    }
+}
+
 template<class T, int dim>
 void GCodeGenerator<T, dim>::crossingTest()
 {
@@ -353,7 +502,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     x0[dim - 1] = 0.2;
     moveTo(x0, 100);
 
-    writeLine(x0, front_scaled, rod_radius_in_mm, 100);
+    writeLine(x0, front_scaled, rod_radius_in_mm);
 
     // writeLine(x0, front_scaled, rod_radius_in_mm);
     int running_cnt =0;
@@ -364,17 +513,21 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
         is_fused.push_back(rod->isFixedNodeForPrinting(node_i, rod_idx));
         if (rod_idx == rod->numSeg() - 1)
             is_fused.push_back(rod->isFixedNodeForPrinting(node_j, rod_idx));        
+        // std::cout << "is_fused " << std::endl;
+        // std::cout << is_fused.back() << std::endl;
     }); 
-
+    
+    std::vector<bool> fused_buffer = is_fused;
     for (int i = 0; i < is_fused.size(); i++)
     {
         if (!is_fused[i])
         {
-            for (int j = i - 3 ; j < i + 4; j++)
+            
+            for (int j = i - 5 ; j < i + 6; j++)
             {
                 if (j >= 0 && j < rod->numSeg())
                 {
-                    is_fused[j] = false;
+                    fused_buffer[j] = false;
                 }
             }
         }
@@ -383,6 +536,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     int node_cnt = 0;
     rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
     {
+        // std::cout << is_fused[node_cnt] << std::endl;
         TV xi, xj;
         rod->x(node_i, xi); rod->x(node_j, xj);
         // if (rod_idx == rod->numSeg() - 1)
@@ -415,7 +569,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     scaleAndShift(back);
     xn[dim - 1] += 0.2;
     // moveTo(xn, 100);
-    writeLine(back, xn, rod_radius_in_mm, 100);
+    writeLine(back, xn, rod_radius_in_mm);
     xn[dim - 1] = 2.0;
     moveTo(xn, 100);
 
@@ -458,8 +612,8 @@ void GCodeGenerator<T, dim>::addSingleTunnelOnCrossingWithFixedRange(int crossin
         left[dim - 1] -= 2.0;
         moveTo(left, 100);
         
-        writeLine(left, mid_point, tunnel_height, 200);
-        writeLine(mid_point, right, tunnel_height, 600);
+        writeLine(left, mid_point, tunnel_height, 100);
+        writeLine(mid_point, right, tunnel_height, 300);
         right[dim - 1] += 2.0;
         moveTo(right);
     }

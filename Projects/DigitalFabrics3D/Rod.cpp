@@ -273,10 +273,49 @@ bool Rod<T, dim>::isFixedNodeForPrinting(int node_idx, int rod_idx)
     //     if (rod_idx >= dof_node_location.back())
     //         return true;
     // }
+
+    
     
     auto iter = std::find(dof_node_idx.begin(), dof_node_idx.end(), node_idx);
     if (iter == dof_node_idx.end())
-        return false;
+    {
+        int left_node = 0;
+        int right_node = indices.size() - 1;
+        for (int i = 0; i < dof_node_location.size(); i++)
+        {
+            if (dof_node_location[i] <= rod_idx)
+            {
+                left_node = i;
+            }
+            if ( dof_node_location[i] >= rod_idx)
+            {
+                right_node = i;
+                break;
+            }
+        }
+
+        // for (auto x : fixed_by_crossing)
+        //         std::cout << x << " ";
+        //     std::cout << std::endl;
+            
+
+        // for (int location : dof_node_location)
+        //     std::cout << fixed_by_crossing[location] << " " << location << std::endl;
+        // std::cout << "dd" << std::endl;
+        // std::cout << left_node << " " << right_node << " " << rod_idx << std::endl;
+        // std::cout << fixed_by_crossing[left_node] << " " << fixed_by_crossing[right_node] << std::endl;
+        // std::getchar();
+        
+        // if((fixed_by_crossing[left_node] || left_node == 0) && (fixed_by_crossing[right_node] || right_node == indices.size() - 1))
+        //     return true;
+        // else
+        //     return false;
+        bool fix_left = fixed_by_crossing[left_node] || left_node == 0;
+        bool fix_right = fixed_by_crossing[right_node] || right_node == indices.size() - 1;
+        if (!fix_left && !fix_right)
+            return false;
+        return true;
+    }
     int location = std::distance(dof_node_idx.begin(), iter);
     if (fixed_by_crossing[location])
         return true;

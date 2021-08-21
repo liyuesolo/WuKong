@@ -62,7 +62,7 @@ const char* test_case_names[] = {
     "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign"
 };
 
-TestCase test_current = StaticSolve;
+TestCase test_current = InverseDesign;
 
 double t = 0.0;
 

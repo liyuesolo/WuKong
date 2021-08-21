@@ -25,7 +25,7 @@ void Homogenization<T, dim>::initialize()
     sim.disable_sliding = false;
     sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    sim.buildSceneFromUnitPatch(12);
+    sim.buildSceneFromUnitPatch(16);
     
     // sim.buildPlanePeriodicBCScene3x3();
     

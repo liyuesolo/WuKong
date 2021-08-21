@@ -6,6 +6,27 @@
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::resetScene()
+{ 
+    deformed_states = rest_states; 
+    for (auto& rod : Rods)
+    {
+        rod->reference_twist.setZero();
+        rod->reference_angles.setZero();
+    }
+    for (auto& crossing : rod_crossings)
+    {
+        crossing->omega.setZero();
+        crossing->rotation_accumulated.setIdentity();
+    }
+
+    for (auto& rod : Rods)
+    {
+        rod->setupBishopFrame();
+    }
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::computeBoundingBox(TV& bottom_left, TV& top_right)
 {
     bottom_left.setConstant(1e6);
@@ -106,6 +127,19 @@ void EoLRodSim<T, dim>::fixRegionalDisplacement(
                 dirichlet_dof[crossing->reduced_dof_offset + d] = 0.0;
         }
     }
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::fixCrossingLagrangian(int crossing_idx, 
+    TV delta, Mask mask)
+{
+    auto crossing = rod_crossings[crossing_idx];
+    auto rod = Rods[crossing->rods_involved.front()];
+    Offset offset;
+    rod->getEntry(crossing->node_idx, offset);
+    for (int d = 0; d < dim; d++)
+        if (mask[d])
+            dirichlet_dof[rod->reduced_map[offset[d]]] = delta[d];
 }
 
 template<class T, int dim>
@@ -322,7 +356,7 @@ void EoLRodSim<T, dim>::buildSystemDoFMatrix(
 }
 
 template<class T, int dim>
-bool EoLRodSim<T, dim>::projectDirichletDoFSystemMatrix(StiffnessMatrix& A)
+void EoLRodSim<T, dim>::projectDirichletDoFSystemMatrix(StiffnessMatrix& A)
 {
     iterateDirichletDoF([&](int offset, T target)
     {
@@ -330,6 +364,18 @@ bool EoLRodSim<T, dim>::projectDirichletDoFSystemMatrix(StiffnessMatrix& A)
         A.col(offset) *= 0.0;
         A.coeffRef(offset, offset) = 1.0;
     });
+}
+
+template<class T, int dim>
+void EoLRodSim<T, dim>::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data)
+{
+    for (auto iter : data)
+    {
+        A.row(iter.first) *= 0.0;
+        A.col(iter.first) *= 0.0;
+        A.coeffRef(iter.first, iter.first) = 1.0;
+    }
+
 }
 
 // template<class T, int dim>
@@ -754,6 +800,9 @@ void EoLRodSim<T, dim>::advanceOneStep()
     VectorXT dq(n_dof);
     dq.setZero();
     
+    // checkHessianPD(dq);
+    // return;
+
     staticSolve(dq);
     
     VectorXT dq_projected = dq;
@@ -776,17 +825,17 @@ void EoLRodSim<T, dim>::advanceOneStep()
     }
 
     std::cout << "E total: " << e_total << std::endl;
-    // std::cout << "total stretching " << addStretchingEnergy() << std::endl;
-    // std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
-    //                                 add3DPBCBendingAndTwistingEnergy(true, false) + 
-    //                                 addJointBendingAndTwistingEnergy(true, false) << std::endl;
+    std::cout << "total stretching " << addStretchingEnergy() << std::endl;
+    std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
+                                    add3DPBCBendingAndTwistingEnergy(true, false) + 
+                                    addJointBendingAndTwistingEnergy(true, false) << std::endl;
 
-    // std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
-    //                                 add3DPBCBendingAndTwistingEnergy(false, true) + 
-    //                                 addJointBendingAndTwistingEnergy(false, true) << std::endl;
+    std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
+                                    add3DPBCBendingAndTwistingEnergy(false, true) + 
+                                    addJointBendingAndTwistingEnergy(false, true) << std::endl;
     
     
-    // checkHessianPD(dq);
+    checkHessianPD(dq);
 
     // VectorXT force(W.rows()); force.setZero();
     // addPBCForce(force);

@@ -81,6 +81,8 @@ public:
 
     using Offset = Vector<int, dim + 1>;
     using Range = Vector<T, 2>;
+    using Mask = Vector<bool, dim>;
+    using Mask2 = Vector<bool, 2>;
 
     
     int N_PBC_BENDING_ELE = 5;
@@ -343,7 +345,9 @@ public:
     T computeResidual(Eigen::Ref<VectorXT> residual, Eigen::Ref<const VectorXT> dq);
     
     
-    bool projectDirichletDoFSystemMatrix(StiffnessMatrix& A);
+    void projectDirichletDoFSystemMatrix(StiffnessMatrix& A);
+
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
 
     void addStiffnessMatrix(std::vector<Eigen::Triplet<T>>& entry_K,
          Eigen::Ref<const VectorXT> dq);
@@ -401,6 +405,8 @@ public:
         auto rod = Rods[crossing->rods_involved.front()];
         rod->x(crossing->node_idx, x);
     }
+
+    void fixCrossingLagrangian(int crossing_idx, TV delta, Mask mask);
 
     void computeBoundingBox(TV& bottom_left, TV& top_right);
     

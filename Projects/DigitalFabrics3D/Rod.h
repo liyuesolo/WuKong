@@ -19,6 +19,8 @@ template<class T, int dim>
 struct RodCrossing
 {
     using TV = Vector<T, dim>;
+    using Mask = Vector<bool, dim>;
+
     int node_idx;
     bool is_fixed;
     
@@ -68,6 +70,7 @@ public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using VectorXi = Eigen::VectorXi;
     using Offset = Vector<int, dim + 1>;
+    using Mask = Vector<bool, dim>;
 
     T B[2][2];
 
@@ -208,6 +211,7 @@ public:
     }
 
 // ============================== Lagrangian Eulerian value helpers ===================================
+    // deformed Lagrangian position
     void x(int node_idx, TV& pos)
     {
         pos = TV::Zero();
@@ -218,19 +222,21 @@ public:
         }
         
     }
-
+    // deformed Eulerian position
     void u(int node_idx, T& pos)
     {
         Offset idx = offset_map[node_idx];
         pos = full_states[idx[dim]];
     }
 
+    // undeformed Eulearian position
     void U(int node_idx, T& pos)
     {
         Offset idx = offset_map[node_idx];
         pos = rest_states[idx[dim]];
     }
 
+    // undeformed Lagrangian position
     void X(int node_idx, TV& pos)
     {
         TV dXdu = TV::Zero(), d2Xdu2 = TV::Zero();
@@ -239,6 +245,7 @@ public:
         rest_state->getMaterialPos(u, pos, dXdu, d2Xdu2, false, false);
     }
 
+    // undeformed Lagrangian position and dXdu
     void XdX(int node_idx, TV& pos, TV& dpos)
     {
         TV d2Xdu2 = TV::Zero();
@@ -247,6 +254,7 @@ public:
         rest_state->getMaterialPos(u, pos, dpos, d2Xdu2, true, false);
     }
 
+    // undeformed Lagrangian position, dXdu, d2Xdu2
     void XdXddX(int node_idx, TV& pos, TV& dpos, TV& ddpos)
     {
         Offset idx = offset_map[node_idx];
@@ -255,6 +263,44 @@ public:
     }
 
 // ============================== helpers ===================================
+    std::pair<int, int> neighbouringCrossingIndex(int current_crossing_location)
+    {
+        auto iter = std::find(dof_node_location.begin(), dof_node_location.end(), current_crossing_location);
+        if (iter == dof_node_location.end())
+        {
+            std::cout << "[Rod.h] invalid crossing node location on rod" << std::endl;
+            std::exit(0);
+        }
+        int location = std::distance(dof_node_location.begin(), iter);
+        if (location == 0)
+        {
+            int left = indices.front();
+            int right = -1;
+            if (location == dof_node_location.size() - 1)
+                right = indices.back();
+            else
+                right = indices[dof_node_location[location + 1]];
+            return std::make_pair(left, right);
+        }
+        else if(location == dof_node_location.size() - 1)
+        {
+            int right = indices.back();
+            int left = -1;
+            if (location == 0)
+                left = indices.front();
+            else
+                left = indices[dof_node_location[location - 1]];
+            return std::make_pair(left, right);
+        }
+        else
+        {
+            int left = indices[dof_node_location[location - 1]];
+            int right = indices[dof_node_location[location + 1]];
+            return std::make_pair(left, right);
+        }
+
+
+    }
 
     int entry(int node_idx)
     {
@@ -286,6 +332,16 @@ public:
     void getEntry(int node_idx, Offset& idx)
     {
         idx = offset_map[node_idx];
+    }
+
+    void getEntryReduced(int node_idx, Offset& idx)
+    {
+        idx = offset_map[node_idx];
+        for (int d = 0; d < dim; d++)
+        {
+            idx[d] = reduced_map[idx[d]];
+        }
+        
     }
 
     void getEntryByLocation(int node_location, Offset& idx)
@@ -347,10 +403,12 @@ public:
     }
 
     void fixPointLagrangianByID(int node_idx, TV delta, 
+        Mask mask,
         std::unordered_map<int, T>& dirichlet_data)
     {
         for (int d = 0; d < dim; d++)
-            dirichlet_data[reduced_map[offset_map[node_idx][d]]] = delta[d];
+            if (mask[d])
+                dirichlet_data[reduced_map[offset_map[node_idx][d]]] = delta[d];
     }
 
     void fixEndPointLagrangian(std::unordered_map<int, T>& dirichlet_data)

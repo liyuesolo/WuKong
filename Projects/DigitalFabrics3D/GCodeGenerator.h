@@ -55,6 +55,9 @@ public:
     ~GCodeGenerator() {}
 
 public:
+    void activeTexticleGCode(bool fused = false);
+    void activeTexticleGCode2(bool fused = false);
+
     void crossingTest();
 
     void generateGCodeFromRodsCurveGripperHardCoded();
