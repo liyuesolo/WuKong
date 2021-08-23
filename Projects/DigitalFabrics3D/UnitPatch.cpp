@@ -75,7 +75,7 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 15)
         buildSquareCrossJointScene(32);
     else if (patch_type == 16)
-        buildActiveTextileScene(16);
+        buildActiveTextileScene(32);
 }
 
 template<class T, int dim>
@@ -170,9 +170,9 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
             int sub_div_extend;
 
             TV extend_to = passing_points.back() + 
-                (passing_points.back() - passing_points.front()) * 0.5;
+                (passing_points.back() - passing_points.front()) * 0.3;
             TV extend = passing_points.front() - 
-                    (passing_points.back() - passing_points.front()) * 0.5;
+                    (passing_points.back() - passing_points.front()) * 0.3;
             if (type == OneHorizontal || type == HorizontalFree || type == LongRec)
             {
                 from = passing_points.front();
@@ -216,10 +216,10 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
             }
 
             TV extend = passing_points.back() + 
-                (passing_points.back() - passing_points.front()) * 0.5;
+                (passing_points.back() - passing_points.front()) * 0.3;
 
             TV extend_from = passing_points.front() - 
-                (passing_points.back() - passing_points.front()) * 0.5;
+                (passing_points.back() - passing_points.front()) * 0.3;
 
             TV to, from;
             int sub_div_extend;
@@ -363,7 +363,7 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
                     // std::cout << node_idx << std::endl;
                     auto crossing = sim.rod_crossings[node_idx];
                     // if (row == half_row)
-                        // crossing->is_fixed = false;
+                        crossing->is_fixed = false;
                     crossing->sliding_ranges[1] = Range::Ones() * 1e6;
                     // std::cout << crossing->rods_involved[1] << std::endl;
                     // if (row == half_row)
@@ -372,25 +372,25 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
                 }    
             }
             auto crossing = sim.rod_crossings[5];
-            // crossing->is_fixed = false;
+            crossing->is_fixed = false;
             crossing->sliding_ranges[0] = Range::Ones() * 1e6;
             sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[0] = false;
             crossing = sim.rod_crossings[10];
-            // crossing->is_fixed = false;
+            crossing->is_fixed = false;
             crossing->sliding_ranges[0] = Range::Ones() * 1e6;
             sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[0] = false;
             crossing = sim.rod_crossings[15];
-            // crossing->is_fixed = false;
+            crossing->is_fixed = false;
             crossing->sliding_ranges[0] = Range::Ones() * 1e6;
             sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[0] = false;
 
-            sim.rod_crossings[6]->is_fixed = false;
-            sim.rod_crossings[7]->is_fixed = false;
-            sim.rod_crossings[8]->is_fixed = false;
+            // sim.rod_crossings[6]->is_fixed = false;
+            // sim.rod_crossings[7]->is_fixed = false;
+            // sim.rod_crossings[8]->is_fixed = false;
 
-            sim.rod_crossings[11]->is_fixed = false;
-            sim.rod_crossings[12]->is_fixed = false;
-            sim.rod_crossings[13]->is_fixed = false;
+            // sim.rod_crossings[11]->is_fixed = false;
+            // sim.rod_crossings[12]->is_fixed = false;
+            // sim.rod_crossings[13]->is_fixed = false;
 
 
         }
@@ -422,13 +422,16 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
 
         
 
-        T r = 0.1 * sim.unit;
+        T r = 0.05 * sim.unit;
         TV center1, center2, center3, center4;
         sim.Rods[n_row-1]->x(sim.Rods[n_row-1]->indices.front(), center1);
         sim.Rods[n_row-1]->x(sim.Rods[n_row-1]->indices.back(), center2);
 
         sim.Rods[0]->x(sim.Rods[0]->indices.front(), center3);
         sim.Rods[0]->x(sim.Rods[0]->indices.back(), center4);
+
+        // sim.Rods[n_row-1]->fixEndPointLagrangian(sim.dirichlet_dof);
+        // sim.Rods[0]->fixPointLagrangianByID(0, TV::Zero(), Mask::Ones(), sim.dirichlet_dof);
 
         auto circle1 = [r, center1](const TV& x)->bool
         {
@@ -539,6 +542,26 @@ void UnitPatch<T, dim>::buildActiveTextileScene(int sub_div)
         // dq.setZero();
         // sim.checkHessianPD(dq);
         // GCodeGenerator<T, dim>(sim, "acitive_textile2_all_fused.gcode").activeTexticleGCode2(true);
+        // TV target = TV(0.0133826, 0.0601781, 0.0324977);
+
+        TV traj_center;
+        sim.getCrossingPosition(12, traj_center);
+        TV tip;
+        sim.getCrossingPosition(4, tip);
+        T r_traj = (tip - traj_center).norm() * 0.8;
+        T d_theta = M_PI / 2.0 / 5.0;
+        TV up = traj_center + TV(0, 0, r_traj);
+        for (T theta = d_theta; theta < M_PI / 2.0 + 1e-4; theta+=d_theta)
+        {
+            TV target;
+            target[2] = r_traj * std::sin(theta);
+            
+            target.template segment<2>(0) = (traj_center + std::cos(theta) * (tip - traj_center)).template segment<2>(0);
+            sim.targets.push_back(target);
+        }
+        
+        // sim.targets.push_back(target);
+        
     }
 }
 

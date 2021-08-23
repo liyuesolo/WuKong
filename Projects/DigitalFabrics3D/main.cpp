@@ -23,6 +23,8 @@ EoLRodSim<T, dim> eol_sim;
 HybridC2Curve<T, dim> hybrid_curve;
 Homogenization<T, dim> homogenizer(eol_sim);
 
+using TV = Vector<T, dim>;
+
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
@@ -52,6 +54,11 @@ static float theta_pbc = 0;
 static float strain = 1.0;
 static int n_rod_per_yarn = 4;
 static int modes = 9;
+
+static bool show_target = true;
+static bool show_tunnel = true;
+static bool show_bc = true;
+static bool target_drawn = false;
 
 bool reset = false;
 enum TestCase{
@@ -114,30 +121,81 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             viewer.data().set_colors(C);
         if (per_yarn)
         {
-            if (eol_sim.new_frame_work)
-            {
-                int n_rods = 0;
-                for (auto& rod : eol_sim.Rods)
-                    n_rods += rod->numSeg();
-                if (show_rest)
-                    C.resize(n_rods * n_faces * 2, 3);
-                else
-                    C.resize(n_rods * n_faces, 3);
-                tbb::parallel_for(0, n_rods, [&](int rod_idx){
-                    for(int i = 0; i < n_faces; i++)
-                    {
-                        // if( int(std::floor(T(i) / 2)) % 2 == 0)
-                        if( i % 2 == 0)
-                            C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
-                        else
-                            C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 0, 1);
-                        if (show_rest)
-                            C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
-                    }
-                    });
-            }
+            
+            int n_rods = 0;
+            for (auto& rod : eol_sim.Rods)
+                n_rods += rod->numSeg();
+            if (show_rest)
+                C.resize(n_rods * n_faces * 2, 3);
             else
-                eol_sim.getColorPerYarn(C, n_rod_per_yarn);
+                C.resize(n_rods * n_faces, 3);
+            tbb::parallel_for(0, n_rods, [&](int rod_idx){
+                for(int i = 0; i < n_faces; i++)
+                {
+                    // if( int(std::floor(T(i) / 2)) % 2 == 0)
+                    if( i % 2 == 0)
+                        C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                    else
+                        C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 0, 1);
+                    if (show_rest)
+                        C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
+                }
+                });
+            if (test_current == InverseDesign)
+            {
+                viewer.data().clear();
+                tbb::parallel_for(0, n_rods, [&](int rod_idx){
+                for(int i = 0; i < n_faces; i++)
+                {
+                    // if( int(std::floor(T(i) / 2)) % 2 == 0)
+                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                    if (show_rest)
+                        C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
+                }
+                });
+                if (show_target && !target_drawn)
+                {
+                    for (auto target : eol_sim.targets)
+                    {
+                        appendSphereMeshWithColor(V, F, C, 0.03, target / eol_sim.unit);
+                    }
+                    
+                    target_drawn = false;
+                }
+                else
+                {
+                    target_drawn = false;
+                }
+            }
+            if (show_tunnel)
+            {
+                viewer.data().clear();
+                for (auto crossing : eol_sim.rod_crossings)
+                {
+                    if (crossing->is_fixed)
+                        continue;
+                    int node_idx = crossing->node_idx;
+                    TV pos;
+                    eol_sim.getCrossingPosition(node_idx, pos);
+                    for (int i = 0; i < crossing->rods_involved.size(); i++)
+                    {
+                        if (crossing->sliding_ranges[i].norm() < 1e-6)
+                            continue;
+                        Eigen::Matrix3d R;
+                        if (i % 2 == 0) 
+                            R = rotationMatrixFromEulerAngle(0.0, 0.0, M_PI/ 2.0);
+                        if (i % 2 == 1) 
+                            R = rotationMatrixFromEulerAngle(M_PI/ 2.0, 0.0, M_PI/ 2.0);
+                        appendTorusMeshWithColor(V, F, C, 0.01, pos / eol_sim.unit, R);        
+                    }
+                }
+            }
+            if (show_bc)
+            {
+                viewer.data().clear();
+                
+            }
+            viewer.data().set_mesh(V, F); 
             viewer.data().set_colors(C);
             if(tileUnit)
             {
@@ -308,7 +366,7 @@ int main(int argc, char *argv[])
             viewer.core().align_camera_center(viewer.data().V, viewer.data().F);
         };
     }
-    else if (test_current == StaticSolve || test_current == InverseDesign)
+    else if (test_current == StaticSolve)
     {
         viewer.plugins.push_back(&menu);
         
@@ -435,6 +493,79 @@ int main(int argc, char *argv[])
                 {
                     updateScreen(viewer);
                 }   
+            }
+            if (ImGui::Button("Solve", ImVec2(-1,0)))
+            {
+                eol_sim.advanceOneStep();
+                
+                updateScreen(viewer);
+            }
+            if (ImGui::Button("Reset", ImVec2(-1,0)))
+            {
+                eol_sim.resetScene();
+                updateScreen(viewer);
+            }
+        };
+    }
+    else if (test_current == InverseDesign)
+    {
+        viewer.plugins.push_back(&menu);
+        
+        menu.callback_draw_viewer_menu = [&]()
+        {   
+            if (ImGui::CollapsingHeader("Inverse", ImGuiTreeNodeFlags_DefaultOpen))
+            {   
+                if (ImGui::Checkbox("ShowTarget", &show_target))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+            }
+            if (ImGui::CollapsingHeader("Configurations", ImGuiTreeNodeFlags_DefaultOpen))
+            {   
+                if (ImGui::Checkbox("RegularizeEulerian", &eol_sim.add_eularian_reg))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Tunnel", &eol_sim.add_contact_penalty))
+                {
+                    if(eol_sim.add_contact_penalty)
+                        eol_sim.releaseCrossing();
+                    else
+                        eol_sim.fixCrossing();
+                    
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("ShowTunnel", &show_tunnel))
+                {
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Stretching", &eol_sim.add_stretching))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Bending", &eol_sim.add_bending))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("Twisting", &eol_sim.add_twisting))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("RigidJoint", &eol_sim.add_rigid_joint))
+                {
+                    eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("ShowRest", &show_rest))
+                {
+                    updateScreen(viewer);
+                }
             }
             if (ImGui::Button("Solve", ImVec2(-1,0)))
             {
@@ -782,6 +913,8 @@ int main(int argc, char *argv[])
     }
     else if (test_current == StaticSolve || test_current == InverseDesign)
     {
+        if (test_current == InverseDesign)
+            viewer.core().background_color.setOnes();
         viewer.data().set_face_based(true);
         viewer.data().shininess = 1.0;
         viewer.data().point_size = 25.0;

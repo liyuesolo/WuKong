@@ -18,7 +18,17 @@
 void appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         double scale = 1.0, Vector<double, 3> shift = Vector<double, 3>::Zero());
 
+void appendSphereMeshWithColor(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C,
+        double scale = 1.0, Vector<double, 3> shift = Vector<double, 3>::Zero());
+
+void appendTorusMeshWithColor(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C,
+        double scale = 1.0, 
+        Vector<double, 3> shift = Vector<double, 3>::Zero(),
+        Eigen::Matrix3d R = Eigen::Matrix3d::Identity());
+
 void removeSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+
+void removeSphereMeshWithColor(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
 template <int dim>
 void appendCylinderMesh(igl::opengl::glfw::Viewer& viewer,

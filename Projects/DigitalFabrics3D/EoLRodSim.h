@@ -195,7 +195,8 @@ public:
     StiffnessMatrix W;
 
 
-
+    // inverse
+    std::vector<TV> targets;
 public:
 
     EoLRodSim()
@@ -366,7 +367,7 @@ public:
 
     void computeSmallestEigenVector(const StiffnessMatrix& K, Eigen::Ref<VectorXT> eigen_vector);
 
-    void staticSolve(Eigen::Ref<VectorXT> dq);
+    bool staticSolve(Eigen::Ref<VectorXT> dq);
 
     void advanceOneStep();
 
@@ -392,7 +393,7 @@ public:
         }
     }
 
-    void forward(Eigen::Ref<VectorXT> dq);
+    bool forward(Eigen::Ref<VectorXT> dq);
     void inverse();
 
     void fixRegion(std::function<bool(const TV&)> inside_region);

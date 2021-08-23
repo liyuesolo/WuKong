@@ -572,12 +572,12 @@ T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq,
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
+bool EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
 {
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 1000;
+    int max_newton_iter = 200;
 
     while (true)
     {
@@ -615,6 +615,10 @@ void EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
     
     // if (verbose)
         std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+    
+    if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
+        return false;
+    return true;
 }
 
 template<class T, int dim>
@@ -778,10 +782,12 @@ void EoLRodSim<T, dim>::checkHessianPD(Eigen::Ref<const VectorXT> dq)
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::forward(Eigen::Ref<VectorXT> dq)
+bool EoLRodSim<T, dim>::forward(Eigen::Ref<VectorXT> dq)
 {
     
-    staticSolve(dq);
+    bool succeed = staticSolve(dq);
+    if (!succeed)
+        return false;
     
     VectorXT dq_projected = dq;
 
@@ -790,6 +796,7 @@ void EoLRodSim<T, dim>::forward(Eigen::Ref<VectorXT> dq)
         });
     dq = dq_projected;
     deformed_states = rest_states + W * dq_projected;
+    return true;
 }
 
 template<class T, int dim>
