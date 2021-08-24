@@ -193,9 +193,55 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 
 
 template<class T, int dim>
-void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded()
+void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n_col, bool fused)
 {
-    
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 40);
+    };
+
+
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+        if (fused)
+        {
+            for (int row = 0; row < n_row; row++)
+            {
+                generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                generateCodeSingleRod(col + n_row, scaleAndShift, true, 1.5 * rod_radius_in_mm, 1.5 * rod_radius_in_mm);
+            }            
+        }
+        else
+        {
+            for (int row = 0; row < n_row; row++)
+            {
+                generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                generateCodeSingleRod(col + n_row, scaleAndShift, true, 1.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm);
+            }
+
+            TV3 heights = TV3(first_layer_height, first_layer_height, 12.0 * first_layer_height);
+            for (int row = 0; row < n_row; row++)
+            {
+                for (int col = 0; col < n_col; col++)
+                {
+                    int crossing_id = row * n_col + col;
+                    addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.015, 0.015));
+                }
+            }
+        }
+        writeFooter();
+    }
 }
 
 
@@ -478,7 +524,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     auto rod = sim.Rods[rod_idx];
 
     T rod_radius_in_mm;
-    rod_radius_in_mm = rod->a * 1e3;
+    rod_radius_in_mm = rod->a * 1e3 * 2.0;
     
     TV x0; rod->x(rod->indices.front(), x0);
     TV front, back;
@@ -488,7 +534,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     scaleAndShift(extend);
 
     //move slightly out of domain in case it doesn't stick at the beginning
-    x0 -= (back - front).normalized() * 0.2 * (front - back).norm();
+    x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
     scaleAndShift(x0);
     TV front_scaled = front;
     scaleAndShift(front_scaled);
@@ -500,7 +546,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
 
     // 0.2 is used for better sticking at the beginning
     x0[dim - 1] = 0.2;
-    moveTo(x0, 100);
+    moveTo(x0, 50);
 
     writeLine(x0, front_scaled, rod_radius_in_mm);
 
@@ -563,7 +609,7 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     });
     
     
-    TV xn = back + (back - front).normalized() * 0.2 * (front - back).norm();
+    TV xn = back + (back - front).normalized() * 0.3 * (front - back).norm();
     // 
     scaleAndShift(xn);
     scaleAndShift(back);
@@ -586,7 +632,7 @@ void GCodeGenerator<T, dim>::addSingleTunnelOnCrossingWithFixedRange(int crossin
 {
     if constexpr (dim == 3)
     {
-        tunnel_height = 0.3;
+        tunnel_height = 0.2;
         auto crossing = sim.rod_crossings[crossing_id];
         auto rod = sim.Rods[crossing->rods_involved[direction]];
         TV front, back;
@@ -811,7 +857,7 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsNoTunnel()
             
             scaleAndShift(xi); scaleAndShift(xj);
             
-            T rod_radius_in_mm = rod->a * 1e3;
+            T rod_radius_in_mm = rod->a * 1e3 * 2.0;
             writeLine(xi, xj, rod_radius_in_mm);
         });
     }
@@ -850,7 +896,7 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsCurveGripperHardCoded()
                 xi[dim - 1] = first_layer_height + layer_height * 4.0;
                 xj[dim - 1] = first_layer_height + layer_height * 4.0;
             }
-            T rod_radius_in_mm = rod->a * 1e3;
+            T rod_radius_in_mm = rod->a * 1e3 * 2.0;
             writeLine(xi, xj, rod_radius_in_mm);
         });
     }
@@ -911,12 +957,12 @@ void GCodeGenerator<T, dim>::moveTo(const TV& to, T speed)
     std::string cmd;
     if (extrusion_mode == Absolute)
     {
-        retract(current_E - 0.2);
+        retract(current_E - 0.4);
         cmd += "G1 F" + std::to_string(speed) + " X" + 
             std::to_string(to[0]) + " Y" + std::to_string(to[1]) +
             " Z" + std::to_string(to[2]) + "\n";
         gcode << cmd;
-        retract(current_E + 0.2);
+        retract(current_E + 0.4);
     }
     else if (extrusion_mode == Relative)
     {

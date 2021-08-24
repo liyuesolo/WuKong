@@ -66,11 +66,11 @@ public:
     void generateGCodeFromRodsFixedGridGripperHardCoded();
 
     void generateGCodeFromRodsShelterHardCoded();
-    void generateGCodeFromRodsGridHardCoded();
+    void generateGCodeFromRodsGridHardCoded(int n_row, int n_col, bool fused);
 
     void generateGCodeFromRodsNoTunnel();
 
-    void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 1000.0);
+    void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 600.0);
     void moveTo(const TV& to, T speed = 3000.0);
 
     void addSingleTunnel(const TV& from, const TV& to, T height);

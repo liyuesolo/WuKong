@@ -43,12 +43,16 @@ public:
     void buildGripperScene(int sub_div);
     void buildGridLayoutGripper(int sub_div);
     void buildSquareCrossJointScene(int sub_div);
+
+    void buildInterlockingSquareScene(int sub_div);
+    void buildDenseInterlockingSquareScene(int sub_div);
     
     void buildActiveTextileScene(int sub_div);
     
     
     void buildTestJoint(int sub_div);
     void buildXJointsScene(int sub_div);
+    void buildXJointsScene2(int sub_div);
 
     void buildShelterScene(int sub_div);
     void buildGridScene2(int sub_div);
@@ -105,6 +109,9 @@ private:
         int& dof_cnt);
     
     void addPoint(const TV& point, int& full_dof_cnt, int& node_cnt);
+
+    void addCrossingPoint(std::vector<TV>& existing_nodes, 
+        const TV& point, int& full_dof_cnt, int& node_cnt);
 };
 
 #endif

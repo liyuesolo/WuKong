@@ -56,7 +56,7 @@ static int n_rod_per_yarn = 4;
 static int modes = 9;
 
 static bool show_target = true;
-static bool show_tunnel = true;
+static bool show_tunnel = false;
 static bool show_bc = true;
 static bool target_drawn = false;
 
@@ -69,7 +69,7 @@ const char* test_case_names[] = {
     "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign"
 };
 
-TestCase test_current = InverseDesign;
+TestCase test_current = StaticSolve;
 
 double t = 0.0;
 
@@ -167,6 +167,15 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
                     target_drawn = false;
                 }
             }
+            tbb::parallel_for(0, n_rods, [&](int rod_idx){
+                for(int i = 0; i < n_faces; i++)
+                {
+                    // if( int(std::floor(T(i) / 2)) % 2 == 0)
+                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                    if (show_rest)
+                        C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
+                }
+            });
             if (show_tunnel)
             {
                 viewer.data().clear();
@@ -193,7 +202,12 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             if (show_bc)
             {
                 viewer.data().clear();
-                
+                for (auto data : eol_sim.boundary_spheres)
+                {
+                    TV center = data.first;
+                    T r = data.second;
+                    appendSphereMeshWithColor(V, F, C, r / eol_sim.unit, center / eol_sim.unit);
+                }
             }
             viewer.data().set_mesh(V, F); 
             viewer.data().set_colors(C);
@@ -400,26 +414,7 @@ int main(int argc, char *argv[])
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
                 }
-                if (ImGui::Checkbox("FixEulerian", &eol_sim.disable_sliding))
-                {
-                    if(!eol_sim.disable_sliding)
-                    {
-                        // eol_sim.freeEulerian();
-                        eol_sim.resetScene();
-                        updateScreen(viewer);
-                    }
-                    else
-                    {
-                        // eol_sim.fixEulerian();
-                        eol_sim.resetScene();
-                        updateScreen(viewer);
-                    }
-                }
-                if (ImGui::Checkbox("RegularizeEulerian", &eol_sim.add_eularian_reg))
-                {
-                    eol_sim.resetScene();
-                    updateScreen(viewer);
-                }
+                
                 if (ImGui::Checkbox("Tunnel", &eol_sim.add_contact_penalty))
                 {
                     if(eol_sim.add_contact_penalty)
@@ -428,6 +423,10 @@ int main(int argc, char *argv[])
                         eol_sim.fixCrossing();
                     
                     eol_sim.resetScene();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("ShowTunnel", &show_tunnel))
+                {
                     updateScreen(viewer);
                 }
                 if (ImGui::Checkbox("Shearing", &eol_sim.add_shearing))
@@ -539,6 +538,10 @@ int main(int argc, char *argv[])
                     updateScreen(viewer);
                 }
                 if (ImGui::Checkbox("ShowTunnel", &show_tunnel))
+                {
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("ShowBCSphere", &show_bc))
                 {
                     updateScreen(viewer);
                 }
@@ -913,7 +916,7 @@ int main(int argc, char *argv[])
     }
     else if (test_current == StaticSolve || test_current == InverseDesign)
     {
-        if (test_current == InverseDesign)
+        // if (test_current == InverseDesign)
             viewer.core().background_color.setOnes();
         viewer.data().set_face_based(true);
         viewer.data().shininess = 1.0;

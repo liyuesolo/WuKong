@@ -1,6 +1,8 @@
 #include "EoLRodSim.h"
 #include <Eigen/SparseCore>
 #include <fstream>
+#include <chrono>
+#include <iomanip>
 
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
@@ -467,7 +469,9 @@ bool EoLRodSim<T, dim>::linearSolve(StiffnessMatrix& K,
 
     return true;
 }
-// #include <iomanip>
+
+
+
 template<class T, int dim>
 T EoLRodSim<T, dim>::lineSearchNewton(Eigen::Ref<VectorXT> dq, 
         Eigen::Ref<const VectorXT> residual, 
@@ -577,8 +581,8 @@ bool EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 200;
-
+    int max_newton_iter = 500;
+    // std::chrono::high_resolution_clock::time_point time = std::chrono::high_resolution_clock::now();
     while (true)
     {
         VectorXT residual(W.cols());
@@ -587,14 +591,12 @@ bool EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         if (cnt == 0)
         {
             dq += perturb;
-            
-            // dq.setRandom();
-            // dq *= 1.0 / dq.norm();
-            // dq -= 0.5 * VectorXT::Ones(dq.rows());
-            // dq *= 0.01 * unit;
-            
         }
+
+        
         computeResidual(residual, dq);
+
+        // auto f_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - time ).count();
 
         residual_norm = residual.norm();
         if (verbose)
@@ -608,6 +610,9 @@ bool EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
         
         dq_norm = lineSearchNewton(dq, residual, 50);
 
+        // auto newton_time = std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::high_resolution_clock::now() - time ).count();
+        // std::cout << f_time / 1000.0 << " " << newton_time / 1000.0 << std::endl;
+        // std::getchar();
         if(cnt == max_newton_iter || dq_norm > 1e10)
             break;
         cnt++;
@@ -820,29 +825,29 @@ void EoLRodSim<T, dim>::advanceOneStep()
     deformed_states = rest_states + W * dq_projected;
     
     
-    T e_total = 0.0;
-    if (add_stretching)
-        e_total += addStretchingEnergy();
-    if constexpr (dim == 3)
-    {
-        e_total += add3DBendingAndTwistingEnergy();
-        if (add_pbc)
-            e_total += add3DPBCBendingAndTwistingEnergy();
-        e_total += addJointBendingAndTwistingEnergy();
-    }
+    // T e_total = 0.0;
+    // if (add_stretching)
+    //     e_total += addStretchingEnergy();
+    // if constexpr (dim == 3)
+    // {
+    //     e_total += add3DBendingAndTwistingEnergy();
+    //     if (add_pbc)
+    //         e_total += add3DPBCBendingAndTwistingEnergy();
+    //     e_total += addJointBendingAndTwistingEnergy();
+    // }
 
-    std::cout << "E total: " << e_total << std::endl;
-    std::cout << "total stretching " << addStretchingEnergy() << std::endl;
-    std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
-                                    add3DPBCBendingAndTwistingEnergy(true, false) + 
-                                    addJointBendingAndTwistingEnergy(true, false) << std::endl;
+    // std::cout << "E total: " << e_total << std::endl;
+    // std::cout << "total stretching " << addStretchingEnergy() << std::endl;
+    // std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
+    //                                 add3DPBCBendingAndTwistingEnergy(true, false) + 
+    //                                 addJointBendingAndTwistingEnergy(true, false) << std::endl;
 
-    std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
-                                    add3DPBCBendingAndTwistingEnergy(false, true) + 
-                                    addJointBendingAndTwistingEnergy(false, true) << std::endl;
+    // std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
+    //                                 add3DPBCBendingAndTwistingEnergy(false, true) + 
+    //                                 addJointBendingAndTwistingEnergy(false, true) << std::endl;
     
     
-    checkHessianPD(dq);
+    // checkHessianPD(dq);
 
     // VectorXT force(W.rows()); force.setZero();
     // addPBCForce(force);

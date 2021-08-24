@@ -13,7 +13,8 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
     T theta = 2.0 * EIGEN_PI / T(n_div);
     TV3Stack points = TV3Stack::Zero(3, n_div);
 
-    T visual_R = 0.01;
+    // T visual_R = 0.01;
+    
     // bottom face vertices
     for(int i = 0; i < n_div; i++)
         points.col(i) = TV3(visual_R * std::cos(theta * T(i)), 0.0, visual_R*std::sin(theta*T(i)));
@@ -178,7 +179,7 @@ void EoLRodSim<T, dim>::buildMeshFromRodNetwork(Eigen::MatrixXd& V, Eigen::Matri
     T theta = 2.0 * EIGEN_PI / T(n_div);
     TV3Stack points = TV3Stack::Zero(3, n_div);
 
-    T visual_R = 0.01;
+    
     // bottom face vertices
     for(int i = 0; i < n_div; i++)
         points.col(i) = TV3(visual_R * std::cos(theta * T(i)), 0.0, visual_R*std::sin(theta*T(i)));

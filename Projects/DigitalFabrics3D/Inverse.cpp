@@ -8,631 +8,139 @@ using namespace LBFGSpp;
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/DenseSymMatProd.h>
 
-// template<class T, int dim>
-// class LBFGSWrapper
-// {
-// public:
-//     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
-//     using TV = Vector<T, dim>;
-//     using Offset = Vector<int, dim + 1>;
-//     using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    
-// private:
-//     int n;
-//     EoLRodSim<T, dim>& sim;
-    
-//     int n0 = 29, n1 = 30;
-//     TV x0, x1;
-//     TV x0_target = TV(0.0377535,   0.0789261,  0);
-//     TV x1_target = TV(0.0479829,    0.0789278, 0);
-
-//     VectorXT computedOdx()
-//     {
-//         sim.Rods[5]->x(n0, x0);
-//         sim.Rods[6]->x(n1, x1);
-//         VectorXT dOdx = VectorXT::Zero(sim.deformed_states.rows());
-//         Offset offset0, offset1;
-//         sim.Rods[5]->getEntry(n0, offset0);
-//         sim.Rods[6]->getEntry(n1, offset1);
-//         dOdx.template segment<dim>(offset0[0]) = x0 - x0_target;
-//         dOdx.template segment<dim>(offset1[0]) = x1 - x1_target;
-//         return sim.W.transpose() * dOdx;
-//     }
-
-//     void updateDesignParameter(const VectorXT& new_p)
-//     {
-//         int cnt = 0;
-//         for (auto& crossing : sim.rod_crossings)
-//         {
-//             if (crossing->is_fixed)
-//             {
-//                 cnt += crossing->rods_involved.size() * 2;
-//                 continue;
-//             }
-//             for (int i = 0; i < crossing->rods_involved.size(); i++)
-//             {
-//                 // if (i == 0)
-//                 //     crossing->sliding_ranges[i].setZero();
-//                 // else
-//                 // {
-//                 //     crossing->sliding_ranges[i] = new_p.template segment<2>(cnt);
-//                 // }
-//                 crossing->sliding_ranges[i] = new_p.template segment<2>(cnt);
-//                 crossing->sliding_ranges[i][0] = std::max(0.0, crossing->sliding_ranges[i][0]);
-//                 crossing->sliding_ranges[i][1] = std::max(0.0, crossing->sliding_ranges[i][1]);
-//                 // std::cout << crossing->sliding_ranges[i].transpose() << std::endl;
-//                 cnt += 2;
-//             }
-//         }
-//     }
-    
-// public:
-//     LBFGSWrapper(int n_, EoLRodSim<T, dim>& _sim) : n(n_), sim(_sim) {}
-//     double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad)
-//     {
-//         updateDesignParameter(x);
-
-//         sim.resetScene();
-//         VectorXT dq(sim.W.cols()); dq.setZero();
-//         sim.forward(dq);
-//         sim.Rods[5]->x(n0, x0);
-//         sim.Rods[6]->x(n1, x1);
-
-//         int nx = sim.deformed_states.rows();
-
-//         StiffnessMatrix H;
-//         sim.buildSystemDoFMatrix(dq, H);
-//         VectorXT dOdx = computedOdx();
-//         // std::cout << "|dOdx| " << dOdx.norm() << std::endl;
-//         Eigen::SimplicialLLT<StiffnessMatrix> solver;
-//         solver.compute(H);
-
-//         VectorXT lambda = solver.solve(dOdx);
-//         // std::cout << "|lambda| " << lambda.norm() << std::endl;
-//         VectorXT dOdp(n); dOdp.setZero();
-
-//         VectorXT dfdp_full(n * nx);
-        
-//         sim.parallelContactdfdp(dfdp_full);
-//         dfdp_full *= -1.0;
-//         //de/dx = -f
-        
-//         // std::cout << "|dfdp_full| " << dfdp_full.norm() << std::endl;
-        
-//         for (int i = 0; i < n; i++)
-//         {
-//             VectorXT dfdp = sim.W.transpose() * dfdp_full.segment(i * nx, nx);
-            
-//             grad[i] = -lambda.dot(dfdp);
-//         }
-//         T obj = 0.5 * ((x0 - x0_target).dot((x0 - x0_target)) + (x1 - x1_target).dot((x1 - x1_target))); 
-//         std::cout << "E " << obj << std::endl;
-//         return obj;
-//     }
-// };
-
-
-// template<class T, int dim>
-// void EoLRodSim<T, dim>::resetScene()
-// { 
-//     deformed_states = rest_states; 
-//     for (auto& rod : Rods)
-//     {
-//         rod->reference_twist.setZero();
-//         rod->reference_angles.setZero();
-//     }
-//     for (auto& crossing : rod_crossings)
-//     {
-//         crossing->omega.setZero();
-//         crossing->rotation_accumulated.setIdentity();
-//     }
-
-//     for (auto& rod : Rods)
-//     {
-//         rod->setupBishopFrame();
-//     }
-// }
-
-// template<class T, int dim>
-// void EoLRodSim<T, dim>::inverse()
-// {
-//     if constexpr (dim == 3)
-//     {
-        
-//         int n_design = 1;
-        
-//         std::cout << "#design parameters: " << n_design << std::endl;
-//         VectorXT p(n_design);
-//         p.setZero();
-        
-//         // int loop_cnt = 0;
-//         // for (auto& crossing : rod_crossings)
-//         // {
-//         //     for (int i = 0; i < crossing->rods_involved.size(); i++)
-//         //     {
-//         //         p[loop_cnt++] = crossing->sliding_ranges[i][0];
-//         //         p[loop_cnt++] = crossing->sliding_ranges[i][1];
-                
-//         //     }
-            
-//         // }
-//         // std::cout << p.transpose() << std::endl;
-        
-//         int n0 = 29, n1 = 30;
-//         TV x0, x1;
-//         TV x0_target = TV(0.0377535,   0.0789261,  0);
-//         TV x1_target = TV(0.0479829,    0.0789278, 0);
-
-                
-
-            
-//         auto objective = [&]()
-//         {
-//             resetScene();
-//             VectorXT dq(W.cols()); dq.setZero();
-//             forward(dq);
-//             Rods[5]->x(n0, x0);
-//             Rods[6]->x(n1, x1);
-//             return 0.5 * ((x0 - x0_target).dot((x0 - x0_target)) + (x1 - x1_target).dot((x1 - x1_target)));
-//         };
-
-//         auto computedOdx = [&]()
-//         {
-            
-//             Rods[5]->x(n0, x0);
-//             Rods[6]->x(n1, x1);
-//             VectorXT dOdx = VectorXT::Zero(deformed_states.rows());
-//             Offset offset0, offset1;
-//             Rods[5]->getEntry(n0, offset0);
-//             Rods[6]->getEntry(n1, offset1);
-//             dOdx.template segment<dim>(offset0[0]) = x0 - x0_target;
-//             dOdx.template segment<dim>(offset1[0]) = x1 - x1_target;
-//             return W.transpose() * dOdx;
-//         };
-
-        
-
-//         auto gradient = [&]()
-//         {
-//             resetScene();
-
-//             VectorXT dq(W.cols()); dq.setZero();
-//             forward(dq);
-            
-//             int nx = deformed_states.rows();
-
-//             StiffnessMatrix H;
-//             buildSystemDoFMatrix(dq, H);
-//             VectorXT dOdx = computedOdx();
-//             // std::cout << "|dOdx| " << dOdx.norm() << std::endl;
-//             Eigen::SimplicialLLT<StiffnessMatrix> solver;
-//             solver.compute(H);
-
-//             VectorXT lambda = solver.solve(dOdx);
-//             // std::cout << "|lambda| " << lambda.norm() << std::endl;
-//             VectorXT dOdp(n_design); dOdp.setZero();
-
-//             VectorXT dfdp_full(n_design * nx);
-            
-//             parallelContactdfdp(dfdp_full);
-//             dfdp_full *= -1.0;
-//             //de/dx = -f
-            
-//             // std::cout << "|dfdp_full| " << dfdp_full.norm() << std::endl;
-            
-//             for (int i = 0; i < n_design; i++)
-//             {
-//                 VectorXT dfdp = W.transpose() * dfdp_full.segment(i * nx, nx);
-                
-//                 dOdp[i] += -lambda.dot(dfdp);
-//             }
-//             // std::getchar();
-//             return dOdp;
-
-//         };
-
-//         auto gradientSA = [&]()
-//         {
-//             resetScene();
-
-//             VectorXT dq(W.cols()); dq.setZero();
-//             forward(dq);
-            
-//             int nx = deformed_states.rows();
-
-//             StiffnessMatrix H;
-//             buildSystemDoFMatrix(dq, H);
-//             VectorXT dOdx = computedOdx();
-//             // std::cout << "|dOdx| " << dOdx.norm() << std::endl;
-//             Eigen::SimplicialLLT<StiffnessMatrix> solver;
-//             solver.compute(H);
-
-            
-//             VectorXT dOdp(n_design); dOdp.setZero();
-
-//             VectorXT dfdp_full(n_design * nx);
-            
-//             parallelContactdfdp(dfdp_full);
-//             dfdp_full *= -1.0;
-            
-//             Eigen::MatrixXd dXdu(W.cols(), n_design);
-//             dXdu.setZero();
-            
-//             for (int i = 0; i < n_design; i++)
-//             {
-//                 VectorXT dfdp = W.transpose() * dfdp_full.segment(i * nx, nx);
-                
-//                 dXdu.col(i) += -solver.solve(dfdp);
-//             }
-//             // std::cout << dXdu << std::endl;
-//             // Eigen::MatrixXd dXdu2 = dXdu.transpose() * dXdu;
-//             Eigen::MatrixXd dXdu2 = dXdu * dXdu.transpose();
-
-//             // std::cout << dXdu2 << std::endl;
-
-//             Spectra::DenseSymMatProd<T> op(dXdu2);
-
-//             int n_eigen = 20;
-            
-//             Spectra::SymEigsSolver< T, Spectra::LARGEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, n_eigen, dXdu2.rows());
-
-//             eigs.init();
-//             int nconv = eigs.compute();
-//             Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-//             Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-
-//             std::cout << "eigen values" << std::endl;
-//             std::cout << eigen_values << std::endl;
-//             // std::getchar();
-
-//             // deformed_states = rest_states + eigen_vectors.col(3);
-//             return dOdp;
-
-//         };
-
-//         // auto updateDesignParameter = [&](const VectorXT& new_p)
-//         // {
-//         //     int cnt = 0;
-//         //     for (auto& crossing : rod_crossings)
-//         //     {
-//         //         if (crossing->is_fixed)
-//         //         {
-//         //             cnt += crossing->rods_involved.size() * 2;
-//         //             continue;
-//         //         }
-//         //         for (int i = 0; i < crossing->rods_involved.size(); i++)
-//         //         {
-//         //             if (i == 0)
-//         //                 crossing->sliding_ranges[i].setZero();
-//         //             else
-//         //             {
-//         //                 crossing->sliding_ranges[i] = new_p.template segment<2>(cnt);
-//         //             }
-//         //             // crossing->sliding_ranges[i] = new_p.template segment<2>(cnt);
-//         //             crossing->sliding_ranges[i][0] = std::max(0.0, crossing->sliding_ranges[i][0]);
-//         //             crossing->sliding_ranges[i][1] = std::max(0.0, crossing->sliding_ranges[i][1]);
-//         //             // std::cout << crossing->sliding_ranges[i].transpose() << std::endl;
-//         //             cnt += 2;
-//         //         }
-//         //     }
-//         // };
-
-//         updateDesignParameter(p);
-
-//         auto diffTest = [&]()
-//         {
-//             T epsilon = 1e-8;
-//             VectorXT g = gradient();
-            
-//             T E0 = objective();
-//             for (int i = 0; i < n_design; i++)
-//             {
-//                 if (!flag[i])
-//                     continue;
-//                 // std::cout << i << std::endl;
-//                 p[i] += epsilon;
-//                 updateDesignParameter(p);
-//                 T E1 = objective();
-                
-//                 std::cout << "FD " << (E1 - E0) / epsilon << " symbolic " << g[i] << std::endl;
-//                 // // std::getchar();
-//                 p[i] -= epsilon;
-//                 // std::cout << E1 << std::endl;
-//             }
-//         };
-
-//         // diffTest();
-
-//         // LBFGSParam<T> param;
-//         // param.epsilon = 1e-4;
-//         // param.max_iterations = 100;
-
-//         // LBFGSSolver<T, LineSearchBracketing> solver(param);
-//         // LBFGSWrapper<T, dim> fun(n_design, *this);
-        
-        
-//         // T fx;
-//         // VectorXT x = VectorXT::Constant(n_design, 0.0);
-//         // int niter = solver.minimize(fun, x, fx);
-
-//         // std::cout << niter << " iterations" << std::endl;
-//         // std::cout << "x = \n" << x.transpose() << std::endl;
-//         // std::cout << "f(x) = " << fx << std::endl;
-//         // VectorXT g = gradientSA();
-//         for (int iter = 0; iter < 10; iter++)
-//         {
-//             VectorXT g = gradient();
-//             break;
-//             std::cout << "|g| " << g.norm() << std::endl;
-            
-//             if (g.norm() < 1e-6)
-//             {
-//                 break;
-//             }
-//             T E0 = objective();
-//             std::cout << "E " << E0 << std::endl;
-//             T alpha = 1.0;
-//             while (true)
-//             {
-//                 VectorXT p_ls = p - alpha * g;
-//                 updateDesignParameter(p_ls);
-//                 // std::getchar();
-//                 T E1 = objective();
-//                 // std::getchar();
-//                 if (E1 < E0)
-//                 {
-//                     p = p_ls;
-//                     break;
-//                 }
-//                 else
-//                 {
-//                     alpha *= 0.5;
-//                 }
-//             }
-            
-
-//         }
-//         std::cout << p.transpose() << std::endl;
-//     }
-// }
-
-template<class T, int dim>
-class LBFGSWrapper
-{
-public:
-    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
-    using TV = Vector<T, dim>;
-    using Offset = Vector<int, dim + 1>;
-    using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    using Entry = Eigen::Triplet<T>;
-private:
-    int n;
-    EoLRodSim<T, dim>& sim;
-    std::vector<int> handle_joints = { 5, 10, 15, 21, 22, 23};
-    bool sliding = false;
-
-    VectorXT computedOdx()
-    {
-        VectorXT dOdx = VectorXT::Zero(sim.W.cols());
-        for (auto crossing : sim.rod_crossings)
-        {
-            Offset offset;
-            sim.Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-            TV crossing_position;
-            sim.getCrossingPosition(crossing->node_idx, crossing_position);
-
-            T x = crossing_position[0], 
-                y = crossing_position[1], 
-                z = crossing_position[2];
-
-            dOdx[offset[0]] += (x * x - y * y - z) * 2.0 * x;
-            dOdx[offset[1]] += (x * x - y * y - z) * -2.0 * y;
-            dOdx[offset[2]] += (x * x - y * y - z) * -1.0;
-        }
-        return dOdx;
-    }
-
-    void updateDesignParameter(const VectorXT& new_p)
-    {
-        int i = 0;
-        for (int crossing_idx : handle_joints)
-        {
-            auto crossing = sim.rod_crossings[crossing_idx];
-            Offset offset;
-            sim.Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-
-            int offset_omega = crossing->reduced_dof_offset;
-
-            if (sliding)
-            {
-                for (int d = 0; d < dim + 1; d++)
-                {
-                    sim.dirichlet_dof[offset[d]] = new_p[i++];
-                }
-            }
-            else
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    sim.dirichlet_dof[offset[d]] = new_p[i++];
-                }
-                for (int d = 0; d < dim; d++)
-                {
-                    sim.dirichlet_dof[offset_omega + d] = new_p[i++];
-                }
-            }
-        }
-    }
-    
-public:
-    LBFGSWrapper(int n_, EoLRodSim<T, dim>& _sim, bool _sliding) : n(n_), sim(_sim), sliding(_sliding) {}
-    double operator()(const Eigen::VectorXd& x, Eigen::VectorXd& grad)
-    {
-        updateDesignParameter(x);
-
-        sim.resetScene();
-            
-        VectorXT dq(sim.W.cols()); dq.setZero();
-        sim.forward(dq);
-        
-        StiffnessMatrix H;
-
-        std::vector<Entry> entry_K;
-        sim.addStiffnessMatrix(entry_K, dq);
-
-        StiffnessMatrix A(sim.deformed_states.rows(), sim.deformed_states.rows());
-        A.setFromTriplets(entry_K.begin(), entry_K.end());
-        H = sim.W.transpose() * A * sim.W;
-        StiffnessMatrix dfdx = H;
-        
-        sim.projectDirichletDoFSystemMatrix(H);
-        
-        VectorXT dOdx = computedOdx();
-        std::cout << "|dOdx| " << dOdx.norm() << std::endl;
-
-        Eigen::SimplicialLLT<StiffnessMatrix> solver;
-        solver.compute(H);
-
-        if (solver.info() == Eigen::NumericalIssue)
-        {
-            std::cout << "not PD" << std::endl;
-        }
-
-        VectorXT lambda = solver.solve(-dOdx);
-        std::cout << "|lambda| " << lambda.norm() << std::endl;
-        VectorXT dOdp(n); dOdp.setZero();
-
-        
-        int i = 0;
-        for (int crossing_idx : handle_joints)
-        {
-            auto crossing = sim.rod_crossings[crossing_idx];
-            Offset offset;
-            sim.Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-
-            int offset_omega = crossing->reduced_dof_offset;
-
-            if (sliding)
-            {
-                for (int d = 0; d < dim + 1; d++)
-                {
-                    VectorXT dfdp = dfdx.col(offset[d]);
-                    for (auto data : sim.dirichlet_dof)
-                        dfdp[data.first] = 0;
-                    dOdp[i++] += lambda.dot(dfdp);
-                }
-            }
-            else
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    VectorXT dfdp = dfdx.col(offset[d]);
-                    for (auto data : sim.dirichlet_dof)
-                        dfdp[data.first] = 0;
-                    
-                    dOdp[i++] += lambda.dot(dfdp);
-                }
-                for (int d = 0; d < dim; d++)
-                {
-                    VectorXT dfdp = dfdx.col(offset_omega + d);
-                    for (auto data : sim.dirichlet_dof)
-                        dfdp[data.first] = 0;
-
-                    dOdp[i++] += lambda.dot(dfdp);
-                }
-            }
-
-        }
-        
-        grad = dOdp;
-
-        T energy = 0.0;
-        for (auto& crossing : sim.rod_crossings)
-        {
-            TV crossing_position;
-            sim.getCrossingPosition(crossing->node_idx, crossing_position);
-
-            T x = crossing_position[0], y = crossing_position[1], z = crossing_position[2];
-            energy += 0.5 * std::pow( x * x - y * y - z, 2);
-        }
-        std::cout << "E " << energy << std::endl;
-        return energy;
-    }
-};
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::inverse()
 {
     if constexpr (dim == 3)
     {
-        bool sliding = true;
-        bool u_only = true;
         auto system_dirichlet_dof = dirichlet_dof;
 
+        int n_row = 11, n_col = 11;
+        int half_row = (n_row - 1) / 2;
+        int half_col = (n_col - 1) / 2;
+
         int n_design = 0;
-        TV target = TV(0.0133826, 0.0601781, 0.0324977);
-        // TV target = TV(0.0, 1, 0.2) * unit;
+        TV target = targets[1];
+     
         Mask mask(false, false, true);
         mask.setConstant(true);
-        std::vector<int> handle_joints = { 5, 10, 15, 21, 22, 23};
-        // std::vector<int> handle_joints = { 5, 10, 15, 21, 22, 23, 6, 7, 8, 11, 12, 13};
-        // std::vector<int> handle_joints = {10, 22};
-        std::unordered_map<int, int> sliding_rods;
-        sliding_rods[10] = 0; 
-        sliding_rods[5] = 0; 
-        sliding_rods[15] = 0;
-        sliding_rods[21] = 1; 
-        sliding_rods[22] = 1;
-        sliding_rods[23] = 1;
-        // sliding_rods[6] = 1; 
-        // sliding_rods[7] = 1;
-        // sliding_rods[8] = 1;
-        // sliding_rods[11] = 1; 
-        // sliding_rods[12] = 1;
-        // sliding_rods[13] = 1;
+        std::vector<std::pair<int, int>> handle_nodes;
 
-        if (sliding)
+        int tip_node_id = n_row - 1;
+
+        for (int col = 1; col < n_col - 1; col++)
         {
-            for (int idx : handle_joints)
-                rod_crossings[idx]->is_fixed = false;
+            handle_nodes.push_back(std::make_pair(Rods[col]->indices.front(), col)); 
         }
-        fixCrossing();
-        for (int idx : handle_joints)
+
+        for (int row = 1; row < n_row - 1; row++)
         {
-            if (sliding)
+            handle_nodes.push_back(std::make_pair(Rods[n_col + row]->indices.back(), n_col + row)); 
+        }
+
+        // handle_nodes.push_back(std::make_pair(Rods[1]->indices.front(), 1));
+        // handle_nodes.push_back(std::make_pair(Rods[2]->indices.front(), 2));
+        // handle_nodes.push_back(std::make_pair(Rods[3]->indices.front(), 3));
+        
+        // handle_nodes.push_back(std::make_pair(Rods[6]->indices.back(), 6));
+        // handle_nodes.push_back(std::make_pair(Rods[7]->indices.back(), 7));
+        // handle_nodes.push_back(std::make_pair(Rods[8]->indices.back(), 8));
+        
+        VectorXT dq_initialization(W.cols());
+        dq_initialization.setZero();
+
+        VectorXT backup_twist, backup_theta, backup_rotations, backup_prev_tangents, backup_u;
+        
+        auto backUpState = [&]()
+        {
+            backup_twist.resize(0);
+            backup_rotations.resize(0);
+            backup_prev_tangents.resize(0);
+            backup_u.resize(0);
+            backup_theta.resize(0);
+
+            for (auto& rod : Rods)
             {
-                if (u_only)
-                    n_design += 1;
-                else
-                    n_design += 4;
+                int current_row = backup_twist.rows();
+                backup_twist.conservativeResize(current_row + rod->numSeg());
+                backup_twist.segment(current_row, rod->numSeg()) = rod->reference_twist;
+                backup_theta.conservativeResize(current_row + rod->numSeg());
+                backup_theta.segment(current_row, rod->numSeg()) = rod->reference_angles;
+
+                current_row = backup_prev_tangents.rows();
+                backup_prev_tangents.conservativeResize(current_row + rod->numSeg() * dim);
+                backup_u.conservativeResize(current_row + rod->numSeg() * dim);
+                
+                for (int i = 0; i < rod->numSeg(); i++)
+                {
+                    backup_prev_tangents.template segment<dim>(current_row + i * dim) = rod->prev_tangents[i];
+                    backup_u.template segment<dim>(current_row + i * dim) = rod->reference_frame_us[i];
+                }
+                
             }
-            else
-                n_design += 6;
+
+            for (auto& crossing : rod_crossings)
+            {
+                int current_row = backup_rotations.rows();
+                backup_rotations.conservativeResize(current_row + 9);
+                backup_rotations.segment(current_row, 9) = Eigen::Map<VectorXT>(crossing->rotation_accumulated.data(), 
+                    crossing->rotation_accumulated.size());
+            }
+        };
+
+        auto recoverState = [&]()
+        {
+            int current_row_twist = 0;
+            int current_row_TV = 0;
+            for (auto& rod : Rods)
+            {
+                
+                rod->reference_twist = backup_twist.segment(current_row_twist, rod->numSeg());
+                rod->reference_angles = backup_theta.segment(current_row_twist, rod->numSeg());
+                current_row_twist += rod->numSeg();
+                
+                for (int i = 0; i < rod->numSeg(); i++)
+                {
+                    rod->prev_tangents[i] = backup_prev_tangents.template segment<dim>(current_row_TV + i * dim);
+                    rod->reference_frame_us[i] = backup_u.template segment<dim>(current_row_TV + i * dim);
+                }
+                current_row_TV += rod->numSeg() * dim;
+            }
+            int current_row_rotation = 0;
+            for (auto& crossing : rod_crossings)
+            {
+                Eigen::Map<VectorXT>(crossing->rotation_accumulated.data(), 
+                    crossing->rotation_accumulated.size()) = backup_rotations.segment(current_row_rotation, 9);
+                current_row_rotation += 9;
+            }
+        };
+
+        
+        
+
+        for (auto data : handle_nodes)
+        {
+            n_design += 3;
         }
         
         std::cout << "#design parameters: " << n_design << std::endl;
         VectorXT p(n_design);
         p.setZero();
-        
-        T w = 1e-2;
+        backUpState();
+        T w = 1e-6;
         
         auto objective = [&]()
         {
             resetScene();
-
+            recoverState();
             VectorXT dq(W.cols()); dq.setZero();
-            forward(dq);
-            
+            bool converged = forward(dq);
+            if (!converged)
+                return 1e10;
             T energy = 0.0;
-            // for (auto& crossing : rod_crossings)
-            // {
-            //     TV crossing_position;
-            //     getCrossingPosition(crossing->node_idx, crossing_position);
-
-            //     T x = crossing_position[0], y = crossing_position[1], z = crossing_position[2];
-            //     energy += 0.5 * std::pow( x * x - y * y - z, 2);
-            // }
-            for (auto& crossing : {rod_crossings[4]})
+            
+            for (auto& crossing : {rod_crossings[tip_node_id]})
             {
                 TV crossing_position;
                 getCrossingPosition(crossing->node_idx, crossing_position);
@@ -642,35 +150,20 @@ void EoLRodSim<T, dim>::inverse()
                     if (mask[d])
                         energy += 0.5 * std::pow(crossing_position[d] - target[d], 2);
                 }
-                
-                // energy += 0.5 * (crossing_position - target).dot(crossing_position - target);
             }
-            std::cout << "obj matching " << energy << std::endl;
+            T obj_matching = energy;
+            std::cout << "\t\tobj matching " << energy << std::endl;
             // energy += addStretchingEnergy() * w;
+            energy += computeTotalEnergy(dq) * w;
+            std::cout << "\t\tstretching " << energy - obj_matching<< std::endl;
             return energy;
         };
 
-        auto computedOdx = [&](VectorXT& dOdx)
+        auto computedOdx = [&](VectorXT& dOdx, const VectorXT& dq)
         {
-            // dOdx = VectorXT::Zero(W.cols());
-            // for (auto crossing : rod_crossings)
-            // {
-            //     Offset offset;
-            //     Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-            //     TV crossing_position;
-            //     getCrossingPosition(crossing->node_idx, crossing_position);
-
-            //     T x = crossing_position[0], 
-            //       y = crossing_position[1], 
-            //       z = crossing_position[2];
-
-            //     dOdx[offset[0]] += (x * x - y * y - z) * 2.0 * x;
-            //     dOdx[offset[1]] += (x * x - y * y - z) * -2.0 * y;
-            //     dOdx[offset[2]] += (x * x - y * y - z) * -1.0;
-            // }
-
+        
             dOdx = VectorXT::Zero(W.cols());
-            for (auto crossing : {rod_crossings[4]})
+            for (auto crossing : {rod_crossings[tip_node_id]})
             {
                 Offset offset;
                 Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
@@ -684,23 +177,53 @@ void EoLRodSim<T, dim>::inverse()
                         dOdx[offset[d]] += (crossing_position[d] - target[d]);
                 }
             }
-            VectorXT f(W.rows()); f.setZero();
-            addStretchingForce(f);
+            // VectorXT f(W.rows()); f.setZero();
+            // addStretchingForce(f);
             // dOdx += -W.transpose() * f * w;
+
+            // VectorXT f(W.rows()); f.setZero();
+            // computeResidual(f);
+            // dOdx += -W.transpose() * f * w;
+            VectorXT f(W.cols());
+            f.setZero();
+            computeResidual(f, dq);
             
+            dOdx += -f * w;
+            
+        };
+
+        auto computed2Odx2 = [&](StiffnessMatrix& d2Odx2, const VectorXT& dq)
+        {
+            StiffnessMatrix hessian(W.rows(), W.rows());
+            std::vector<Entry> hessian_entries;
+            for (auto crossing : {rod_crossings[tip_node_id]})
+            {
+                Offset offset;
+                Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, offset);
+                TV crossing_position;
+                getCrossingPosition(crossing->node_idx, crossing_position);
+
+                for (int d = 0; d < dim; d++)
+                {
+                    if (mask[d])
+                        hessian_entries.push_back(Entry(offset[d], offset[d], 1.0));
+                }
+            }
+            // addStretchingK(hessian_entries);
+            addStiffnessMatrix(hessian_entries, dq);
+            hessian.setFromTriplets(hessian_entries.begin(), hessian_entries.end());
+
+            d2Odx2 = w * W.transpose() * hessian * W;
+            // d2Odx2 = hessian;
         };
 
 
         auto gradient = [&]()
         {
             resetScene();
-            
+            recoverState();
             VectorXT dq(W.cols()); dq.setZero();
             forward(dq);
-
-            // TV c4;            
-            // getCrossingPosition(4, c4);
-            // std::cout << c4.transpose() << std::endl;
 
             StiffnessMatrix H;
 
@@ -714,7 +237,7 @@ void EoLRodSim<T, dim>::inverse()
             // projectDirichletDoFMatrix(dfdx, system_dirichlet_dof);
             projectDirichletDoFSystemMatrix(H);
             
-            VectorXT dOdx; computedOdx(dOdx);
+            VectorXT dOdx; computedOdx(dOdx, dq);
             std::cout << "|dOdx| " << dOdx.norm() << std::endl;
 
             Eigen::SimplicialLLT<StiffnessMatrix> solver;
@@ -728,60 +251,21 @@ void EoLRodSim<T, dim>::inverse()
             VectorXT lambda = solver.solve(-dOdx);
             std::cout << "|lambda| " << lambda.norm() << std::endl;
             VectorXT dOdp(n_design); dOdp.setZero();
-
             
             int i = 0;
-            for (int crossing_idx : handle_joints)
+            for (std::pair<int, int> idx_rod_idx : handle_nodes)
             {
-                auto crossing = rod_crossings[crossing_idx];
                 Offset offset;
-                Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-
-                int offset_omega = crossing->reduced_dof_offset;
-
-                if (sliding)
+                Rods[idx_rod_idx.second]->getEntryReduced(idx_rod_idx.first, offset);
+                for (int d = 0; d < dim; d++)
                 {
-                    if (u_only)
-                    {
-                        int sliding_rod = sliding_rods[crossing_idx];
-                        VectorXT dfdp = dfdx.col(offset[dim]);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-                        dOdp[i++] += lambda.dot(dfdp);
-                    }
-                    else
-                    {
-                        for (int d = 0; d < dim + 1; d++)
-                        {
-                            VectorXT dfdp = dfdx.col(offset[d]);
-                            for (auto data : dirichlet_dof)
-                                dfdp[data.first] = 0;
-                            dOdp[i++] += lambda.dot(dfdp);
-                        }
-                    }
+                    VectorXT dfdp = dfdx.col(offset[d]);
+                    for (auto data : dirichlet_dof)
+                        dfdp[data.first] = 0;
+                    
+                    dOdp[i++] += lambda.dot(dfdp);
                 }
-                else
-                {
-                    for (int d = 0; d < dim; d++)
-                    {
-                        VectorXT dfdp = dfdx.col(offset[d]);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-                        
-                        dOdp[i++] += lambda.dot(dfdp);
-                    }
-                    for (int d = 0; d < dim; d++)
-                    {
-                        VectorXT dfdp = dfdx.col(offset_omega + d);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-
-                        dOdp[i++] += lambda.dot(dfdp);
-                    }
-                }
-
             }
-            
             return dOdp;
 
         };
@@ -789,51 +273,19 @@ void EoLRodSim<T, dim>::inverse()
         auto updateDesignParameter = [&](const VectorXT& new_p)
         {
             int i = 0;
-            for (int crossing_idx : handle_joints)
+            for (std::pair<int, int> idx_rod_idx : handle_nodes)
             {
-                auto crossing = rod_crossings[crossing_idx];
                 Offset offset;
-                Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-
-                int offset_omega = crossing->reduced_dof_offset;
-
-                if (sliding)
+                Rods[idx_rod_idx.second]->getEntryReduced(idx_rod_idx.first, offset);
+                for (int d = 0; d < dim; d++)
                 {
-                    if (u_only)
-                    {
-                        dirichlet_dof[offset[dim]] = new_p[i++];
-                    }
-                    else
-                    {
-                        for (int d = 0; d < dim + 1; d++)
-                        {
-                            dirichlet_dof[offset[d]] = new_p[i++];
-                        }
-                    }
-                }
-                else
-                {
-                    for (int d = 0; d < dim; d++)
-                    {
-                        dirichlet_dof[offset[d]] = new_p[i++];
-                    }
-                    // if (crossing_idx == 10)
-                    //     dirichlet_dof[offset[1]] = -0.1 * unit;
-                    // if (crossing_idx == 22)
-                    // {
-                    //     dirichlet_dof[offset[0]] = 0.1 * unit;
-                    //     dirichlet_dof[offset[2]] = 0.01 * unit;
-                    // }
-                    for (int d = 0; d < dim; d++)
-                    {
-                        dirichlet_dof[offset_omega + d] = new_p[i++];
-                    }
+                    dirichlet_dof[offset[d]] = new_p[i++];
                 }
             }
-
+            
         };
 
-        auto gradientSA = [&]()
+        auto GaussNewtonStep = [&](StiffnessMatrix& H_GN)
         {
             resetScene();
             
@@ -850,11 +302,10 @@ void EoLRodSim<T, dim>::inverse()
             A.setFromTriplets(entry_K.begin(), entry_K.end());
             H = W.transpose() * A * W;
             StiffnessMatrix dfdx = H;
-            // projectDirichletDoFMatrix(dfdx, system_dirichlet_dof);
             projectDirichletDoFSystemMatrix(H);
-            
-            VectorXT dOdx; computedOdx(dOdx);
-            std::cout << "|dOdx| " << dOdx.norm() << std::endl;
+            H.makeCompressed();
+            VectorXT dOdx; computedOdx(dOdx, dq);
+            // std::cout << "|dOdx| " << dOdx.norm() << std::endl;
 
             Eigen::SimplicialLLT<StiffnessMatrix> solver;
             solver.compute(H);
@@ -863,86 +314,124 @@ void EoLRodSim<T, dim>::inverse()
             {
                 std::cout << "not PD" << std::endl;
             }
-            
-            VectorXT dOdp(n_design); dOdp.setZero();
 
-            
-            Eigen::MatrixXd dXdu(W.cols(), n_design);
-            dXdu.setZero();
+            StiffnessMatrix dXdu(W.cols(), n_design);
+            // dXdu.setZero();
+            std::vector<Entry> dXdu_entry;
 
             int i = 0;
-            for (int crossing_idx : handle_joints)
+            for (std::pair<int, int> idx_rod_idx : handle_nodes)
             {
-                auto crossing = rod_crossings[crossing_idx];
                 Offset offset;
-                Rods[crossing->rods_involved.front()]->getEntryReduced(crossing->node_idx, offset);
-
-                int offset_omega = crossing->reduced_dof_offset;
-
-                if (sliding)
+                Rods[idx_rod_idx.second]->getEntryReduced(idx_rod_idx.first, offset);
+                for (int d = 0; d < dim; d++)
                 {
-                    for (int d = 0; d < dim + 1; d++)
+                    VectorXT dfdp = dfdx.col(offset[d]);
+                    for (auto data : dirichlet_dof)
+                        dfdp[data.first] = 0;
+                    
+                    VectorXT dXdu_col_i = -solver.solve(dfdp);
+                    for (int j = 0; j < dXdu_col_i.rows(); j++)
                     {
-                        VectorXT dfdp = dfdx.col(offset[d]);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-                        dXdu.col(i) += -solver.solve(dfdp);
+                        if (std::abs(dXdu_col_i[j]) > 1e-10)
+                            dXdu_entry.push_back(Entry(j, i, dXdu_col_i[j]));
                     }
+                    i++;
                 }
-                else
-                {
-                    for (int d = 0; d < dim; d++)
-                    {
-                        VectorXT dfdp = dfdx.col(offset[d]);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-                        
-                        dXdu.col(i) += -solver.solve(dfdp);
-                    }
-                    for (int d = 0; d < dim; d++)
-                    {
-                        VectorXT dfdp = dfdx.col(offset_omega + d);
-                        for (auto data : dirichlet_dof)
-                            dfdp[data.first] = 0;
-
-                        dXdu.col(i) += -solver.solve(dfdp);
-                    }
-                }
-
             }
 
-            // std::cout << dXdu << std::endl;
-            // Eigen::MatrixXd dXdu2 = dXdu.transpose() * dXdu;
-
-            Eigen::MatrixXd dXdu2 = dXdu * dXdu.transpose();
-
-            // std::cout << dXdu2 << std::endl;
-
-            Spectra::DenseSymMatProd<T> op(dXdu2);
-
-            int n_eigen = 50;
             
-            Spectra::SymEigsSolver< T, Spectra::LARGEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, n_eigen, dXdu2.rows());
+            dXdu.setFromTriplets(dXdu_entry.begin(), dXdu_entry.end());
+            
+            StiffnessMatrix d2Odx2(W.cols(), W.cols());
+            computed2Odx2(d2Odx2, dq);
 
-            eigs.init();
-            int nconv = eigs.compute();
-            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-            std::cout << "eigen values" << std::endl;
-            std::cout << eigen_values << std::endl;
-            // std::getchar();
-            // deformed_states = rest_states + W * eigen_vectors.col(0);
-            VectorXT du = dXdu.transpose() * eigen_vectors.col(0);
-            updateDesignParameter(du);
-            VectorXT ddq(W.cols());
-            ddq.setZero();
-            forward(ddq);
-            return dOdp;
+            H_GN = dXdu.transpose() * d2Odx2 * dXdu;
 
         };
 
-       
+        auto searchDirection = [&](VectorXT& dp)
+        {
+            resetScene();
+            
+            VectorXT dq(W.cols()); dq.setZero();
+            forward(dq);
         
+            StiffnessMatrix H;
+
+            std::vector<Entry> entry_K;
+            addStiffnessMatrix(entry_K, dq);
+
+            StiffnessMatrix A(deformed_states.rows(), deformed_states.rows());
+            A.setFromTriplets(entry_K.begin(), entry_K.end());
+            H = W.transpose() * A * W;
+            StiffnessMatrix dfdx = H;
+            projectDirichletDoFSystemMatrix(H);
+            H.makeCompressed();
+            VectorXT dOdx; computedOdx(dOdx, dq);
+
+            Eigen::SimplicialLLT<StiffnessMatrix> solver;
+            solver.compute(H);
+
+            VectorXT lambda = solver.solve(-dOdx);
+            
+            VectorXT dOdp(n_design); dOdp.setZero();
+
+            StiffnessMatrix dXdu(W.cols(), n_design);
+            
+            std::vector<Entry> dXdu_entry;
+
+            int i = 0;
+            for (std::pair<int, int> idx_rod_idx : handle_nodes)
+            {
+                Offset offset;
+                Rods[idx_rod_idx.second]->getEntryReduced(idx_rod_idx.first, offset);
+                for (int d = 0; d < dim; d++)
+                {
+                    VectorXT dfdp = dfdx.col(offset[d]);
+                    for (auto data : dirichlet_dof)
+                        dfdp[data.first] = 0;
+                    
+                    VectorXT dXdu_col_i = -solver.solve(dfdp);
+                    for (int j = 0; j < dXdu_col_i.rows(); j++)
+                    {
+                        if (std::abs(dXdu_col_i[j]) > 1e-10)
+                            dXdu_entry.push_back(Entry(j, i, dXdu_col_i[j]));
+                    }
+                    dOdp[i++] += lambda.dot(dfdp);
+                }
+            }
+            std::cout << "|g| " << dOdp.norm() << std::endl;
+            if (dOdp.norm() < 1e-6)
+            {
+                
+                return false;
+            }
+
+            dXdu.setFromTriplets(dXdu_entry.begin(), dXdu_entry.end());
+            
+            StiffnessMatrix d2Odx2(W.cols(), W.cols());
+            computed2Odx2(d2Odx2, dq);
+
+            StiffnessMatrix H_GN = dXdu.transpose() * d2Odx2 * dXdu;
+                
+            solver.compute(H_GN);
+            T mu = 10e-6;
+        
+            while (solver.info() == Eigen::NumericalIssue)
+            {
+                for (int j = 0; j < H_GN.rows(); j++)
+                {
+                    H_GN.coeffRef(j, j) += mu;
+                }
+                mu *= 10.0;
+                solver.compute(H_GN);
+            }
+
+            dp = solver.solve(-dOdp);
+            return true;
+        };
+
         
 
         updateDesignParameter(p);
@@ -971,64 +460,188 @@ void EoLRodSim<T, dim>::inverse()
             }
         };
 
-        // diffTest();
-        // gradientSA();
-        // LBFGSParam<T> param;
-        // param.epsilon = 1e-4;
-        // param.max_iterations = 100;
-
-        // LBFGSSolver<T, LineSearchBracketing> solver(param);
-        // LBFGSWrapper<T, dim> fun(n_design, *this, false);
-        
-        // T fx;
-        // VectorXT x = VectorXT::Constant(n_design, 0.0);
-        // int niter = solver.minimize(fun, x, fx);
-
-        // std::cout << niter << " iterations" << std::endl;
-        // std::cout << "x = \n" << x.transpose() << std::endl;
-        // std::cout << "f(x) = " << fx << std::endl;
-        
-        bool stuck = false;
-        for (int iter = 0; iter < 200; iter++)
+        auto diffTest2ndOrder = [&]()
         {
+            
             VectorXT g = gradient();
-            std::cout << "|g| " << g.norm() << std::endl;
-            // return;
-            if (g.norm() < 1e-4 || stuck)
-            {
-                break;
-            }
+
+            VectorXT dx(n_design);
+            dx.setRandom();
+            dx *= 1.0 / dx.norm();
+            dx *= 1e-4;
             T E0 = objective();
-            // if (E0 < 1e-6)
-            // {
-            //     break;
-            // }
-            std::cout << "E " << E0 << std::endl;
-            T alpha = 1.0;
-            int ls_cnt = 0;
-            while (true)
+            T previous = 0.0;
+            for (int i = 0; i < 10; i++)
             {
-                VectorXT p_ls = p - alpha * g;
-                updateDesignParameter(p_ls);
-                // std::getchar();
+                updateDesignParameter(p + dx);
                 T E1 = objective();
-                // std::getchar();
-                if (E1 < E0 || ls_cnt > 15)
+                T dE = E1 - E0;
+                
+                dE -= g.dot(dx);
+                // std::cout << "dE " << dE << std::endl;
+                if (i > 0)
                 {
-                    if (ls_cnt > 15)
-                        stuck = true;
-                    p = p_ls;
+                    std::cout << (previous/dE) << std::endl;
+                }
+                previous = dE;
+                dx *= 0.5;
+            }
+
+        };
+
+        auto gradientDescent = [&]()
+        {
+            bool stuck = false;
+            for (int iter = 0; iter < 10; iter++)
+            {
+                VectorXT g = gradient();
+                std::cout << "|g| " << g.norm() << std::endl;
+                
+                if (g.norm() < 1e-4 || stuck)
+                {
                     break;
+                }
+                T E0 = objective();
+                
+                std::cout << "\tE " << E0 << std::endl;
+                T alpha = 1.0;
+                int ls_cnt = 0;
+                while (true)
+                {
+                    VectorXT p_ls = p - alpha * g;
+                    updateDesignParameter(p_ls);
+                    // std::getchar();
+                    T E1 = objective();
+                    // std::getchar();
+                    if (E1 < E0 || ls_cnt > 20)
+                    {
+                        dq_initialization = W.transpose() * (deformed_states - rest_states);
+                        perturb = dq_initialization;
+                        p = p_ls;
+                        break;
+                    }
+                    else
+                    {
+                        ls_cnt++;
+                        alpha *= 0.5;
+                    }
+                }
+            
+            }
+            std::cout << "stuck " << stuck << std::endl;
+            std::cout << p.transpose() << std::endl;
+        };
+
+        auto gaussNewton = [&]()
+        {
+            for (int iter = 0; iter < 40; iter++)
+            {
+                VectorXT g = gradient();
+                std::cout << "|g| " << g.norm() << std::endl;
+             
+                if (g.norm() < 1e-6)
+                {
+                    break;
+                }
+                StiffnessMatrix H_GN;
+                GaussNewtonStep(H_GN);
+
+                Eigen::SimplicialLLT<StiffnessMatrix> solver;
+                solver.compute(H_GN);
+                T mu = 10e-6;
+                StiffnessMatrix I(H_GN.rows(), H_GN.cols());
+                I.setIdentity();
+
+                StiffnessMatrix H = H_GN;
+                while (solver.info() == Eigen::NumericalIssue)
+                {
+                    H = H_GN + mu * I;
+                    mu *= 10.0;
+                    solver.compute(H);
+                }
+
+                VectorXT dp = solver.solve(-g);
+                // if (dp.norm() > T(1) * n_design)
+                //     dp = dp / dp.norm() * n_design;
+                std::cout << "|dp| " << dp.norm() << std::endl;
+                std::cout << "\tdot " << dp.normalized().dot(-g.normalized()) << std::endl;
+                T E0 = objective();
+                // std::cout << "E " << E0 << std::endl;
+                T alpha = 1.0;
+                int ls_cnt = 0;
+                while (true)
+                {
+                    VectorXT p_ls = p + alpha * dp;
+                    updateDesignParameter(p_ls);
+                    
+                    T E1 = objective();
+                    
+                    if (E1 < E0 || ls_cnt > 15)
+                    {
+                        if (ls_cnt > 15)
+                        {
+                            p = p_ls;
+                            break;
+                        }
+                        p = p_ls;
+                        break;
+                    }
+                    else
+                    {
+                        ls_cnt++;
+                        alpha *= 0.5;
+                    }
+                }
+            }
+        };
+
+        auto gaussNewtonFast = [&]()
+        {
+            for (int iter = 0; iter < 10; iter++)
+            {
+                VectorXT dp;
+                if (searchDirection(dp))
+                {
+                    std::cout << "|dp| " << dp.norm() << std::endl;
+                    T E0 = objective();
+                    // std::cout << "E " << E0 << std::endl;
+                    T alpha = 1.0;
+                    int ls_cnt = 0;
+                    while (true)
+                    {
+                        VectorXT p_ls = p + alpha * dp;
+                        updateDesignParameter(p_ls);
+                        
+                        T E1 = objective();
+                        
+                        if (E1 < E0 || ls_cnt > 15)
+                        {
+                            dq_initialization = W.transpose() * (deformed_states - rest_states);
+                            perturb = dq_initialization;
+                            backUpState();
+                            p = p_ls;
+                            break;
+                        }
+                        else
+                        {
+                            ls_cnt++;
+                            alpha *= 0.5;
+                        }
+                    }
                 }
                 else
                 {
-                    ls_cnt++;
-                    alpha *= 0.5;
+                    break;
                 }
             }
-        
-        }
-        std::cout << p.transpose() << std::endl;
+            std::cout << "max iter reached" << std::endl;
+        };
+
+        // gradientDescent();
+        // gaussNewton();
+        gaussNewtonFast();
+        // diffTest();
+        // std::cout << "|u| " << p.norm() << std::endl;
     }
 }
 

@@ -115,7 +115,7 @@ public:
     T R = 0.0002;
 
     T unit = 0.03;
-
+    T visual_R = 0.01;
     T rho = 1;
     T ks = 1.0;  // stretching term
     T kc = 1e2;  //constraint term
@@ -194,6 +194,7 @@ public:
 
     StiffnessMatrix W;
 
+    std::vector<std::pair<TV, T>> boundary_spheres;
 
     // inverse
     std::vector<TV> targets;

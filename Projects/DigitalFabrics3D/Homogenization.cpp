@@ -9,11 +9,13 @@ void Homogenization<T, dim>::testOneSample()
     // sim.disable_sliding = false;
     TV strain_dir, ortho_dir;
     
-    // sim.setUniaxialStrain(50/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(60/180.0 * M_PI, s1, strain_dir, ortho_dir);
+    // sim.setUniaxialStrain(1.885, s1, strain_dir, ortho_dir);
+    
 
     // TV2 E_nu;
-    // materialParametersFromUniaxialStrain(50/180.0 * M_PI, s1, E_nu);
-    // std::cout << "theta: " << 50 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
+    // materialParametersFromUniaxialStrain(1.885, s1, E_nu);
+    // std::cout << "theta: " << 3.3929 << " youngs_modulus " << E_nu(0) << " Poisson Ratio: " << E_nu(1) << std::endl;
     // sim.setUniaxialStrain(0.0/180.0 * M_PI, s1, strain_dir, ortho_dir);
 }
 
@@ -22,10 +24,10 @@ void Homogenization<T, dim>::initialize()
 {
     
     sim.print_force_mag = false;
-    sim.disable_sliding = false;
+    sim.disable_sliding = true;
     sim.verbose = false;
     // sim.buildPlanePeriodicBCScene3x3Subnodes(8);
-    sim.buildSceneFromUnitPatch(16);
+    sim.buildSceneFromUnitPatch(18);
     
     // sim.buildPlanePeriodicBCScene3x3();
     
@@ -42,10 +44,10 @@ void Homogenization<T, dim>::initialize()
     
     sim.k_yc = 1e8;
     sim.k_pbc = 1e8;
-    sim.kr = 1e4;
+    sim.kr = 1e3;
     
     
-    s1 = 1.1;
+    s1 = 1.05;
     s2 = 1.0;
 }
 
@@ -97,6 +99,7 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM2& stress_marco, TM2& st
         TV Xj_bc = rest_states.template segment<dim>(offset_j[0]);
         TV Xi_bc = rest_states.template segment<dim>(offset_i[0]);
 
+        // T length = (Xj_bc - Xi_bc).norm();
         T length = (Xj_bc - Xi_bc).norm();
         Offset bc_node = direction == 0 ? offset_j : offset_i;
         if (std::abs(length) >= 1e-6)
@@ -105,7 +108,11 @@ void Homogenization<T, dim>::computeMacroStressStrain(TM2& stress_marco, TM2& st
     });
 
     TM2 F_bc = TM2::Zero(), n_bc = TM2::Zero();
-    F_bc.col(0) = f_bc[0].template segment<2>(0); F_bc.col(1) = f_bc[1].template segment<2>(0);
+    F_bc.col(0) = f_bc[0].template segment<2>(0); 
+    F_bc.col(1) = f_bc[1].template segment<2>(0);
+
+    // std::cout << F_bc << std::endl;
+
     n_bc.col(0) = n1; n_bc.col(1) = n0;
 
     stress_marco = F_bc * n_bc.inverse();
@@ -126,6 +133,7 @@ void Homogenization<T, dim>::computeYoungsModulusPoissonRatioBatch()
     for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
     {
         T theta6 = std::round( theta * 1e4 ) / 1e4;
+        
         thetas.push_back(theta6);
         TV2 E_nu;
         materialParametersFromUniaxialStrain(theta6, s1, E_nu);
@@ -161,8 +169,9 @@ void Homogenization<T, dim>::materialParametersFromUniaxialStrain(T theta, T s, 
     TM2 stress, strain;
     computeMacroStressStrain(stress, strain);
     T stretch_in_d = strain_dir.template segment<2>(0).dot(strain * strain_dir.template segment<2>(0));
+    
     E_nu(0) = strain_dir.template segment<2>(0).dot(stress * strain_dir.template segment<2>(0)) / stretch_in_d;
-    E_nu(1) = ortho_dir.template segment<2>(0).dot(strain * ortho_dir.template segment<2>(0)) / stretch_in_d;
+    E_nu(1) = -ortho_dir.template segment<2>(0).dot(strain * ortho_dir.template segment<2>(0)) / stretch_in_d;
     sim.resetScene();
     
 }
@@ -172,175 +181,152 @@ template<class T, int dim>
 void Homogenization<T, dim>::fitComplianceTensor()
 {
     
-    // initialize();
+    initialize();
 
-    // CDoF2D S_entry;
-    // S_entry.setZero();
-    // ComplianceTensor S;
+    CDoF2D S_entry;
+    S_entry.setZero();
+    ComplianceTensor S;
     
-    // S.setZero();
-    // int n_angles = 400;
+    S.setZero();
+    int n_angles = 400;
     
-    // std::vector<TVEntry> strain_entries, stress_entries;
+    std::vector<TVEntry> strain_entries, stress_entries;
 
-    // auto gatherData = [&, n_angles]()
-    // {
-    //     for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
-    //     {
-    //         TV strain_dir, ortho_dir;
-    //         // sim.setBiaxialStrain(theta, s1, theta, s2, strain_dir, ortho_dir);
-    //         // TV strain_dir;
-    //         sim.setUniaxialStrain(theta, s1, strain_dir, ortho_dir);
-    //         sim.advanceOneStep();
-    //         TM stress, strain;
-    //         computeMacroStressStrain(stress, strain);
-    //         // std::cout << "E sim : " << strain_dir.dot(stress * strain_dir) / strain_dir.dot(strain * strain_dir) << std::endl;
-    //         if constexpr (dim == 2)
-    //         {
-    //             TVEntry se0, se1, se2;
-    //             se0[0] = stress(0, 0); se0[1] = stress(1, 1); se0[2] = stress(1, 0);
-    //             se1[0] = strain(0, 0); se1[1] = strain(1, 1); se1[2] = 2.0 * strain(1, 0);
-
-    //             strain_entries.push_back(se1);
-    //             stress_entries.push_back(se0);
-    //         }
-    //         sim.resetScene();
-    //     }
-    // };
-
-    // auto loadDataFromFile = [&]()
-    // {
-    //     std::string base_path = "/home/yueli/Downloads/hexagon_uniaxial_distanceBased/";
-    //     for (int degree = 0; degree < 180; degree++)
-    //     {
+    auto gatherData = [&, n_angles]()
+    {
+        for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)n_angles)
+        {
+            TV strain_dir, ortho_dir;
             
-    //         std::ifstream in(base_path + "uniaxial_"+std::to_string(degree)+".000000degrees.txt");
-    //         T eps00, eps01, eps10, eps11, sigma00, sigma01, sigma10, sigma11, dummy;
-    //         while(in >> eps00 >> eps01 >> eps10 >> eps11 >> sigma00 >> sigma01 >> sigma10 >> sigma11 >> dummy >> dummy >> dummy >> dummy >> dummy)
-    //         {
-                
-    //             TVEntry se0, se1, se2;
-    //             se0[0] = sigma00; se0[1] = sigma11; se0[2] = sigma01; 
-    //             se1[0] = eps00; se1[1] = eps11; se1[2] = 2.0 * eps01; 
-    //             if(se1.norm() < 1e-6)
-    //                 continue;
-    //             strain_entries.push_back(se1);
-    //             stress_entries.push_back(se0);
-    //             // break;
-    //         }
-    //         in.close();
-    //     }
-    // };
+            sim.setUniaxialStrain(theta, s1, strain_dir, ortho_dir);
+            sim.advanceOneStep();
+            TM2 stress, strain;
+            computeMacroStressStrain(stress, strain);
+            
+            if constexpr (dim == 2)
+            {
+                TVEntry se0, se1, se2;
+                se0[0] = stress(0, 0); se0[1] = stress(1, 1); se0[2] = stress(1, 0);
+                se1[0] = strain(0, 0); se1[1] = strain(1, 1); se1[2] = 2.0 * strain(1, 0);
 
-    // auto computeEnergy = [&]()
-    // {
-    //     T energy = 0.0;
-    //     for (int i = 0; i < stress_entries.size(); i++)
-    //     {
-    //         // energy += 0.5 * (S * stress_entries[i] - strain_entries[i]).squaredNorm() / strain_entries[i].squaredNorm();
-    //         auto x = stress_entries[i];
-    //         auto b = strain_entries[i];
-    //         T V[1];
-    //         #include "Maple/LSV.mcg"
-    //         energy += V[0];
-    //     }
-    //     return energy;
-    // };
+                strain_entries.push_back(se1);
+                stress_entries.push_back(se0);
+            }
+            sim.resetScene();
+        }
+    };
 
-    // auto computeGradient = [&]()
-    // {
-    //     CDoF2D gradient;
-    //     gradient.setZero();
-    //     for (int i = 0; i < stress_entries.size(); i++)
-    //     {
-    //         CDoF2D F;
-    //         auto x = stress_entries[i];
-    //         auto b = strain_entries[i];
-    //         #include "Maple/LSF.mcg"
-    //         gradient += F;
-    //     }
-    //     return gradient;
-    // };
-
-
-    // auto computeHessian = [&]()
-    // {
-    //     CHessian2D H;
-    //     H.setZero();
-    //     for (int a = 0; a < stress_entries.size(); a++)
-    //     {
-    //         auto x = stress_entries[a];
-    //         auto b = strain_entries[a];
-    //         T J[6][6];
-    //         memset(J, 0, sizeof(J));
-    //         #include "Maple/LSJ.mcg"
-    //         for(int i = 0; i< 6; i++)
-    //             for(int j = 0; j< 6; j++)
-    //                 H(i, j) += -J[i][j];
-    //         // H += (stress_entries[i] * stress_entries[i].transpose()).transpose() / strain_entries[i].squaredNorm();
-    //     }
-    //     return H;
-    // };
     
 
-    // auto leastSquareFit = [&]()
-    // {
-    //     CDoF2D gradient = computeGradient();
-        
-    //     CHessian2D H = computeHessian();
-    //     CDoF2D dx = H.colPivHouseholderQr().solve(gradient);
-        
-    //     S_entry += dx;
+    auto computeEnergy = [&]()
+    {
+        T energy = 0.0;
+        for (int i = 0; i < stress_entries.size(); i++)
+        {
+            // energy += 0.5 * (S * stress_entries[i] - strain_entries[i]).squaredNorm() / strain_entries[i].squaredNorm();
+            auto x = stress_entries[i];
+            auto b = strain_entries[i];
+            T V[1];
+            #include "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Maple/LSV.mcg"
+            energy += V[0];
+        }
+        return energy;
+    };
 
-        
-    //     S(0, 0) = S_entry[0]; S(0, 1) = S_entry[1]; S(0, 2) = S_entry[2];
-    //     S(1, 0) = S_entry[1]; S(1, 1) = S_entry[3]; S(1, 2) = S_entry[4];
-    //     S(2, 0) = S_entry[2]; S(2, 1) = S_entry[4]; S(2, 2) = S_entry[5];
+    auto computeGradient = [&]()
+    {
+        CDoF2D gradient;
+        gradient.setZero();
+        for (int i = 0; i < stress_entries.size(); i++)
+        {
+            CDoF2D F;
+            auto x = stress_entries[i];
+            auto b = strain_entries[i];
+            #include "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Maple/LSF.mcg"
+            gradient += F;
+        }
+        return gradient;
+    };
 
-    //     // std::cout << "Sσ - ε " << (S * stress_entries[0] - strain_entries[0]).norm() << std::endl;
 
-    //     // std::cout << S_entry << std::endl;
-    // };
+    auto computeHessian = [&]()
+    {
+        CHessian2D H;
+        H.setZero();
+        for (int a = 0; a < stress_entries.size(); a++)
+        {
+            auto x = stress_entries[a];
+            auto b = strain_entries[a];
+            T J[6][6];
+            memset(J, 0, sizeof(J));
+            #include "/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Maple/LSJ.mcg"
+            for(int i = 0; i< 6; i++)
+                for(int j = 0; j< 6; j++)
+                    H(i, j) += -J[i][j];
+            // H += (stress_entries[i] * stress_entries[i].transpose()).transpose() / strain_entries[i].squaredNorm();
+        }
+        return H;
+    };
     
-    // gatherData();
-    // // loadDataFromFile();
-    // std::cout << "# sample: " << stress_entries.size() << std::endl;
-    // std::cout << "======== Simulation Data Generation Done ========" << std::endl;
-    // T e = computeEnergy();
-    // std::cout << "e: " << e << std::endl;
-    // leastSquareFit();
 
-    // e = computeEnergy();
-    // auto gd = computeGradient();
-    // std::cout << "e: " << e << " |g|: " << gd.norm() << std::endl;
-    // std::cout << "S" << std::endl;
-    // std::cout << S << std::endl;
+    auto leastSquareFit = [&]()
+    {
+        CDoF2D gradient = computeGradient();
+        
+        CHessian2D H = computeHessian();
+        CDoF2D dx = H.colPivHouseholderQr().solve(gradient);
+        
+        S_entry += dx;
 
-    // std::vector<T> thetas, youngs_moduli, poisson_ratio;
-    // for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)400)
-    // {
-    //     thetas.push_back(theta);
-    //     TVEntry ddT_vec, nnT_vec;
-    //     ddT_vec[0] = std::cos(theta) * std::cos(theta);
-    //     ddT_vec[1] = std::sin(theta) * std::sin(theta);
-    //     ddT_vec[2] = std::cos(theta) * std::sin(theta);
-    //     T youngs_modulus = 1.0 / ddT_vec.dot(S * ddT_vec);
-    //     nnT_vec[0] = std::sin(theta) * std::sin(theta);
-    //     nnT_vec[1] = std::cos(theta) * std::cos(theta);
-    //     nnT_vec[2] = -std::cos(theta) * std::sin(theta);
-    //     T nu = -youngs_modulus * ddT_vec.dot(S*nnT_vec);
-    //     youngs_moduli.push_back(youngs_modulus);
-    //     poisson_ratio.push_back(nu);
-    // }
-    // for(T theta : thetas)
-    //     std::cout << theta << " ";
-    // std::cout << std::endl;
-    // for(T youngs_modulus : youngs_moduli)
-    //     std::cout << youngs_modulus << " ";
-    // std::cout << std::endl;
-    // for(T nu : poisson_ratio)
-    //     std::cout << nu << " ";
-    // std::cout << std::endl;
+        
+        S(0, 0) = S_entry[0]; S(0, 1) = S_entry[1]; S(0, 2) = S_entry[2];
+        S(1, 0) = S_entry[1]; S(1, 1) = S_entry[3]; S(1, 2) = S_entry[4];
+        S(2, 0) = S_entry[2]; S(2, 1) = S_entry[4]; S(2, 2) = S_entry[5];
+
+        // std::cout << "Sσ - ε " << (S * stress_entries[0] - strain_entries[0]).norm() << std::endl;
+
+        // std::cout << S_entry << std::endl;
+    };
+    
+    gatherData();
+    // loadDataFromFile();
+    std::cout << "# sample: " << stress_entries.size() << std::endl;
+    std::cout << "======== Simulation Data Generation Done ========" << std::endl;
+    T e = computeEnergy();
+    std::cout << "e: " << e << std::endl;
+    leastSquareFit();
+
+    e = computeEnergy();
+    auto gd = computeGradient();
+    std::cout << "e: " << e << " |g|: " << gd.norm() << std::endl;
+    std::cout << "S" << std::endl;
+    std::cout << S << std::endl;
+
+    std::vector<T> thetas, youngs_moduli, poisson_ratio;
+    for (T theta = 0; theta <= 2.0 * M_PI; theta += 2.0 * M_PI /(T)400)
+    {
+        thetas.push_back(theta);
+        TVEntry ddT_vec, nnT_vec;
+        ddT_vec[0] = std::cos(theta) * std::cos(theta);
+        ddT_vec[1] = std::sin(theta) * std::sin(theta);
+        ddT_vec[2] = std::cos(theta) * std::sin(theta);
+        T youngs_modulus = 1.0 / ddT_vec.dot(S * ddT_vec);
+        nnT_vec[0] = std::sin(theta) * std::sin(theta);
+        nnT_vec[1] = std::cos(theta) * std::cos(theta);
+        nnT_vec[2] = -std::cos(theta) * std::sin(theta);
+        T nu = -youngs_modulus * ddT_vec.dot(S*nnT_vec);
+        youngs_moduli.push_back(youngs_modulus);
+        poisson_ratio.push_back(nu);
+    }
+    for(T theta : thetas)
+        std::cout << theta << " ";
+    std::cout << std::endl;
+    for(T youngs_modulus : youngs_moduli)
+        std::cout << youngs_modulus << " ";
+    std::cout << std::endl;
+    for(T nu : poisson_ratio)
+        std::cout << nu << " ";
+    std::cout << std::endl;
 }
 
 
