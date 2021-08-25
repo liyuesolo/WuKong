@@ -178,8 +178,8 @@ public:
             if (dof_node_location.size())
                 if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
                     is_crossing = true;
-            f(indices.back(), indices[1], indices[indices.size() - 2],
-             offset_map[indices.back()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]], 0, is_crossing);
+            f(indices.front(), indices[1], indices[indices.size() - 2],
+             offset_map[indices.front()], offset_map[indices[1]], offset_map[indices[indices.size() - 2]], 0, is_crossing);
         }
     }
 
@@ -206,7 +206,7 @@ public:
             if (dof_node_location.size())
                 if (dof_node_location[0] == 0)// || dof_node_location[0] == 1 || dof_node_location[0] == indices.size() - 2)
                     is_crossing = true;
-            f(indices.back(), indices[1], indices[indices.size() - 2], 0, is_crossing);
+            f(indices.front(), indices[1], indices[indices.size() - 2], 0, is_crossing);
         }
     }
 

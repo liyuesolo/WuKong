@@ -39,7 +39,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                     rod->x(node_j, xj);
                     rod->XdX(node_j, Xj, dXj);
                     edge1 = on_rod_idx[rod_idx];
-                    if(rod->closed && on_rod_idx[rod_idx] == rod->numSeg())
+                    if(rod->closed && on_rod_idx[rod_idx] == 0)
                         edge1 = 0;
                 }
                 if (node_k != -1)
@@ -50,7 +50,6 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingK(std::vector<Entry>& entry_K)
                     edge0 = on_rod_idx[rod_idx]-1;
                     if(rod->closed && on_rod_idx[rod_idx] == 0)
                         edge0 = rod->numSeg() - 1;
-
                 }
 
                 T theta_edge0 = rod->reference_angles[edge0];
@@ -305,7 +304,7 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                     rod->x(node_j, xj);
                     rod->XdX(node_j, Xj, dXj);
                     edge1 = on_rod_idx[rod_idx];
-                    if(rod->closed && on_rod_idx[rod_idx] == rod->numSeg())
+                    if(rod->closed && on_rod_idx[rod_idx] == 0)
                         edge1 = 0;
                 }
                 if (node_k != -1)
@@ -318,6 +317,9 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                         edge0 = rod->numSeg() - 1;
 
                 }
+
+                // std::cout << " node i " << node_i << " node j " << node_j << " node k " << node_k << std::endl;
+                // std::cout << " on_rod_idx[rod_idx] " << on_rod_idx[rod_idx] << " " << edge0 << " " << edge1 << std::endl;
 
                 T theta_edge0 = rod->reference_angles[edge0];
                 T theta_edge1 = rod->reference_angles[edge1];
@@ -422,8 +424,10 @@ void EoLRodSim<T, dim>::addJointBendingAndTwistingForce(Eigen::Ref<VectorXT> res
                         residual(offset_i[dim]) += F.template segment<dim>(3*dim + dim).dot(dXi);
                         residual(offset_j[dim]) += F.template segment<dim>(3*dim + 2*dim).dot(dXj);
 
-                        residual.template segment<2>(rod->theta_dof_start_offset + (edge0)) += 
-                            F.template segment<2>(18);
+                        
+                        residual[rod->theta_dof_start_offset + edge0] += F[18];
+                        residual[rod->theta_dof_start_offset + edge1] += F[19];
+                        
                     }
                 }
 
@@ -475,7 +479,7 @@ T EoLRodSim<T, dim>::addJointBendingAndTwistingEnergy(bool bending, bool twistin
                     rod->x(node_j, xj);
                     rod->X(node_j, Xj);
                     edge1 = on_rod_idx[rod_idx];
-                    if(rod->closed && on_rod_idx[rod_idx] == rod->numSeg())
+                    if(rod->closed && on_rod_idx[rod_idx] == 0)
                         edge1 = 0;
                 }
                 if (node_k != -1)

@@ -76,7 +76,7 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 8)
         buildShelterScene(32);
     else if (patch_type == 9)
-        buildGripperScene(32);
+        buildGripperScene(4);
     else if (patch_type == 10)
         buildGridLayoutGripper(32);
     else if (patch_type == 11)
@@ -96,8 +96,99 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 18)
         buildInterlockingSquareScene(32);
     else if (patch_type == 19)
-        buildDenseInterlockingSquareScene(32);
+        buildDenseInterlockingSquareScene(4);
+    else if (patch_type == 20)
+        buildTestSceneJuan(2);
 }
+
+template<class T, int dim>
+void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        
+        clearSimData();
+
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.add_pbc_twisting = false;
+        sim.add_pbc = false;
+
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
+
+        sim.ke = 1e-6;
+
+        sim.unit = 0.09;
+        sim.visual_R = 0.005;
+
+        auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
+        {
+            sim.rod_crossings[crossing_idx]->is_fixed = true;
+            sim.rod_crossings[crossing_idx]->rods_involved.push_back(rod_idx);
+            sim.rod_crossings[crossing_idx]->on_rod_idx[rod_idx] = location;
+            sim.rod_crossings[crossing_idx]->sliding_ranges.push_back(Range::Zero());
+        };
+
+        std::vector<Eigen::Triplet<T>> w_entry;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        int rod_cnt = 0;
+
+        std::vector<TV> nodal_positions;
+
+        TV a;
+        a = TV(0.5, 0.5, 0) * sim.unit;
+
+        addCrossingPoint(nodal_positions, a, full_dof_cnt, node_cnt);
+
+        TV from = TV(0, 0.5, 0.0) * sim.unit, to = TV(1, 0.5, 0.0) * sim.unit;
+        addAStraightRod(from, to, {a}, {0}, sub_div , full_dof_cnt, node_cnt, rod_cnt);
+
+        addCrossingData(0, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[0]);
+
+        
+
+
+        for (auto& rod : sim.Rods)
+            rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+        
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+        
+        sim.fixCrossing();
+
+        sim.perturb = VectorXT::Zero(sim.W.cols());
+        for (auto& crossing : sim.rod_crossings)
+        {
+            Offset off;
+            sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+            T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+            int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+            sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
+            
+        }
+    }
+}
+
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
@@ -189,40 +280,40 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             
         };
 
-        // auto addRodsForASquare = [&](int bottom_left_node_idx)
-        // {
-        //     TV bottom_left = nodal_positions[bottom_left_node_idx];
-        //     TV bottom_right = nodal_positions[bottom_left_node_idx + 1];
-        //     TV top_right = nodal_positions[bottom_left_node_idx + 2];
-        //     TV top_left = nodal_positions[bottom_left_node_idx + 3];
+        auto addRodsForASquare = [&](int bottom_left_node_idx)
+        {
+            TV bottom_left = nodal_positions[bottom_left_node_idx];
+            TV bottom_right = nodal_positions[bottom_left_node_idx + 1];
+            TV top_right = nodal_positions[bottom_left_node_idx + 2];
+            TV top_left = nodal_positions[bottom_left_node_idx + 3];
 
-        //     addAStraightRod(bottom_left, bottom_right, 
-        //         {bottom_left, bottom_right}, {bottom_left_node_idx, bottom_left_node_idx + 1},
-        //         sub_div, full_dof_cnt, node_cnt, rod_cnt );
+            addAStraightRod(bottom_left, bottom_right, 
+                {bottom_left, bottom_right}, {bottom_left_node_idx, bottom_left_node_idx + 1},
+                sub_div, full_dof_cnt, node_cnt, rod_cnt );
             
-        //     addCrossingData(bottom_left_node_idx, rod_cnt - 1, 0);
-        //     addCrossingData(bottom_left_node_idx + 1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            addCrossingData(bottom_left_node_idx, rod_cnt - 1, 0);
+            addCrossingData(bottom_left_node_idx + 1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
 
-        //     addAStraightRod(bottom_right, top_right, 
-        //         {bottom_right, top_right}, {bottom_left_node_idx + 1, bottom_left_node_idx + 2},
-        //         sub_div, full_dof_cnt, node_cnt, rod_cnt );
-        //     addCrossingData(bottom_left_node_idx + 1, rod_cnt - 1, 0);
-        //     addCrossingData(bottom_left_node_idx + 2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            addAStraightRod(bottom_right, top_right, 
+                {bottom_right, top_right}, {bottom_left_node_idx + 1, bottom_left_node_idx + 2},
+                sub_div, full_dof_cnt, node_cnt, rod_cnt );
+            addCrossingData(bottom_left_node_idx + 1, rod_cnt - 1, 0);
+            addCrossingData(bottom_left_node_idx + 2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
             
-        //     addAStraightRod(top_right, top_left, 
-        //         {top_right, top_left}, {bottom_left_node_idx + 2, bottom_left_node_idx + 3},
-        //         sub_div, full_dof_cnt, node_cnt, rod_cnt );
-        //     addCrossingData(bottom_left_node_idx + 2, rod_cnt - 1, 0);
-        //     addCrossingData(bottom_left_node_idx + 3, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            addAStraightRod(top_right, top_left, 
+                {top_right, top_left}, {bottom_left_node_idx + 2, bottom_left_node_idx + 3},
+                sub_div, full_dof_cnt, node_cnt, rod_cnt );
+            addCrossingData(bottom_left_node_idx + 2, rod_cnt - 1, 0);
+            addCrossingData(bottom_left_node_idx + 3, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
 
-        //     addAStraightRod(top_left, bottom_left, 
-        //         {top_left, bottom_left}, {bottom_left_node_idx + 3, bottom_left_node_idx},
-        //         sub_div, full_dof_cnt, node_cnt, rod_cnt );
-        //     addCrossingData(bottom_left_node_idx + 3, rod_cnt - 1, 0);
-        //     addCrossingData(bottom_left_node_idx, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
-        // };
+            addAStraightRod(top_left, bottom_left, 
+                {top_left, bottom_left}, {bottom_left_node_idx + 3, bottom_left_node_idx},
+                sub_div, full_dof_cnt, node_cnt, rod_cnt );
+            addCrossingData(bottom_left_node_idx + 3, rod_cnt - 1, 0);
+            addCrossingData(bottom_left_node_idx, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+        };
 
-        int n_row = 2, n_col = 3;
+        int n_row = 3, n_col = 3;
         
         T length_x = square_width * n_col + (square_width - 2.0 * overlap) * (n_col - 1);
         T length_y = length_x;
@@ -247,9 +338,12 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
                 T left = square_width - overlap + col * 2.0 * (square_width - overlap);
                 T bottom = square_width - overlap + row * 2.0 * (square_width - overlap);
                 TV bottom_left = TV(left, bottom, 0.0);
+                // std::cout << bottom_left.transpose() << std::endl;
                 addInnerSquare(bottom_left);
             }    
         }
+
+        std::cout << nodal_positions.size() << std::endl;
 
         // add Boundary rods first
         // these are the top row and bottom row
@@ -259,9 +353,9 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             int idx0 = (0 * n_col + col) * 4; // 4 is four nodes per square
             int idx1 = ((n_row - 1) * n_col + col) * 4; // 4 is four nodes per square
             // std::cout << idx0 << " " << idx1 << std::endl;
-            TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
-            TV v0_next = nodal_positions[idx0 + 1], v1_next = nodal_positions[idx1 + 1]; 
-
+            TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1 + 3];
+            TV v0_next = nodal_positions[idx0 + 1], v1_next = nodal_positions[idx1 + 2]; 
+            // std::cout << v0.transpose() << " " << v0_next.transpose() << std::endl;
             addAStraightRod(v0, v0_next, 
                 {v0, v0_next}, {idx0, idx0 + 1},
                 sub_div, full_dof_cnt, node_cnt, rod_cnt );
@@ -269,10 +363,10 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             addCrossingData(idx0 + 1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
 
             addAStraightRod(v1, v1_next, 
-                {v1, v1_next}, {idx1, idx1 + 1},
+                {v1, v1_next}, {idx1 + 3, idx1 + 2},
                 sub_div, full_dof_cnt, node_cnt, rod_cnt );
-            addCrossingData(idx1, rod_cnt - 1, 0);
-            addCrossingData(idx1 + 1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            addCrossingData(idx1 + 3, rod_cnt - 1, 0);
+            addCrossingData(idx1 + 2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
         }
 
 
@@ -282,35 +376,40 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             int idx0 = (row * n_col + 0) * 4; // 4 is four nodes per square
             int idx1 = (row * n_col + n_col - 1) * 4; // 4 is four nodes per square
             
-            TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
-            TV v0_next = nodal_positions[idx0 + 3], v1_next = nodal_positions[idx1 + 3]; 
+            TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1 + 1];
+            TV v0_next = nodal_positions[idx0 + 3], v1_next = nodal_positions[idx1 + 2]; 
 
             addAStraightRod(v0, v0_next, 
                 {v0, v0_next}, {idx0, idx0 + 3},
                 sub_div, full_dof_cnt, node_cnt, rod_cnt );
             addCrossingData(idx0, rod_cnt - 1, 0);
             addCrossingData(idx0 + 3, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
             addAStraightRod(v1, v1_next, 
-                {v1, v1_next}, {idx1, idx1 + 3},
+                {v1, v1_next}, {idx1 + 1, idx1 + 2},
                 sub_div, full_dof_cnt, node_cnt, rod_cnt );
-            addCrossingData(idx1, rod_cnt - 1, 0);
-            addCrossingData(idx1 + 3, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            addCrossingData(idx1 + 1, rod_cnt - 1, 0);
+            addCrossingData(idx1 + 2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
         }
         
         
         // add inner rods
-        
-        for (int row = 0; row < n_row; row++)
+        for (int row = 0; row < n_row - 1; row++)
         {
+            // vertical ones
             for (int col = 0; col < n_col - 1; col++)
             {
                 //these are right column of each square
                 int idx0 = (row * n_col + col) * 4 + 1; // 4 is four nodes per square
                 int idx1 = (row * n_col + col) * 4 + 2; 
 
-                int idx_middle1 = n_row * n_col + (row * n_col + col) * 12 + 1;
+                int idx_middle1 = n_row * n_col * 4 + (row * n_col + col) * 12 + 1;
+                int idx_middle2 = n_row * n_col * 4 + ((row + 1) * n_col + col) * 12 + 1;
+                // std::cout << idx0 << " " << idx_middle1 << " " << idx1 << std::endl;
+
                 TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
                 TV v_middle1 = nodal_positions[idx_middle1];
+                TV v_middle2;
                 if (row == 0)
                 {
                     addAStraightRod(v0, v1, 
@@ -319,13 +418,257 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
                     addCrossingData(idx0, rod_cnt - 1, 0);
                     addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
                     addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
-                }
-                // else if ()
 
-                //these are left column of each square
+                    idx0 = (row * n_col + col + 1) * 4 + 0; // 4 is four nodes per square
+                    idx1 = (row * n_col + col + 1) * 4 + 3; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 4;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                }
+                if (row == n_row - 2)
+                {
+                    idx0 = ((row + 1) * n_col + col) * 4 + 1; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col) * 4 + 2; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 10;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                    idx0 = ((row + 1) * n_col + col + 1) * 4 + 0; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col + 1) * 4 + 3; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 7;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                }
+                if (row != n_row - 2)
+                {
+                    idx0 = ((row + 1) * n_col + col) * 4 + 1; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col) * 4 + 2; 
+                    
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 10;
+                    idx_middle2 = n_row * n_col * 4 + ((row + 1) * (n_col - 1) + col) * 12 + 1;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1]; v_middle2 = nodal_positions[idx_middle2];
+                    
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, idx_middle1, idx_middle2,  idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx_middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                    idx0 = ((row + 1) * n_col + col + 1) * 4 + 0; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col + 1) * 4 + 3; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 7;
+                    idx_middle2 = n_row * n_col * 4 + ((row + 1) * (n_col - 1) + col) * 12 + 4;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1]; v_middle2 = nodal_positions[idx_middle2];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, idx_middle1, idx_middle2,  idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx_middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                }
+
+                if (col == 0)
+                {
+                    idx0 = (row * n_col + col) * 4 + 3; // 4 is four nodes per square
+                    idx1 = (row * n_col + col) * 4 + 2; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 2;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                    idx0 = ((row + 1) * n_col + col) * 4 + 0; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col) * 4 + 1; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 11;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                }
+                if (col == n_col - 2)
+                {
+                    idx0 = (row * n_col + col + 1) * 4 + 3; // 4 is four nodes per square
+                    idx1 = (row * n_col + col + 1) * 4 + 2; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 5;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                    idx0 = ((row + 1) * n_col + col + 1) * 4 + 0; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col + 1) * 4 + 1; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 8;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v1}, {idx0, idx_middle1, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                }
+                if (n_col - 2 != col)
+                {
+                    idx0 = (row * n_col + col + 1) * 4 + 3; // 4 is four nodes per square
+                    idx1 = (row * n_col + col + 1) * 4 + 2; 
+                    
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 5;
+                    idx_middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col + 1) * 12 + 2;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1]; v_middle2 = nodal_positions[idx_middle2];
+                    
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, idx_middle1, idx_middle2,  idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx_middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                    idx0 = ((row + 1) * n_col + col + 1) * 4 + 0; // 4 is four nodes per square
+                    idx1 = ((row + 1) * n_col + col + 1) * 4 + 1; 
+
+                    idx_middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 8;
+                    idx_middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col + 1) * 12 + 11;
+                    v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                    v_middle1 = nodal_positions[idx_middle1]; v_middle2 = nodal_positions[idx_middle2];
+                    addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, idx_middle1, idx_middle2,  idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                    addCrossingData(idx0, rod_cnt - 1, 0);
+                    addCrossingData(idx_middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                    addCrossingData(idx_middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                    addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                }
             }
         }
 
+        // std::cout << "inner" << std::endl;
+        for (int row = 0; row < n_row - 1; row++)
+        {
+            for (int col = 0; col < n_col - 1; col++)
+            {
+                int idx0 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+                int idx1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 3; 
+                int middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 1; 
+                int middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 4; 
+
+                
+                TV v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                TV v_middle1 = nodal_positions[middle1], v_middle2 = nodal_positions[middle2];
+                addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, middle1, middle2, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                addCrossingData(idx0, rod_cnt - 1, 0);
+                addCrossingData(middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                addCrossingData(middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                idx0 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 3;
+                idx1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 6; 
+                middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 5; 
+                middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 8; 
+
+                v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                v_middle1 = nodal_positions[middle1], v_middle2 = nodal_positions[middle2];
+                addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, middle1, middle2, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                addCrossingData(idx0, rod_cnt - 1, 0);
+                addCrossingData(middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                addCrossingData(middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+
+                idx0 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 6;
+                idx1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 9; 
+                middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 7; 
+                middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 10; 
+
+                v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                v_middle1 = nodal_positions[middle1], v_middle2 = nodal_positions[middle2];
+                addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, middle1, middle2, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                addCrossingData(idx0, rod_cnt - 1, 0);
+                addCrossingData(middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                addCrossingData(middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+                
+                idx0 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 9;
+                idx1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 0; 
+                middle1 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 11; 
+                middle2 = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12 + 2; 
+
+                v0 = nodal_positions[idx0], v1 = nodal_positions[idx1];
+                v_middle1 = nodal_positions[middle1], v_middle2 = nodal_positions[middle2];
+                addAStraightRod(v0, v1, 
+                        {v0, v_middle1, v_middle2, v1}, {idx0, middle1, middle2, idx1},
+                        sub_div, full_dof_cnt, node_cnt, rod_cnt );
+                addCrossingData(idx0, rod_cnt - 1, 0);
+                addCrossingData(middle1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[1]);
+                addCrossingData(middle2, rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[2]);
+                addCrossingData(idx1, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+            }
+        }
+
+        // std::cout << sim.rod_crossings.size() << std::endl;
+        // for (auto crossing : sim.rod_crossings)
+        // {
+        //     std::cout << crossing->node_idx << " " << crossing->rods_involved.size() << std::endl;
+        // }
+        // std::cout << "square" << std::endl;
+        // for (int row = 0; row < n_row; row++)
+        // {
+        //     for (int col = 0; col < n_col; col++)
+        //     {
+        //         int crossing_idx = row * n_col + col;
+        //         addRodsForASquare(crossing_idx * 4); // 4 is four nodes per square
+        //     }
+
+        // }
 
         // for (int row = 0; row < n_row - 1; row++)
         // {
@@ -336,18 +679,18 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         //     }
         // }
 
-        for (auto& crossing : sim.rod_crossings)
-        {
-            std::sort( crossing->rods_involved.begin(), crossing->rods_involved.end() );
-            crossing->rods_involved.erase( std::unique( crossing->rods_involved.begin(), crossing->rods_involved.end() ), crossing->rods_involved.end() );
-        }
+        // for (auto& crossing : sim.rod_crossings)
+        // {
+        //     std::sort( crossing->rods_involved.begin(), crossing->rods_involved.end() );
+        //     crossing->rods_involved.erase( std::unique( crossing->rods_involved.begin(), crossing->rods_involved.end() ), crossing->rods_involved.end() );
+        // }
         
         for (auto& rod : sim.Rods)
             rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
 
         int dof_cnt = 0;
         markCrossingDoF(w_entry, dof_cnt);
-        
+        // std::cout << "mark dof" << std::endl;
         for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
         
         appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
@@ -364,7 +707,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         }
         
         sim.fixCrossing();
-
+        // std::cout << "fix crossing" << std::endl;
         sim.perturb = VectorXT::Zero(sim.W.cols());
         for (auto& crossing : sim.rod_crossings)
         {
@@ -376,6 +719,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             
         }
     }
+    // std::cout << "done" << std::endl;
 }
 
 template<class T, int dim>
@@ -2426,10 +2770,12 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
 
         for (int i = 0; i < 2; i++)
         {
+            std::cout << " dof node location " << sim.Rods[0]->dof_node_location[i] << std::endl;
             RodCrossing<T, dim>* crossing = 
                     new RodCrossing<T, dim>(i, {0, 1});
             crossing->on_rod_idx[0] = sim.Rods[0]->dof_node_location[1 - i];
             crossing->on_rod_idx[1] = sim.Rods[1]->dof_node_location[i];
+            // std::cout << crossing->on_rod_idx[0] << std::endl;
             if (i == 0)
             // if(true)
             {
@@ -2463,7 +2809,6 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
             rod->setupBishopFrame();
         }
 
-        sim.fixCrossing();
         
         
 
@@ -2473,18 +2818,24 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
         {        
             sim.dirichlet_dof[sim.Rods[0]->reduced_map[offset[d]]] = 0;
         }
+
+        sim.fixCrossing();
         sim.Rods[0]->fixPointLagrangian(1, TV::Zero(), sim.dirichlet_dof);
         sim.Rods[0]->fixPointLagrangian(sim.Rods[0]->indices.size() - 2, TV::Zero(), sim.dirichlet_dof);
         sim.Rods[1]->backOffsetReduced(offset);
+
         sim.dirichlet_dof[offset[0]] = 0;
-        sim.dirichlet_dof[offset[1]] = -0.3 * sim.unit;
+        sim.dirichlet_dof[offset[1]] = -0.2 * sim.unit;
         sim.dirichlet_dof[offset[2]] = 0;
 
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset] = 0;
         sim.dirichlet_dof[sim.Rods[0]->theta_reduced_dof_start_offset + sim.Rods[0]->numSeg()-1] = 0;
 
-        GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRodsCurveGripperHardCoded();
+        // GCodeGenerator<T, dim>(this->sim, "gripper.gcode").generateGCodeFromRodsCurveGripperHardCoded();
         
+
+        sim.perturb = VectorXT::Zero(sim.W.cols());
+
         for (auto& crossing : sim.rod_crossings)
         // for (int i = 0; i < 10; i++)
         {
@@ -3656,6 +4007,8 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
         }
            
     }
+    
+    
 
     // now we add the Eulerian Dof of the passing points
     deformed_states.conservativeResize(full_dof_cnt + passing_points.size());
@@ -3689,11 +4042,12 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
     
 
     rod->rest_state = rest_state_rod0;
-    std::vector<int> ordered_location(dof_node_location.size());
+    std::vector<int> ordered_location;
     for (auto item : dof_node_location)
         ordered_location.push_back(item.second);
     std::sort(ordered_location.begin(), ordered_location.end());
-        
+    
+    
     rod->dof_node_location = ordered_location;
 
     sim.Rods.push_back(rod);
