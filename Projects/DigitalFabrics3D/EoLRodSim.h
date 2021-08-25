@@ -401,7 +401,7 @@ public:
     void fixRegionalDisplacement(std::function<bool(const TV&, TV&, Vector<bool, dim>&)> helper);
 
     
-    void getCrossingPosition(int crossing_idx, TV& x)
+    void getCrossingPosition(int crossing_idx, TV& x) const
     {
         auto crossing = rod_crossings[crossing_idx];
         auto rod = Rods[crossing->rods_involved.front()];

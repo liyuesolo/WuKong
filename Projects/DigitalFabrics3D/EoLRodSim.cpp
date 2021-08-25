@@ -866,60 +866,6 @@ void EoLRodSim<T, dim>::advanceOneStep()
     //     // std::cout << rod->reference_angles.transpose() << std::endl;
     //     // std::cout << reference_twist.transpose() << std::endl;
     // }
-
-    // for (auto& crossing : rod_crossings)
-    // {
-    //     break;
-    //     // TV t(1,0,0), n(0, 0, 1);
-    //     Matrix<T, 3, 3> rb_frames = Matrix<T, 3, 3>::Identity();
-    //     rb_frames = crossing->rotation_accumulated * rb_frames;
-    //     TV u1_prev, u2_prev;
-    //     TV m11_prev, m12_prev;
-    //     TV t1_prev;
-
-    //     int cnt = 0;
-    //     for(int rod_idx : crossing->rods_involved)
-    //     {
-    //         int node_loc = crossing->on_rod_idx[rod_idx];
-    //         auto rod = Rods[rod_idx];
-            
-    //         if constexpr (dim == 3)
-    //         {
-    //             T theta1 = rod->reference_angles[node_loc];
-    //             TV t1 = rod->prev_tangents[node_loc];
-    //             TV u1 = rod->reference_frame_us[node_loc];
-    //             TV b1 = t1.cross(u1);
-    //             TV m11 = u1 * std::cos(theta1) + b1 * std::sin(theta1);
-    //             TV m12 = -u1 * std::sin(theta1) + b1 * std::cos(theta1);
-
-    //             // T theta2 = rod->reference_angles[node_loc - 1];
-    //             // TV t2 = rod->prev_tangents[node_loc - 1];
-    //             // TV u2 = rod->reference_frame_us[node_loc - 1];
-    //             // TV b2 = t2.cross(u2);
-    //             // TV m21 = u2 * std::cos(theta2) + b2 * std::sin(theta2);
-    //             // TV m22 = -u2 * std::sin(theta2) + b2 * std::cos(theta2);
-    //             // if (cnt %2 ==1)
-    //             {
-    //                 std::cout << " dot " << t1.dot(m12_prev) <<std::endl;
-    //                 std::cout << " dot " << m12.dot(t1_prev) <<std::endl;
-    //                 std::cout << " dot " << m11.dot(m11_prev) <<std::endl;
-    //                 // std::cout << " dot " << b1.dot(b1_prev) <<std::endl;
-    //                 // std::cout << "normal dot " << t2.dot(u2_prev) <<std::endl;
-    //             }
-    //             // std::cout << "dot " << u1.dot(rb_frames.col(0)) << " " << u2.dot(rb_frames.col(0)) <<std::endl;
-    //             // std::cout << "dot " << u1.dot(u2) <<std::endl;
-    //             // std::cout << "normal cross " << m12.cross(rb_frames.col(2)).norm() << " " << m22.cross(rb_frames.col(2)).norm() <<std::endl;
-    //             u1_prev = u1; t1_prev = t1;
-    //             m11_prev = m11; m12_prev = m12;
-                
-    //             std::cout << std::endl;
-    //         }
-    //         cnt ++;
-    //     }
-    // }
-
-    // std::cout<< addJointBendingAndTwistingEnergy() << std::endl;
-    
 }
 
 

@@ -55,6 +55,9 @@ public:
     ~GCodeGenerator() {}
 
 public:
+    
+    void slidingBlocksGCode(int n_row, int n_col, int type);
+
     void activeTexticleGCode(bool fused = false);
     void activeTexticleGCode2(bool fused = false);
 
@@ -71,7 +74,7 @@ public:
     void generateGCodeFromRodsNoTunnel();
 
     void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 600.0);
-    void moveTo(const TV& to, T speed = 3000.0);
+    void moveTo(const TV& to, T speed = 2000.0);
 
     void addSingleTunnel(const TV& from, const TV& to, T height);
 
@@ -84,7 +87,7 @@ public:
 
     void generateCodeSingleRod(int rod_idx, std::function<void(TV&)> scaleAndShift, 
         bool is_first_layer,
-        T bd_height = 0.3, T inner_height = 0.3);
+        T bd_height = 0.3, T inner_height = 0.3, T buffer_percentage = 0.3);
 private:
 
     T computeExtrusionAmount() const;

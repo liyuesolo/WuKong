@@ -19,178 +19,200 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 {
 
 }
-// template<class T, int dim>
-// void GCodeGenerator<T, dim>::crossingTest()
-// {
-//     if constexpr (dim == 3)
-//     {
-//         layer_height = 0.3;
-//         writeHeader();
-//         TV from = TV(20, 40, layer_height);
-//         TV to = TV(60, 40, layer_height);
-//         TV extend = TV(80, 40, layer_height);
 
-//         TV left(38, 40, layer_height);
-//         TV right(42, 40, layer_height);
+template<class T, int dim>
+void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 40);
+    };
 
-//         moveTo(from);
-//         writeLine(from, to, layer_height, 300);
-//         moveTo(extend);
-//         extend[dim - 1] += 4.0;
-//         moveTo(extend);
-//         extend[dim - 1] -= 4.0;
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
 
-//         left[dim - 1] += 2.0;
-//         moveTo(left);
-//         left[dim - 1] -= 2.0;
-//         addSingleTunnel(left, right, 2.0);
-        
-//         right[dim - 1] += 4.0;
-//         moveTo(right);
-//         right[dim - 1] -= 4.0;
-        
-//         for (int i = 0; i < 3; i++)
-//         {
-//             from[dim - 1] += layer_height;
-//             left[dim - 1] += layer_height;
+        // x sliding
+        if (type == 0)
+        {
+            int rod_cnt = 0; 
+            int boundary_rod_cnt = 0;
+            // outer contour
+            for (int col = 0; col < n_col; col++)
+            {
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+            }
+            for (int row = 0; row < n_row; row++)
+            {
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+            }
+            boundary_rod_cnt = rod_cnt;
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    if (row == 0)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                    }
+                    if (row == n_row - 2)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                    }
+                    if (row != n_row - 2)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                    }
+                    if (col == 0) rod_cnt += 2;
+                    if (col == n_col - 2) rod_cnt += 2;
+                    if (n_col - 2 != col) rod_cnt += 2;
+                       
+                }
+            }
+
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    rod_cnt++;
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                    rod_cnt++;
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                }
+            }
             
-//             from[dim - 1] += 4.0;
-//             moveTo(from);
-//             from[dim - 1] -= 4.0;
-//             moveTo(from);
+            rod_cnt = boundary_rod_cnt;
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    if (row == 0) rod_cnt += 2;
+                    if (row == n_row - 2) rod_cnt += 2;
+                    if (row != n_row - 2) rod_cnt += 2;
+                    if (col == 0)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    }
+                    if (col == n_col - 2)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    }
+                    if (n_col - 2 != col)
+                    {
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    }
+                }
+            }
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    rod_cnt++;
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    rod_cnt++;
+                }
+            }
+            TV3 heights = TV3(first_layer_height, first_layer_height, 12.0 * first_layer_height);
 
-//             writeLine(from, left, layer_height, 300);
-//             left[dim - 1] += 2.0;
-//             moveTo(left);
-//             left[dim - 1] -= 2.0;
-//         }
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+                    for (int corner = 0; corner < 4; corner++)
+                    {
+                        int crossing_id = base + corner * 3 + 1;
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                        crossing_id = base + corner * 3 + 2;
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.08, 0.08));
+                    }
+                }
+            }
+        }
+        else if (type == 1)
+        {
+            int rod_cnt = 0; 
+            for (int row = 0; row < n_row; row++)
+            {
+                for (int col = 0; col < n_col; col++)
+                {
+                    TV bottom_left;
+                    sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
+                    bottom_left[dim] = rod_radius_in_mm; 
+                    scaleAndShift(bottom_left);
+                    moveTo(bottom_left);
+                    for (int corner = 0; corner < 4; corner++)
+                    {
+                        int from_idx = (row * n_col + col) * 4 + corner;
+                        int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
+                        TV from, to;
+                        sim.getCrossingPosition(from_idx, from);
+                        sim.getCrossingPosition(to_idx, to);
+                        scaleAndShift(from); scaleAndShift(to);
+                        from[dim] = rod_radius_in_mm; to[dim] = rod_radius_in_mm;
+                        
+                        writeLine(from, to, rod_radius_in_mm);
+                    }
+                    
+                }
+            }
+            for (int col = 0; col < n_col; col++) rod_cnt+=2;
+            for (int row = 0; row < n_row; row++) rod_cnt+=2;
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    if (row == 0) rod_cnt += 2;
+                    if (row == n_row - 2) rod_cnt += 2;
+                    if (row != n_row - 2) rod_cnt += 2;
+                    if (col == 0) rod_cnt += 2;
+                    if (col == n_col - 2) rod_cnt += 2;
+                    if (n_col - 2 != col) rod_cnt += 2;
+                }
+            }
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                }
+            }
 
-//         for (int i = 0; i < 3; i++)
-//         {
-//             to[dim - 1] += layer_height;
-//             right[dim - 1] += layer_height;
-            
-//             right[dim - 1] += 4.0;
-//             moveTo(right);
-//             right[dim - 1] -= 4.0;
-//             moveTo(right);
-            
-//             writeLine(right, to, layer_height, 300);
-//             to[dim - 1] += 2.0;
-//             moveTo(to);
-//             to[dim - 1] -= 2.0;
-//         }
+            TV3 heights = TV3(first_layer_height, first_layer_height, 12.0 * first_layer_height);
 
-//         from[dim - 1] += 4.0;
-//         moveTo(from);
-//         from[dim - 1] -= 4.0;
+            for (int row = 0; row < n_row - 1; row++)
+            {
+                for (int col = 0; col < n_col - 1; col++)
+                {
+                    int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+                    for (int corner = 0; corner < 4; corner++)
+                    {
+                        int crossing_id = base + corner * 3 + 1;
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                        crossing_id = base + corner * 3 + 2;
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                    }
+                }
+            }
+        }
         
-
-//         moveTo(from);
-//         writeLine(from, to, layer_height, 300);
-//         moveTo(extend);
-//         extend[dim - 1] += 4.0;
-//         moveTo(extend);
-//         extend[dim - 1] -= 4.0;
-
-//         left[dim - 1] += 2.0;
-//         moveTo(left);
-//         left[dim - 1] -= 2.0;
-//         addSingleTunnel(left, right, 3.0);
-        
-//         right[dim - 1] += 4.0;
-//         moveTo(right);
-//         right[dim - 1] -= 4.0;
-        
-//         for (int i = 0; i < 3; i++)
-//         {
-//             from[dim - 1] += layer_height;
-//             left[dim - 1] += layer_height;
-            
-//             from[dim - 1] += 4.0;
-//             moveTo(from);
-//             from[dim - 1] -= 4.0;
-//             moveTo(from);
-
-//             writeLine(from, left, layer_height, 300);
-//             left[dim - 1] += 2.0;
-//             moveTo(left);
-//             left[dim - 1] -= 2.0;
-//         }
-
-//         for (int i = 0; i < 3; i++)
-//         {
-//             to[dim - 1] += layer_height;
-//             right[dim - 1] += layer_height;
-            
-//             right[dim - 1] += 4.0;
-//             moveTo(right);
-//             right[dim - 1] -= 4.0;
-//             moveTo(right);
-            
-//             writeLine(right, to, layer_height, 300);
-//             to[dim - 1] += 2.0;
-//             moveTo(to);
-//             to[dim - 1] -= 2.0;
-//         }
-
-//         from[dim - 1] += 4.0;
-//         moveTo(from);
-//         from[dim - 1] -= 4.0;
-//         moveTo(from);
-
-        
-//         writeLine(from, to, layer_height, 300);
-//         moveTo(extend);
-//         extend[dim - 1] += 4.0;
-//         moveTo(extend);
-//         extend[dim - 1] -= 4.0;
-
-//         left[dim - 1] += 2.0;
-//         moveTo(left);
-//         left[dim - 1] -= 2.0;
-//         addSingleTunnel(left, right, 4.0);
-        
-//         right[dim - 1] += 4.0;
-//         moveTo(right);
-//         right[dim - 1] -= 4.0;
-        
-//         for (int i = 0; i < 3; i++)
-//         {
-//             from[dim - 1] += layer_height;
-//             left[dim - 1] += layer_height;
-            
-//             from[dim - 1] += 4.0;
-//             moveTo(from);
-//             from[dim - 1] -= 4.0;
-//             moveTo(from);
-
-//             writeLine(from, left, layer_height, 300);
-//             left[dim - 1] += 2.0;
-//             moveTo(left);
-//             left[dim - 1] -= 2.0;
-//         }
-
-//         for (int i = 0; i < 3; i++)
-//         {
-//             to[dim - 1] += layer_height;
-//             right[dim - 1] += layer_height;
-            
-//             right[dim - 1] += 4.0;
-//             moveTo(right);
-//             right[dim - 1] -= 4.0;
-//             moveTo(right);
-            
-//             writeLine(right, to, layer_height, 300);
-//             to[dim - 1] += 2.0;
-//             moveTo(to);
-//             to[dim - 1] -= 2.0;
-//         }
-        
-//         writeFooter();
-//     }
-// }
-
+        writeFooter();
+    }
+}
 
 template<class T, int dim>
 void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n_col, bool fused)
@@ -377,19 +399,19 @@ void GCodeGenerator<T, dim>::activeTexticleGCode2(bool fused)
                     4.0 * rod_radius_in_mm);
 
             
-            TV3 heights = TV3(first_layer_height, first_layer_height, 14.0 * first_layer_height);
+            TV3 heights = TV3(first_layer_height, first_layer_height, 7.0 * first_layer_height);
 
             std::vector<int> crossings = {6, 7, 8, 11, 12, 13, 16, 17, 18, 21, 22, 23};
 
             for (int crossing_id : crossings)
             {
-                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.03, 0.03));
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.04, 0.04));
             }
 
             crossings = {5, 10, 15};
             for (int crossing_id : crossings)
             {
-                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.03, 0.03));
+                addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.04, 0.04));
             }
         }
         writeFooter();
@@ -519,7 +541,7 @@ void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T hei
 template<class T, int dim>
 void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx, 
     std::function<void(TV&)> scaleAndShift, bool is_first_layer,
-    T bd_height, T inner_height)
+    T bd_height, T inner_height, T buffer_percentage)
 {
     auto rod = sim.Rods[rod_idx];
 
@@ -530,11 +552,11 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     TV front, back;
     rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
 
-    TV extend = back + (back - front).normalized() * 0.3 * (front - back).norm();
+    TV extend = back + (back - front).normalized() * buffer_percentage * (front - back).norm();
     scaleAndShift(extend);
 
     //move slightly out of domain in case it doesn't stick at the beginning
-    x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
+    x0 -= (back - front).normalized() * buffer_percentage * (front - back).norm();
     scaleAndShift(x0);
     TV front_scaled = front;
     scaleAndShift(front_scaled);
@@ -548,7 +570,8 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     x0[dim - 1] = 0.2;
     moveTo(x0, 50);
 
-    writeLine(x0, front_scaled, rod_radius_in_mm);
+    if (buffer_percentage > 1e-6)
+        writeLine(x0, front_scaled, rod_radius_in_mm);
 
     // writeLine(x0, front_scaled, rod_radius_in_mm);
     int running_cnt =0;
@@ -609,13 +632,14 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     });
     
     
-    TV xn = back + (back - front).normalized() * 0.3 * (front - back).norm();
+    TV xn = back + (back - front).normalized() * buffer_percentage * (front - back).norm();
     // 
     scaleAndShift(xn);
     scaleAndShift(back);
     xn[dim - 1] += 0.2;
     // moveTo(xn, 100);
-    writeLine(back, xn, rod_radius_in_mm);
+    if (buffer_percentage > 1e-6)
+        writeLine(back, xn, rod_radius_in_mm);
     xn[dim - 1] = 2.0;
     moveTo(xn, 100);
 
