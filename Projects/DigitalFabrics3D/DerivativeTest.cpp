@@ -11,11 +11,11 @@ void EoLRodSim<T, dim>::derivativeTest()
     add_bending = false;
     // add_shearing = false;
     add_twisting = false;
-    add_rigid_joint = true;
+    add_rigid_joint = false;
     add_pbc_bending = false;
     add_rotation_penalty = false;
     // add_pbc = true;
-    add_contact_penalty = false;
+    add_contact_penalty = true;
     add_eularian_reg = false;
     
     deformed_states /= unit;
@@ -164,6 +164,7 @@ void EoLRodSim<T, dim>::testGradient(Eigen::Ref<VectorXT> dq)
         n_crossing += 3;
     std::cout << "n crossing " << n_crossing << std::endl;
     std::cout << "n seg " << n_seg << std::endl;
+    
 
     std::cout << W.rows() << " " << W.cols() << std::endl;
     VectorXT gradient(n_dof);

@@ -581,7 +581,7 @@ bool EoLRodSim<T, dim>::staticSolve(Eigen::Ref<VectorXT> dq)
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
     
-    int max_newton_iter = 500;
+    int max_newton_iter = 1000;
     // std::chrono::high_resolution_clock::time_point time = std::chrono::high_resolution_clock::now();
     while (true)
     {
@@ -825,26 +825,26 @@ void EoLRodSim<T, dim>::advanceOneStep()
     deformed_states = rest_states + W * dq_projected;
     
     
-    // T e_total = 0.0;
-    // if (add_stretching)
-    //     e_total += addStretchingEnergy();
-    // if constexpr (dim == 3)
-    // {
-    //     e_total += add3DBendingAndTwistingEnergy();
-    //     if (add_pbc)
-    //         e_total += add3DPBCBendingAndTwistingEnergy();
-    //     e_total += addJointBendingAndTwistingEnergy();
-    // }
+    T e_total = 0.0;
+    if (add_stretching)
+        e_total += addStretchingEnergy();
+    if constexpr (dim == 3)
+    {
+        e_total += add3DBendingAndTwistingEnergy();
+        if (add_pbc)
+            e_total += add3DPBCBendingAndTwistingEnergy();
+        e_total += addJointBendingAndTwistingEnergy();
+    }
 
-    // std::cout << "E total: " << e_total << std::endl;
-    // std::cout << "total stretching " << addStretchingEnergy() << std::endl;
-    // std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
-    //                                 add3DPBCBendingAndTwistingEnergy(true, false) + 
-    //                                 addJointBendingAndTwistingEnergy(true, false) << std::endl;
+    std::cout << "E total: " << e_total << std::endl;
+    std::cout << "total stretching " << addStretchingEnergy() << std::endl;
+    std::cout << "total bending " << add3DBendingAndTwistingEnergy(true, false) + 
+                                    add3DPBCBendingAndTwistingEnergy(true, false) + 
+                                    addJointBendingAndTwistingEnergy(true, false) << std::endl;
 
-    // std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
-    //                                 add3DPBCBendingAndTwistingEnergy(false, true) + 
-    //                                 addJointBendingAndTwistingEnergy(false, true) << std::endl;
+    std::cout << "total twist " << add3DBendingAndTwistingEnergy(false, true) + 
+                                    add3DPBCBendingAndTwistingEnergy(false, true) + 
+                                    addJointBendingAndTwistingEnergy(false, true) << std::endl;
     
     
     // checkHessianPD(dq);

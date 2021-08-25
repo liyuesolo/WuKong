@@ -41,6 +41,7 @@ void Rod<T, dim>::setupBishopFrame()
             if (segment)
                 reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
         });    
+        
     }
     rest_tangents = prev_tangents;
     rest_normals = reference_frame_us;
@@ -68,7 +69,7 @@ void Rod<T, dim>::rotateReferenceFrameToLastNewtonStepAndComputeReferenceTwsit()
             prev_tangents[segment] = tangent;
                 // reference_twist[segment] = computeReferenceTwist(tangent, prev_tangent, segment);
         });
-        
+
         // iterateSegments([&](int node_i, int node_j, int segment){
         //     TV xi, xj;
         //     x(node_i, xi); x(node_j, xj);

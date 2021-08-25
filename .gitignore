@@ -5,3 +5,4 @@ CMakeLists.txt.user
 .gcode
 output/
 Projects/DigitalFabrics3D/IsohedraTiling
+Libs/lbfgs

@@ -63,39 +63,39 @@ void EoLRodSim<T, dim>::addStretchingK(std::vector<Entry>& entry_K)
                             }
         });   
     }
-    for (auto& rod : Rods)
-    {
-        rod->iterateSegmentsWithOffset([&](int node_i, int node_j, Offset offset_i, Offset offset_j, int rod_idx)
-        {
-            // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
-            TV xi, xj, Xi, Xj, dXi, dXj, ddXi, ddXj;
-            rod->x(node_i, xi); rod->x(node_j, xj);
-            rod->XdXddX(node_i, Xi, dXi, ddXi); rod->XdXddX(node_j, Xj, dXj, ddXj);
+    // for (auto& rod : Rods)
+    // {
+    //     rod->iterateSegmentsWithOffset([&](int node_i, int node_j, Offset offset_i, Offset offset_j, int rod_idx)
+    //     {
+    //         // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
+    //         TV xi, xj, Xi, Xj, dXi, dXj, ddXi, ddXj;
+    //         rod->x(node_i, xi); rod->x(node_j, xj);
+    //         rod->XdXddX(node_i, Xi, dXi, ddXi); rod->XdXddX(node_j, Xj, dXj, ddXj);
 
-            std::vector<TV> x(4);
-            x[0] = xi; x[1] = xj; x[2] = Xi; x[3] = Xj;
+    //         std::vector<TV> x(4);
+    //         x[0] = xi; x[1] = xj; x[2] = Xi; x[3] = Xj;
 
-            Vector<T, dim * 4> F;
-            F.setZero();
-            if constexpr (dim == 2)
-            {
-                // #include "Maple/YarnStretchingF.mcg"
-            }
-            else if constexpr (dim == 3)
-            {
-                // #include "Maple/RodStretching3DF.mcg"
-                computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
-            }
+    //         Vector<T, dim * 4> F;
+    //         F.setZero();
+    //         if constexpr (dim == 2)
+    //         {
+    //             // #include "Maple/YarnStretchingF.mcg"
+    //         }
+    //         else if constexpr (dim == 3)
+    //         {
+    //             // #include "Maple/RodStretching3DF.mcg"
+    //             computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
+    //         }
 
-            for(int d = 0; d < dim; d++)
-            {
-                entry_K.push_back(Eigen::Triplet<T>(offset_i[dim], 
-                                    offset_i[dim], -F[0*dim + 2*dim + d] * ddXi[d]));
-                entry_K.push_back(Eigen::Triplet<T>(offset_j[dim], 
-                                    offset_j[dim], -F[1*dim + 2*dim + d] * ddXj[d]));
-            }    
-        });
-    }
+    //         for(int d = 0; d < dim; d++)
+    //         {
+    //             entry_K.push_back(Eigen::Triplet<T>(offset_i[dim], 
+    //                                 offset_i[dim], -F[0*dim + 2*dim + d] * ddXi[d]));
+    //             entry_K.push_back(Eigen::Triplet<T>(offset_j[dim], 
+    //                                 offset_j[dim], -F[1*dim + 2*dim + d] * ddXj[d]));
+    //         }    
+    //     });
+    // }
 }
 template<class T, int dim>
 void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
@@ -107,6 +107,7 @@ void EoLRodSim<T, dim>::addStretchingForce(Eigen::Ref<VectorXT> residual)
         rod->iterateSegmentsWithOffset([&](int node_i, int node_j, Offset offset_i, Offset offset_j, int rod_idx)
         {
             // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
+            // std::cout << "node i " << offset_i.transpose() << " node j " << offset_j.transpose() << std::endl;
             TV xi, xj, Xi, Xj, dXi, dXj;
             rod->x(node_i, xi); rod->x(node_j, xj);
             rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj);
@@ -164,10 +165,9 @@ T EoLRodSim<T, dim>::addStretchingEnergy()
             else if constexpr (dim == 3)
             {
                 // #include "Maple/RodStretching3DV.mcg"
-                V[0] = stretchingEnergyLocal(rod->ks, Xi, Xj, xi, xj);
+               E += stretchingEnergyLocal(rod->ks, Xi, Xj, xi, xj);
                 // std::cout << V[0] << std::endl;
             }
-            E += V[0];
             
         });
     }

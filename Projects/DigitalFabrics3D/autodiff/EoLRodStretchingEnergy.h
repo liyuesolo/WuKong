@@ -6,7 +6,7 @@
 template <class T>
 T stretchingEnergyLocal(T ks, const Matrix<T,3,1> & X1, const Matrix<T,3,1> & X2, const Matrix<T,3,1> & x1, const Matrix<T,3,1> & x2)
 {
-    double _i_var[24];
+    T _i_var[24];
 	_i_var[0] = (X2(1,0))-(X1(1,0));
 	_i_var[1] = (X2(0,0))-(X1(0,0));
 	_i_var[2] = (x2(1,0))-(x1(1,0));

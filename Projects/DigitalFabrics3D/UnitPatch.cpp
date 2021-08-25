@@ -76,7 +76,7 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 8)
         buildShelterScene(32);
     else if (patch_type == 9)
-        buildGripperScene(4);
+        buildGripperScene(32);
     else if (patch_type == 10)
         buildGridLayoutGripper(32);
     else if (patch_type == 11)
@@ -313,7 +313,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             addCrossingData(bottom_left_node_idx, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
         };
 
-        int n_row = 3, n_col = 3;
+        int n_row = 2, n_col = 2;
         
         T length_x = square_width * n_col + (square_width - 2.0 * overlap) * (n_col - 1);
         T length_y = length_x;
@@ -2736,6 +2736,7 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
         sim.add_eularian_reg = true;
 
         sim.ke = 1e-4;
+        sim.unit = 0.05;
 
         int full_dof_cnt = 0;
         int node_cnt = 0;
@@ -2763,19 +2764,16 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
 
         addCurvedRod(data_points, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
 
-        
 
         TV to = TV(0.5, -1, 0.0) * sim.unit;
         addAStraightRod(v0, to, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
 
         for (int i = 0; i < 2; i++)
         {
-            std::cout << " dof node location " << sim.Rods[0]->dof_node_location[i] << std::endl;
             RodCrossing<T, dim>* crossing = 
                     new RodCrossing<T, dim>(i, {0, 1});
             crossing->on_rod_idx[0] = sim.Rods[0]->dof_node_location[1 - i];
             crossing->on_rod_idx[1] = sim.Rods[1]->dof_node_location[i];
-            // std::cout << crossing->on_rod_idx[0] << std::endl;
             if (i == 0)
             // if(true)
             {
@@ -2791,7 +2789,7 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
             }
             sim.rod_crossings.push_back(crossing);
         }
-        
+
         int dof_cnt = 0;
         markCrossingDoF(w_entry, dof_cnt);
         
@@ -2809,9 +2807,6 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
             rod->setupBishopFrame();
         }
 
-        
-        
-
         Offset offset;
         sim.Rods[0]->getEntry(1, offset);
         for (int d = 0; d < dim; d++)
@@ -2822,6 +2817,7 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
         sim.fixCrossing();
         sim.Rods[0]->fixPointLagrangian(1, TV::Zero(), sim.dirichlet_dof);
         sim.Rods[0]->fixPointLagrangian(sim.Rods[0]->indices.size() - 2, TV::Zero(), sim.dirichlet_dof);
+        
         sim.Rods[1]->backOffsetReduced(offset);
 
         sim.dirichlet_dof[offset[0]] = 0;
@@ -2837,17 +2833,12 @@ void UnitPatch<T, dim>::buildGripperScene(int sub_div)
         sim.perturb = VectorXT::Zero(sim.W.cols());
 
         for (auto& crossing : sim.rod_crossings)
-        // for (int i = 0; i < 10; i++)
         {
-            // auto crossing = rod_crossings[i];
             Offset off;
             sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
             T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
             int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
             sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
-            // break;
-            // dq[z_off] += 0.001 * r * unit;
-            
         }
     }
 }

@@ -31,17 +31,20 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
             Rods[rod_idx]->getEntry(left_right.first, offset_left);
             Rods[rod_idx]->getEntry(left_right.second, offset_right);
 
-            if (u_right - u < min_du)
+            if (node_idx != 0 || !Rods[rod_idx]->closed)
             {
-                entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
-                entry_K.push_back(Entry(offset_right[dim], offset_right[dim], k_yc));
                 
-            }
-            if (u - u_left < min_du)
-            {
-                entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
-                entry_K.push_back(Entry(offset_left[dim], offset_left[dim], k_yc));
-                
+                if (u_right - u < min_du && offset_right[dim] != offset[dim])
+                {
+                    entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
+                    entry_K.push_back(Entry(offset_right[dim], offset_right[dim], k_yc));
+                    
+                }
+                if (u - u_left < min_du && offset_left[dim] != offset[dim])
+                {
+                    entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
+                    entry_K.push_back(Entry(offset_left[dim], offset_left[dim], k_yc));   
+                }
             }
 
             Rods[rod_idx]->U(node_idx, U);
@@ -133,6 +136,7 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
             T u, U, u_left, u_right;
             
             auto left_right = Rods[rod_idx]->neighbouringCrossingIndex(crossing->on_rod_idx[rod_idx]);
+            
             Rods[rod_idx]->u(left_right.first, u_left);
             Rods[rod_idx]->u(left_right.second, u_right);
             Rods[rod_idx]->u(node_idx, u);
@@ -141,15 +145,18 @@ void EoLRodSim<T, dim>::addParallelContactForce(Eigen::Ref<VectorXT> residual)
             Rods[rod_idx]->getEntry(left_right.first, offset_left);
             Rods[rod_idx]->getEntry(left_right.second, offset_right);
 
-            if (u_right - u < min_du)
+            if (node_idx != 0 || !Rods[rod_idx]->closed)
             {
-                residual[offset[dim]] += k_yc * (u_right - u - min_du);
-                residual[offset_right[dim]] += -k_yc * (u_right - u - min_du);
-            }
-            if (u - u_left < min_du)
-            {
-                residual[offset[dim]] += -k_yc * (u - u_left - min_du);
-                residual[offset_left[dim]] += k_yc * (u - u_left - min_du);
+                if (u_right - u < min_du && offset_right[dim] != offset[dim])
+                {
+                    residual[offset[dim]] += k_yc * (u_right - u - min_du);
+                    residual[offset_right[dim]] += -k_yc * (u_right - u - min_du);
+                }
+                if (u - u_left < min_du && offset_left[dim] != offset[dim])
+                {
+                    residual[offset[dim]] += -k_yc * (u - u_left - min_du);
+                    residual[offset_left[dim]] += k_yc * (u - u_left - min_du);
+                }
             }
 
             
@@ -203,13 +210,20 @@ T EoLRodSim<T, dim>::addParallelContactEnergy()
             Rods[rod_idx]->u(left_right.second, u_right);
             Rods[rod_idx]->u(node_idx, u);
 
-            if (u_right - u < min_du)
+            Offset offset_left, offset_right;
+            Rods[rod_idx]->getEntry(left_right.first, offset_left);
+            Rods[rod_idx]->getEntry(left_right.second, offset_right);
+
+            if (node_idx != 0 || !Rods[rod_idx]->closed)
             {
-                energy += 0.5 * k_yc * std::pow(u_right - u - min_du, 2);
-            }
-            if (u - u_left < min_du)
-            {
-                energy += 0.5 * k_yc * std::pow(u - u_left - min_du, 2);
+                if (u_right - u < min_du && offset_right[dim] != offset[dim])
+                {
+                    energy += 0.5 * k_yc * std::pow(u_right - u - min_du, 2);
+                }
+                if (u - u_left < min_du && offset_left[dim] != offset[dim])
+                {
+                    energy += 0.5 * k_yc * std::pow(u - u_left - min_du, 2);
+                }
             }
 
             Rods[rod_idx]->U(node_idx, U);
