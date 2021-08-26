@@ -140,7 +140,10 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
 
     
 
-        std::vector<T> thetas = {0, M_PI/3.0, M_PI/2.0, 2.0*M_PI/3.0, M_PI, 4.0*M_PI/3.0, 3.0*M_PI/2.0, 5.0*M_PI/3.0};
+        // std::vector<T> thetas = {0, M_PI/3.0, M_PI/2.0, 2.0*M_PI/3.0, M_PI, 4.0*M_PI/3.0, 3.0*M_PI/2.0, 5.0*M_PI/3.0};
+        std::vector<T> thetas;
+        for (int i = 0; i< 8; i++)
+            thetas.push_back(2.0 * M_PI / 8.0 * i);
 
         std::vector<TV> points_inner;
         for(int i=0; i<thetas.size(); ++i)
@@ -162,14 +165,18 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
         for(int i=0; i<points_outer.size(); ++i)
             addPoint(points_outer[i], full_dof_cnt, node_cnt);
         std::vector<int> indices_outer = {16, 17, 18, 19, 20, 21, 22, 23};
+        
+        
 
         std::vector<TV2> data_points;
         for(int i=0; i<points_inner.size(); ++i)
             data_points.push_back(points_inner[i].template head<2>());
         data_points.push_back(points_inner[0].template head<2>());
 
-        addCurvedRod(data_points, points_inner, indices_inner, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
 
+
+        addCurvedRod(data_points, points_inner, indices_inner, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
+        
         data_points.clear();
         for(int i=0; i<points_center.size(); ++i)
             data_points.push_back(points_center[i].template head<2>());
@@ -177,10 +184,10 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
         
         addCurvedRod(data_points, points_center, indices_center, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
 
-        data_points.clear();
-        for(int i=0; i<points_center.size(); ++i)
-            data_points.push_back(points_outer[i].template head<2>());
-        data_points.push_back(points_outer[0].template head<2>());
+        // data_points.clear();
+        // for(int i=0; i<points_center.size(); ++i)
+        //     data_points.push_back(points_outer[i].template head<2>());
+        // data_points.push_back(points_outer[0].template head<2>());
         // std::vector<TV> nodal_positions;
 
         // TV v0 = TV(0.5, 0, 0.0) * sim.unit;
@@ -4062,6 +4069,9 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
         const std::vector<int>& passing_points_id, 
         int sub_div, int& full_dof_cnt, int& node_cnt, int& rod_cnt, bool closed)
 {
+    if (passing_points.size() != passing_points_id.size())
+        std::cout << " passing_points.size() != passing_points_id.size() " << std::endl;
+
     int first_node_idx = node_cnt;
     int sub_div_2 = sub_div / 2;
     HybridC2Curve<T, 2>* curve = new HybridC2Curve<T, 2>(sub_div);
@@ -4070,6 +4080,8 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
     
     std::vector<TV2> points_on_curve;
     curve->sampleCurves(points_on_curve);
+    // std::cout << points_on_curve.size() << std::endl;
+    // std::getchar();
 
     std::unordered_map<int, int> dof_node_location;
     if (closed)
@@ -4077,26 +4089,25 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
     else
         deformed_states.conservativeResize(full_dof_cnt + (points_on_curve.size() - passing_points_id.size()) * (dim + 1));
     
+
+    
     Rod<T, dim>* rod = new Rod<T, dim>(deformed_states, sim.rest_states, rod_cnt, closed, ROD_A, ROD_B);
     std::unordered_map<int, Offset> offset_map;
     std::vector<int> node_index_list;
     std::vector<T> data_points_discrete_arc_length;
-    
+    int full_dof_before = full_dof_cnt;
+    int not_found_cnt = 0;
     for (int i = 0; i < points_on_curve.size(); i++)
     {
         
         TV2 pt = points_on_curve[i];
-        if constexpr (dim == 3)
-            deformed_states.template segment<dim>(full_dof_cnt) = TV(pt[0], pt[1], 0);
-        else if constexpr (dim == 2)
-            deformed_states.template segment<dim>(full_dof_cnt) = pt;
-        
-        TV pt_search = deformed_states.template segment<dim>(full_dof_cnt);
-
+        TV pt_search;
+        pt_search.template segment<2>(0) = pt;
+        // std::cout << "pt on curve " << pt.transpose() << std::endl;
         //if points already added as crossings
         auto find_node_iter = std::find_if(passing_points.begin(), passing_points.end(), 
             [&pt_search](TV pt_in_vec)
-            { return (pt_search - pt_in_vec).norm() < 1e-6; }
+            { return (pt_search - pt_in_vec).norm() < 1e-8; }
         );
         
         if (find_node_iter == passing_points.end())
@@ -4109,18 +4120,23 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
             offset_map[node_cnt] = Offset::Zero();
             node_index_list.push_back(node_cnt);
             //push Lagrangian DoF
-            
-            for (int d = 0; d < dim; d++) offset_map[node_cnt][d] = full_dof_cnt++;  
+            for (int d = 0; d < dim; d++) 
+            {
+                deformed_states[full_dof_cnt] = pt_search[d];
+                offset_map[node_cnt][d] = full_dof_cnt++;  
+            }
             // push Eulerian DoF
             deformed_states[full_dof_cnt] = T(i) * (curve->data_points.size() - 1) / (points_on_curve.size() - 1);
-            
             offset_map[node_cnt][dim] = full_dof_cnt++;
-
             node_cnt++;
         }
         else
         {
+            not_found_cnt++;
             int dof_loc = std::distance(passing_points.begin(), find_node_iter);
+            
+            // std::cout << passing_points[dof_loc].transpose() << std::endl;
+
             node_index_list.push_back(passing_points_id[dof_loc]);
             dof_node_location[dof_loc] = i;
             if (closed && i == points_on_curve.size() - 1)
@@ -4128,9 +4144,15 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
         }
            
     }
-    
-    
+    // checking scene
+    if (not_found_cnt != passing_points.size() + int(closed))
+        std::cout << "not_found_cnt " << not_found_cnt << " passing_points.size() " << passing_points.size() << std::endl;
+    int dof_added = full_dof_cnt - full_dof_before;
 
+    int dof_added_should_be = (points_on_curve.size() - passing_points.size() - int(closed)) * (dim + 1);
+    if (dof_added != dof_added_should_be)
+        std::cout << " dof_added " << dof_added << " dof_added should be " << dof_added_should_be << std::endl;
+    
     // now we add the Eulerian Dof of the passing points
     deformed_states.conservativeResize(full_dof_cnt + passing_points.size());
 
@@ -4144,6 +4166,11 @@ void UnitPatch<T, dim>::addCurvedRod(const std::vector<TV2>& data_points,
         
         offset_map[passing_points_id[i]][dim] = full_dof_cnt++; 
     }
+
+    dof_added = full_dof_cnt - full_dof_before;
+    dof_added_should_be += passing_points.size();
+    if (dof_added != dof_added_should_be)
+        std::cout << " dof_added " << dof_added << " dof_added should be " << dof_added_should_be << std::endl;
     
     rod->offset_map = offset_map;
     rod->indices = node_index_list;
