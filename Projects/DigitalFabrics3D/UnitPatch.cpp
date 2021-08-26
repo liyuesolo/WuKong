@@ -96,9 +96,9 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 18)
         buildInterlockingSquareScene(32);
     else if (patch_type == 19)
-        buildDenseInterlockingSquareScene(2);
+        buildDenseInterlockingSquareScene(1);
     else if (patch_type == 20)
-        buildTestSceneJuan(32);
+        buildTestSceneJuan(4);
 }
 
 template<class T, int dim>
@@ -123,7 +123,7 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
         sim.ke = 1e-4;
 
         sim.unit = 0.05;
-        sim.visual_R = 0.01;
+        sim.visual_R = 0.02;
 
         auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
         {
@@ -142,12 +142,13 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
 
         // std::vector<T> thetas = {0, M_PI/3.0, M_PI/2.0, 2.0*M_PI/3.0, M_PI, 4.0*M_PI/3.0, 3.0*M_PI/2.0, 5.0*M_PI/3.0};
         std::vector<T> thetas;
-        for (int i = 0; i< 8; i++)
-            thetas.push_back(2.0 * M_PI / 8.0 * i);
+        int theta_sub = 8;
+        for (int i = 0; i< theta_sub; i++)
+            thetas.push_back(2.0 * M_PI / theta_sub * ((i + int(0.75 * theta_sub)) % theta_sub));
 
         std::vector<TV> points_inner;
         for(int i=0; i<thetas.size(); ++i)
-            points_inner.push_back(TV(0.75*cos(thetas[i]), 0.75*sin(thetas[i]), 0) * sim.unit);
+            points_inner.push_back(TV(0.6*cos(thetas[i]), 0.6*sin(thetas[i]), 0) * sim.unit);
         for(int i=0; i<points_inner.size(); ++i)
             addPoint(points_inner[i], full_dof_cnt, node_cnt);
         std::vector<int> indices_inner = {0, 1, 2, 3, 4, 5, 6, 7};
@@ -161,18 +162,16 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
 
         std::vector<TV> points_outer;
         for(int i=0; i<thetas.size(); ++i)
-            points_outer.push_back(TV(1.25*cos(thetas[i]), 1.25*sin(thetas[i]), 0) * sim.unit);
+            points_outer.push_back(TV(1.4*cos(thetas[i]), 1.4*sin(thetas[i]), 0) * sim.unit);
         for(int i=0; i<points_outer.size(); ++i)
             addPoint(points_outer[i], full_dof_cnt, node_cnt);
         std::vector<int> indices_outer = {16, 17, 18, 19, 20, 21, 22, 23};
-        
-        
+                
 
         std::vector<TV2> data_points;
         for(int i=0; i<points_inner.size(); ++i)
             data_points.push_back(points_inner[i].template head<2>());
         data_points.push_back(points_inner[0].template head<2>());
-
 
 
         addCurvedRod(data_points, points_inner, indices_inner, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
@@ -184,6 +183,45 @@ void UnitPatch<T, dim>::buildTestSceneJuan(int sub_div)
         
         addCurvedRod(data_points, points_center, indices_center, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
 
+        data_points.clear();
+        for(int i=0; i<points_outer.size(); ++i)
+            data_points.push_back(points_outer[i].template head<2>());
+        data_points.push_back(points_outer[0].template head<2>());
+        
+        addCurvedRod(data_points, points_outer, indices_outer, sub_div, full_dof_cnt, node_cnt, rod_cnt, true);
+        
+        std::vector<TV> passing_points;
+        std::vector<int> passing_points_id;
+        passing_points.push_back(points_inner[theta_sub/2]);
+        passing_points.push_back(points_inner[0]); passing_points.push_back(points_center[0]); passing_points.push_back(points_outer[0]);
+
+        passing_points_id.push_back(indices_inner[theta_sub/2]);
+        passing_points_id.push_back(indices_inner[0]); passing_points_id.push_back(indices_center[0]); passing_points_id.push_back(indices_outer[0]);
+        TV to = TV(0, -3.0, 0.0) * sim.unit;
+        addAStraightRod(passing_points.front(), to, passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+
+        int left = 0.75 * theta_sub;
+        int right = 0.25 * theta_sub;
+
+        passing_points = {points_outer[left], points_center[left], points_inner[left], points_inner[right], points_center[right], points_outer[right]};
+        passing_points_id = {indices_outer[left], indices_center[left], indices_inner[left], indices_inner[right], indices_center[right], indices_outer[right]};
+        addAStraightRod(passing_points.front(), passing_points.back(), passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+        
+        for (int i = 1; i < thetas.size(); i += 2)
+        {
+            passing_points = {points_outer[i], points_center[i], points_inner[i]};
+            passing_points_id = {indices_outer[i], indices_center[i], indices_inner[i]};
+            addAStraightRod(passing_points.front(), passing_points.back(), passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+        }
+
+        
+
+        // for (int i = 0; i < indices_center.size(); i++)
+        // {
+        //     sim.rod_crossings.push_back(new RodCrossing<T, dim>(i, {}));
+        // }
+        
+        
         // data_points.clear();
         // for(int i=0; i<points_center.size(); ++i)
         //     data_points.push_back(points_outer[i].template head<2>());
@@ -360,7 +398,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         std::vector<TV> nodal_positions;
 
 
-        T square_width = 0.02; 
+        T square_width = 0.012; 
         T overlap = square_width * 0.25;
 
         auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
@@ -854,7 +892,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
             
         }
 
-        GCodeGenerator<T, dim>(sim, "sliding_blocks.gcode").slidingBlocksGCode(n_row, n_col, 0);
+        GCodeGenerator<T, dim>(sim, "sliding_blocks.gcode").slidingBlocksGCode(n_row, n_col, 1);
     }
     // std::cout << "done" << std::endl;
 }
