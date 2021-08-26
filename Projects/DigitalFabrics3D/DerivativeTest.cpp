@@ -12,10 +12,11 @@ void EoLRodSim<T, dim>::derivativeTest()
     // add_shearing = false;
     add_twisting = false;
     add_rigid_joint = false;
-    add_pbc_bending = false;
+    add_pbc_bending = true;
+    add_pbc_twisting = true;
     add_rotation_penalty = false;
-    // add_pbc = true;
-    add_contact_penalty = true;
+    add_pbc = true;
+    add_contact_penalty = false;
     add_eularian_reg = false;
     
     deformed_states /= unit;

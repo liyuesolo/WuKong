@@ -42,15 +42,26 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
             // outer contour
             for (int col = 0; col < n_col; col++)
             {
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                rod_cnt++;
             }
             for (int row = 0; row < n_row; row++)
             {
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                rod_cnt++;
+            }
+            for (int col = 0; col < n_col; col++)
+            {
+                generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                rod_cnt++;
+            }
+            for (int row = 0; row < n_row; row++)
+            {
+                generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                rod_cnt++;
             }
             boundary_rod_cnt = rod_cnt;
+            
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -59,32 +70,42 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     {
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        // rod_cnt++;
                     }
                     if (row == n_row - 2)
                     {
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        // rod_cnt++;
                     }
                     if (row != n_row - 2)
                     {
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                        // rod_cnt++;
                     }
                     if (col == 0) rod_cnt += 2;
                     if (col == n_col - 2) rod_cnt += 2;
                     if (n_col - 2 != col) rod_cnt += 2;
-                       
                 }
+                
             }
 
-            for (int row = 0; row < n_row - 1; row++)
+            int temp = rod_cnt;
+            for (int col = 0; col < n_col - 1; col++)
             {
-                for (int col = 0; col < n_col - 1; col++)
+                for (int row = 0; row < n_row - 1; row++)
                 {
-                    rod_cnt++;
-                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
-                    rod_cnt++;
-                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                    int idx = row * (n_col - 1) + col;
+                    generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
+                }
+            }
+            for (int col = 0; col < n_col - 1; col++)
+            {
+                for (int row = n_row - 2; row > -1; row--)
+                {
+                    int idx = row * (n_col - 1) + col;
+                    generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);
                 }
             }
             
@@ -124,7 +145,9 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                 }
             }
             TV3 heights = TV3(first_layer_height, first_layer_height, 12.0 * first_layer_height);
-
+            T width;
+            if (sim.unit == 0.05)
+                width = 0.15;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -133,9 +156,9 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     for (int corner = 0; corner < 4; corner++)
                     {
                         int crossing_id = base + corner * 3 + 1;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
                         crossing_id = base + corner * 3 + 2;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.08, 0.08));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(width, width));
                     }
                 }
             }
@@ -185,7 +208,10 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
             {
                 for (int col = 0; col < n_col - 1; col++)
                 {
-                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    if (row == 0 && col == 0)
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+                    else
+                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
@@ -193,7 +219,9 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
             }
 
             TV3 heights = TV3(first_layer_height, first_layer_height, 12.0 * first_layer_height);
-
+            T width;
+            if (sim.unit == 0.05)
+                width = 0.12;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -202,9 +230,9 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     for (int corner = 0; corner < 4; corner++)
                     {
                         int crossing_id = base + corner * 3 + 1;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
                         crossing_id = base + corner * 3 + 2;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.08));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
                     }
                 }
             }
@@ -564,12 +592,13 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
 
     // 2.0 is to avoid nozzle touching existing rods
     x0[dim - 1] = 2.0;
-    moveTo(x0);
+    retract(current_E - 0.5);
+    moveTo(x0, 2000, false);
 
     // 0.2 is used for better sticking at the beginning
     x0[dim - 1] = 0.2;
-    moveTo(x0, 50);
-
+    moveTo(x0, 50, false);
+    retract(current_E + 0.5);
     if (buffer_percentage > 1e-6)
         writeLine(x0, front_scaled, rod_radius_in_mm);
 
@@ -641,11 +670,13 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     if (buffer_percentage > 1e-6)
         writeLine(back, xn, rod_radius_in_mm);
     xn[dim - 1] = 2.0;
-    moveTo(xn, 100);
+    retract(current_E - 0.5);
+    moveTo(xn, 100, false);
 
     // move nozzle along printing direction to avoid detaching of current print
     extend[dim - 1] = 2.0;
-    moveTo(extend);
+    moveTo(extend, 2000, false);
+    retract(current_E + 0.5);
 }
 
 
@@ -963,7 +994,8 @@ void GCodeGenerator<T, dim>::writeLine(const TV& from, const TV& to, T rod_radiu
 template<class T, int dim>  
 void GCodeGenerator<T, dim>::retract(T E)
 {
-    gcode << "G1 E" << std::to_string(E) << " F2100.0" << std::endl;
+    // gcode << "G1 E" << std::to_string(E) << " F2100.0" << std::endl;
+    gcode << "G1 E" << std::to_string(E) << std::endl;
     current_E = E;
 }
 
@@ -976,17 +1008,19 @@ void GCodeGenerator<T, dim>::extrude(T E)
 }
 
 template<class T, int dim>  
-void GCodeGenerator<T, dim>::moveTo(const TV& to, T speed)
+void GCodeGenerator<T, dim>::moveTo(const TV& to, T speed, bool do_retract)
 {
     std::string cmd;
     if (extrusion_mode == Absolute)
     {
-        retract(current_E - 0.4);
+        if (do_retract)
+            retract(current_E - 0.4);
         cmd += "G1 F" + std::to_string(speed) + " X" + 
             std::to_string(to[0]) + " Y" + std::to_string(to[1]) +
             " Z" + std::to_string(to[2]) + "\n";
         gcode << cmd;
-        retract(current_E + 0.4);
+        if (do_retract)
+            retract(current_E + 0.4);
     }
     else if (extrusion_mode == Relative)
     {

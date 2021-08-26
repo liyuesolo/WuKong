@@ -98,12 +98,15 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
         TV xj = deformed_states.template segment<dim>(offset_j[0]);
         TV xi = deformed_states.template segment<dim>(offset_i[0]);
 
+        
         T dij = (xj - xi).dot(strain_dir);
         
         residual.template segment<dim>(offset_i[0]) += k_strain * strain_dir * (dij - Dij);
         residual.template segment<dim>(offset_j[0]) += -k_strain * strain_dir * (dij - Dij);
     });
     
+    
+
     if (add_rotation_penalty)
     {
         std::vector<TV2> data, dXdu, d2Xdu2;
@@ -119,6 +122,9 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
             residual[offsets[i][dim]] += -F.template segment<2>(4*2+ i*2).dot(dXdu[i]);
         }
     }
+
+    // std::cout << (residual - residual_cp).norm() << std::endl;
+    // std::getchar();
     
     iteratePBCPairs([&](Offset offset_ref_i, Offset offset_ref_j, Offset offset_i, Offset offset_j){
         
@@ -146,6 +152,8 @@ void EoLRodSim<T, dim>::addPBCForce(Eigen::Ref<VectorXT> residual)
         residual.template segment<dim>(offset_ref_j[0]) += k_pbc *pair_dis_vec;
     });
 
+    // std::cout << (residual - residual_cp).norm() << std::endl;
+    // std::getchar();
 
     if (print_force_mag)
         std::cout << "pbc force " << (residual - residual_cp).norm() << std::endl;

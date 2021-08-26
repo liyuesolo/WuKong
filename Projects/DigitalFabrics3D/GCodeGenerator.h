@@ -74,7 +74,7 @@ public:
     void generateGCodeFromRodsNoTunnel();
 
     void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 600.0);
-    void moveTo(const TV& to, T speed = 2000.0);
+    void moveTo(const TV& to, T speed = 2000.0, bool do_retract = true);
 
     void addSingleTunnel(const TV& from, const TV& to, T height);
 

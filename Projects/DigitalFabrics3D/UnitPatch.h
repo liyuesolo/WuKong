@@ -47,6 +47,8 @@ public:
     void buildSquareCrossJointScene(int sub_div);
 
     void buildInterlockingSquareScene(int sub_div);
+    void buildDenseInterlockingSquarePeriodicScene(int sub_div);
+    
     void buildDenseInterlockingSquareScene(int sub_div);
     
     void buildActiveTextileScene(int sub_div);

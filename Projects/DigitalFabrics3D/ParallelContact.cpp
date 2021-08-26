@@ -1,6 +1,6 @@
 #include "EoLRodSim.h"
 
-static double min_du = 1e-2;
+static double min_du = 0.05;
 
 template<class T, int dim>
 void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
