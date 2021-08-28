@@ -29,7 +29,7 @@ void EoLRodSim<T, dim>::resetScene()
 }
 
 template<class T, int dim>
-void EoLRodSim<T, dim>::computeBoundingBox(TV& bottom_left, TV& top_right)
+void EoLRodSim<T, dim>::computeBoundingBox(TV& bottom_left, TV& top_right) const
 {
     bottom_left.setConstant(1e6);
     top_right.setConstant(-1e6);

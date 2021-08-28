@@ -171,7 +171,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
                 for(int i = 0; i < n_faces; i++)
                 {
                     // if( int(std::floor(T(i) / 2)) % 2 == 0)
-                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 1, 0);
+                    C.row(rod_idx * n_faces + i) = Eigen::Vector3d(0, 0.3, 1);
                     if (show_rest)
                         C.row(n_rods * n_faces + rod_idx * n_faces + i) = Eigen::Vector3d(1, 0, 0);
                 }
@@ -185,7 +185,9 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
                         continue;
                     int node_idx = crossing->node_idx;
                     TV pos;
-                    eol_sim.getCrossingPosition(node_idx, pos);
+                    auto rod = eol_sim.Rods[crossing->rods_involved.front()];
+                    rod->x(crossing->node_idx, pos);
+                    
                     for (int i = 0; i < crossing->rods_involved.size(); i++)
                     {
                         if (crossing->sliding_ranges[i].norm() < 1e-6)
@@ -498,6 +500,10 @@ int main(int argc, char *argv[])
                 eol_sim.advanceOneStep();
                 
                 updateScreen(viewer);
+            }
+            if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
+            {
+                igl::writeOBJ("current_mesh.obj", V, F);
             }
             if (ImGui::Button("Reset", ImVec2(-1,0)))
             {
@@ -923,6 +929,7 @@ int main(int argc, char *argv[])
         viewer.data().point_size = 25.0;
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
+        viewer.data().show_lines = false;
         viewer.core().align_camera_center(V);
         viewer.core().animation_max_fps = 24.;
         key_down(viewer,'0',0);

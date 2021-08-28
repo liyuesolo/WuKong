@@ -88,8 +88,14 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
                 }
 
                 // central vertex of the top and bottom face
-                V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
-                V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+                if (rod_idx == 0)
+                    V.row(rov + i) = ((V.row(rov + i) - Eigen::Vector3d(0, visual_R, 0).transpose()) * R).transpose() + vtx_from;
+                else
+                    V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+                if (rod_idx == rod->numSeg() - 1)
+                    V.row(rov + i + n_div) = ((V.row(rov + i + n_div) + Eigen::Vector3d(0, visual_R, 0).transpose()) * R).transpose() + vtx_from;
+                else
+                    V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
                 
                 F.row(rof + i*2 ) = IV3(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
                 F.row(rof + i*2 + 1) = IV3(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);

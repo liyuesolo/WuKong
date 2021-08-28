@@ -43,6 +43,7 @@ private:
 	ExtrusionMode extrusion_mode;
 
     T current_E;
+    TV current_position = TV::Zero();
 
     std::ofstream gcode;
 
@@ -73,7 +74,7 @@ public:
 
     void generateGCodeFromRodsNoTunnel();
 
-    void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 600.0);
+    void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 800.0);
     void moveTo(const TV& to, T speed = 2000.0, bool do_retract = true);
 
     void addSingleTunnel(const TV& from, const TV& to, T height);
@@ -83,11 +84,11 @@ public:
     
     void addSingleTunnelOnCrossingWithFixedRange(int crossing_id, const TV3& heights, 
         int direction, std::function<void(TV&)> scaleAndShift,
-        const Range& range);
+        const Range& range, T extend_right = 0.3, T speed_first_half = 100, T speed_second_half = 300);
 
     void generateCodeSingleRod(int rod_idx, std::function<void(TV&)> scaleAndShift, 
         bool is_first_layer,
-        T bd_height = 0.3, T inner_height = 0.3, T buffer_percentage = 0.3);
+        T bd_height = 0.3, T inner_height = 0.3, T buffer_percentage = 0.3, T less = false, T extend = false);
 private:
 
     T computeExtrusionAmount() const;

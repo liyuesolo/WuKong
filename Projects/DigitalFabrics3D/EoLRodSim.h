@@ -410,7 +410,7 @@ public:
 
     void fixCrossingLagrangian(int crossing_idx, TV delta, Mask mask);
 
-    void computeBoundingBox(TV& bottom_left, TV& top_right);
+    void computeBoundingBox(TV& bottom_left, TV& top_right) const;
     
 private:
 

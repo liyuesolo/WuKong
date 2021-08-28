@@ -50,10 +50,11 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
     
     C.resize(F.rows(), 3);
     tbb::parallel_for(0, int(F.rows()), [&](int i){
-        if( i % 2 == 0)
-            C.row(i) = Eigen::Vector3d(0, 1, 0);
-        else
-            C.row(i) = Eigen::Vector3d(0, 0, 1);
+        // if( i % 2 == 0)
+        //     C.row(i) = Eigen::Vector3d(0, 1, 0);
+        // else
+        //     C.row(i) = Eigen::Vector3d(0, 0, 1);
+        C.row(i) = Eigen::Vector3d(0, 0.3, 1);
     });
     
     // std::cout << V << std::endl;
