@@ -929,7 +929,7 @@ int main(int argc, char *argv[])
         viewer.data().point_size = 25.0;
         setupScene(viewer);
         viewer.callback_key_down = &key_down;
-        viewer.data().show_lines = false;
+        // viewer.data().show_lines = false;
         viewer.core().align_camera_center(V);
         viewer.core().animation_max_fps = 24.;
         key_down(viewer,'0',0);

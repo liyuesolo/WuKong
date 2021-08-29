@@ -408,6 +408,22 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
     if constexpr (dim == 3)
     {
         writeHeader();
+        T extend_percentage = 0.3;
+        TV bottom_left, top_right;
+        sim.computeBoundingBox(bottom_left, top_right);
+
+        scaleAndShift(bottom_left); scaleAndShift(top_right);
+        bottom_left[dim-1] = rod_radius_in_mm;
+        top_right[dim-1] = rod_radius_in_mm;
+
+        TV bottom_right = bottom_left;
+        bottom_right[0] = top_right[0];
+        TV top_left = top_right;
+        top_left[0] = bottom_left[0];
+
+        TV bottom_left_extend = bottom_left - (bottom_right - bottom_left) * 0.2;
+
+        
         
         if (fused)
         {
@@ -425,12 +441,88 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
         {
             for (int row = 0; row < n_row; row++)
             {
-                generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
             }
 
             for (int col = 0; col < n_col; col++)
             {
-                generateCodeSingleRod(col + n_row, scaleAndShift, true, 1.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = 3.0 * rod_radius_in_mm; to[dim-1] = 3.0 * rod_radius_in_mm;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right);
+                    right[dim-1] = 0.2;
+                    moveTo(right);
+                    to[1] = top_right[1];
+                    TV temp = 0.5 * (right + to);
+                    temp[2] = 0.2;
+
+                    writeLine(right, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, to, rod_radius_in_mm, 400);
+                    writeLine(to, from, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (from + left);
+                    temp[2] = 0.2;
+                    writeLine(from, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, left, rod_radius_in_mm, 200);
+                }
+                else
+                {
+                    moveTo(left);
+                    left[dim-1] = 0.2;
+                    moveTo(left);
+                    from[1] = bottom_left[1];
+                    TV temp = 0.5 * (left + from);
+                    temp[2] = 0.2;
+                    writeLine(left, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, from, rod_radius_in_mm, 400);
+                    writeLine(from, to, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (to + right);
+                    temp[2] = 0.2;
+                    writeLine(to, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, right, rod_radius_in_mm, 200);
+                }
             }
 
             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
@@ -442,30 +534,17 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
                 for (int col = 0; col < n_col; col++)
                 {
                     int crossing_id = row * n_col + col;
-                    addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+                    addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 100, 200);
                 }
             }
         }
 
-        TV bottom_left, top_right;
-        sim.computeBoundingBox(bottom_left, top_right);
-
-        scaleAndShift(bottom_left); scaleAndShift(top_right);
-        bottom_left[dim-1] = rod_radius_in_mm;
-        top_right[dim-1] = rod_radius_in_mm;
-
-        TV bottom_right = bottom_left;
-        bottom_right[0] = top_right[0];
-        TV top_left = top_right;
-        top_left[0] = bottom_left[0];
-
-        TV bottom_left_extend = bottom_left - (bottom_right - bottom_left) * 0.2;
-
         moveTo(bottom_left_extend);
-        writeLine(bottom_left_extend, bottom_right, rod_radius_in_mm);
-        writeLine(bottom_right, top_right, rod_radius_in_mm);
-        writeLine(top_right, top_left, rod_radius_in_mm);
-        writeLine(top_left, bottom_left, rod_radius_in_mm);
+        writeLine(bottom_left_extend, bottom_right, rod_radius_in_mm, 1500);
+        writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+        writeLine(top_right, top_left, rod_radius_in_mm, 1500);
+        writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+        
 
         writeFooter();
     }

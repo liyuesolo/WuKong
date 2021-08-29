@@ -48,12 +48,14 @@ public:
 
     void buildInterlockingSquareScene(int sub_div);
     void buildDenseInterlockingSquarePeriodicScene(int sub_div);
-    
+
     void buildDenseInterlockingSquareScene(int sub_div);
     
     void buildActiveTextileScene(int sub_div);
 
     void buildTestSceneJuan(int sub_div);
+
+    void buildDomeScene(int sub_div);
     
     
     void buildTestJoint(int sub_div);
