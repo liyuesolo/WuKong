@@ -36,10 +36,14 @@ public:
     ~UnitPatch() {}
 
     void buildScene(int patch_type);
+    
 
     //Mechanisim
     void buildFingerScene(int sub_div);
 
+    void buildShoeScene(int sub_div);
+
+    void buildRandomPatchScene(int sub_div);
 
     void buildSaddleScene(int sub_div);
     void buildGripperScene(int sub_div);

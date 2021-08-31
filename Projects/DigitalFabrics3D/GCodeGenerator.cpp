@@ -20,8 +20,383 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 
 }
 
+// template<class T, int dim>
+// void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type, bool add_bar)
+// {
+//     auto scaleAndShift = [](TV& x)->void
+//     {
+//         x *= 1e3;
+//         x.template segment<2>(0) += Vector<T, 2>(50, 40);
+//     };
+
+//     if constexpr (dim == 3)
+//     {
+//         writeHeader();
+//         T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+//         T extend_percentage = 0.1;
+//         T inner_height = 3.5 * rod_radius_in_mm;
+//         // x sliding
+//         if (type == 0)
+//         {
+//             int rod_cnt = 0; 
+//             int boundary_rod_cnt = 0;
+//             // outer contour
+//             for (int col = 0; col < n_col; col++)
+//             {
+//                 generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int col = 0; col < n_col; col++)
+//             {
+//                 generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             boundary_rod_cnt = rod_cnt;
+//             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
+//             {
+//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//             }
+            
+//             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = 0; row < n_row - 1; row++)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     if (row == n_row - 2)
+//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
+//                     else
+//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = n_row - 2; row > -1; row--)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     if (row == 0)
+//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
+//                     else
+//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+            
+//             boundary_rod_cnt = rod_cnt;
+//             while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
+//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+
+
+            
+//             temp = rod_cnt;
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = 0; row < n_row - 1; row++)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+//                 }
+//             }
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = n_row - 2; row > -1; row--)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+//                 }
+//             }
+
+//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+//             T width;
+//             if (sim.unit == 0.05)
+//                 width = 0.12;
+//             tunnel_height = 0.14;
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+//                     for (int corner = 0; corner < 4; corner++)
+//                     {
+//                         int crossing_id = base + corner * 3 + 1;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+//                         crossing_id = base + corner * 3 + 2;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(width, width), 0.2, 150, 200);
+//                     }
+//                 }
+//             }
+//         }
+//         else if (type == 1)
+//         {
+//             int rod_cnt = 0; 
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 for (int col = 0; col < n_col; col++)
+//                 {
+//                     TV bottom_left;
+//                     sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
+
+//                     scaleAndShift(bottom_left);
+//                     bottom_left[dim-1] = rod_radius_in_mm; 
+                    
+//                     for (int corner = 0; corner < 4; corner++)
+//                     {
+//                         int from_idx = (row * n_col + col) * 4 + corner;
+//                         int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
+//                         TV from, to;
+//                         sim.getCrossingPosition(from_idx, from);
+//                         sim.getCrossingPosition(to_idx, to);
+                        
+//                         TV left, right;
+//                         left = from - (to - from) * extend_percentage;
+//                         right = to + (to - from) * extend_percentage;
+
+//                         scaleAndShift(left); scaleAndShift(right);
+//                         left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+//                         moveTo(left);
+//                         writeLine(left, right, rod_radius_in_mm);
+//                         // for (int i = 0; i < 8; i++)
+//                         // {
+//                         //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
+//                         // }
+                        
+                        
+//                     }
+                    
+//                 }
+//             }
+//             for (int col = 0; col < n_col; col++) rod_cnt+=2;
+//             for (int row = 0; row < n_row; row++) rod_cnt+=2;
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     if (row == 0) rod_cnt += 2;
+//                     if (row == n_row - 2) rod_cnt += 2;
+//                     if (row != n_row - 2) rod_cnt += 2;
+//                     if (col == 0) rod_cnt += 2;
+//                     if (col == n_col - 2) rod_cnt += 2;
+//                     if (n_col - 2 != col) rod_cnt += 2;
+//                 }
+//             }
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     // if (row == 0 && col == 0)
+//                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+//                     // else
+//                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, false, true);
+//                 }
+//             }
+
+//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+//             T width;
+//             tunnel_height = 0.14;
+//             if (sim.unit == 0.05)
+//                 width = 0.12;
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+//                     for (int corner = 0; corner < 4; corner++)
+//                     {
+//                         int crossing_id = base + corner * 3 + 1;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
+//                         crossing_id = base + corner * 3 + 2;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
+//                     }
+//                 }
+//             }
+//         }
+//         // fused
+//         else if (type == 2)
+//         {
+//             int rod_cnt = 0; 
+//             int boundary_rod_cnt = 0;
+//             // outer contour
+//             for (int col = 0; col < n_col; col++)
+//             {
+//                 generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int col = 0; col < n_col; col++)
+//             {
+//                 generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 rod_cnt++;
+//             }
+//             boundary_rod_cnt = rod_cnt;
+//             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
+//             {
+//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//             }
+            
+//             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = 0; row < n_row - 1; row++)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     if (row == n_row - 2)
+//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
+//                     else
+//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = n_row - 2; row > -1; row--)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     if (row == 0)
+//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
+//                     else
+//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+            
+//             boundary_rod_cnt = rod_cnt;
+//             while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
+//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+
+
+            
+//             temp = rod_cnt;
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = 0; row < n_row - 1; row++)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+//             for (int col = 0; col < n_col - 1; col++)
+//             {
+//                 for (int row = n_row - 2; row > -1; row--)
+//                 {
+//                     int idx = row * (n_col - 1) + col;
+//                     generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+//                 }
+//             }
+
+            
+//         }
+//         else if (type == 3)
+//         {
+//             int rod_cnt = 0; 
+//             for (int row = 0; row < n_row; row++)
+//             {
+//                 for (int col = 0; col < n_col; col++)
+//                 {
+//                     TV bottom_left;
+//                     sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
+//                     scaleAndShift(bottom_left);
+//                     bottom_left[dim-1] = rod_radius_in_mm; 
+//                     // moveTo(bottom_left);
+//                     for (int corner = 0; corner < 4; corner++)
+//                     {
+//                         int from_idx = (row * n_col + col) * 4 + corner;
+//                         int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
+//                         TV from, to;
+//                         sim.getCrossingPosition(from_idx, from);
+//                         sim.getCrossingPosition(to_idx, to);
+
+//                         TV left, right;
+//                         left = from - (to - from) * extend_percentage;
+//                         right = to + (to - from) * extend_percentage;
+
+//                         scaleAndShift(left); scaleAndShift(right);
+//                         left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                        
+//                         moveTo(left);
+//                         writeLine(left, right, rod_radius_in_mm);
+//                         // for (int i = 0; i < 8; i++)
+//                         // {
+//                         //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
+//                         // }
+//                     }
+                    
+//                 }
+//             }
+//             for (int col = 0; col < n_col; col++) rod_cnt+=2;
+//             for (int row = 0; row < n_row; row++) rod_cnt+=2;
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     if (row == 0) rod_cnt += 2;
+//                     if (row == n_row - 2) rod_cnt += 2;
+//                     if (row != n_row - 2) rod_cnt += 2;
+//                     if (col == 0) rod_cnt += 2;
+//                     if (col == n_col - 2) rod_cnt += 2;
+//                     if (n_col - 2 != col) rod_cnt += 2;
+//                 }
+//             }
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     // if (row == 0 && col == 0)
+//                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+//                     // else
+//                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+//                 }
+//             }
+
+//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+//             T width;
+//             tunnel_height = 0.17;
+//             if (sim.unit == 0.05)
+//                 width = 0.12;
+//             for (int row = 0; row < n_row - 1; row++)
+//             {
+//                 for (int col = 0; col < n_col - 1; col++)
+//                 {
+//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+//                     for (int corner = 0; corner < 4; corner++)
+//                     {
+//                         if (corner == 0)
+//                             continue;
+//                         int crossing_id = base + corner * 3 + 1;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+//                         crossing_id = base + corner * 3 + 2;
+//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+//                     }
+//                 }
+//             }
+//         }
+//         writeFooter();
+//     }
+// }
+
 template<class T, int dim>
-void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
+void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type, bool add_bar)
 {
     auto scaleAndShift = [](TV& x)->void
     {
@@ -31,9 +406,21 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
 
     if constexpr (dim == 3)
     {
-        writeHeader();
+        TV bottom_left, top_right;
         T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
-        T extend_percentage = 0.1;
+        sim.computeBoundingBox(bottom_left, top_right);
+
+        scaleAndShift(bottom_left); scaleAndShift(top_right);
+        bottom_left[dim-1] = rod_radius_in_mm;
+        top_right[dim-1] = rod_radius_in_mm;
+
+        TV bottom_right = bottom_left;
+        bottom_right[0] = top_right[0];
+        TV top_left = top_right;
+        top_left[0] = bottom_left[0];   
+
+        writeHeader();
+        T extend_percentage = 0.05;
         T inner_height = 3.5 * rod_radius_in_mm;
         // x sliding
         if (type == 0)
@@ -41,30 +428,55 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
             int rod_cnt = 0; 
             int boundary_rod_cnt = 0;
             // outer contour
-            for (int col = 0; col < n_col; col++)
+            
+
+            if (add_bar)
             {
-                generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
+                for (int col = 0; col < n_col; col++)
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);   
+                for (int col = 0; col < n_col; col++)
+                {
+                    if (col == 0)
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.1);
+                    else
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                }
+                    
+                
+                addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+                addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+                
+                rod_cnt += 2 * n_col + 2 * n_row;
             }
-            for (int row = 0; row < n_row; row++)
+            else
             {
-                generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
+                for (int col = 0; col < n_col; col++)
+                {
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int row = 0; row < n_row; row++)
+                {
+                    generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int col = 0; col < n_col; col++)
+                {
+                    generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int row = 0; row < n_row; row++)
+                {
+                    generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
             }
-            for (int col = 0; col < n_col; col++)
-            {
-                generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
-            }
-            for (int row = 0; row < n_row; row++)
-            {
-                generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
-            }
+
             boundary_rod_cnt = rod_cnt;
             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
             {
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                generateCodeSingleRod(rod_cnt, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                rod_cnt++;
             }
             
             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
@@ -103,23 +515,56 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                 for (int row = 0; row < n_row - 1; row++)
                 {
                     int idx = row * (n_col - 1) + col;
+                    if (row == 0)
+                    {
+                        auto rod = sim.Rods[temp + idx * 4 + 0];
+                        TV x0; rod->x(rod->indices.front(), x0);
+                        TV front, back;
+                        rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
+                        x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
+                        scaleAndShift(x0);
+                        x0[dim - 1] = 2.0;
+                        moveTo(x0);
+                    }
                     generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+                    if (row == n_row - 2)
+                    {
+                        current_position[dim - 1] = 2.0;
+                        moveTo(current_position, 300, true);
+                    }
                 }
             }
-            for (int col = 0; col < n_col - 1; col++)
+
+            for (int row = n_row - 2; row > -1; row--)
             {
-                for (int row = n_row - 2; row > -1; row--)
+                for (int col = n_col - 2; col > -1; col--)
                 {
                     int idx = row * (n_col - 1) + col;
+                    if (col == n_col - 2)
+                    {
+                        auto rod = sim.Rods[temp + idx * 4 + 2];
+                        TV x0; rod->x(rod->indices.front(), x0);
+                        TV front, back;
+                        rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
+                        x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
+                        scaleAndShift(x0);
+                        x0[dim - 1] = 2.0;
+                        moveTo(x0);
+                    }
                     generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+                    if (col == 0)
+                    {
+                        current_position[dim - 1] = 2.0;
+                        moveTo(current_position, 300, true);
+                    }
                 }
             }
 
             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
             T width;
             if (sim.unit == 0.05)
-                width = 0.12;
-            tunnel_height = 0.14;
+                width = 0.1;
+            tunnel_height = 0.2;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -128,9 +573,9 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     for (int corner = 0; corner < 4; corner++)
                     {
                         int crossing_id = base + corner * 3 + 1;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                         crossing_id = base + corner * 3 + 2;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(width, width), 0.2, 150, 200);
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                     }
                 }
             }
@@ -138,56 +583,37 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
         else if (type == 1)
         {
             int rod_cnt = 0; 
-            for (int row = 0; row < n_row; row++)
+            int boundary_rod_cnt = 0;
+
+            if (add_bar)
             {
                 for (int col = 0; col < n_col; col++)
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);   
+                for (int col = 0; col < n_col; col++)
                 {
-                    TV bottom_left;
-                    sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
-
-                    scaleAndShift(bottom_left);
-                    bottom_left[dim-1] = rod_radius_in_mm; 
-                    
-                    for (int corner = 0; corner < 4; corner++)
-                    {
-                        int from_idx = (row * n_col + col) * 4 + corner;
-                        int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
-                        TV from, to;
-                        sim.getCrossingPosition(from_idx, from);
-                        sim.getCrossingPosition(to_idx, to);
-                        
-                        TV left, right;
-                        left = from - (to - from) * extend_percentage;
-                        right = to + (to - from) * extend_percentage;
-
-                        scaleAndShift(left); scaleAndShift(right);
-                        left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
-                        moveTo(left);
-                        writeLine(left, right, rod_radius_in_mm);
-                        // for (int i = 0; i < 8; i++)
-                        // {
-                        //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
-                        // }
-                        
-                        
-                    }
-                    
+                    if (col == 0)
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.1);
+                    else
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
                 }
+                
+                addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+                addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+                
+                rod_cnt += 2 * n_col + 2 * n_row;
             }
-            for (int col = 0; col < n_col; col++) rod_cnt+=2;
-            for (int row = 0; row < n_row; row++) rod_cnt+=2;
-            for (int row = 0; row < n_row - 1; row++)
+
+            boundary_rod_cnt = rod_cnt;
+            while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
             {
-                for (int col = 0; col < n_col - 1; col++)
-                {
-                    if (row == 0) rod_cnt += 2;
-                    if (row == n_row - 2) rod_cnt += 2;
-                    if (row != n_row - 2) rod_cnt += 2;
-                    if (col == 0) rod_cnt += 2;
-                    if (col == n_col - 2) rod_cnt += 2;
-                    if (n_col - 2 != col) rod_cnt += 2;
-                }
+                generateCodeSingleRod(rod_cnt, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                rod_cnt++;
             }
+
+            boundary_rod_cnt = rod_cnt;
+            while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, true);
+
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -195,18 +621,28 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     // if (row == 0 && col == 0)
                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
                     // else
-                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+                    auto rod = sim.Rods[rod_cnt];
+                    TV x0; rod->x(rod->indices.front(), x0);
+                    TV front, back;
+                    rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
+                    x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
+                    scaleAndShift(x0);
+                    x0[dim - 1] = 2.0;
+                    moveTo(x0);
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, false, true);
+                    current_position[dim - 1] = 2.0;
+                    moveTo(current_position, 300, true);
                 }
             }
 
+            
+
             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
             T width;
-            tunnel_height = 0.14;
-            if (sim.unit == 0.05)
-                width = 0.12;
+            tunnel_height = 0.2;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -215,42 +651,69 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     for (int corner = 0; corner < 4; corner++)
                     {
                         int crossing_id = base + corner * 3 + 1;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                         crossing_id = base + corner * 3 + 2;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                     }
                 }
             }
         }
+        // fused
         else if (type == 2)
         {
+            for (auto& rod : sim.Rods)
+                rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
+
             int rod_cnt = 0; 
             int boundary_rod_cnt = 0;
             // outer contour
-            for (int col = 0; col < n_col; col++)
+            
+            if (add_bar)
             {
-                generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
+                for (int col = 0; col < n_col; col++)
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);   
+                for (int col = 0; col < n_col; col++)
+                {
+                    if (col == 0)
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.1);
+                    else
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                }
+                
+                addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+                addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+                
+                rod_cnt += 2 * n_col + 2 * n_row;
             }
-            for (int row = 0; row < n_row; row++)
+            else
             {
-                generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
+                for (int col = 0; col < n_col; col++)
+                {
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int row = 0; row < n_row; row++)
+                {
+                    generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int col = 0; col < n_col; col++)
+                {
+                    generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
+                for (int row = 0; row < n_row; row++)
+                {
+                    generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    rod_cnt++;
+                }
             }
-            for (int col = 0; col < n_col; col++)
-            {
-                generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
-            }
-            for (int row = 0; row < n_row; row++)
-            {
-                generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-                rod_cnt++;
-            }
+
             boundary_rod_cnt = rod_cnt;
             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
             {
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                generateCodeSingleRod(rod_cnt, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                rod_cnt++;
             }
             
             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
@@ -279,7 +742,7 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
             
             boundary_rod_cnt = rod_cnt;
             while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
-                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, true);
 
 
             
@@ -289,71 +752,84 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                 for (int row = 0; row < n_row - 1; row++)
                 {
                     int idx = row * (n_col - 1) + col;
-                    generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, true);
                 }
             }
-            for (int col = 0; col < n_col - 1; col++)
+
+            for (int row = n_row - 2; row > -1; row--)
             {
-                for (int row = n_row - 2; row > -1; row--)
+                for (int col = n_col - 2; col > -1; col--)
                 {
                     int idx = row * (n_col - 1) + col;
-                    generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                    generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, true);           
                 }
             }
+
 
             
         }
+        // Fix corner 1X1Y
         else if (type == 3)
         {
-            int rod_cnt = 0; 
-            for (int row = 0; row < n_row; row++)
-            {
-                for (int col = 0; col < n_col; col++)
-                {
-                    TV bottom_left;
-                    sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
-                    scaleAndShift(bottom_left);
-                    bottom_left[dim-1] = rod_radius_in_mm; 
-                    // moveTo(bottom_left);
-                    for (int corner = 0; corner < 4; corner++)
-                    {
-                        int from_idx = (row * n_col + col) * 4 + corner;
-                        int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
-                        TV from, to;
-                        sim.getCrossingPosition(from_idx, from);
-                        sim.getCrossingPosition(to_idx, to);
-
-                        TV left, right;
-                        left = from - (to - from) * extend_percentage;
-                        right = to + (to - from) * extend_percentage;
-
-                        scaleAndShift(left); scaleAndShift(right);
-                        left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
-                        
-                        moveTo(left);
-                        writeLine(left, right, rod_radius_in_mm);
-                        // for (int i = 0; i < 8; i++)
-                        // {
-                        //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
-                        // }
-                    }
-                    
-                }
-            }
-            for (int col = 0; col < n_col; col++) rod_cnt+=2;
-            for (int row = 0; row < n_row; row++) rod_cnt+=2;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
                 {
-                    if (row == 0) rod_cnt += 2;
-                    if (row == n_row - 2) rod_cnt += 2;
-                    if (row != n_row - 2) rod_cnt += 2;
-                    if (col == 0) rod_cnt += 2;
-                    if (col == n_col - 2) rod_cnt += 2;
-                    if (n_col - 2 != col) rod_cnt += 2;
+                    int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+                    for (int corner = 0; corner < 4; corner++)
+                    {
+                        
+                        auto crossing = sim.rod_crossings[base + corner * 3 + 1];
+                        
+
+                        if (corner == 0)
+                        {
+                            crossing->is_fixed = true;
+                            sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[1] = true;
+                        }
+
+                        crossing = sim.rod_crossings[base + corner * 3 + 2];
+                    
+                        if (corner == 0)
+                        {
+                            sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[2] = true;
+                        }
+
+                    }
                 }
             }
+            int rod_cnt = 0; 
+            int boundary_rod_cnt = 0;
+
+            if (add_bar)
+            {
+                for (int col = 0; col < n_col; col++)
+                    generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);   
+                for (int col = 0; col < n_col; col++)
+                {
+                    if (col == 0)
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.1);
+                    else
+                        generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                }
+                
+                addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+                addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+                
+                rod_cnt += 2 * n_col + 2 * n_row;
+            }
+
+            boundary_rod_cnt = rod_cnt;
+            while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
+            {
+                generateCodeSingleRod(rod_cnt, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
+                rod_cnt++;
+            }
+
+            boundary_rod_cnt = rod_cnt;
+            while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
+                generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, true);
+
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -361,18 +837,26 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                     // if (row == 0 && col == 0)
                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
                     // else
-                        generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+                    auto rod = sim.Rods[rod_cnt];
+                    TV x0; rod->x(rod->indices.front(), x0);
+                    TV front, back;
+                    rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
+                    x0 -= (back - front).normalized() * 0.3 * (front - back).norm();
+                    scaleAndShift(x0);
+                    x0[dim - 1] = 2.0;
+                    moveTo(x0);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+                    generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, false, true);
+                    current_position[dim - 1] = 2.0;
+                    moveTo(current_position, 300, true);
                 }
             }
 
             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
             T width;
-            tunnel_height = 0.17;
-            if (sim.unit == 0.05)
-                width = 0.12;
+            tunnel_height = 0.2;
             for (int row = 0; row < n_row - 1; row++)
             {
                 for (int col = 0; col < n_col - 1; col++)
@@ -383,19 +867,104 @@ void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type)
                         if (corner == 0)
                             continue;
                         int crossing_id = base + corner * 3 + 1;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                         crossing_id = base + corner * 3 + 2;
-                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+                        addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(0.08, 0.12), 0.3, 150, 200);
                     }
                 }
             }
+
+            // int rod_cnt = 0; 
+            // for (int row = 0; row < n_row; row++)
+            // {
+            //     for (int col = 0; col < n_col; col++)
+            //     {
+            //         TV bottom_left;
+            //         sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
+            //         scaleAndShift(bottom_left);
+            //         bottom_left[dim-1] = rod_radius_in_mm; 
+            //         // moveTo(bottom_left);
+            //         for (int corner = 0; corner < 4; corner++)
+            //         {
+            //             int from_idx = (row * n_col + col) * 4 + corner;
+            //             int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
+            //             TV from, to;
+            //             sim.getCrossingPosition(from_idx, from);
+            //             sim.getCrossingPosition(to_idx, to);
+
+            //             TV left, right;
+            //             left = from - (to - from) * extend_percentage;
+            //             right = to + (to - from) * extend_percentage;
+
+            //             scaleAndShift(left); scaleAndShift(right);
+            //             left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                        
+            //             moveTo(left);
+            //             writeLine(left, right, rod_radius_in_mm);
+            //             // for (int i = 0; i < 8; i++)
+            //             // {
+            //             //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
+            //             // }
+            //         }
+                    
+            //     }
+            // }
+            // for (int col = 0; col < n_col; col++) rod_cnt+=2;
+            // for (int row = 0; row < n_row; row++) rod_cnt+=2;
+            // for (int row = 0; row < n_row - 1; row++)
+            // {
+            //     for (int col = 0; col < n_col - 1; col++)
+            //     {
+            //         if (row == 0) rod_cnt += 2;
+            //         if (row == n_row - 2) rod_cnt += 2;
+            //         if (row != n_row - 2) rod_cnt += 2;
+            //         if (col == 0) rod_cnt += 2;
+            //         if (col == n_col - 2) rod_cnt += 2;
+            //         if (n_col - 2 != col) rod_cnt += 2;
+            //     }
+            // }
+            // for (int row = 0; row < n_row - 1; row++)
+            // {
+            //     for (int col = 0; col < n_col - 1; col++)
+            //     {
+            //         // if (row == 0 && col == 0)
+            //         //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
+            //         // else
+            //             generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+            //         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+            //         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+            //         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
+            //     }
+            // }
+
+            // TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+            // T width;
+            // tunnel_height = 0.17;
+            // if (sim.unit == 0.05)
+            //     width = 0.12;
+            // for (int row = 0; row < n_row - 1; row++)
+            // {
+            //     for (int col = 0; col < n_col - 1; col++)
+            //     {
+            //         int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+            //         for (int corner = 0; corner < 4; corner++)
+            //         {
+            //             if (corner == 0)
+            //                 continue;
+            //             int crossing_id = base + corner * 3 + 1;
+            //             addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+            //             crossing_id = base + corner * 3 + 2;
+            //             addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
+            //         }
+            //     }
+            // }
         }
         writeFooter();
     }
 }
 
 template<class T, int dim>
-void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n_col, bool fused)
+void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n_col, int type)
 {
     auto scaleAndShift = [](TV& x)->void
     {
@@ -425,19 +994,88 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
 
         
         
-        if (fused)
+        if (type == 0)
         {
             for (int row = 0; row < n_row; row++)
             {
-                generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm);
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
             }
 
             for (int col = 0; col < n_col; col++)
             {
-                generateCodeSingleRod(col + n_row, scaleAndShift, true, 1.5 * rod_radius_in_mm, 1.5 * rod_radius_in_mm);
-            }            
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+            
+            moveTo(bottom_left_extend);
+            writeLine(bottom_left_extend, bottom_right, rod_radius_in_mm, 1500);
+            writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+            writeLine(top_right, top_left, rod_radius_in_mm, 1500);
+            writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
         }
-        else
+        else if (type == 1)
         {
             for (int row = 0; row < n_row; row++)
             {
@@ -537,13 +1175,111 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
                     addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 100, 200);
                 }
             }
+            
+            
         }
 
-        moveTo(bottom_left_extend);
-        writeLine(bottom_left_extend, bottom_right, rod_radius_in_mm, 1500);
-        writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
-        writeLine(top_right, top_left, rod_radius_in_mm, 1500);
-        writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+        else if (type == 2)
+        {
+            TV top_right_extend = top_right + (top_right - top_left) * 0.2;
+
+            moveTo(top_right_extend);
+            writeLine(top_right_extend, top_left, rod_radius_in_mm, 1500);
+            writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+            writeLine(bottom_left, bottom_right, rod_radius_in_mm, 1500);
+            writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+
+            for (int row = 0; row < n_row; row++)
+            {
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = 3.0 * rod_radius_in_mm; to[dim-1] = 3.0 * rod_radius_in_mm;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right);
+                    right[dim-1] = 0.2;
+                    moveTo(right);
+                    to[1] = top_right[1];
+                    TV temp = 0.5 * (right + to);
+                    temp[2] = 0.2;
+
+                    writeLine(right, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, to, rod_radius_in_mm, 400);
+                    writeLine(to, from, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (from + left);
+                    temp[2] = 0.2;
+                    writeLine(from, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, left, rod_radius_in_mm, 200);
+                }
+                else
+                {
+                    moveTo(left);
+                    left[dim-1] = 0.2;
+                    moveTo(left);
+                    from[1] = bottom_left[1];
+                    TV temp = 0.5 * (left + from);
+                    temp[2] = 0.2;
+                    writeLine(left, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, from, rod_radius_in_mm, 400);
+                    writeLine(from, to, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (to + right);
+                    temp[2] = 0.2;
+                    writeLine(to, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, right, rod_radius_in_mm, 200);
+                }
+            }
+
+        }
+
+        
+
+       
         
 
         writeFooter();
@@ -884,9 +1620,9 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
     {
         if (!is_fused[i])
         {
-            lift_head = true;
-            break;       
-            for (int j = i - 2 ; j < i + 3; j++)
+            // lift_head = true;
+            // break;       
+            for (int j = i - 2 ; j < i + 2; j++)
             {
                 if (j >= 0 && j < rod->numSeg())
                 {
@@ -910,27 +1646,27 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
         //     xi -= (back - front).normalized() * buffer_percentage * (front - back).norm();
         scaleAndShift(xi); scaleAndShift(xj);
         
-        // if (fused_buffer[node_cnt]) xi[dim - 1] = bd_height;
-        // else xi[dim - 1] = inner_height; 
+        if (fused_buffer[node_cnt]) xi[dim - 1] = bd_height;
+        else xi[dim - 1] = inner_height; 
         
-        // if (fused_buffer[node_cnt + 1]) xj[dim - 1] = bd_height;
-        // else xj[dim - 1] = inner_height; 
-        // node_cnt++;
+        if (fused_buffer[node_cnt + 1]) xj[dim - 1] = bd_height;
+        else xj[dim - 1] = inner_height; 
+        node_cnt++;
 
-        if (lift_head && rod_idx != 0 && rod_idx != rod->numSeg()-1)
-        {
-             xj[dim - 1] = inner_height; 
-             xi[dim - 1] = inner_height; 
-        }
-        else
-        {
-            xj[dim - 1] = bd_height; 
-            xi[dim - 1] = bd_height; 
-        }
+        // if (lift_head && rod_idx != 0 && rod_idx < rod->numSeg()-2)
+        // {
+        //      xj[dim - 1] = inner_height; 
+        //      xi[dim - 1] = inner_height; 
+        // }
+        // else
+        // {
+        //     xj[dim - 1] = bd_height; 
+        //     xi[dim - 1] = bd_height; 
+        // }
         if (less)
-            writeLine(xi, xj, 0.7 * rod_radius_in_mm);
+            writeLine(xi, xj, 0.8 * rod_radius_in_mm, 300);
         else
-            writeLine(xi, xj, rod_radius_in_mm);
+            writeLine(xi, xj, rod_radius_in_mm, 300);
     });
     
     
@@ -1356,6 +2092,50 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsCurveGripperHardCoded()
     right[dim - 1] = first_layer_height;
     addSingleTunnel(left, right, 2.0);
     writeFooter();
+}
+
+// ################################## UTILITIES ##################################
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::addRecBar(const TV& border_a, const TV& border_b, T width, T rod_diameter)
+{
+    if constexpr (dim == 3)
+    {
+        moveTo(border_a);
+        TV line_vector = border_b - border_a;
+        Eigen::Matrix3d rotation_clockwise = rotationMatrixFromEulerAngle(-M_PI / 2.0, 0.0, 0.0);
+        TV ortho_dir = rotation_clockwise * (border_b - border_a);
+        ortho_dir.normalize();
+        // T dx = width / rod_diameter;
+        // std::cout << dx << " " << width << " " << rod_diameter << std::endl;
+        int cnt = 0;
+        for (T delta = 0; delta < width; delta += rod_diameter)
+        {
+            TV from, to;
+            if (cnt % 2 == 0)
+            {
+                from = current_position;
+                to = current_position + line_vector;
+                writeLine(from, to, rod_diameter);
+                TV shift = to + ortho_dir * rod_diameter;
+                moveTo(shift);
+                // writeLine(to, shift, rod_diameter);
+            }
+            else
+            {
+                from = current_position;
+                to = current_position - line_vector;
+                writeLine(from, to, rod_diameter);
+                TV shift = to + ortho_dir * rod_diameter;
+                moveTo(shift);
+                // writeLine(to, shift, rod_diameter);
+            }
+            cnt++;
+            
+        }
+        
+    }
+    
 }
 
 template<class T, int dim>

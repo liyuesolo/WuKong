@@ -37,6 +37,7 @@ void HybridC2Curve<T, dim>::generateC2Curves()
             F(theta/M_PI, curve_idx+1, F1);
             // equation (2)
             TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
+            
             points_on_curve.push_back(Ci);
         }
     }
@@ -61,6 +62,15 @@ void HybridC2Curve<T, dim>::constructIndividualCurves()
         curve_data.push_back(new CurveData<T, dim>(
                                 center, axis1, axis2, 
                                 Vector<T, 2>(limits[0], limits[2])));
+        // std::cout << data_points[i - 1].transpose() << " | " << data_points[i].transpose() << " | " << data_points[i+1].transpose() << std::endl;
+        // TV pos;
+        // F(0.5, 0, pos);
+        // std::cout << "middle " << pos.transpose() << std::endl;
+        // F(0, 0, pos);
+        // std::cout << "left " << pos.transpose() << std::endl;
+        // F(1, 0, pos);
+        // std::cout << "right " << pos.transpose() << std::endl;
+        // std::getchar();
     }
 }
 
@@ -110,36 +120,82 @@ void HybridC2Curve<T, dim>::sampleCurves(std::vector<TV>& points)
     constructIndividualCurves();
     
     // first half of the first spline, no interpolation
-    for (int vtx = 0; vtx < sub_div / 2; vtx++)
+    // for (int vtx = 0; vtx < sub_div / 2; vtx++)
+    // {
+    //     T t = T(vtx) / sub_div;
+    //     TV F0; F(t, 0, F0);
+    //     points_on_curve.push_back(F0);
+    // }
+    // // interpolate between two splines
+    // for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
+    // {
+    //     for (int vtx = 0; vtx < sub_div / 2; vtx++)
+    //     {
+    //         T t = T(vtx) / sub_div * 2.0;
+    //         T theta = t * M_PI * 0.5;
+    //         TV F0, F1;
+    //         // maps to 0.5 ~ 1 for the first spline
+    //         F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
+    //         // maps to 0 ~ 0.5 for the second spline
+    //         F(theta/M_PI, curve_idx+1, F1);
+    //         // equation (2)
+    //         TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
+            
+    //         points_on_curve.push_back(Ci);
+    //     }
+    // }
+
+    // // second half of the last spline, no interpolation
+    // for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
+    // {
+    //     T t = T(vtx) / sub_div;
+    //     TV F1; F(t, curve_data.size() - 1, F1);
+    //     points_on_curve.push_back(F1);
+    // }
+
+    T ti = curve_data.front()->limits[0];
+    T ti_plus_1 = 0;
+    T dt = (ti_plus_1 - ti) / (sub_div / 2);
+    for (int i = 0; i < sub_div / 2; i++)
     {
-        T t = T(vtx) / sub_div;
+        T t = (ti + dt * (T)i - curve_data.front()->limits[0])/ (curve_data.front()->limits[1] - curve_data.front()->limits[0]);
         TV F0; F(t, 0, F0);
-        points_on_curve.push_back(F0);
+        points_on_curve.push_back(F0);    
     }
-    // interpolate between two splines
     for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
     {
-        for (int vtx = 0; vtx < sub_div / 2; vtx++)
+        T ti = 0;
+        T ti_plus_1 = curve_data[curve_idx]->limits[1]; 
+        
+        T dt = (ti_plus_1 - ti) / (sub_div / 2);
+        T dt_next = (0 - curve_data[curve_idx + 1]->limits[0]) / (sub_div / 2); 
+        for (int i = 0; i < sub_div / 2; i++)
         {
-            T t = T(vtx) / sub_div * 2.0;
-            T theta = t * M_PI * 0.5;
+            T t = (ti + dt * (T)i - curve_data[curve_idx]->limits[0]) / (curve_data[curve_idx]->limits[1] - curve_data[curve_idx]->limits[0]);
+
+            T theta = (dt * T(i)) / (ti_plus_1 - ti) * M_PI * 0.5;
             TV F0, F1;
-            // maps to 0.5 ~ 1 for the first spline
-            F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
-            // maps to 0 ~ 0.5 for the second spline
-            F(theta/M_PI, curve_idx+1, F1);
+            F(t, curve_idx, F0);
+            T t_next = ( dt_next * T(i)) / (curve_data[curve_idx + 1]->limits[1] - curve_data[curve_idx + 1]->limits[0]);
+            F(t_next, curve_idx+1, F1);
             // equation (2)
             TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
             points_on_curve.push_back(Ci);
         }
     }
-    // second half of the last spline, no interpolation
-    for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
+
+    ti = 0;
+    ti_plus_1 = curve_data.back()->limits[1];
+    dt = (ti_plus_1 - ti) / (sub_div / 2);
+    for (int i = 0; i < sub_div / 2; i++)
     {
-        T t = T(vtx) / sub_div;
+        T t = (ti + dt * (T)i - curve_data.back()->limits[0]) / (curve_data.back()->limits[1] - curve_data.back()->limits[0]);
         TV F1; F(t, curve_data.size() - 1, F1);
+        // std::cout << " F1 at last segment " << F1.transpose() << std::endl;
         points_on_curve.push_back(F1);
     }
+
+    points_on_curve.push_back(data_points.back());
 
     points = points_on_curve;
 }
@@ -152,37 +208,42 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
 
     //check if the derivative of individual function is correct.
     // passed
-    for(int i = 0; i < curve_data.size(); i++)
-    {
-        for (T t = 0.0; t < 1.0; t += 0.1)
-        {
-            TV dF0dt, dF1dt, d2F0dt2;
-            dF(t, i, dF0dt);
-            dF(t + epsilon, i, dF1dt);
-            ddF(t, i, d2F0dt2);
-            TV F0, F1;
-            F(t, i, F0); F(t + epsilon, i, F1);
-            for (int d = 0; d < dim; d++)
-            {
-                std::cout << "dF: " <<  (F1[d] - F0[d]) / epsilon << " " << dF0dt[d] << std::endl;
-                std::cout << "ddF " << (dF1dt[d] - dF0dt[d]) / epsilon << " " << d2F0dt2[d] << std::endl;
-            }
-            std::getchar();
-        }
-    }
+    // for(int i = 0; i < curve_data.size(); i++)
+    // {
+    //     for (T t = 0.0; t < 1.0; t += 0.1)
+    //     {
+    //         TV dF0dt, dF1dt, d2F0dt2;
+    //         dF(t, i, dF0dt);
+    //         dF(t + epsilon, i, dF1dt);
+    //         ddF(t, i, d2F0dt2);
+    //         TV F0, F1;
+    //         F(t, i, F0); F(t + epsilon, i, F1);
+    //         for (int d = 0; d < dim; d++)
+    //         {
+    //             std::cout << "dF: " <<  (F1[d] - F0[d]) / epsilon << " " << dF0dt[d] << std::endl;
+    //             std::cout << "ddF " << (dF1dt[d] - dF0dt[d]) / epsilon << " " << d2F0dt2[d] << std::endl;
+    //         }
+    //         std::getchar();
+    //     }
+    // }
 
     //check interpolated value
 
-    for(int i = 0; i < curve_data.size() - 1; i++)
+    for(int i = 1; i < curve_data.size() - 1; i++)
     {
+        std::cout << "curve " << i << std::endl;
         for (T t = 0.0; t < 1.0; t += 0.1)
         {
             auto Ci = [&](T _t, int i, TV& c)
             {
-                T theta = _t * M_PI * 0.5;
+                T ti = (0 + _t * (curve_data[i]->limits[1] - 0) - curve_data[i]->limits[0]) / (curve_data[i]->limits[1] - curve_data[i]->limits[0]);
+                T ti_plus_1 = (_t * (0 - curve_data[i + 1]->limits[0]) ) / (curve_data[i + 1]->limits[1] - curve_data[i + 1]->limits[0]);
+
                 TV F0, F1;
-                F((theta + M_PI * 0.5)/M_PI, i, F0);
-                F(theta/M_PI, i+1, F1);
+                F(ti, i, F0);
+                F(ti_plus_1, i+1, F1);
+
+                T theta = _t * M_PI * 0.5;
 
                 T cos2 = std::cos(theta) * std::cos(theta);
                 T sin2 = std::sin(theta) * std::sin(theta);
@@ -191,29 +252,37 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
 
             auto computedCdt = [&](T _t, int i, TV& dcdt)
             {
+                T ti = (0 + _t * (curve_data[i]->limits[1] - 0) - curve_data[i]->limits[0]) / (curve_data[i]->limits[1] - curve_data[i]->limits[0]);
+                T ti_plus_1 = (_t * (0 - curve_data[i + 1]->limits[0]) ) / (curve_data[i + 1]->limits[1] - curve_data[i + 1]->limits[0]);
+                
+                T dtidt = (curve_data[i]->limits[1] - 0) / (curve_data[i]->limits[1] - curve_data[i]->limits[0]);
+                T dti_plus_1dt = (0 - curve_data[i + 1]->limits[0]) / (curve_data[i + 1]->limits[1] - curve_data[i + 1]->limits[0]);
+
+                TV F0, F1;
+                F(ti, i, F0);
+                F(ti_plus_1, i+1, F1);
+
+                T theta = _t * M_PI * 0.5;
+                
                 TV dF0dt, dF1dt;
 
                 T dtheta_dt = M_PI * 0.5;
-                T theta = _t * M_PI * 0.5;
-
+                
                 T cos2 = std::cos(theta) * std::cos(theta);
                 T sin2 = std::sin(theta) * std::sin(theta);
 
-                TV F0, F1;
-                F((theta + M_PI * 0.5)/M_PI, i, F0);
-                F(theta/M_PI, i + 1, F1);
 
-                dF((theta + M_PI * 0.5)/M_PI, i, dF0dt); 
-                dF(theta/M_PI, i + 1, dF1dt); 
+                dF(ti, i, dF0dt); 
+                dF(ti_plus_1, i + 1, dF1dt); 
                 
                 TV dF_dtheta = TV::Zero();
-                dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0);
+                dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0) * dtheta_dt;
                 // std::cout << dF_dtheta.transpose() << std::endl;
-                dF_dtheta += cos2 * dF0dt / M_PI ;
+                dF_dtheta += cos2 * dF0dt * dtidt ;
                 // std::cout << dF_dtheta.transpose() << std::endl;
-                dF_dtheta += sin2 * dF1dt / M_PI; // write it out for clearity
+                dF_dtheta += sin2 * dF1dt * dti_plus_1dt; // write it out for clearity
                 // std::cout << dF_dtheta.transpose() << std::endl;
-                dcdt = dF_dtheta * dtheta_dt;
+                dcdt = dF_dtheta ;
             };
 
             auto ddCi = [&](T _t, int i, TV& d2cdt2)
@@ -222,27 +291,35 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
                 TV d2F0dt2, d2F1dt2;
                 
                 T dtheta_dt = M_PI * 0.5;
+
+                T ti = (0 + _t * (curve_data[i]->limits[1] - 0) - curve_data[i]->limits[0]) / (curve_data[i]->limits[1] - curve_data[i]->limits[0]);
+                T ti_plus_1 = (_t * (0 - curve_data[i + 1]->limits[0]) ) / (curve_data[i + 1]->limits[1] - curve_data[i + 1]->limits[0]);
+                T dtidt = (curve_data[i]->limits[1] - 0) / (curve_data[i]->limits[1] - curve_data[i]->limits[0]);
+                T dti_plus_1dt = (0 - curve_data[i + 1]->limits[0]) / (curve_data[i + 1]->limits[1] - curve_data[i + 1]->limits[0]);
+
+                TV F0, F1;
+                F(ti, i, F0);
+                F(ti_plus_1, i+1, F1);
+
                 T theta = _t * M_PI * 0.5;
 
                 T cos2 = std::cos(theta) * std::cos(theta);
                 T sin2 = std::sin(theta) * std::sin(theta);
 
-                TV F0, F1;
-                F((theta + M_PI * 0.5)/M_PI, i, F0);
-                F(theta/M_PI, i+1, F1);
 
-                dF((theta + M_PI * 0.5)/M_PI, i, dF0dt); 
-                dF(theta/M_PI, i + 1, dF1dt); 
+                dF(ti, i, dF0dt); 
+                dF(ti_plus_1, i + 1, dF1dt); 
 
-                ddF((theta + M_PI * 0.5)/M_PI, i, d2F0dt2); 
-                ddF(theta/M_PI, i + 1, d2F1dt2); 
+                ddF(ti, i, d2F0dt2); 
+                ddF(ti_plus_1, i + 1, d2F1dt2); 
 
                 d2cdt2 = TV::Zero();
-                d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0);
-                d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt / M_PI - dF0dt / M_PI);
-                d2cdt2 += cos2 * d2F0dt2 / M_PI / M_PI + sin2 * d2F1dt2 / M_PI / M_PI;
+                d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0) * dtheta_dt * dtheta_dt;
+                
+                d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt * dti_plus_1dt - dF0dt * dtidt) * dtheta_dt;
 
-                d2cdt2 *= dtheta_dt * dtheta_dt;
+                d2cdt2 += cos2 * d2F0dt2 * dtidt * dtidt + sin2 * d2F1dt2 * dti_plus_1dt * dti_plus_1dt;
+
             };
             
             TV c0, c1;
@@ -253,7 +330,7 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
             TV dc1; computedCdt(t + epsilon, i, dc1);
 
             TV ddc0; ddCi(t, i, ddc0);
-
+            std::cout << "t = " << t << std::endl;
             for (int d = 0; d < dim; d++)
             {
                 std::cout << "dc: " <<  (c1[d] - c0[d]) / epsilon << " " << dc0[d] << std::endl;
@@ -271,8 +348,12 @@ void HybridC2Curve<T, dim>::circularInterpolation(int i, TV& center, TV& axis1, 
 {
     axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
 
-    int j = (i - 1 + data_points.size()) % data_points.size();
-    int k = (i + 1) % data_points.size();
+    // int j = (i - 1 + data_points.size()) % data_points.size();
+    // int k = (i + 1) % data_points.size();
+
+    int j = i - 1;
+    int k = i + 1;
+
     TV vec1 = data_points[i] - data_points[j];
     TV mid1 = data_points[j] + 0.5 * vec1;
     TV vec2 = data_points[k] - data_points[i];
@@ -323,8 +404,12 @@ void HybridC2Curve<T, dim>::ellipticalInterpolation(int i, TV& center, TV& axis1
 {
     axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
     int numIter = 16;
-    int j = (i - 1 + data_points.size()) % data_points.size();
-    int k = (i + 1) % data_points.size();
+    // int j = (i - 1 + data_points.size()) % data_points.size();
+    // int k = (i + 1) % data_points.size();
+    
+    int j = i - 1;
+    int k = i + 1;
+
     TV vec1 = data_points[j] - data_points[i];
     TV vec2 = data_points[k] - data_points[i];
 
@@ -428,10 +513,17 @@ void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t,
     dci = TV::Zero(); ddci = TV::Zero();
     if (interpolate)
     {
+        // we keep 0 here to indicate that's pi in the curve
+        T ti = (0 + t * (curve_data[curve_idx]->limits[1] - 0) - curve_data[curve_idx]->limits[0]) / (curve_data[curve_idx]->limits[1] - curve_data[curve_idx]->limits[0]);
+        T ti_plus_1 = (t * (0 - curve_data[curve_idx + 1]->limits[0]) ) / (curve_data[curve_idx + 1]->limits[1] - curve_data[curve_idx + 1]->limits[0]);
+        T dtidt = (curve_data[curve_idx]->limits[1] - 0) / (curve_data[curve_idx]->limits[1] - curve_data[curve_idx]->limits[0]);
+        T dti_plus_1dt = (0 - curve_data[curve_idx + 1]->limits[0]) / (curve_data[curve_idx + 1]->limits[1] - curve_data[curve_idx + 1]->limits[0]);
+        
         T theta = t * M_PI * 0.5;
+        
         TV F0, F1;
-        F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
-        F(theta/M_PI, curve_idx+1, F1);
+        F(ti, curve_idx, F0);
+        F(ti_plus_1, curve_idx+1, F1);
 
         T cos2 = std::cos(theta) * std::cos(theta);
         T sin2 = std::sin(theta) * std::sin(theta);
@@ -443,37 +535,109 @@ void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t,
 
         if (compute_dci)
         {
-            dF((theta + M_PI * 0.5)/M_PI, curve_idx, dF0dt); 
-            dF(theta/M_PI, curve_idx + 1, dF1dt); 
+            dF(ti, curve_idx, dF0dt); 
+            dF(ti_plus_1, curve_idx + 1, dF1dt); 
             
             TV dF_dtheta = TV::Zero();
-            dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0);
-            dF_dtheta += cos2 * dF0dt / M_PI ;
+            dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0)  * dtheta_dt;
+            dF_dtheta += cos2 * dF0dt * dtidt ;
             
-            dF_dtheta += sin2 * dF1dt / M_PI; // write it out for clearity
+            dF_dtheta += sin2 * dF1dt * dti_plus_1dt; // write it out for clearity
             
-            dci = dF_dtheta * dtheta_dt;
+            dci = dF_dtheta;
         }
         if (compute_ddci)
         {
-            ddF((theta + M_PI * 0.5)/M_PI, curve_idx, d2F0dt2); 
-            ddF(theta/M_PI, curve_idx + 1, d2F1dt2); 
+            ddF(ti, curve_idx, d2F0dt2); 
+            ddF(ti_plus_1, curve_idx+1, d2F1dt2); 
 
             TV d2cdt2 = TV::Zero();
-            d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0);
-            d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt / M_PI - dF0dt / M_PI);
-            d2cdt2 += cos2 * d2F0dt2 / M_PI / M_PI + sin2 * d2F1dt2 / M_PI / M_PI;
+            d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0)  * dtheta_dt * dtheta_dt;
+            d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt * dti_plus_1dt - dF0dt * dtidt)  * dtheta_dt;
+            d2cdt2 += cos2 * d2F0dt2 * dtidt * dtidt + sin2 * d2F1dt2 * dti_plus_1dt * dti_plus_1dt;
 
-            ddci = d2cdt2 * dtheta_dt * dtheta_dt;
+            ddci = d2cdt2;
         }
     }
     else
     {
-        F(t, curve_idx, ci);
-        if (compute_dci) dF(t, curve_idx, dci); 
-        if (compute_ddci) ddF(t, curve_idx, ddci);
+        T ti;
+        T dtidt;
+        if (curve_idx == 0)
+        {
+            ti = (0 + t * (0 - curve_data.front()->limits[0])) / (curve_data.front()->limits[1] - curve_data.front()->limits[0]);
+            dtidt= (0 - curve_data.front()->limits[0]) / (curve_data.front()->limits[1] - curve_data.front()->limits[0]);
+        }
+        else
+        {
+            ti = (0 + t * (curve_data.back()->limits[1] - 0) - curve_data.back()->limits[0]) / (curve_data.back()->limits[1] - curve_data.back()->limits[0]);
+            dtidt = (curve_data.back()->limits[1] - 0) / (curve_data.back()->limits[1] - curve_data.back()->limits[0]);
+        }
+        F(ti, curve_idx, ci);
+        if (compute_dci) dF(ti, curve_idx, dci); 
+        if (compute_ddci) ddF(ti, curve_idx, ddci);
+
+        dci *= dtidt;
+        ddci *= dtidt * dtidt;
     }
 }
 
+// template<class T, int dim>
+// void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t, 
+//         TV& ci, TV& dci, TV& ddci,
+//         bool compute_dci, bool compute_ddci,
+//         bool interpolate)
+// {
+//     dci = TV::Zero(); ddci = TV::Zero();
+//     if (interpolate)
+//     {
+
+//         T theta = t * M_PI * 0.5;
+//         TV F0, F1;
+//         F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
+//         F(theta/M_PI, curve_idx+1, F1);
+
+//         T cos2 = std::cos(theta) * std::cos(theta);
+//         T sin2 = std::sin(theta) * std::sin(theta);
+//         ci = cos2 * F0 + sin2 * F1;
+        
+//         TV dF0dt, dF1dt;
+//         TV d2F0dt2, d2F1dt2;
+//         T dtheta_dt = M_PI * 0.5;
+
+//         if (compute_dci)
+//         {
+//             dF((theta + M_PI * 0.5)/M_PI, curve_idx, dF0dt); 
+//             dF(theta/M_PI, curve_idx + 1, dF1dt); 
+            
+//             TV dF_dtheta = TV::Zero();
+//             dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0);
+//             dF_dtheta += cos2 * dF0dt / M_PI ;
+            
+//             dF_dtheta += sin2 * dF1dt / M_PI; // write it out for clearity
+            
+//             dci = dF_dtheta * dtheta_dt;
+//         }
+//         if (compute_ddci)
+//         {
+//             ddF((theta + M_PI * 0.5)/M_PI, curve_idx, d2F0dt2); 
+//             ddF(theta/M_PI, curve_idx + 1, d2F1dt2); 
+
+//             TV d2cdt2 = TV::Zero();
+//             d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0);
+//             d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt / M_PI - dF0dt / M_PI);
+//             d2cdt2 += cos2 * d2F0dt2 / M_PI / M_PI + sin2 * d2F1dt2 / M_PI / M_PI;
+
+//             ddci = d2cdt2 * dtheta_dt * dtheta_dt;
+//         }
+//     }
+//     else
+//     {
+
+//         F(t, curve_idx, ci);
+//         if (compute_dci) dF(t, curve_idx, dci); 
+//         if (compute_ddci) ddF(t, curve_idx, ddci);
+//     }
+// }
 template class HybridC2Curve<double, 3>;
 template class HybridC2Curve<double, 2>;

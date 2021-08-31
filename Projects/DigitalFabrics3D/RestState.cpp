@@ -39,12 +39,10 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     T t = u - T(left_node * dx);
     
     bool interpolate = false;
-    if ( left_node == 0 )
-        t *= 0.5;
-    else if( left_node == curve->data_points.size() - 2 )
-        t = t * 0.5 + 0.5;
-    else
+    if ( left_node != 0 && left_node != curve->data_points.size() - 2)
         interpolate = true;
+        
+        
     if (debug)
         std::cout << "t " << t << " u " << u <<  " curve idx " << curve_id << " left node " << left_node << " interpolate " << interpolate << std::endl;
     
@@ -60,12 +58,6 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     }
     else if constexpr (dim == 2)
         curve->getPosOnCurveWithDerivatives(curve_id, t, X, dXdu, d2Xdu2, g, h, interpolate);
-
-    if ( left_node == 0 || left_node == curve->data_points.size() - 2)
-    {
-        dXdu *= 0.5; 
-        d2Xdu2 *= 0.5 * 0.5;
-    }
 
     // T shifted = shift ? t * 0.5 + 0.5 : t * 0.5;
     // X *= 0.03;

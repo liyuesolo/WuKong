@@ -6,16 +6,16 @@ void EoLRodSim<T, dim>::derivativeTest()
 {
     run_diff_test = true;
     // add_regularizor = false;
-    add_stretching = false;
+    add_stretching = true;
     // add_penalty = false;
-    add_bending = false;
+    add_bending = true;
     // add_shearing = false;
-    add_twisting = false;
-    add_rigid_joint = false;
-    add_pbc_bending = true;
-    add_pbc_twisting = true;
+    add_twisting = true;
+    add_rigid_joint = true;
+    add_pbc_bending = false;
+    add_pbc_twisting = false;
     add_rotation_penalty = false;
-    add_pbc = true;
+    add_pbc = false;
     add_contact_penalty = false;
     add_eularian_reg = false;
     

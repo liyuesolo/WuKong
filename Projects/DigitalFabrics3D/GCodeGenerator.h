@@ -57,7 +57,7 @@ public:
 
 public:
     
-    void slidingBlocksGCode(int n_row, int n_col, int type);
+    void slidingBlocksGCode(int n_row, int n_col, int type, bool add_bar);
 
     void activeTexticleGCode(bool fused = false);
     void activeTexticleGCode2(bool fused = false);
@@ -70,9 +70,11 @@ public:
     void generateGCodeFromRodsFixedGridGripperHardCoded();
 
     void generateGCodeFromRodsShelterHardCoded();
-    void generateGCodeFromRodsGridHardCoded(int n_row, int n_col, bool fused);
+    void generateGCodeFromRodsGridHardCoded(int n_row, int n_col, int type);
 
     void generateGCodeFromRodsNoTunnel();
+
+    void addRecBar(const TV& border_a, const TV& border_b, T width, T rod_diameter);
 
     void writeLine(const TV& from, const TV& to, T rod_radius, T speed = 800.0);
     void moveTo(const TV& to, T speed = 2000.0, bool do_retract = true);

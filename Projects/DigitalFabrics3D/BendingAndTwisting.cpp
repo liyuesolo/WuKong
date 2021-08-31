@@ -18,13 +18,16 @@ T EoLRodSim<T, dim>::add3DBendingAndTwistingEnergy(bool bending, bool twisting)
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->X(node_i, Xi); rod->X(node_j, Xj); rod->X(node_k, Xk);
 
-                T theta0 = rod->reference_angles[second - 1];
+                int left_rod = (rod->closed && second == 0) ? rod->numSeg() - 1 : second - 1;
+
+                T theta0 = rod->reference_angles[left_rod];
                 T theta1 = rod->reference_angles[second];
-                TV referenceNormal1 = rod->reference_frame_us[second - 1];
+                TV referenceNormal1 = rod->reference_frame_us[left_rod];
                 TV referenceNormal2 = rod->reference_frame_us[second];
 
-                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent1 = rod->prev_tangents[left_rod];
                 TV referenceTangent2 = rod->prev_tangents[second];
+
 
                 Matrix<T, 2, 2> B = bending ? rod->bending_coeffs : Matrix<T, 2, 2>::Zero();
                 T kt = twisting ? rod->kt : 0.0;
@@ -55,13 +58,15 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
                 TV xi, xj, xk, Xi, Xj, Xk, dXi, dXj, dXk;
                 rod->x(node_i, xi); rod->x(node_j, xj); rod->x(node_k, xk);
                 rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj); rod->XdX(node_k, Xk, dXk);
+                
+                int left_rod = (rod->closed && second == 0) ? rod->numSeg() - 1 : second - 1;
 
-                T theta0 = rod->reference_angles[second - 1];
+                T theta0 = rod->reference_angles[left_rod];
                 T theta1 = rod->reference_angles[second];
-                TV referenceNormal1 = rod->reference_frame_us[second - 1];
+                TV referenceNormal1 = rod->reference_frame_us[left_rod];
                 TV referenceNormal2 = rod->reference_frame_us[second];
 
-                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent1 = rod->prev_tangents[left_rod];
                 TV referenceTangent2 = rod->prev_tangents[second];
 
                 Matrix<T, 2, 2> B = rod->bending_coeffs;
@@ -70,6 +75,7 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
                 Vector<T, 20> F;
                 computeRodBendingAndTwistEnergyGradient(B, rod->kt, 0.0, referenceNormal1, referenceTangent1,
                     referenceNormal2, referenceTangent2,  reference_twist, xk, xi, xj, Xk, Xi, Xj, theta0, theta1, F);
+                
                 
                 F *= -1.0;
 
@@ -81,8 +87,12 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residu
                 residual(offset_i[dim]) += F.template segment<dim>(3*dim + dim).dot(dXi);
                 residual(offset_j[dim]) += F.template segment<dim>(3*dim + 2*dim).dot(dXj);
 
-                residual.template segment<2>(rod->theta_dof_start_offset + (second - 1)) += 
-                    F.template segment<2>(18);
+                int dof_theta0 = (rod->closed && second == 0) ? rod->theta_dof_start_offset + rod->numSeg() - 1 : rod->theta_dof_start_offset + second - 1;
+                int dof_theta1 = rod->theta_dof_start_offset + second;
+                residual[dof_theta0] += F[18];
+                residual[dof_theta1] += F[19];
+                // residual.template segment<2>(rod->theta_dof_start_offset + (second - 1)) += 
+                //     F.template segment<2>(18);
             });
         }
     }
@@ -111,20 +121,19 @@ void EoLRodSim<T, dim>::add3DBendingAndTwistingK(std::vector<Entry>& entry_K)
 
                 std::vector<Offset> offsets = { offset_k, offset_i, offset_j };
 
-                T theta0 = rod->reference_angles[second - 1];
-                T theta1 = rod->reference_angles[second];
-
-                int dof_theta1 = rod->theta_dof_start_offset + (second - 1);
+                int dof_theta0 = (rod->closed && second == 0) ? rod->theta_dof_start_offset + rod->numSeg() - 1 : rod->theta_dof_start_offset + second - 1;
+                int dof_theta1 = rod->theta_dof_start_offset + second;
                 
-                std::vector<int> theta_dofs = {dof_theta1, dof_theta1 + 1};
+                std::vector<int> theta_dofs = {dof_theta0, dof_theta1};
 
-                // std::cout << dof_theta1 << " " << dof_theta1 + 1 << std::endl;
-                // std::getchar();
+                int left_rod = (rod->closed && second == 0) ? rod->numSeg() - 1 : second - 1;
 
-                TV referenceNormal1 = rod->reference_frame_us[second - 1];
+                T theta0 = rod->reference_angles[left_rod];
+                T theta1 = rod->reference_angles[second];
+                TV referenceNormal1 = rod->reference_frame_us[left_rod];
                 TV referenceNormal2 = rod->reference_frame_us[second];
 
-                TV referenceTangent1 = rod->prev_tangents[second - 1];
+                TV referenceTangent1 = rod->prev_tangents[left_rod];
                 TV referenceTangent2 = rod->prev_tangents[second];
 
                 Matrix<T, 2, 2> B = rod->bending_coeffs;
