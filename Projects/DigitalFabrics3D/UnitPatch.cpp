@@ -108,8 +108,198 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
         buildShoeScene(8);
     else if (patch_type == 24)
         buildRandomPatchScene(4);
+    else if (patch_type == 25)
+        buildPeriodicCircleScene(8);
 }
 
+template<class T, int dim>
+void UnitPatch<T, dim>::buildPeriodicCircleScene(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        
+        clearSimData();
+
+        sim.add_rotation_penalty = true;
+        sim.add_pbc_bending = true;
+        sim.add_pbc_twisting = true;
+        sim.add_pbc = true;
+
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
+
+        sim.ke = 1e-4;
+
+        sim.unit = 0.01;
+        // sim.unit = 1.0;
+        sim.visual_R = 0.012;
+
+        auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
+        {
+            sim.rod_crossings[crossing_idx]->is_fixed = true;
+            sim.rod_crossings[crossing_idx]->rods_involved.push_back(rod_idx);
+            sim.rod_crossings[crossing_idx]->on_rod_idx[rod_idx] = location;
+            sim.rod_crossings[crossing_idx]->sliding_ranges.push_back(Range::Zero());
+        };        
+
+        std::vector<Eigen::Triplet<T>> w_entry;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        int rod_cnt = 0;
+
+        std::vector<TV> nodal_positions;
+
+        T r = 0.55 * sim.unit;
+
+        TV center0 = TV(0, 0, 0) * sim.unit;
+        TV center1 = TV(1, 0, 0) * sim.unit;
+        TV center2 = TV(1, 1, 0) * sim.unit;
+        TV center3 = TV(0, 1, 0) * sim.unit;
+        
+        std::vector<TV> centers = {center0, center1, center2, center3};
+
+        // add 8 boundary points counterclock wise
+        for (int i = 0; i < centers.size(); i++)
+        {
+            TV current = centers[i], next = centers[(i + 1) % centers.size()];
+            TV v0 = next - r  / sim.unit * (next - current);
+            TV v1 = current + r / sim.unit * (next - current);
+            addCrossingPoint(nodal_positions, v0, full_dof_cnt, node_cnt);
+            addCrossingPoint(nodal_positions, v1, full_dof_cnt, node_cnt);
+        }
+        
+
+        TV vtx8, vtx9, vtx10, vtx11, dummy;
+        circleCircleIntersection(center0, r, center1, r, vtx8, dummy);
+        circleCircleIntersection(center1, r, center2, r, vtx9, dummy);
+        circleCircleIntersection(center2, r, center3, r, vtx10, dummy);
+        circleCircleIntersection(center3, r, center0, r, vtx11, dummy);
+
+        addCrossingPoint(nodal_positions, vtx8, full_dof_cnt, node_cnt);
+        addCrossingPoint(nodal_positions, vtx9, full_dof_cnt, node_cnt);
+        addCrossingPoint(nodal_positions, vtx10, full_dof_cnt, node_cnt);
+        addCrossingPoint(nodal_positions, vtx11, full_dof_cnt, node_cnt);
+
+
+        auto addCurvedRodFromIDs = [&](const std::vector<int>& ids)
+        {
+            std::vector<TV> passing_points;
+            std::vector<TV2> data_points;
+            for (int id : ids)
+            {
+                passing_points.push_back(nodal_positions[id]);
+                data_points.push_back(passing_points.back().template head<2>());
+            }
+            addCurvedRod(data_points, passing_points, ids, sub_div, full_dof_cnt, node_cnt, rod_cnt, false);
+            for (int i = 0; i < ids.size(); i++)
+            {
+                addCrossingData(ids[i], rod_cnt - 1, sim.Rods[rod_cnt-1]->dof_node_location[i]);
+            }
+        };
+
+        addCurvedRodFromIDs({0, 8, 9, 3});
+        addCurvedRodFromIDs({2, 9, 10, 5});
+        addCurvedRodFromIDs({4, 10, 11, 7});
+        addCurvedRodFromIDs({6, 11, 8, 1});
+        
+
+        auto setPBCData = [&](int rod_idx0, int rod_idx1, int direction, bool unique, bool reverse)
+        {
+            auto rod0 = sim.Rods[rod_idx0];
+            auto rod1 = sim.Rods[rod_idx1];
+            Offset end0, end1;
+            if (reverse)
+            {
+                rod0->backOffset(end0); rod1->frontOffset(end1);
+            }
+            else
+            {
+                rod0->frontOffset(end0); rod1->backOffset(end1);
+            }
+            if (unique)
+                sim.pbc_pairs_reference[direction] = std::make_pair(std::make_pair(end0, end1), 
+                        std::make_pair(rod0->rod_id, rod1->rod_id));
+            sim.pbc_pairs.push_back(std::make_pair(direction, std::make_pair(end0, end1)));
+
+            Offset a, b;
+            if (reverse)
+            {
+                rod0->getEntryByLocation(rod1->indices.size() - 2, a);
+                rod1->getEntryByLocation(1, b); 
+                sim.pbc_bending_pairs.push_back({end0, a, b, end1});
+                sim.pbc_bending_pairs_rod_id.push_back({rod0->rod_id, rod0->rod_id, rod1->rod_id, rod1->rod_id});
+            }
+            else
+            {
+                rod0->getEntryByLocation(1, a); 
+                rod1->getEntryByLocation(rod1->indices.size() - 2, b);
+                sim.pbc_bending_pairs.push_back({end0, a, b, end1});
+                sim.pbc_bending_pairs_rod_id.push_back({rod0->rod_id, rod0->rod_id, rod1->rod_id, rod1->rod_id});
+            }
+            
+        };
+
+        // now we set the periodic data
+        setPBCData(3, 0, 0, true, false);
+        setPBCData(2, 1, 0, false, true);
+
+        setPBCData(0, 1, 1, true, false);
+        setPBCData(3, 2, 1, false, true);
+
+        // for (auto crossing : sim.rod_crossings)
+        // {
+        //     if (crossing->node_idx < 8)
+        //         continue;
+        //     crossing->is_fixed = false;
+        //     // crossing->sliding_ranges[0] = Range::Ones();
+        //     crossing->sliding_ranges[0] = Range(0.9, 0.9);
+        //     // crossing->sliding_ranges[1] = Range::Ones() * 20.0;
+        // }
+        
+
+
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+        
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+
+        Offset offset;
+        sim.Rods[0]->frontOffsetReduced(offset);
+        for (int d = 0; d < dim; d++) sim.dirichlet_dof[offset[d]] = 0;
+
+        sim.fixCrossing();
+
+        // sim.boundary_spheres.push_back(std::make_pair(center, r * 0.5));
+
+        sim.perturb = VectorXT::Zero(sim.W.cols());
+
+        for (auto& crossing : sim.rod_crossings)
+        {
+            Offset off;
+            sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+            T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+            int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+            sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
+            
+        }
+    }
+}
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildRandomPatchScene(int sub_div)

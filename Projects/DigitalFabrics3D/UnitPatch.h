@@ -43,6 +43,8 @@ public:
 
     void buildShoeScene(int sub_div);
 
+    void buildPeriodicCircleScene(int sub_div);
+
     void buildRandomPatchScene(int sub_div);
 
     void buildSaddleScene(int sub_div);
