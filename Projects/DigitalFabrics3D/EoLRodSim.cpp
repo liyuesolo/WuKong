@@ -805,6 +805,20 @@ bool EoLRodSim<T, dim>::forward(Eigen::Ref<VectorXT> dq)
 }
 
 template<class T, int dim>
+void EoLRodSim<T, dim>::staticSolveIncremental(int step)
+{
+    if (incremental_steps == 0)
+    {
+        std::cout << "[EoLRodSim.cpp] Zero incremetal step size" << std::endl;
+        return;
+    }
+    resetScene();
+    incremental_bc(*this, step);
+    advanceOneStep();
+    rest_states = deformed_states;
+}
+
+template<class T, int dim>
 void EoLRodSim<T, dim>::advanceOneStep()
 {
     // newton_tol = 1e-6;

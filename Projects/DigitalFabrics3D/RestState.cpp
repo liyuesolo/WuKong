@@ -41,7 +41,11 @@ void DiscreteHybridCurvature<T, dim>::getMaterialPos(T u, TV& X,
     bool interpolate = false;
     if ( left_node != 0 && left_node != curve->data_points.size() - 2)
         interpolate = true;
-        
+    if (curve->data_points.size() == 3 && u >= 1)
+    {
+        curve_id += 1;
+        interpolate= false;
+    }
         
     if (debug)
         std::cout << "t " << t << " u " << u <<  " curve idx " << curve_id << " left node " << left_node << " interpolate " << interpolate << std::endl;

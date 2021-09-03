@@ -59,14 +59,14 @@ static bool show_target = true;
 static bool show_tunnel = false;
 static bool show_bc = true;
 static bool target_drawn = false;
-
+static bool perturb = true;
 bool reset = false;
 enum TestCase{
-    DrawUnit, StaticSolve, BatchRendering, InverseDesign
+    DrawUnit, StaticSolve, BatchRendering, InverseDesign, StaticSolveIncremental
 };
 
 const char* test_case_names[] = {
-    "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign"
+    "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign", "StaticSolveIncremental"
 };
 
 TestCase test_current = StaticSolve;
@@ -274,6 +274,14 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
             // }
             
         }
+        else if (test_current == StaticSolveIncremental)
+        {
+            for (int step = 0; step < eol_sim.incremental_steps; step++)
+            {
+                eol_sim.staticSolveIncremental(step);
+                updateScreen(viewer);
+            }    
+        }
         else if (test_current == InverseDesign)
         {
             eol_sim.inverse();
@@ -357,7 +365,7 @@ int main(int argc, char *argv[])
             draw_unit = true;
             // viewer.core().camera_zoom = 0.1;
         }
-        else if (test_current == StaticSolve)
+        else if (test_current == StaticSolve || test_current == StaticSolveIncremental)
         {
             homogenizer.testOneSample();
             draw_unit = false;
@@ -852,12 +860,18 @@ int main(int argc, char *argv[])
                     //         Vector<T, dim>(0, delta_y, 0.0), 
                     //         eol_sim.dirichlet_dof);
 
-                    eol_sim.Rods[7]->fixPointLagrangian(eol_sim.Rods[7]->indices.front(), 
-                            Vector<T, dim>(0, delta_y, 0.0), 
+                    // eol_sim.Rods[7]->fixPointLagrangian(eol_sim.Rods[7]->indices.front(), 
+                    //         Vector<T, dim>(0, delta_y, 0.0), 
+                    //         eol_sim.dirichlet_dof);
+
+                    T dz = perturb ? 1e-3 * eol_sim.unit : 0.0;
+                    eol_sim.Rods[3]->fixPointLagrangian(eol_sim.Rods[3]->indices.back(), 
+                            Vector<T, dim>(0, delta_y, perturb), 
                             eol_sim.dirichlet_dof);
 
                     eol_sim.advanceOneStep();
                     updateScreen(viewer);
+                    perturb = false;
                     return true;
                 }
                 else
@@ -920,7 +934,7 @@ int main(int argc, char *argv[])
     {
         
     }
-    else if (test_current == StaticSolve || test_current == InverseDesign)
+    else if (test_current == StaticSolve || test_current == InverseDesign || test_current == StaticSolveIncremental)
     {
         // if (test_current == InverseDesign)
             viewer.core().background_color.setOnes();

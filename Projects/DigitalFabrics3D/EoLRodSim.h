@@ -103,7 +103,8 @@ public:
     int n_dof;
     int n_rods;
     int n_pb_cons;
-    
+    int incremental_steps = 0;
+
     IV2 n_rod_uv;
     
     const static int grid_range = 3;
@@ -195,6 +196,8 @@ public:
     StiffnessMatrix W;
 
     std::vector<std::pair<TV, T>> boundary_spheres;
+
+    std::function<void(EoLRodSim<T, dim>&, int)> incremental_bc;
 
     // inverse
     std::vector<TV> targets;
@@ -369,6 +372,8 @@ public:
     void computeSmallestEigenVector(const StiffnessMatrix& K, Eigen::Ref<VectorXT> eigen_vector);
 
     bool staticSolve(Eigen::Ref<VectorXT> dq);
+
+    void staticSolveIncremental(int step);
 
     void advanceOneStep();
 

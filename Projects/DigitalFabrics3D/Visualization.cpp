@@ -44,6 +44,8 @@ void EoLRodSim<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::Matr
             TV vtx_from_TV, vtx_to_TV;
             rod->x(node_i, vtx_from_TV);
             rod->x(node_j, vtx_to_TV);
+            // rod->X(node_i, vtx_from_TV);
+            // rod->X(node_j, vtx_to_TV);
             vtx_from_TV += shift;
             vtx_to_TV += shift;
             vtx_from_TV /= unit; vtx_to_TV /= unit;

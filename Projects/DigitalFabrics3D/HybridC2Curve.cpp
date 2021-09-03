@@ -567,15 +567,19 @@ void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t,
         {
             ti = (0 + t * (0 - curve_data.front()->limits[0])) / (curve_data.front()->limits[1] - curve_data.front()->limits[0]);
             dtidt= (0 - curve_data.front()->limits[0]) / (curve_data.front()->limits[1] - curve_data.front()->limits[0]);
+            F(ti, curve_idx, ci);
+            if (compute_dci) dF(ti, curve_idx, dci); 
+            if (compute_ddci) ddF(ti, curve_idx, ddci);
         }
         else
         {
             ti = (0 + t * (curve_data.back()->limits[1] - 0) - curve_data.back()->limits[0]) / (curve_data.back()->limits[1] - curve_data.back()->limits[0]);
             dtidt = (curve_data.back()->limits[1] - 0) / (curve_data.back()->limits[1] - curve_data.back()->limits[0]);
+            F(ti, curve_data.size() - 1, ci);
+            if (compute_dci) dF(ti, curve_data.size() - 1, dci); 
+            if (compute_ddci) ddF(ti, curve_data.size() - 1, ddci);
         }
-        F(ti, curve_idx, ci);
-        if (compute_dci) dF(ti, curve_idx, dci); 
-        if (compute_ddci) ddF(ti, curve_idx, ddci);
+        
 
         dci *= dtidt;
         ddci *= dtidt * dtidt;
