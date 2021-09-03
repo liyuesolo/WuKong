@@ -49,7 +49,45 @@ void EoLRodSim<T, dim>::computeBoundingBox(TV& bottom_left, TV& top_right) const
         }
     }   
 }
-
+template<class T, int dim>
+void EoLRodSim<T, dim>::fixRegionAvoidRod(std::function<bool(const TV&)> inside_region, int rod_idx)
+{
+    for (auto& rod : Rods)
+    {
+        if (rod->rod_id == rod_idx)
+            continue;
+        int cnt = 0;
+        for (int idx : rod->indices)
+        {
+            TV x;
+            rod->x(idx, x);
+            Offset offset;
+            
+            if (inside_region(x))
+            {
+                rod->getEntry(idx, offset);
+                for (int d = 0; d < dim; d++)
+                {
+                    dirichlet_dof[rod->reduced_map[offset[d]]] = 0.0;
+                }
+                if (cnt < rod->numSeg())
+                    dirichlet_dof[rod->theta_reduced_dof_start_offset + cnt] = 0;
+            }
+            cnt++;
+        }
+    }
+    for (auto& crossing : rod_crossings)
+    {
+        auto rod = Rods[crossing->rods_involved.front()];
+        TV x;
+        rod->x(crossing->node_idx, x);
+        if (inside_region(x))
+        {
+            for (int d = 0; d < dim; d++)
+                dirichlet_dof[crossing->reduced_dof_offset + d] = 0.0;
+        }
+    }
+}
 template<class T, int dim>
 void EoLRodSim<T, dim>::fixRegion(std::function<bool(const TV&)> inside_region)
 {

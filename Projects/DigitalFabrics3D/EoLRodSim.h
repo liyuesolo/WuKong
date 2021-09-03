@@ -403,6 +403,7 @@ public:
     void inverse();
 
     void fixRegion(std::function<bool(const TV&)> inside_region);
+    void fixRegionAvoidRod(std::function<bool(const TV&)> inside_region, int rod_idx);
     void fixRegionalDisplacement(std::function<bool(const TV&, TV&, Vector<bool, dim>&)> helper);
 
     

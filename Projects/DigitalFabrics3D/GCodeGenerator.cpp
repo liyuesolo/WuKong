@@ -12,7 +12,7 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
     first_layer_height(0.2), 
     layer_height(0.2),
     feed_rate_move(5200),
-	feed_rate_print(1000),
+	feed_rate_print(300),
     printer(PrusaI3),
     extrusion_mode(Absolute),
     current_E(0.0)
@@ -20,380 +20,680 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 
 }
 
-// template<class T, int dim>
-// void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type, bool add_bar)
-// {
-//     auto scaleAndShift = [](TV& x)->void
-//     {
-//         x *= 1e3;
-//         x.template segment<2>(0) += Vector<T, 2>(50, 40);
-//     };
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeSingleStrand()
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(60, 60);
+    };
 
-//     if constexpr (dim == 3)
-//     {
-//         writeHeader();
-//         T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
-//         T extend_percentage = 0.1;
-//         T inner_height = 3.5 * rod_radius_in_mm;
-//         // x sliding
-//         if (type == 0)
-//         {
-//             int rod_cnt = 0; 
-//             int boundary_rod_cnt = 0;
-//             // outer contour
-//             for (int col = 0; col < n_col; col++)
-//             {
-//                 generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int col = 0; col < n_col; col++)
-//             {
-//                 generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             boundary_rod_cnt = rod_cnt;
-//             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
-//             {
-//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//             }
-            
-//             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = 0; row < n_row - 1; row++)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     if (row == n_row - 2)
-//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
-//                     else
-//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = n_row - 2; row > -1; row--)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     if (row == 0)
-//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
-//                     else
-//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-            
-//             boundary_rod_cnt = rod_cnt;
-//             while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
-//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
+    if constexpr (dim == 3)
+    {
+        
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+        writeHeader();
+        
+        // sim.Rods[2]->fixed_by_crossing[0] = false;
+        // sim.Rods[2]->fixed_by_crossing[2] = false;
+        // for (int i : {0, 2, 4, 6})
+        // {
+        //     sim.Rods[0]->fixed_by_crossing[i] = false;
+        //     sim.Rods[1]->fixed_by_crossing[i] = false;
+        // }
+        // for (int i = 0; i < sim.Rods.size(); i++)
+        feed_rate_print = 400;
+        for (int i : {0, 1, 2})
+        {
+            sim.Rods[i]->indices.push_back(sim.Rods[i]->indices[0]);
+            sim.Rods[i]->indices.push_back(sim.Rods[i]->indices[1]);
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+            sim.Rods[i]->indices.pop_back();
+            sim.Rods[i]->indices.pop_back();
+        }
+        for (int i : {5, 6, 7, 8})
+        {
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+        }
+
+        generateCodeSingleRod(4, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+        for (int i = 0; i < sim.Rods[3]->dof_node_location.size(); i++)
+        {
+            if (i>0)
+                sim.Rods[3]->fixed_by_crossing[i] = false;
+        }
+        generateCodeSingleRod(3, scaleAndShift, true, rod_radius_in_mm, 4.0 * rod_radius_in_mm, 0.2, false, true);   
+
+        TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+        T width = 0.5;
+
+        addTunnelsAlongRod(0, heights, scaleAndShift, 4);
+        addTunnelsAlongRod(1, heights, scaleAndShift, 2);
+        addTunnelsAlongRod(2, heights, scaleAndShift, 2);
+
+        addSingleTunnelOnCrossingWithFixedRange(24, heights, 1, scaleAndShift, Range(0.03, 0.05), 0.3, 150, 200);
+        // for (int i : {0, 1, 2, 3, 4, 5} )
+        //     addTunnelsAlongRod(i, heights, scaleAndShift, 10);
+
+        writeFooter();
+    }
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeShelter()
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(60, 60);
+    };
+
+    if constexpr (dim == 3)
+    {
+        
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+        writeHeader();
+        
+        // sim.Rods[2]->fixed_by_crossing[0] = false;
+        // sim.Rods[2]->fixed_by_crossing[2] = false;
+        // for (int i : {0, 2, 4, 6})
+        // {
+        //     sim.Rods[0]->fixed_by_crossing[i] = false;
+        //     sim.Rods[1]->fixed_by_crossing[i] = false;
+        // }
+        // for (int i = 0; i < sim.Rods.size(); i++)
+        feed_rate_print = 900;
+        for (int i : {0, 1, 2, 3, 4, 5})
+        {
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+        }
+        for (int i : {6, 7, 8, 9, 10, 11} )
+        {
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, 4.0 * rod_radius_in_mm, 0.0);   
+        }
+
+        TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+        T width = 0.5;
+        for (int i : {0, 1, 2, 3, 4, 5} )
+            addTunnelsAlongRod(i, heights, scaleAndShift, 10);
+
+        writeFooter();
+    }
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateShelterScene()
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(100, 100);
+    };
+
+    if constexpr (dim == 3)
+    {
+        
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+        writeHeader();
+        feed_rate_print = 600;
+        // for (int i = 0; i < sim.Rods.size(); i++)
+        sim.Rods[2]->fixed_by_crossing[0] = false;
+        sim.Rods[2]->fixed_by_crossing[2] = false;
+        for (int i : {0, 2, 4, 6})
+        {
+            sim.Rods[0]->fixed_by_crossing[i] = false;
+            sim.Rods[1]->fixed_by_crossing[i] = false;
+        }
+        for (int i : {0, 1, 2})
+        {
+            sim.Rods[i]->indices.push_back(sim.Rods[i]->indices[0]);
+            sim.Rods[i]->indices.push_back(sim.Rods[i]->indices[1]);
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+            sim.Rods[i]->indices.pop_back();
+            sim.Rods[i]->indices.pop_back();
+        }
+
+        for (int i : {5, 6, 7, 8})
+        {
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.0);   
+        }
+
+        for (int i : {3, 4} )
+        {
+            generateCodeSingleRod(i, scaleAndShift, true, rod_radius_in_mm, 4.0 * rod_radius_in_mm, 0.2, false, true);   
+        }
+
+        TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 5.0 * rod_radius_in_mm);
+        T width = 0.5;
+        
+        
+        
+        addTunnelsAlongRod(0, heights, scaleAndShift, 2);
+        addTunnelsAlongRod(1, heights, scaleAndShift, 1);
+        addTunnelsAlongRod(2, heights, scaleAndShift, 1);
+        writeFooter();
+    }
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bool add_bar)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 40);
+    };
+
+    if constexpr (dim == 3)
+    {
+        
+        T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+
+        T r = 0.008 * 1e3; 
+        T d = 0.9 * 2.0 * r;
+
+        writeHeader();
+        if (type == 0)
+        {   
+            // TV bottom_left_center = TV(0, 0, rod_radius_in_mm);
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+
+            // TV left = bottom_left_center;
+            // TV start = left + TV(r, 0, 0);
+            // writeCircle(left, r, start, TV2(0, M_PI * 2.0), {}, 20, rod_radius_in_mm);
+
+            // TV right = left + TV(d, 0, 0);
+            // start = right + TV(r, 0, 0);
+            // TV ixn0, ixn1;
+            // circleCircleIntersection(left, r, right, r, ixn0, ixn1);
+            // writeCircle(right, r, start, TV2(0, M_PI * 2.0), {ixn0, ixn1}, 20, rod_radius_in_mm);
+
+            // T theta = std::acos((ixn0 - left).normalized().dot(TV(1, 0, 0)));
+            // T epsilon = 0.3;
+            // TV tunnel_left = left + TV(r * std::cos(theta - epsilon), r * std::sin(theta - epsilon), 0);
+            // TV tunnel_right = left + TV(r * std::cos(theta + epsilon + 0.1), r * std::sin(theta + epsilon + 0.1), 0);
+            // ixn0[dim-1] = 4.0 * rod_radius_in_mm;
+            // addSingleTunnel(tunnel_left, ixn0, tunnel_right, rod_radius_in_mm);
 
 
-            
-//             temp = rod_cnt;
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = 0; row < n_row - 1; row++)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
-//                 }
-//             }
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = n_row - 2; row > -1; row--)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, true);
-//                 }
-//             }
+            for (int row = 0; row < n_row; row+=2)
+            {
+                for (int col = 0; col < n_col; col+=2)
+                {
+                    TV center = bottom_left_center + TV(40 + d * col, 40 + d * row, 0);
+                    TV start = center + TV(r, 0, 0);
+                    if (col == 0)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0, M_PI / 2.0), {}, 10, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0, M_PI * 1.5), {}, 10, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0), {}, 20, rod_radius_in_mm);
+                }   
+            }
 
-//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
-//             T width;
-//             if (sim.unit == 0.05)
-//                 width = 0.12;
-//             tunnel_height = 0.14;
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
-//                     for (int corner = 0; corner < 4; corner++)
-//                     {
-//                         int crossing_id = base + corner * 3 + 1;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
-//                         crossing_id = base + corner * 3 + 2;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 1, scaleAndShift, Range(width, width), 0.2, 150, 200);
-//                     }
-//                 }
-//             }
-//         }
-//         else if (type == 1)
-//         {
-//             int rod_cnt = 0; 
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 for (int col = 0; col < n_col; col++)
-//                 {
-//                     TV bottom_left;
-//                     sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
+            for (int row = 0; row < n_row; row++)
+            {
+                int col = row % 2 == 0 ? 1 : 0;
+                int col_end = row % 2 == 0 ? n_col - 1 : n_col;
+                for (; col < col_end; col+=2)
+                {
+                    TV center = bottom_left_center + TV(40 + d * col, 40 + d * row, 0);
+                    std::vector<TV> ixns;
+                    if (row % 2 == 0)
+                    {
+                        TV left_center = bottom_left_center + TV(40 + d * (col - 1), 40 + d * row, 0);
+                        TV right_center = bottom_left_center + TV(40 + d * (col + 1), 40 + d * row, 0);
+                        TV ixn_left0, ixn_left1, ixn_right0, ixn_right1;
+                        circleCircleIntersection(left_center, r, center, r, ixn_left0, ixn_left1);
+                        circleCircleIntersection(right_center, r, center, r, ixn_right0, ixn_right1);
 
-//                     scaleAndShift(bottom_left);
-//                     bottom_left[dim-1] = rod_radius_in_mm; 
+                        ixns = { ixn_left0, ixn_left1, ixn_right1, ixn_right0 };
+                    }
+                    if (row % 2 == 1)
+                    {
+                        TV bottom_center = bottom_left_center + TV(40 + d * col, 40 + d * (row - 1), 0);
+                        TV top_center = bottom_left_center + TV(40 + d * col, 40 + d * (row + 1), 0);
+                        TV ixn_bottom0, ixn_bottom1, ixn_top0, ixn_top1;
+                        circleCircleIntersection(bottom_center, r, center, r, ixn_bottom0, ixn_bottom1);
+                        circleCircleIntersection(top_center, r, center, r, ixn_top0, ixn_top1);
+
+                        ixns = { ixn_bottom0, ixn_bottom1, ixn_top0, ixn_top1};
+                    }
+                    TV start = center - TV(0, r, 0);
+                    if (col == 0)
+                    {
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0, M_PI / 2.0), ixns, 20, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0, M_PI * 1.5), ixns, 20, rod_radius_in_mm);
+                    }
+                    else
+                    {
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0, M_PI * 1.5), ixns, 40, rod_radius_in_mm);
+                    }
+
+                    if (row % 2 == 0)
+                    {
+                        TV ixn0 = ixns[0];
+                        TV left_center = bottom_left_center + TV(40 + d * (col - 1), 40 + d * row, 0);
+                        TV right_center = bottom_left_center + TV(40 + d * (col + 1), 40 + d * row, 0);
+
+                        T theta = std::acos((ixn0 - left_center).normalized().dot(TV(1, 0, 0)));
+                        T epsilon_left = 0.25, epsilon_right = 0.25;
+
+                        auto writeTunnel = [&](T _theta, const TV& _ixn, const TV& _center)
+                        {
+                            TV ixn = _ixn;
+                            TV tunnel_left = _center + TV(r * std::cos(_theta - epsilon_left), r * std::sin(_theta - epsilon_left), 0);
+                            TV tunnel_right = _center + TV(r * std::cos(_theta + epsilon_right), r * std::sin(_theta + epsilon_right), 0);
+                            ixn[dim-1] = 5.0 * rod_radius_in_mm;
+                            addSingleTunnel(tunnel_left, ixn, tunnel_right, rod_radius_in_mm);
+                        };
+                        
+                        writeTunnel(theta, ixns[0], left_center);
+                        writeTunnel(M_PI + M_PI - theta, ixns[1], left_center);
+                        
+                        writeTunnel(M_PI - theta, ixns[2], right_center);
+                        writeTunnel(-M_PI + theta, ixns[3], right_center);
+                    }
+                    else if (row % 2 == 1)
+                    {
+                        TV ixn0 = ixns[2];
+
+                        TV bottom_center = bottom_left_center + TV(40 + d * col, 40 + d * (row - 1), 0);
+                        TV top_center = bottom_left_center + TV(40 + d * col, 40 + d * (row + 1), 0);
+
+                        T theta = std::acos((ixn0 - center).normalized().dot(TV(1, 0, 0)));
+                        T epsilon_left = 0.25, epsilon_right = 0.25;
+
+                        auto writeTunnel = [&](T _theta, const TV& _ixn, const TV& _center)
+                        {
+                            TV ixn = _ixn;
+                            TV tunnel_left = _center + TV(r * std::cos(_theta - epsilon_left), r * std::sin(_theta - epsilon_left), 0);
+                            TV tunnel_right = _center + TV(r * std::cos(_theta + epsilon_right), r * std::sin(_theta + epsilon_right), 0);
+                            ixn[dim-1] = 5.0 * rod_radius_in_mm;
+                            addSingleTunnel(tunnel_left, ixn, tunnel_right, rod_radius_in_mm);
+                        };
+                        if (col != n_col - 1)
+                        {
+                            writeTunnel(theta, ixns[1], bottom_center);
+                            writeTunnel(-theta, ixns[2], top_center);
+                        }
+                        if (col != 0)
+                        {
+                            writeTunnel(-M_PI + theta, ixns[3], top_center);
+                            writeTunnel(M_PI - theta, ixns[0], bottom_center);
+                        }
+                            
+                        
+                    }
+                    if (col == n_col - 1)
+                    {
+                        current_position[dim - 1] = 2.0;
+                        moveTo(current_position);
+                    }
                     
-//                     for (int corner = 0; corner < 4; corner++)
-//                     {
-//                         int from_idx = (row * n_col + col) * 4 + corner;
-//                         int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
-//                         TV from, to;
-//                         sim.getCrossingPosition(from_idx, from);
-//                         sim.getCrossingPosition(to_idx, to);
-                        
-//                         TV left, right;
-//                         left = from - (to - from) * extend_percentage;
-//                         right = to + (to - from) * extend_percentage;
+                }   
+            }
+            for (int row = 1; row < n_row - 1; row+=2)
+            {
+                for (int col = 1; col < n_col; col+=2)
+                {
+                    TV center = bottom_left_center + TV(40 + d * col, 40 + d * row, 0);
+                    if (row == 1)
+                    {
+                        center[dim - 1] = 2.0;
+                        moveTo(center);
+                        center[dim - 1] = rod_radius_in_mm;
+                    }
+                    TV start = center + TV(r, 0, 0);
 
-//                         scaleAndShift(left); scaleAndShift(right);
-//                         left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
-//                         moveTo(left);
-//                         writeLine(left, right, rod_radius_in_mm);
-//                         // for (int i = 0; i < 8; i++)
-//                         // {
-//                         //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
-//                         // }
+                    TV left_center = bottom_left_center + TV(40 + d * (col - 1), 40 + d * row, 0);
+                    TV right_center = bottom_left_center + TV(40 + d * (col + 1), 40 + d * row, 0);
+                    TV ixn_left0, ixn_left1, ixn_right0, ixn_right1;
+                    circleCircleIntersection(left_center, r, center, r, ixn_left0, ixn_left1);
+                    circleCircleIntersection(center, r, right_center, r, ixn_right0, ixn_right1);
+                    TV bottom_center = bottom_left_center + TV(40 + d * col, 40 + d * (row - 1), 0);
+                    TV top_center = bottom_left_center + TV(40 + d * col, 40 + d * (row + 1), 0);
+                    TV ixn_bottom0, ixn_bottom1, ixn_top0, ixn_top1;
+                    circleCircleIntersection(bottom_center, r, center, r, ixn_bottom0, ixn_bottom1);
+                    circleCircleIntersection(center, r, top_center, r, ixn_top0, ixn_top1);
+
+                    std::vector<TV> ixns = {ixn_right0, ixn_top1, ixn_top0, ixn_left0, ixn_left1, ixn_bottom0, ixn_bottom1, ixn_right1};
+
+                    T theta = std::acos((ixns[0] - center).normalized().dot(TV(1, 0, 0)));
+                    T epsilon_left = 0.25, epsilon_right = 0.25;
+
+                    auto writeTunnel = [&](T _theta, const TV& _ixn, const TV& _center)
+                    {
+                        TV ixn = _ixn;
+                        TV tunnel_left = _center + TV(r * std::cos(_theta - epsilon_left), r * std::sin(_theta - epsilon_left), 0);
+                        TV tunnel_right = _center + TV(r * std::cos(_theta + epsilon_right), r * std::sin(_theta + epsilon_right), 0);
+                        ixn[dim-1] = 5.0 * rod_radius_in_mm;
+                        addSingleTunnel(tunnel_left, ixn, tunnel_right, rod_radius_in_mm);
+                    };
+
+                    writeCircle(center, r, start, TV2(0, M_PI * 2.0), ixns, 40, rod_radius_in_mm);
+
+                    writeTunnel(M_PI - theta, ixns[0], right_center);
+                    writeTunnel(-(M_PI * 0.5 - theta), ixns[1], top_center);
+                    writeTunnel(-M_PI * 0.5 - theta, ixns[2], top_center);
+                    writeTunnel(theta, ixns[3], left_center);
+                    writeTunnel(-theta, ixns[4], left_center);
+                    writeTunnel((M_PI * 0.5 + theta), ixns[5], bottom_center);
+                    writeTunnel(M_PI * 0.5 - theta, ixns[6], bottom_center);
+                    writeTunnel(M_PI + theta, ixns[7], right_center);
+                }
+            }
+            // TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+            // TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+            // TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+            // TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+        }
+        // current one overlay the last one
+        else if (type == 1)
+        {
+            d = 0.9 * 2.0 * r;
+            if (add_bar)
+            {
+                TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+                TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+                bottom_right[dim - 1] = 2.0;
+                moveTo(bottom_right);
+                bottom_right[dim - 1] = rod_radius_in_mm;
+                addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+                TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+                TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+                top_left[dim - 1] = 2.0;
+                moveTo(top_left);
+                top_left[dim - 1] = rod_radius_in_mm;
+                addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+            }
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+            bool intersect_bottom = true, intersect_left = false;
+            for (int row = 0; row < n_row; row++)
+            {
+                if (row == 0)
+                    intersect_bottom = false;
+                else
+                    intersect_bottom = true;
+                for (int col = 0; col < n_col; col++)   
+                {
+                    if (col == 0)
+                    {
+                        intersect_left = false;
+                    }
+                    else
+                        intersect_left = true;
+                    std::vector<TV> ixns;
+                    TV center = bottom_left_center + TV(d * col, d * row, 0);
+                    TV start = center + TV(r, 0 , 0);
+                    if (intersect_left)
+                    {
+                        TV ixn0, ixn1;
+                        TV center_left = bottom_left_center + TV(d * (col - 1), d * row, 0);
+                        circleCircleIntersection(center_left, r, center, r, ixn0, ixn1);
+                        ixns.push_back(ixn0);
+                        ixns.push_back(ixn1);
+                    }
+                    if (intersect_bottom)
+                    {
+                        TV ixn0, ixn1;
+                        TV center_bottom = bottom_left_center + TV(d * col, d * (row - 1), 0);
+                        circleCircleIntersection(center_bottom, r, center, r, ixn0, ixn1);
+                        ixns.push_back(ixn0);
+                        ixns.push_back(ixn1);
+                    }
+                    if (col == 0 && add_bar)
+                    {
+                        start = center - TV(0, r, 0);
+                        center[dim - 1] = 2.0;
+                        moveTo(center);
+                        center[dim - 1] = rod_radius_in_mm;
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0 - 0.2, M_PI / 2.0 + 0.2), {}, 15, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1 && add_bar)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), {}, 15, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), ixns, 30, rod_radius_in_mm);
+                    if ((col == 0 || col == n_col - 1)  && add_bar)
+                        continue;
+                    T epsilon_left = 0.25, epslion_right = 0.2;
+                    for (int i = 0; i < ixns.size(); i++)
+                    {
+                        TV ixn_center = i < 2 && intersect_left ? center - TV(d, 0, 0) : center - TV(0, d, 0);
+                        if (!intersect_left)
+                        {
+                            ixn_center = center - TV(0, d, 0);
+                            if (i == 1)
+                            {
+                                epsilon_left = 0.05;
+                                epslion_right = 0.35;
+                            }
+                        }
+                        TV ixn0 = ixns[i];
+                        T theta = std::acos((ixn0 - ixn_center).normalized().dot(TV(1, 0, 0)));
+                        if (intersect_left)
+                        {
+                            if (i == 1)
+                            {
+                                theta = M_PI + (M_PI - theta);
+                                epsilon_left = 0.1;
+                                epslion_right = 0.3;
+                            }
+                            if (i == 3)
+                            {
+                                epsilon_left = 0.05;
+                                epslion_right = 0.35;
+                            }
+                        }
                         
-                        
-//                     }
+                        TV tunnel_left = ixn_center + TV(r * std::cos(theta - epsilon_left), r * std::sin(theta - epsilon_left), 0);
+                        TV tunnel_right = ixn_center + TV(r * std::cos(theta + epslion_right), r * std::sin(theta + epslion_right), 0);
+                        ixn0[dim-1] = 5.0 * rod_radius_in_mm;
+                        addSingleTunnel(tunnel_left, ixn0, tunnel_right, rod_radius_in_mm);
+                    }
+                    if (col == n_col - 1)
+                    {
+                        current_position[dim - 1] = 2.0;
+                        moveTo(current_position);
+                    }
+                }
+            }
+            // TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+            // TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // bottom_right[dim - 1] = 2.0;
+            // moveTo(bottom_right);
+            // bottom_right[dim - 1] = rod_radius_in_mm;
+            // addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+            // TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+            // TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // top_left[dim - 1] = 2.0;
+            // moveTo(top_left);
+            // top_left[dim - 1] = rod_radius_in_mm;
+            // addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+        }
+        // fused
+        else if (type == 2)
+        {
+            d = 0.9 * 2.0 * r;
+            TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+            TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            bottom_right[dim - 1] = 2.0;
+            moveTo(bottom_right);
+            bottom_right[dim - 1] = rod_radius_in_mm;
+            addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+            TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+            TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            top_left[dim - 1] = 2.0;
+            moveTo(top_left);
+            top_left[dim - 1] = rod_radius_in_mm;
+            addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+            bool intersect_bottom = true, intersect_left = false;
+            for (int row = 0; row < n_row; row++)
+            {
+                for (int col = 0; col < n_col; col++)   
+                {
+                    std::vector<TV> ixns;
+                    TV center = bottom_left_center + TV(d * col, d * row, 0);
+                    TV start = center + TV(r, 0 , 0);
+                    if (col == 0 && add_bar)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0 - 0.2, M_PI / 2.0 + 0.2), {}, 15, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1 && add_bar)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), {}, 15, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), ixns, 30, rod_radius_in_mm);
+                }
+            }
+        }
+        else if (type == 3)
+        {
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+
+            for (int row = 0; row < n_row; row++)
+            {
+                int col = (row % 2 == 0) ? 0 : 1;
+                int col_end = (row % 2 == 0) ? n_col : n_col - 1;
+                for (; col < col_end; col+=2)
+                {
+                    TV center = bottom_left_center + TV(0 + d * col, 0 + d * row, 0);
+                    TV start = center + TV(r, 0, 0);
+                    if (col == 0)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0 - 0.2, M_PI / 2.0 + 0.2), {}, 10, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), {}, 10, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), {}, 20, rod_radius_in_mm);
+                }   
+            }
+
+            for (int row = 0; row < n_row; row++)
+            {
+                int col = (row % 2 == 0) ? 1 : 0;
+                int col_end = (row % 2 == 0) ? n_col - 1 : n_col;
+                for (; col < col_end; col+=2)
+                {
+                    TV center = bottom_left_center + TV(d * col, d * row, 0);
+                    TV start = center + TV(r, 0, 0);
+
+                    TV left_center = bottom_left_center + TV(d * (col - 1),  d * row, 0);
+                    TV right_center = bottom_left_center + TV(d * (col + 1), d * row, 0);
+                    TV ixn_left0, ixn_left1, ixn_right0, ixn_right1;
+                    TV bottom_center = bottom_left_center + TV( d * col, d * (row - 1), 0);
+                    TV top_center = bottom_left_center + TV(d * col,d * (row + 1), 0);
+                    TV ixn_bottom0, ixn_bottom1, ixn_top0, ixn_top1;
                     
-//                 }
-//             }
-//             for (int col = 0; col < n_col; col++) rod_cnt+=2;
-//             for (int row = 0; row < n_row; row++) rod_cnt+=2;
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     if (row == 0) rod_cnt += 2;
-//                     if (row == n_row - 2) rod_cnt += 2;
-//                     if (row != n_row - 2) rod_cnt += 2;
-//                     if (col == 0) rod_cnt += 2;
-//                     if (col == n_col - 2) rod_cnt += 2;
-//                     if (n_col - 2 != col) rod_cnt += 2;
-//                 }
-//             }
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     // if (row == 0 && col == 0)
-//                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
-//                     // else
-//                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage, false, true);
-//                 }
-//             }
-
-//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
-//             T width;
-//             tunnel_height = 0.14;
-//             if (sim.unit == 0.05)
-//                 width = 0.12;
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
-//                     for (int corner = 0; corner < 4; corner++)
-//                     {
-//                         int crossing_id = base + corner * 3 + 1;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
-//                         crossing_id = base + corner * 3 + 2;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width));
-//                     }
-//                 }
-//             }
-//         }
-//         // fused
-//         else if (type == 2)
-//         {
-//             int rod_cnt = 0; 
-//             int boundary_rod_cnt = 0;
-//             // outer contour
-//             for (int col = 0; col < n_col; col++)
-//             {
-//                 generateCodeSingleRod(col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 generateCodeSingleRod(n_col * 2 + n_row + row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int col = 0; col < n_col; col++)
-//             {
-//                 generateCodeSingleRod(n_col + col, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 generateCodeSingleRod(n_col * 2 + row , scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 rod_cnt++;
-//             }
-//             boundary_rod_cnt = rod_cnt;
-//             while (rod_cnt < boundary_rod_cnt + 2 * (n_col - 1) * n_row)
-//             {
-//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//             }
-            
-//             int temp = rod_cnt + 2 * (n_row - 1) * n_col;
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = 0; row < n_row - 1; row++)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     if (row == n_row - 2)
-//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
-//                     else
-//                         generateCodeSingleRod(temp + idx * 4 + 1, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = n_row - 2; row > -1; row--)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     if (row == 0)
-//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage, false, true);
-//                     else
-//                         generateCodeSingleRod(temp + idx * 4 + 3, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-            
-//             boundary_rod_cnt = rod_cnt;
-//             while (rod_cnt < boundary_rod_cnt + 2 * (n_row - 1) * n_col)
-//                 generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-
-
-            
-//             temp = rod_cnt;
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = 0; row < n_row - 1; row++)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     generateCodeSingleRod(temp + idx * 4 + 0, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-//             for (int col = 0; col < n_col - 1; col++)
-//             {
-//                 for (int row = n_row - 2; row > -1; row--)
-//                 {
-//                     int idx = row * (n_col - 1) + col;
-//                     generateCodeSingleRod(temp + idx * 4 + 2, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, extend_percentage);
-//                 }
-//             }
-
-            
-//         }
-//         else if (type == 3)
-//         {
-//             int rod_cnt = 0; 
-//             for (int row = 0; row < n_row; row++)
-//             {
-//                 for (int col = 0; col < n_col; col++)
-//                 {
-//                     TV bottom_left;
-//                     sim.getCrossingPosition((row * n_col + col) * 4, bottom_left);
-//                     scaleAndShift(bottom_left);
-//                     bottom_left[dim-1] = rod_radius_in_mm; 
-//                     // moveTo(bottom_left);
-//                     for (int corner = 0; corner < 4; corner++)
-//                     {
-//                         int from_idx = (row * n_col + col) * 4 + corner;
-//                         int to_idx = (row * n_col + col) * 4 + (corner + 1) % 4;
-//                         TV from, to;
-//                         sim.getCrossingPosition(from_idx, from);
-//                         sim.getCrossingPosition(to_idx, to);
-
-//                         TV left, right;
-//                         left = from - (to - from) * extend_percentage;
-//                         right = to + (to - from) * extend_percentage;
-
-//                         scaleAndShift(left); scaleAndShift(right);
-//                         left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
-                        
-//                         moveTo(left);
-//                         writeLine(left, right, rod_radius_in_mm);
-//                         // for (int i = 0; i < 8; i++)
-//                         // {
-//                         //     writeLine(from + (to - from) * i/8.0, from + (to - from) * (i + 1) /8.0, rod_radius_in_mm);
-//                         // }
-//                     }
+                    circleCircleIntersection(bottom_center, r, center, r, ixn_bottom0, ixn_bottom1);
+                    circleCircleIntersection(center, r, top_center, r, ixn_top0, ixn_top1);
+                    circleCircleIntersection(left_center, r, center, r, ixn_left0, ixn_left1);
+                    circleCircleIntersection(center, r, right_center, r, ixn_right0, ixn_right1);
                     
-//                 }
-//             }
-//             for (int col = 0; col < n_col; col++) rod_cnt+=2;
-//             for (int row = 0; row < n_row; row++) rod_cnt+=2;
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     if (row == 0) rod_cnt += 2;
-//                     if (row == n_row - 2) rod_cnt += 2;
-//                     if (row != n_row - 2) rod_cnt += 2;
-//                     if (col == 0) rod_cnt += 2;
-//                     if (col == n_col - 2) rod_cnt += 2;
-//                     if (n_col - 2 != col) rod_cnt += 2;
-//                 }
-//             }
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     // if (row == 0 && col == 0)
-//                     //     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, 0.5 * rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.0);
-//                     // else
-//                         generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                     generateCodeSingleRod(rod_cnt++, scaleAndShift, true, rod_radius_in_mm, inner_height, extend_percentage);
-//                 }
-//             }
+                    std::vector<TV> ixns = {ixn_right0, ixn_top1, ixn_top0, ixn_left0, ixn_left1, ixn_bottom0, ixn_bottom1, ixn_right1};
 
-//             TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
-//             T width;
-//             tunnel_height = 0.17;
-//             if (sim.unit == 0.05)
-//                 width = 0.12;
-//             for (int row = 0; row < n_row - 1; row++)
-//             {
-//                 for (int col = 0; col < n_col - 1; col++)
-//                 {
-//                     int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
-//                     for (int corner = 0; corner < 4; corner++)
-//                     {
-//                         if (corner == 0)
-//                             continue;
-//                         int crossing_id = base + corner * 3 + 1;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
-//                         crossing_id = base + corner * 3 + 2;
-//                         addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 150, 200);
-//                     }
-//                 }
-//             }
-//         }
-//         writeFooter();
-//     }
-// }
+                    std::vector<TV> ixn_write;
+
+                    if (col > 0)
+                    {
+                        ixn_write.push_back(ixn_left0);
+                        ixn_write.push_back(ixn_left1);
+                    }
+                    if (col < n_col-1)
+                    {
+                        ixn_write.push_back(ixn_right0);
+                        ixn_write.push_back(ixn_right1);
+                    }
+                    if (row > 0)
+                    {
+                        ixn_write.push_back(ixn_bottom0);
+                        ixn_write.push_back(ixn_bottom1);
+                    }
+                    if (row < n_row-1)
+                    {
+                        ixn_write.push_back(ixn_top0);
+                        ixn_write.push_back(ixn_top1);
+                    }
+                        
+                    T theta = std::acos((ixns[0] - center).normalized().dot(TV(1, 0, 0)));
+                    
+                    T epsilon_left = 0.25, epsilon_right = 0.25;
+
+                    auto writeTunnel = [&](T _theta, const TV& _ixn, const TV& _center)
+                    {
+                        TV ixn = _ixn;
+                        TV tunnel_left = _center + TV(r * std::cos(_theta - epsilon_left), r * std::sin(_theta - epsilon_left), 0);
+                        TV tunnel_right = _center + TV(r * std::cos(_theta + epsilon_right), r * std::sin(_theta + epsilon_right), 0);
+                        ixn[dim-1] = 5.0 * rod_radius_in_mm;
+                        addSingleTunnel(tunnel_left, ixn, tunnel_right, rod_radius_in_mm);
+                    };
+                    if (col == 0)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0, M_PI / 2.0), ixn_write, 20, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0, M_PI * 1.5), ixn_write, 20, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.1), ixn_write, 40, rod_radius_in_mm);
+
+                    if (col < n_col - 1)
+                    {
+                        writeTunnel(M_PI - theta, ixns[0], right_center);
+                    }
+                    if (row < n_row - 1 && col < n_col - 1)
+                    {
+                        writeTunnel(-(M_PI * 0.5 - theta), ixns[1], top_center);    
+                    }
+                    if (row < n_row - 1 && col > 0)
+                        writeTunnel(-M_PI * 0.5 - theta, ixns[2], top_center);
+                    if (col > 0)
+                    {
+                        writeTunnel(theta, ixns[3], left_center);
+                        writeTunnel(-theta, ixns[4], left_center);
+                    }
+                    if (row > 0 && col > 0)
+                        writeTunnel((M_PI * 0.5 + theta), ixns[5], bottom_center);
+                    if (row > 0 && col < n_col - 1)
+                        writeTunnel(M_PI * 0.5 - theta, ixns[6], bottom_center);
+                    if (col < n_col - 1)
+                        writeTunnel(M_PI + theta, ixns[7], right_center);
+                }
+            }
+
+        }
+        
+        writeFooter();
+    }
+}
 
 template<class T, int dim>
 void GCodeGenerator<T, dim>::slidingBlocksGCode(int n_row, int n_col, int type, bool add_bar)
@@ -1544,7 +1844,7 @@ void GCodeGenerator<T, dim>::crossingTest()
 }
 
 template<class T, int dim>
-void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T height)
+void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T height, T rod_diameter)
 {
     if constexpr (dim == 3)
     {
@@ -1553,10 +1853,35 @@ void GCodeGenerator<T, dim>::addSingleTunnel(const TV& from, const TV& to, T hei
         mid_point[2] += height;    
         moveTo(from);
         
-        writeLine(from, mid_point, 0.3, 100);
-        writeLine(mid_point, to, 0.3, 200);
+        writeLine(from, mid_point, 0.2, 150);
+        writeLine(mid_point, to, 0.2, 200);
     }
 }
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::addSingleTunnel(const TV& left, const TV& center, const TV& right, T rod_diameter)
+{
+    if constexpr (dim == 3)
+    {
+        TV _left = left, _right = right;
+        _left[dim - 1] += 2.0;
+        moveTo(_left);
+        _left[dim - 1] -= 2.0;
+        moveTo(_left, 100);
+        
+        writeLine(_left, center, tunnel_height, 400);
+        writeLine(center, _right, tunnel_height, 600);
+        _right[dim - 1] += 2.0;
+        moveTo(_right);
+
+        // moveTo(left, 600);
+        
+        // writeLine(left, center, 0.2, 600);
+        // writeLine(center, right, 0.2, 600);
+    }
+}
+
+
 
 template<class T, int dim>
 void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx, 
@@ -1664,9 +1989,9 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
         //     xi[dim - 1] = bd_height; 
         // }
         if (less)
-            writeLine(xi, xj, 0.8 * rod_radius_in_mm, 300);
+            writeLine(xi, xj, 0.8 * rod_radius_in_mm, feed_rate_print);
         else
-            writeLine(xi, xj, rod_radius_in_mm, 300);
+            writeLine(xi, xj, rod_radius_in_mm, feed_rate_print);
     });
     
     
@@ -1806,6 +2131,51 @@ void GCodeGenerator<T, dim>::generateCodeSingleRod(int rod_idx,
 //     // retract(current_E + 0.5);
 // }
 
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::addTunnelsAlongRod(int rod_idx, const TV3& heights,
+        std::function<void(TV&)> scaleAndShift, int cross_n_seg,
+        T extend_right, T speed_first_half, T speed_second_half)
+{
+    if constexpr (dim == 3)
+    {
+        auto rod = sim.Rods[rod_idx];
+        int cnt = -1;
+
+        for (int idx : rod->dof_node_location)
+        {
+            // std::cout << rod->fixed_by_crossing[cnt]  << std::endl;
+            cnt++;
+            if (rod->fixed_by_crossing[cnt])
+                continue;
+            int extend_seg = extend_right * cross_n_seg;
+            int left_node, right_node;
+            left_node = rod->closed ? (idx - cross_n_seg + rod->numSeg()) % (rod->numSeg()) : std::max(0, idx-cross_n_seg);
+            right_node = rod->closed ? (idx + cross_n_seg + extend_seg) % (rod->numSeg()) : std::min(idx+cross_n_seg + extend_seg, rod->numSeg());
+
+            TV left, right, center;
+            rod->x(rod->indices[left_node], left);
+            rod->x(rod->indices[idx], center);
+            rod->x(rod->indices[right_node], right);
+
+            scaleAndShift(left); scaleAndShift(right); scaleAndShift(center); 
+
+            left[dim - 1] = heights[0];
+            right[dim - 1] = heights[1];
+            center[2] = heights[2];  
+
+            left[dim - 1] += 2.0;
+            moveTo(left);
+            left[dim - 1] -= 2.0;
+            moveTo(left, 100);
+            
+            writeLine(left, center, tunnel_height, speed_first_half);
+            writeLine(center, right, tunnel_height, speed_second_half);
+            right[dim - 1] += 2.0;
+            moveTo(right);
+        }
+    }
+}
 
 template<class T, int dim>
 void GCodeGenerator<T, dim>::addSingleTunnelOnCrossingWithFixedRange(int crossing_id, const TV3& heights, 
@@ -2014,6 +2384,52 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridGripperHardCoded()
 
     
     writeFooter();
+}
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::writeCircle(const TV& center, T r, const TV& start, const Vector<T, 2>& range,
+    const std::vector<TV>& lifting_points, int sub_div, T rod_diameter)
+{
+    
+    std::vector<T> thetas;
+    for (int i = 0; i < sub_div + 1; i++)
+    {
+        thetas.push_back(range[0] + T(i) / T(sub_div) * (range[1] - range[0]));
+    }
+
+    moveTo(start);
+    int cnt = 0;
+    for (T theta : thetas)
+    {
+        TV next = center; 
+        next[0] += r * std::cos(theta);
+        next[1] += r * std::sin(theta);
+        bool lift = false;
+        for (auto pt : lifting_points)
+        {
+            if ((next.template head<2>() - pt.template head<2>()).norm() < 1.5)
+            {
+                next[dim-1] = 3.0 * rod_diameter;
+                lift = true;
+                break;
+            }
+            else
+            {
+                next[dim-1] = rod_diameter;
+            }
+
+        }
+        if (lift)
+            writeLine(current_position, next, 0.5 * rod_diameter, 600);
+        else
+        {
+            if (cnt == 0)
+                writeLine(current_position, next, rod_diameter, 200);
+            else
+                writeLine(current_position, next, rod_diameter, 600);
+        }
+        cnt ++;
+    }
 }
 
 template<class T, int dim>

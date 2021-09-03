@@ -40,10 +40,16 @@ public:
 
     //Mechanisim
     void buildFingerScene(int sub_div);
-
+    void buildTennisBallWrapperScene(int sub_div);
     void buildShoeScene(int sub_div);
 
+    void buildActuationSingleStrandScene(int sub_div);
+    void buildActuationSingleStrandSceneWithoutCrossing(int sub_div);
+
     void buildPeriodicCircleScene(int sub_div);
+    void buildFullCircleScene(int sub_div);
+
+    void buildShelterAcutationScene(int sub_div);
 
     void buildRandomPatchScene(int sub_div);
 
