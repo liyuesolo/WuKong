@@ -53,7 +53,6 @@ public:
             points = data_points;
         else
         {
-            generateC2Curves();
             points = points_on_curve;
         }
     }
@@ -100,9 +99,6 @@ public:
         ddpos = -dtheta * dtheta * (std::cos(theta) * curve_data[idx]->axis1 + 
                 curve_data[idx]->axis2 * std::sin(theta));
     }
-
-
-    void generateC2Curves();
 
 private:
 

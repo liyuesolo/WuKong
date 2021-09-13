@@ -69,7 +69,7 @@ const char* test_case_names[] = {
     "DrawUnit", "StaticSolve", "BatchRendering", "InverseDesign", "StaticSolveIncremental"
 };
 
-TestCase test_current = StaticSolveIncremental;
+TestCase test_current = StaticSolve;
 
 double t = 0.0;
 
@@ -280,6 +280,8 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
             {
                 eol_sim.staticSolveIncremental(step);
                 updateScreen(viewer);
+                igl::writeOBJ("output/" + std::to_string(step) + ".obj", V, F);
+                
             }    
         }
         else if (test_current == InverseDesign)

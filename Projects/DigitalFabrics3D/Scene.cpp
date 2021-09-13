@@ -6,7 +6,7 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
     Eigen::MatrixXd& C, bool show_rest)
 {
     V.resize(0, 0); F.resize(0, 0);
-    int n_tile_x = 3, n_tile_y = 3;
+    int n_tile_x = 2, n_tile_y = 2;
     int n_faces = 20;
 
     if constexpr (dim == 3)
@@ -17,9 +17,10 @@ void EoLRodSim<T, dim>::buildPeriodicNetwork(Eigen::MatrixXd& V, Eigen::MatrixXi
         TV xl = deformed_states.template segment<dim>(pbc_pairs_reference[1].first.second[0]);
 
         TV ref0_shift = xj - xi, ref1_shift = xl - xk;
-        for (int i = -n_tile_x + 1; i < n_tile_x; i++)
+        // for (int i = -n_tile_x + 1; i < n_tile_x; i++)
+        for (int i = 0; i < n_tile_x; i++)
         {
-            for (int j = -n_tile_y + 1; j < n_tile_y; j++)
+            for (int j = 0; j < n_tile_y; j++)
             {
                 Eigen::MatrixXd V_tile;
                 Eigen::MatrixXi F_tile;

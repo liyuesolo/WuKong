@@ -61,6 +61,8 @@ public:
 
     void generateGCodeShelter();
     void generateGCodeSingleStrand();
+
+    void generateGCodeClosedGrid(int n_row, int n_col, int type);
     
     void circlePatchGCode(int n_row, int n_col, int type, bool add_bar);
 

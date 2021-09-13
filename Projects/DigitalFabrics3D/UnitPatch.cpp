@@ -11,16 +11,8 @@
 #include "GCodeGenerator.h"
 
 
-
-// static double ROD_A = 1e-3;
-// static double ROD_B = 1e-3;
-
 static double ROD_A = 2.5e-4;
 static double ROD_B = 2.5e-4;
-
-
-// static double ROD_A = 5e-4;
-// static double ROD_B = 5e-4;
 
 
 #include <random>
@@ -109,7 +101,7 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
     else if (patch_type == 24)
         buildRandomPatchScene(4);
     else if (patch_type == 25)
-        buildPeriodicCircleScene(8);
+        buildPeriodicCircleScene(32);
     else if (patch_type == 26)
         buildFullCircleScene(8);
     else if (patch_type == 27)
@@ -122,7 +114,175 @@ void UnitPatch<T, dim>::buildScene(int patch_type)
         buildActuationSingleStrandScene(64);
     else if (patch_type == 31)
         buildActuationSingleStrandSceneWithoutCrossing(32);
+    else if (patch_type == 32)
+        buildGridClosed(32);
 }   
+
+template<class T, int dim>
+void UnitPatch<T, dim>::buildGridClosed(int sub_div)
+{
+    if constexpr (dim == 3)
+    {
+        auto unit_yarn_map = sim.yarn_map;
+        sim.yarn_map.clear();
+        
+        clearSimData();
+
+        sim.add_rotation_penalty = false;
+        sim.add_pbc_bending = false;
+        sim.add_pbc_twisting = false;
+        sim.add_pbc = false;
+
+        sim.add_contact_penalty=true;
+        sim.new_frame_work = true;
+        sim.add_eularian_reg = true;
+
+        sim.ke = 1e-4;
+
+        
+        sim.visual_R = 0.005;
+
+        sim.unit = 0.09;
+        
+        std::vector<Eigen::Triplet<T>> w_entry;
+        int full_dof_cnt = 0;
+        int node_cnt = 0;
+        int rod_cnt = 0;
+
+        int n_row = 20, n_col = 20;
+
+        // push crossings first 
+        T dy = 1.0 / n_row * sim.unit;
+        T dx = 1.0 / n_col * sim.unit;
+
+        auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
+        {
+            sim.rod_crossings[crossing_idx]->is_fixed = true;
+            sim.rod_crossings[crossing_idx]->rods_involved.push_back(rod_idx);
+            sim.rod_crossings[crossing_idx]->on_rod_idx[rod_idx] = location;
+            sim.rod_crossings[crossing_idx]->sliding_ranges.push_back(Range::Zero());
+        };
+
+        
+
+        std::vector<TV> nodal_positions;
+
+        for (int row = 0; row < n_row; row++)
+        {
+            for (int col = 0; col < n_col; col++)
+            {
+                TV pt = TV(dx * col, dy * row, 0);
+                addCrossingPoint(nodal_positions, pt, full_dof_cnt, node_cnt);
+            }
+        }
+
+        for (int row = 0; row < n_row; row++)
+        {
+            std::vector<TV> passing_points;
+            std::vector<int> passing_points_id;
+            for (int col = 0; col < n_col; col++)
+            {
+                passing_points_id.push_back(row * n_col + col);
+                passing_points.push_back(nodal_positions[passing_points_id.back()]);
+            }
+            addAStraightRod(passing_points.front(), passing_points.back(), passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+            for (int i = 0; i < passing_points_id.size(); i++)
+                addCrossingData(passing_points_id[i], rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[i]);
+        }
+
+        for (int col = 0; col < n_col; col++)
+        {
+            std::vector<TV> passing_points;
+            std::vector<int> passing_points_id;
+            for (int row = 0; row < n_row; row++)
+            {
+                passing_points_id.push_back(row * n_col + col);
+                passing_points.push_back(nodal_positions[passing_points_id.back()]);
+            }
+            addAStraightRod(passing_points.front(), passing_points.back(), passing_points, passing_points_id, sub_div, full_dof_cnt, node_cnt, rod_cnt);
+            for (int i = 0; i < passing_points_id.size(); i++)
+                addCrossingData(passing_points_id[i], rod_cnt - 1, sim.Rods[rod_cnt - 1]->dof_node_location[i]);
+        }
+
+        for (auto rod : sim.Rods)
+        {
+            rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
+        }
+        
+        int dof_cnt = 0;
+        markCrossingDoF(w_entry, dof_cnt);
+        
+        for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+        
+        appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+        
+        sim.rest_states = deformed_states;
+        
+        sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+        sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+        
+        for (auto& rod : sim.Rods)
+        {
+            rod->fixEndPointEulerian(sim.dirichlet_dof);
+            rod->setupBishopFrame();
+        }
+
+        for (int row = 1; row < n_row - 1; row++)
+        {
+            for (int col = 1; col < n_col - 1; col++)
+            {
+                auto crossing = sim.rod_crossings[row * n_col + col];
+                crossing->is_fixed = false;
+                crossing->sliding_ranges[0] = Range::Ones();
+            }
+        }
+        
+
+        T r = 0.1 * sim.unit;
+        TV center1, center2;
+        sim.getCrossingPosition(0, center1);
+        sim.getCrossingPosition(n_row * n_col - 1, center2);
+
+        TV delta1 = TV(-0.3, -0.3, -1e-2) * sim.unit;
+
+        auto circle1 = [r, center1, delta1](const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
+        {
+            mask = Vector<bool, dim>(true, true, true);
+            delta = delta1;
+            return (x - center1).norm() < r;
+        };
+
+        TV delta2 = TV(0.0, 0.0, 0) * sim.unit;
+        auto circle2 = [r, center2, delta2](const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
+        {
+            mask = Vector<bool, dim>(true, true, true);
+            delta = delta2;
+            return (x - center2).norm() < r;
+
+        };
+
+        sim.fixRegionalDisplacement(circle1);
+        sim.fixRegionalDisplacement(circle2);
+        
+        sim.fixCrossing();
+
+        sim.perturb = VectorXT::Zero(sim.W.cols());
+
+        for (auto& crossing : sim.rod_crossings)
+        {
+            Offset off;
+            sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+            T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+            int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
+            sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
+            
+        }
+
+        GCodeGenerator<T, dim>(sim, "closed_grid_sliding.gcode").generateGCodeClosedGrid(n_row, n_col, 0);
+    }
+
+
+}
 
 template<class T, int dim>
 void UnitPatch<T, dim>::buildActuationSingleStrandSceneWithoutCrossing(int sub_div)
@@ -810,7 +970,7 @@ void UnitPatch<T, dim>::buildActuationSingleStrandScene(int sub_div)
 
         sim.fixCrossing();
 
-        sim.boundary_spheres.push_back(std::make_pair(center, r * 0.5));
+        // sim.boundary_spheres.push_back(std::make_pair(center, r * 0.5));
         //sim.boundary_spheres.push_back(std::make_pair(center2, r * 0.5));
 
         sim.perturb = VectorXT::Zero(sim.W.cols());
@@ -824,7 +984,7 @@ void UnitPatch<T, dim>::buildActuationSingleStrandScene(int sub_div)
             sim.perturb[z_off] += 0.001 * (r ) * sim.unit;
             
         }
-        GCodeGenerator<T, dim>(sim, "single_strand.gcode").generateGCodeSingleStrand();
+        // GCodeGenerator<T, dim>(sim, "single_strand.gcode").generateGCodeSingleStrand();
     }
 }
 
@@ -1769,16 +1929,20 @@ void UnitPatch<T, dim>::buildPeriodicCircleScene(int sub_div)
         setPBCData(0, 1, 1, true, false);
         setPBCData(3, 2, 1, false, true);
 
-        // for (auto crossing : sim.rod_crossings)
-        // {
-        //     if (crossing->node_idx < 8)
-        //         continue;
-        //     crossing->is_fixed = false;
-        //     // crossing->sliding_ranges[0] = Range::Ones();
-        //     crossing->sliding_ranges[0] = Range(0.9, 0.9);
-        //     // crossing->sliding_ranges[1] = Range::Ones() * 20.0;
-        // }
+        for (auto crossing : sim.rod_crossings)
+        {
+            if (crossing->node_idx < 8)
+                continue;
+            // crossing->is_fixed = false;
+            // crossing->sliding_ranges[0] = Range(0.9, 0.9);
+        }
         
+        // auto crossing = sim.rod_crossings[8];
+        // crossing->is_fixed = false;
+        // crossing->sliding_ranges[0] = Range::Ones();
+        // crossing = sim.rod_crossings[11];
+        // crossing->is_fixed = false;
+        // crossing->sliding_ranges[0] = Range::Ones();
 
 
         int dof_cnt = 0;
@@ -1818,9 +1982,10 @@ void UnitPatch<T, dim>::buildPeriodicCircleScene(int sub_div)
             sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
             
         }
-        GCodeGenerator<T, dim>(this->sim, "circle_patch_every_other.gcode").circlePatchGCode(3, 5, 3, false);
-        // GCodeGenerator<T, dim>(this->sim, "circle_patch.gcode").circlePatchGCode(2, 3, 1, false);
-        // GCodeGenerator<T, dim>(this->sim, "circle_patch_fused.gcode").circlePatchGCode(5, 7, 2, true);
+        // GCodeGenerator<T, dim>(this->sim, "circle_patch_every_other.gcode").circlePatchGCode(3, 5, 3, false);
+        // GCodeGenerator<T, dim>(this->sim, "circle_patch.gcode").circlePatchGCode(5, 6, 1, true);
+        // GCodeGenerator<T, dim>(this->sim, "circle_patch_test.gcode").circlePatchGCode(3, 4, 5, true);
+        // GCodeGenerator<T, dim>(this->sim, "circle_patch_fused.gcode").circlePatchGCode(5, 6, 2, true);
     }
 }
 
@@ -3442,7 +3607,8 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquarePeriodicScene(int sub_div)
         };
         T dx = (square_width * 0.5 - overlap) / square_width * 1.4;
         T dy = overlap / square_width * 0.92;
-        FixingType type = ALL;
+
+        FixingType type = AllowX;
 
         for (int corner = 0; corner < 4; corner++)
         {
@@ -4128,33 +4294,33 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         for (auto& rod : sim.Rods)
             rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
 
-        for (int row = 0; row < n_row - 1; row++)
-        {
-            for (int col = 0; col < n_col - 1; col++)
-            {
-                int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
-                for (int corner = 0; corner < 4; corner++)
-                {
+        // for (int row = 0; row < n_row - 1; row++)
+        // {
+        //     for (int col = 0; col < n_col - 1; col++)
+        //     {
+        //         int base = n_row * n_col * 4 + (row * (n_col - 1) + col) * 12;
+        //         for (int corner = 0; corner < 4; corner++)
+        //         {
                     
-                    auto crossing = sim.rod_crossings[base + corner * 3 + 1];
-                    crossing->is_fixed = false;
-                    crossing->sliding_ranges[1] = Range::Ones();
-                    sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[1] = false;
-                    sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[2] = false;
+        //             auto crossing = sim.rod_crossings[base + corner * 3 + 1];
+        //             crossing->is_fixed = false;
+        //             crossing->sliding_ranges[1] = Range::Ones();
+        //             sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[1] = false;
+        //             sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[2] = false;
 
-                    sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[1] = false;
+        //             sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[1] = false;
 
-                    crossing = sim.rod_crossings[base + corner * 3 + 2];
-                    crossing->is_fixed = false;
-                    crossing->sliding_ranges[0] = Range::Ones();
-                    sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[1] = false;
+        //             crossing = sim.rod_crossings[base + corner * 3 + 2];
+        //             crossing->is_fixed = false;
+        //             crossing->sliding_ranges[0] = Range::Ones();
+        //             sim.Rods[crossing->rods_involved[0]]->fixed_by_crossing[1] = false;
 
-                    sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[1] = false;
-                    sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[2] = false;
+        //             sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[1] = false;
+        //             sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[2] = false;
 
-                }
-            }
-        }
+        //         }
+        //     }
+        // }
 
         
 
@@ -4184,11 +4350,11 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         TV bottom_left, top_right;
         sim.computeBoundingBox(bottom_left, top_right);
 
-        TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
+        TV shear_x_right = TV(0.1, 0.0, 0.0) * length_x;
         TV shear_x_left = TV(0.0, 0.0, 0) * sim.unit;
 
 
-        T rec_width = 0.05 * sim.unit;
+        T rec_width = 0.015 * sim.unit;
 
         auto rec1 = [bottom_left, top_right, shear_x_left, rec_width](
             const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
@@ -4233,7 +4399,7 @@ void UnitPatch<T, dim>::buildDenseInterlockingSquareScene(int sub_div)
         // std::cout << sim.rod_crossings[38]->is_fixed << std::endl;
   
         // GCodeGenerator<T, dim>(sim, "sliding_blocks_"+ std::to_string(n_row) + "x" + std::to_string(n_col) +".gcode").slidingBlocksGCode(n_row, n_col, 0);
-        GCodeGenerator<T, dim>(sim, "sliding_blocks_1X1Y_fuse_corner.gcode").slidingBlocksGCode(n_row, n_col, 3, true);
+        // GCodeGenerator<T, dim>(sim, "sliding_blocks_1X1Y_fuse_corner.gcode").slidingBlocksGCode(n_row, n_col, 3, true);
         // GCodeGenerator<T, dim>(sim, "sliding_blocks_1X1Y_bar.gcode").slidingBlocksGCode(n_row, n_col, 1, true);
         // GCodeGenerator<T, dim>(sim, "sliding_blocks_fused.gcode").slidingBlocksGCode(n_row, n_col, 2, true);
         // GCodeGenerator<T, dim>(sim, "sliding_blocks_allX_bar.gcode").slidingBlocksGCode(n_row, n_col, 0, true);
@@ -7797,17 +7963,18 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
 
         sim.add_contact_penalty=true;
         sim.new_frame_work = true;
-        sim.add_eularian_reg = true;
+        sim.add_eularian_reg = false;
 
         sim.ke = 1e-4;
 
         sim.unit = 0.09;
+        sim.visual_R = 0.0035;
         
         std::vector<Eigen::Triplet<T>> w_entry;
         int full_dof_cnt = 0;
         int node_cnt = 0;
 
-        int n_row = 8, n_col = 8;
+        int n_row = 20, n_col = 20;
 
         // push crossings first 
         T dy = 1.0 / n_row * sim.unit;
@@ -7917,18 +8084,23 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
                 // if (row ==  col)
                 //     crossing->is_fixed = true;
 
-                if (row != col)
-                    crossing->is_fixed = true;
+                // if (row != col)
+                //     crossing->is_fixed = true;
 
                 // crossing->is_fixed = true;
-                    
+
+                // if (row == 0 || row == n_row - 1 || col == 0 || col == n_col - 1)                    
+                    crossing->is_fixed = true;
 
                 sim.Rods[row]->fixed_by_crossing[col] = false;
                 sim.Rods[n_row + col]->fixed_by_crossing[row] = false;
                 // if (col % 2 == 0)
                 {
+                    // crossing->sliding_ranges.push_back(Range(0, 0));    
+                    // crossing->sliding_ranges.push_back(Range(1.0/20.0 - 1e3, 1.0/20.0 - 1e3));
+                    // crossing->sliding_ranges.push_back(Range(1, 1));    
+                    crossing->sliding_ranges.push_back(Range(1, 1));    
                     crossing->sliding_ranges.push_back(Range(0, 0));    
-                    crossing->sliding_ranges.push_back(Range(0.02, 0.02));
                 }
                 // else
                 // {
@@ -7969,7 +8141,7 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
         sim.getCrossingPosition(0, center1);
         sim.getCrossingPosition(n_row * n_col - 1, center2);
 
-        TV delta1 = TV(-0.1, -0.1, -1e-2) * sim.unit;
+        TV delta1 = TV(-0.05, -0.05, -1e-2) * sim.unit;
 
         auto circle1 = [r, center1, delta1](const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
         {
@@ -7978,7 +8150,7 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
             return (x - center1).norm() < r;
         };
 
-        TV delta2 = TV(0.1, 0.1, 1e-2) * sim.unit;
+        TV delta2 = TV(0.0, 0.0, 0) * sim.unit;
         auto circle2 = [r, center2, delta2](const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
         {
             mask = Vector<bool, dim>(true, true, true);
@@ -7992,7 +8164,7 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
         TV shear_y_left = TV(0.0, 0.5, 0.1) * sim.unit;
         TV shear_y_right = TV(0.0, 0.0, 0) * sim.unit;
         
-        T rec_width = 0.2 * sim.unit;
+        T rec_width = 0.1 * sim.unit;
 
         auto rec1 = [bottom_left, top_right, shear_y_left, rec_width](
             const TV& x, TV& delta, Vector<bool, dim>& mask)->bool
@@ -8035,12 +8207,14 @@ void UnitPatch<T, dim>::buildGridScene2(int sub_div)
         sim.perturb = VectorXT::Zero(sim.W.cols());
         for (auto& crossing : sim.rod_crossings)
         {
+            if (crossing->is_fixed)
+                return;
             Offset off;
             sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
             T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
             int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[dim-1]];
-            // sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
-            sim.perturb[z_off] += 0.001 * r * sim.unit;
+            sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
+            // sim.perturb[z_off] += 0.001 * r * sim.unit;
         }
         // VectorXT dq = VectorXT::Zero(sim.W.cols());
         // sim.checkHessianPD(dq);
@@ -8665,7 +8839,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         int full_dof_cnt = 0;
         int node_cnt = 0;
 
-        int n_row = 20, n_col = 20;
+        int n_row = 2, n_col = 2;
 
         T length = 1.0 / 20.0 * sim.unit;
 
@@ -8793,8 +8967,10 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
                     // crossing->is_fixed = false;
                 // if (row != 0 && col != 0)
                 //     crossing->is_fixed = true;
-                if (row == col)
-                    crossing->is_fixed = true;
+                // if (row == col)
+                    // crossing->is_fixed = true;
+                // if (row == 0 && col == 0)
+                    // crossing->is_fixed = true;
                 sim.Rods[crossing->rods_involved[1]]->fixed_by_crossing[row] = false;
                 sim.rod_crossings.push_back(crossing);
                 odd_even_cnt++;
@@ -8868,7 +9044,9 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
 
         
 
-        GCodeGenerator<T, dim>(this->sim, "dense_patch_free.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 2);
+        // GCodeGenerator<T, dim>(this->sim, "dense_patch_free.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 2);
+        // GCodeGenerator<T, dim>(this->sim, "dense_patch_free_change_boundary.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 3);
+        // GCodeGenerator<T, dim>(this->sim, "dense_patch_free_change_boundary.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 1);
     }
 }
 

@@ -21,6 +21,186 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 }
 
 template<class T, int dim>
+void GCodeGenerator<T, dim>::generateGCodeClosedGrid(int n_row, int n_col, int type)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 40);
+    };
+
+    T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+    
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T extend_percentage = 0.2;
+        TV bottom_left, top_right;
+        sim.computeBoundingBox(bottom_left, top_right);
+
+        scaleAndShift(bottom_left); scaleAndShift(top_right);
+        bottom_left[dim-1] = rod_radius_in_mm;
+        top_right[dim-1] = rod_radius_in_mm;
+
+        TV bottom_right = bottom_left;
+        bottom_right[0] = top_right[0];
+        TV top_left = top_right;
+        top_left[0] = bottom_left[0];
+
+        TV bottom_left_extend = bottom_left - (bottom_right - bottom_left) * 0.2;
+
+        
+        
+        if (type == 0)
+        {
+            for (int row = 1; row < n_row - 1; row++)
+            {
+                
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                T rod_height = (col == 0 || col == n_col - 1) ? rod_radius_in_mm : 3.0 * rod_radius_in_mm;
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = rod_height; to[dim-1] = rod_height;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right);
+                    right[dim-1] = 0.2;
+                    moveTo(right);
+                    to[1] = top_right[1];
+                    TV temp = 0.5 * (right + to);
+                    temp[2] = 0.2;
+
+                    writeLine(right, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, to, rod_radius_in_mm, 400);
+                    writeLine(to, from, rod_height+ rod_radius_in_mm, 600);
+                    temp = 0.5 * (from + left);
+                    temp[2] = 0.2;
+                    writeLine(from, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, left, rod_radius_in_mm, 200);
+                }
+                else
+                {
+                    moveTo(left);
+                    left[dim-1] = 0.2;
+                    moveTo(left);
+                    from[1] = bottom_left[1];
+                    TV temp = 0.5 * (left + from);
+                    temp[2] = 0.2;
+                    writeLine(left, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, from, rod_radius_in_mm, 400);
+                    writeLine(from, to, rod_height + rod_radius_in_mm, 600);
+                    temp = 0.5 * (to + right);
+                    temp[2] = 0.2;
+                    writeLine(to, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, right, rod_radius_in_mm, 200);
+                }
+            }
+
+            for (int row : {0, n_row - 1})
+            {
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+
+            TV3 heights = TV3(rod_radius_in_mm, rod_radius_in_mm, 4.0 * rod_radius_in_mm);
+            // T width = 0.034;
+            T width = 0.015;
+            tunnel_height = 0.2;
+            for (int row = 1; row < n_row - 1; row++)
+            {
+                for (int col = 1; col < n_col - 1; col++)
+                {
+                    int crossing_id = row * n_col + col;
+                    addSingleTunnelOnCrossingWithFixedRange(crossing_id, heights, 0, scaleAndShift, Range(width, width), 0.2, 100, 200);
+                }
+            }
+            
+            // moveTo(bottom_left_extend);
+            // writeLine(bottom_left_extend, bottom_right, rod_radius_in_mm, 1500);
+            // writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+            // writeLine(top_right, top_left, rod_radius_in_mm, 1500);
+            // writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+        }
+    }
+    writeFooter();
+}
+
+template<class T, int dim>
 void GCodeGenerator<T, dim>::generateGCodeSingleStrand()
 {
     auto scaleAndShift = [](TV& x)->void
@@ -383,14 +563,17 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                     };
 
                     writeCircle(center, r, start, TV2(0, M_PI * 2.0), ixns, 40, rod_radius_in_mm);
-
+                    
                     writeTunnel(M_PI - theta, ixns[0], right_center);
+                    epsilon_left = 0.1, epsilon_right = 0.25;
                     writeTunnel(-(M_PI * 0.5 - theta), ixns[1], top_center);
+
                     writeTunnel(-M_PI * 0.5 - theta, ixns[2], top_center);
                     writeTunnel(theta, ixns[3], left_center);
                     writeTunnel(-theta, ixns[4], left_center);
                     writeTunnel((M_PI * 0.5 + theta), ixns[5], bottom_center);
                     writeTunnel(M_PI * 0.5 - theta, ixns[6], bottom_center);
+                    epsilon_left = 0.25, epsilon_right = 0.25;
                     writeTunnel(M_PI + theta, ixns[7], right_center);
                 }
             }
@@ -439,6 +622,7 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                     std::vector<TV> ixns;
                     TV center = bottom_left_center + TV(d * col, d * row, 0);
                     TV start = center + TV(r, 0 , 0);
+                    
                     if (intersect_left)
                     {
                         TV ixn0, ixn1;
@@ -453,7 +637,8 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                         TV center_bottom = bottom_left_center + TV(d * col, d * (row - 1), 0);
                         circleCircleIntersection(center_bottom, r, center, r, ixn0, ixn1);
                         ixns.push_back(ixn0);
-                        ixns.push_back(ixn1);
+                        if (col < n_col - 1)
+                            ixns.push_back(ixn1);
                     }
                     if (col == 0 && add_bar)
                     {
@@ -466,11 +651,12 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                     else if (col == n_col - 1 && add_bar)
                     {
                         start = center + TV(0, r, 0);
-                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), {}, 15, rod_radius_in_mm);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), ixns, 15, rod_radius_in_mm);
                     }
                     else
                         writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), ixns, 30, rod_radius_in_mm);
-                    if ((col == 0 || col == n_col - 1)  && add_bar)
+                    // if ((col == 0 || col == n_col - 1)  && add_bar)
+                    if (col == 0  && add_bar)
                         continue;
                     T epsilon_left = 0.25, epslion_right = 0.2;
                     for (int i = 0; i < ixns.size(); i++)
@@ -481,8 +667,8 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                             ixn_center = center - TV(0, d, 0);
                             if (i == 1)
                             {
-                                epsilon_left = 0.05;
-                                epslion_right = 0.35;
+                                epsilon_left = 0.2;
+                                epslion_right = 0.3;
                             }
                         }
                         TV ixn0 = ixns[i];
@@ -495,10 +681,15 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
                                 epsilon_left = 0.1;
                                 epslion_right = 0.3;
                             }
-                            if (i == 3)
+                            else if (i == 2)
                             {
-                                epsilon_left = 0.05;
-                                epslion_right = 0.35;
+                                epsilon_left = 0.2;
+                                epslion_right = 0.3;
+                            }
+                            else if (i == 3)
+                            {
+                                epsilon_left = 0.2;
+                                epslion_right = 0.3;
                             }
                         }
                         
@@ -690,6 +881,267 @@ void GCodeGenerator<T, dim>::circlePatchGCode(int n_row, int n_col, int type, bo
             }
 
         }
+        else if (type == 4)
+        {
+            d = 0.8 * 2.0 * r;
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+            TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+            TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            bottom_right[dim - 1] = 2.0;
+            moveTo(bottom_right);
+            bottom_right[dim - 1] = rod_radius_in_mm;
+            addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+            TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+            TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            top_left[dim - 1] = 2.0;
+            moveTo(top_left);
+            top_left[dim - 1] = rod_radius_in_mm;
+            addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+            
+
+            for (int row = 0; row < n_row; row++)
+            {
+                int col = (row % 2 == 0) ? 0 : 1;
+                int col_end = (row % 2 == 0) ? n_col : n_col - 1;
+                for (; col < col_end; col+=2)
+                {
+                    TV center = bottom_left_center + TV(0 + d * col, 0 + d * row, 0);
+                    TV start = center + TV(r, 0, 0);
+                    if (col == 0)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0 - 0.2, M_PI / 2.0 + 0.2), {}, 10, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), {}, 10, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), {}, 20, rod_radius_in_mm);
+                }   
+            }
+
+            for (int row = 0; row < n_row; row++)
+            {
+                int col = (row % 2 == 0) ? 1 : 0;
+                int col_end = (row % 2 == 0) ? n_col - 1 : n_col;
+                for (; col < col_end; col+=2)
+                {
+                    TV center = bottom_left_center + TV(d * col, d * row, 0);
+                    TV start = center + TV(r, 0, 0);
+
+                    TV left_center = bottom_left_center + TV(d * (col - 1),  d * row, 0);
+                    TV right_center = bottom_left_center + TV(d * (col + 1), d * row, 0);
+                    TV ixn_left0, ixn_left1, ixn_right0, ixn_right1;
+                    TV bottom_center = bottom_left_center + TV( d * col, d * (row - 1), 0);
+                    TV top_center = bottom_left_center + TV(d * col,d * (row + 1), 0);
+                    TV ixn_bottom0, ixn_bottom1, ixn_top0, ixn_top1;
+                    
+                    circleCircleIntersection(bottom_center, r, center, r, ixn_bottom0, ixn_bottom1);
+                    circleCircleIntersection(center, r, top_center, r, ixn_top0, ixn_top1);
+                    circleCircleIntersection(left_center, r, center, r, ixn_left0, ixn_left1);
+                    circleCircleIntersection(center, r, right_center, r, ixn_right0, ixn_right1);
+                    
+                    std::vector<TV> ixns = {ixn_right0, ixn_top1, ixn_top0, ixn_left0, ixn_left1, ixn_bottom0, ixn_bottom1, ixn_right1};
+
+                    // std::vector<TV> ixns = {ixn_top0, ixn_left0, ixn_left1, ixn_bottom0};
+
+                    std::vector<TV> ixn_write;
+
+                    
+
+                    if (col > 0)
+                    {
+                        ixn_write.push_back(ixn_left0);
+                        ixn_write.push_back(ixn_left1);
+                    }
+                    if (col < n_col-1)
+                    {
+                        // ixn_write.push_back(ixn_right0);
+                        // ixn_write.push_back(ixn_right1);
+                    }
+                    if (row > 0)
+                    {
+                        ixn_write.push_back(ixn_bottom0);
+                        // ixn_write.push_back(ixn_bottom1);
+                    }
+                    if (row < n_row-1)
+                    {
+                        ixn_write.push_back(ixn_top0);
+                        // ixn_write.push_back(ixn_top1);
+                    }
+                        
+                    T theta = std::acos((ixns[0] - center).normalized().dot(TV(1, 0, 0)));
+                    
+                    T epsilon_left = 0.25, epsilon_right = 0.25;
+                    
+
+                    auto writeTunnel = [&](T _theta, const TV& _ixn, const TV& _center)
+                    {
+                        TV ixn = _ixn;
+                        TV tunnel_left = _center + TV(r * std::cos(_theta - epsilon_left), r * std::sin(_theta - epsilon_left), 0);
+                        TV tunnel_right = _center + TV(r * std::cos(_theta + epsilon_right), r * std::sin(_theta + epsilon_right), 0);
+                        ixn[dim-1] = 5.0 * rod_radius_in_mm;
+                        addSingleTunnel(tunnel_left, ixn, tunnel_right, rod_radius_in_mm);
+                    };
+                    if (col == 0)
+                    {
+                        start = center - TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0, M_PI / 2.0), ixn_write, 20, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0, M_PI * 1.5), ixn_write, 20, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.1), ixn_write, 40, rod_radius_in_mm);
+
+                    if (col < n_col - 1)
+                    {
+                        // writeTunnel(M_PI - theta, ixns[0], right_center);
+                    }
+                    if (row < n_row - 1 && col < n_col - 1)
+                    {
+                        // writeTunnel(-(M_PI * 0.5 - theta), ixns[1], top_center);    
+                    }
+                    if (row < n_row - 1 && col > 0)
+                        writeTunnel(-M_PI * 0.5 - theta, ixns[2], top_center);
+                    if (col > 0)
+                    {
+                        writeTunnel(theta, ixns[3], left_center);
+                        writeTunnel(-theta, ixns[4], left_center);
+                    }
+                    if (row > 0 && col > 0)
+                        writeTunnel((M_PI * 0.5 + theta), ixns[5], bottom_center);
+                    // if (row > 0 && col < n_col - 1)
+                        // writeTunnel(M_PI * 0.5 - theta, ixns[6], bottom_center);
+                    // if (col < n_col - 1)
+                        // writeTunnel(M_PI + theta, ixns[7], right_center);
+                }
+            }
+
+        }
+        else if (type == 5)
+        {
+            d = 0.8 * 2.0 * r;
+            if (add_bar)
+            {
+                TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+                TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+                bottom_right[dim - 1] = 2.0;
+                moveTo(bottom_right);
+                bottom_right[dim - 1] = rod_radius_in_mm;
+                addRecBar(bottom_right, top_right, 2, rod_radius_in_mm);
+                TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+                TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+                top_left[dim - 1] = 2.0;
+                moveTo(top_left);
+                top_left[dim - 1] = rod_radius_in_mm;
+                addRecBar(top_left, bottom_left, 2, rod_radius_in_mm);
+            }
+            TV bottom_left_center = TV(40, 40, rod_radius_in_mm);
+            bool intersect_bottom = true, intersect_left = false;
+            for (int row = 0; row < n_row; row++)
+            {
+                if (row == 0)
+                    intersect_bottom = false;
+                else
+                    intersect_bottom = true;
+                for (int col = 0; col < n_col; col++)   
+                {
+                    if (col == 0)
+                    {
+                        intersect_left = false;
+                    }
+                    else
+                        intersect_left = true;
+                    std::vector<TV> ixns;
+                    TV center = bottom_left_center + TV(d * col, d * row, 0);
+                    TV start = center + TV(r, 0 , 0);
+                    if (col == 0)
+                    {
+                        start[dim - 1] = 2.0;
+                        moveTo(start);
+                        start[dim - 1] = rod_radius_in_mm;
+                    }
+                    if (intersect_left)
+                    {
+                        // TV ixn0, ixn1;
+                        // TV center_left = bottom_left_center + TV(d * (col - 1), d * row, 0);
+                        // circleCircleIntersection(center_left, r, center, r, ixn0, ixn1);
+                        // ixns.push_back(ixn0);
+                        // ixns.push_back(ixn1);
+                    }
+                    if (intersect_bottom)
+                    {
+                        TV ixn0, ixn1;
+                        TV center_bottom = bottom_left_center + TV(d * col, d * (row - 1), 0);
+                        circleCircleIntersection(center_bottom, r, center, r, ixn0, ixn1);
+                        ixns.push_back(ixn0);
+                        if (col < n_col - 1)
+                            ixns.push_back(ixn1);
+                    }
+                    if (col == 0 && add_bar)
+                    {
+                        start = center - TV(0, r, 0);
+                        center[dim - 1] = 2.0;
+                        moveTo(center);
+                        center[dim - 1] = rod_radius_in_mm;
+                        writeCircle(center, r, start, TV2(-M_PI / 2.0 - 0.2, M_PI / 2.0 + 0.2), {}, 15, rod_radius_in_mm);
+                    }
+                    else if (col == n_col - 1 && add_bar)
+                    {
+                        start = center + TV(0, r, 0);
+                        writeCircle(center, r, start, TV2(M_PI / 2.0 - 0.2, M_PI * 1.5 + 0.2), ixns, 15, rod_radius_in_mm);
+                    }
+                    else
+                        writeCircle(center, r, start, TV2(0, M_PI * 2.0 + 0.2), ixns, 30, rod_radius_in_mm);
+                    // if ((col == 0 || col == n_col - 1)  && add_bar)
+                    if (col == 0  && add_bar)
+                        continue;
+                    T epsilon_left = 0.25, epslion_right = 0.2;
+                    if (ixns.size())
+                    {
+                        TV ixn_center = center - TV(0, d, 0);
+                        TV ixn0 = ixns[0];
+                        T theta = std::acos((ixn0 - ixn_center).normalized().dot(TV(1, 0, 0)));
+                        TV tunnel_left = ixn_center + TV(r * std::cos(theta - epsilon_left), r * std::sin(theta - epsilon_left), 0);
+                        TV tunnel_right = ixn_center + TV(r * std::cos(theta + epslion_right), r * std::sin(theta + epslion_right), 0);
+                        ixn0[dim-1] = 5.0 * rod_radius_in_mm;
+                        addSingleTunnel(tunnel_left, ixn0, tunnel_right, rod_radius_in_mm);
+                        if (ixns.size() > 1)
+                        {
+                            TV ixn0 = ixns[1];
+                            T theta = std::acos((ixn0 - ixn_center).normalized().dot(TV(1, 0, 0)));
+                            TV tunnel_left = ixn_center + TV(r * std::cos(theta - epsilon_left), r * std::sin(theta - epsilon_left), 0);
+                            TV tunnel_right = ixn_center + TV(r * std::cos(theta + epslion_right), r * std::sin(theta + epslion_right), 0);
+                            ixn0[dim-1] = 4.0 * rod_radius_in_mm;
+                            addSingleTunnel(tunnel_left, ixn0, tunnel_right, rod_radius_in_mm);
+                        }
+                    }
+                    if (col == n_col - 1)
+                    {
+                        current_position[dim - 1] = 2.0;
+                        moveTo(current_position);
+                    }
+                }
+            }
+            // TV bottom_right = TV(40 + d * (n_col - 1), 40 -r, rod_radius_in_mm);
+            // TV top_right = TV(40 + d * (n_col - 1), 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // bottom_right[dim - 1] = 2.0;
+            // moveTo(bottom_right);
+            // bottom_right[dim - 1] = rod_radius_in_mm;
+            // addRecBar(bottom_right, top_right, 10, rod_radius_in_mm);
+            // TV bottom_left = TV(40, 40 -r, rod_radius_in_mm);
+            // TV top_left = TV(40, 40 + d * (n_row - 1) + r, rod_radius_in_mm);
+            // top_left[dim - 1] = 2.0;
+            // moveTo(top_left);
+            // top_left[dim - 1] = rod_radius_in_mm;
+            // addRecBar(top_left, bottom_left, 10, rod_radius_in_mm);
+        }
+        
         
         writeFooter();
     }
@@ -1476,7 +1928,17 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
                 }
             }
             
-            
+            TV top_right_extend = top_right + (top_right - top_left) * 0.2;
+
+            moveTo(top_right_extend);
+            top_left[dim - 1] = 1.5 * rod_radius_in_mm;
+            bottom_left[dim - 1] = 1.5 * rod_radius_in_mm;
+            bottom_right[dim - 1] = 1.5 * rod_radius_in_mm;
+            top_right[dim - 1] = 1.5 * rod_radius_in_mm;
+            writeLine(top_right_extend, top_left, rod_radius_in_mm, 1500);
+            writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+            writeLine(bottom_left, bottom_right, rod_radius_in_mm, 1500);
+            writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
         }
 
         else if (type == 2)
@@ -1577,7 +2039,103 @@ void GCodeGenerator<T, dim>::generateGCodeFromRodsGridHardCoded(int n_row, int n
 
         }
 
-        
+        else if (type == 3)
+        {
+            TV top_right_extend = top_right + (top_right - top_left) * 0.2;
+
+            moveTo(top_right_extend);
+            writeLine(top_right_extend, top_left, rod_radius_in_mm, 1500);
+            writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+            writeLine(bottom_left, bottom_right, rod_radius_in_mm, 1500);
+            writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+
+            for (int row = 0; row < n_row; row++)
+            {
+                // generateCodeSingleRod(row, scaleAndShift, true, rod_radius_in_mm, rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                from[dim-1] = rod_radius_in_mm; to[dim-1] = rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, rod_radius_in_mm, 600);
+                    writeLine(from, to, rod_radius_in_mm, 1200);
+                    writeLine(to, right, rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, rod_radius_in_mm, 600);
+                    writeLine(to, from, rod_radius_in_mm, 1200);
+                    writeLine(from, left, rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices[rod->dof_node_location[0]], from); rod->x(rod->indices[rod->dof_node_location.back()], to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = 3.0 * rod_radius_in_mm; to[dim-1] = 3.0 * rod_radius_in_mm;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right);
+                    right[dim-1] = 0.2;
+                    moveTo(right);
+                    to[1] = top_right[1];
+                    TV temp = 0.5 * (right + to);
+                    temp[2] = 0.2;
+
+                    writeLine(right, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, to, rod_radius_in_mm, 400);
+                    writeLine(to, from, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (from + left);
+                    temp[2] = 0.2;
+                    writeLine(from, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, left, rod_radius_in_mm, 200);
+                }
+                else
+                {
+                    moveTo(left);
+                    left[dim-1] = 0.2;
+                    moveTo(left);
+                    from[1] = bottom_left[1];
+                    TV temp = 0.5 * (left + from);
+                    temp[2] = 0.2;
+                    writeLine(left, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, from, rod_radius_in_mm, 400);
+                    writeLine(from, to, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (to + right);
+                    temp[2] = 0.2;
+                    writeLine(to, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, right, rod_radius_in_mm, 200);
+                }
+            }
+
+        }
 
        
         

@@ -36,7 +36,7 @@ public:
     ~UnitPatch() {}
 
     void buildScene(int patch_type);
-    
+    void buildGridClosed(int sub_div);
 
     //Mechanisim
     void buildFingerScene(int sub_div);

@@ -1,54 +1,5 @@
 #include "HybridC2Curve.h"
 
-template<class T, int dim>
-void HybridC2Curve<T, dim>::generateC2Curves()
-{
-    curve_data.clear();
-    points_on_curve.clear();
-    
-    
-    for(int i = 1; i < data_points.size() - 1; i++)
-    {
-        TV center, axis1, axis2; Vector<T, 3> limits;
-        hybridInterpolation(i, center, axis1, axis2, limits);
-        curve_data.push_back(new CurveData<T, dim>(
-                                center, axis1, axis2, 
-                                Vector<T, 2>(limits[0], limits[2])));
-    }
-    
-    // first half of the first spline, no interpolation
-    for (int vtx = 0; vtx < sub_div / 2; vtx++)
-    {
-        T t = T(vtx) / sub_div;
-        TV F0; F(t, 0, F0);
-        points_on_curve.push_back(F0);
-    }
-    // interpolate between two splines
-    for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
-    {
-        for (int vtx = 0; vtx < sub_div / 2; vtx++)
-        {
-            T t = T(vtx) / sub_div * 2.0;
-            T theta = t * M_PI * 0.5;
-            TV F0, F1;
-            // maps to 0.5 ~ 1 for the first spline
-            F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
-            // maps to 0 ~ 0.5 for the second spline
-            F(theta/M_PI, curve_idx+1, F1);
-            // equation (2)
-            TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
-            
-            points_on_curve.push_back(Ci);
-        }
-    }
-    // second half of the last spline, no interpolation
-    for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
-    {
-        T t = T(vtx) / sub_div;
-        TV F1; F(t, curve_data.size() - 1, F1);
-        points_on_curve.push_back(F1);
-    }
-}
 
 template<class T, int dim>
 void HybridC2Curve<T, dim>::constructIndividualCurves()
@@ -62,15 +13,7 @@ void HybridC2Curve<T, dim>::constructIndividualCurves()
         curve_data.push_back(new CurveData<T, dim>(
                                 center, axis1, axis2, 
                                 Vector<T, 2>(limits[0], limits[2])));
-        // std::cout << data_points[i - 1].transpose() << " | " << data_points[i].transpose() << " | " << data_points[i+1].transpose() << std::endl;
-        // TV pos;
-        // F(0.5, 0, pos);
-        // std::cout << "middle " << pos.transpose() << std::endl;
-        // F(0, 0, pos);
-        // std::cout << "left " << pos.transpose() << std::endl;
-        // F(1, 0, pos);
-        // std::cout << "right " << pos.transpose() << std::endl;
-        // std::getchar();
+                                
     }
 }
 
@@ -110,7 +53,6 @@ void HybridC2Curve<T, dim>::normalizeDataPoints()
     {
         pt = (pt - min_point) / longest_dis;
     }
-        // pt /= longest_dis;   
 }
 
 template<class T, int dim>
@@ -118,40 +60,6 @@ void HybridC2Curve<T, dim>::sampleCurves(std::vector<TV>& points)
 {
     points_on_curve.clear();
     constructIndividualCurves();
-    
-    // first half of the first spline, no interpolation
-    // for (int vtx = 0; vtx < sub_div / 2; vtx++)
-    // {
-    //     T t = T(vtx) / sub_div;
-    //     TV F0; F(t, 0, F0);
-    //     points_on_curve.push_back(F0);
-    // }
-    // // interpolate between two splines
-    // for (int curve_idx = 0; curve_idx < curve_data.size()-1; curve_idx++)
-    // {
-    //     for (int vtx = 0; vtx < sub_div / 2; vtx++)
-    //     {
-    //         T t = T(vtx) / sub_div * 2.0;
-    //         T theta = t * M_PI * 0.5;
-    //         TV F0, F1;
-    //         // maps to 0.5 ~ 1 for the first spline
-    //         F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
-    //         // maps to 0 ~ 0.5 for the second spline
-    //         F(theta/M_PI, curve_idx+1, F1);
-    //         // equation (2)
-    //         TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
-            
-    //         points_on_curve.push_back(Ci);
-    //     }
-    // }
-
-    // // second half of the last spline, no interpolation
-    // for (int vtx = sub_div / 2; vtx < sub_div + 1; vtx++)
-    // {
-    //     T t = T(vtx) / sub_div;
-    //     TV F1; F(t, curve_data.size() - 1, F1);
-    //     points_on_curve.push_back(F1);
-    // }
 
     T ti = curve_data.front()->limits[0];
     T ti_plus_1 = 0;
@@ -181,6 +89,7 @@ void HybridC2Curve<T, dim>::sampleCurves(std::vector<TV>& points)
             // equation (2)
             TV Ci = std::cos(theta) * std::cos(theta) * F0 + std::sin(theta) * std::sin(theta) * F1;
             points_on_curve.push_back(Ci);
+            // std::cout << "curve idx: " << curve_idx << " limit 0: " << curve_data[curve_idx]->limits[0] << " limit 1: " << curve_data[curve_idx]->limits[1] << std::endl;
         }
     }
 
@@ -208,24 +117,24 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
 
     //check if the derivative of individual function is correct.
     // passed
-    // for(int i = 0; i < curve_data.size(); i++)
-    // {
-    //     for (T t = 0.0; t < 1.0; t += 0.1)
-    //     {
-    //         TV dF0dt, dF1dt, d2F0dt2;
-    //         dF(t, i, dF0dt);
-    //         dF(t + epsilon, i, dF1dt);
-    //         ddF(t, i, d2F0dt2);
-    //         TV F0, F1;
-    //         F(t, i, F0); F(t + epsilon, i, F1);
-    //         for (int d = 0; d < dim; d++)
-    //         {
-    //             std::cout << "dF: " <<  (F1[d] - F0[d]) / epsilon << " " << dF0dt[d] << std::endl;
-    //             std::cout << "ddF " << (dF1dt[d] - dF0dt[d]) / epsilon << " " << d2F0dt2[d] << std::endl;
-    //         }
-    //         std::getchar();
-    //     }
-    // }
+    for(int i = 0; i < curve_data.size(); i++)
+    {
+        for (T t = 0.0; t < 1.0; t += 0.1)
+        {
+            TV dF0dt, dF1dt, d2F0dt2;
+            dF(t, i, dF0dt);
+            dF(t + epsilon, i, dF1dt);
+            ddF(t, i, d2F0dt2);
+            TV F0, F1;
+            F(t, i, F0); F(t + epsilon, i, F1);
+            for (int d = 0; d < dim; d++)
+            {
+                std::cout << "dF: " <<  (F1[d] - F0[d]) / epsilon << " " << dF0dt[d] << std::endl;
+                std::cout << "ddF " << (dF1dt[d] - dF0dt[d]) / epsilon << " " << d2F0dt2[d] << std::endl;
+            }
+            std::getchar();
+        }
+    }
 
     //check interpolated value
 
@@ -342,17 +251,14 @@ void HybridC2Curve<T, dim>::derivativeTestdCdt()
 
 }
 
-
+// adapted from source code
 template<class T, int dim>
 void HybridC2Curve<T, dim>::circularInterpolation(int i, TV& center, TV& axis1, TV& axis2, Vector<T, 3>& limits)
 {
     axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
 
-    // int j = (i - 1 + data_points.size()) % data_points.size();
-    // int k = (i + 1) % data_points.size();
-
-    int j = i - 1;
-    int k = i + 1;
+    int j = (i - 1 + data_points.size()) % data_points.size();
+    int k = (i + 1) % data_points.size();
 
     TV vec1 = data_points[i] - data_points[j];
     TV mid1 = data_points[j] + 0.5 * vec1;
@@ -375,6 +281,7 @@ void HybridC2Curve<T, dim>::circularInterpolation(int i, TV& center, TV& axis1, 
             axis1 = TV::Zero();
             axis2 = vec2 / s;
             limits = Vector<T, 3>(-small_angle * l1 / l2, 0, small_angle);
+            return;
         }
         else
             det = 0.001;
@@ -404,11 +311,9 @@ void HybridC2Curve<T, dim>::ellipticalInterpolation(int i, TV& center, TV& axis1
 {
     axis1.setZero(); axis2.setZero(); center.setZero(); limits.setZero();
     int numIter = 16;
-    // int j = (i - 1 + data_points.size()) % data_points.size();
-    // int k = (i + 1) % data_points.size();
-    
-    int j = i - 1;
-    int k = i + 1;
+    int j = (i - 1 + data_points.size()) % data_points.size();
+    int k = (i + 1) % data_points.size();
+
 
     TV vec1 = data_points[j] - data_points[i];
     TV vec2 = data_points[k] - data_points[i];
@@ -421,6 +326,7 @@ void HybridC2Curve<T, dim>::ellipticalInterpolation(int i, TV& center, TV& axis1
         axis1 = TV::Zero();
         axis2 = vec2 / s;
         limits = Vector<T, 3>(-small_angle, 0, small_angle);
+        return;
     }
 
     T len1 = std::sqrt( vec1[0]*vec1[0] + vec1[1]*vec1[1] );
@@ -586,62 +492,5 @@ void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t,
     }
 }
 
-// template<class T, int dim>
-// void HybridC2Curve<T, dim>::getPosOnCurveWithDerivatives(int curve_idx, T t, 
-//         TV& ci, TV& dci, TV& ddci,
-//         bool compute_dci, bool compute_ddci,
-//         bool interpolate)
-// {
-//     dci = TV::Zero(); ddci = TV::Zero();
-//     if (interpolate)
-//     {
-
-//         T theta = t * M_PI * 0.5;
-//         TV F0, F1;
-//         F((theta + M_PI * 0.5)/M_PI, curve_idx, F0);
-//         F(theta/M_PI, curve_idx+1, F1);
-
-//         T cos2 = std::cos(theta) * std::cos(theta);
-//         T sin2 = std::sin(theta) * std::sin(theta);
-//         ci = cos2 * F0 + sin2 * F1;
-        
-//         TV dF0dt, dF1dt;
-//         TV d2F0dt2, d2F1dt2;
-//         T dtheta_dt = M_PI * 0.5;
-
-//         if (compute_dci)
-//         {
-//             dF((theta + M_PI * 0.5)/M_PI, curve_idx, dF0dt); 
-//             dF(theta/M_PI, curve_idx + 1, dF1dt); 
-            
-//             TV dF_dtheta = TV::Zero();
-//             dF_dtheta += 2.0 * std::cos(theta) * std::sin(theta) * (F1 - F0);
-//             dF_dtheta += cos2 * dF0dt / M_PI ;
-            
-//             dF_dtheta += sin2 * dF1dt / M_PI; // write it out for clearity
-            
-//             dci = dF_dtheta * dtheta_dt;
-//         }
-//         if (compute_ddci)
-//         {
-//             ddF((theta + M_PI * 0.5)/M_PI, curve_idx, d2F0dt2); 
-//             ddF(theta/M_PI, curve_idx + 1, d2F1dt2); 
-
-//             TV d2cdt2 = TV::Zero();
-//             d2cdt2 += 2.0 * (cos2 - sin2) * (F1 - F0);
-//             d2cdt2 += 4.0 * std::cos(theta) * std::sin(theta) * (dF1dt / M_PI - dF0dt / M_PI);
-//             d2cdt2 += cos2 * d2F0dt2 / M_PI / M_PI + sin2 * d2F1dt2 / M_PI / M_PI;
-
-//             ddci = d2cdt2 * dtheta_dt * dtheta_dt;
-//         }
-//     }
-//     else
-//     {
-
-//         F(t, curve_idx, ci);
-//         if (compute_dci) dF(t, curve_idx, dci); 
-//         if (compute_ddci) ddF(t, curve_idx, ddci);
-//     }
-// }
 template class HybridC2Curve<double, 3>;
 template class HybridC2Curve<double, 2>;

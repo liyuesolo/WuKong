@@ -33,7 +33,6 @@ void EoLRodSim<T, dim>::addParallelContactK(std::vector<Entry>& entry_K)
 
             if (node_idx != 0 || !Rods[rod_idx]->closed)
             {
-                
                 if (u_right - u < min_du && offset_right[dim] != offset[dim])
                 {
                     entry_K.push_back(Entry(offset[dim], offset[dim], k_yc));
