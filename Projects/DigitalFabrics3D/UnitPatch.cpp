@@ -8839,7 +8839,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
         int full_dof_cnt = 0;
         int node_cnt = 0;
 
-        int n_row = 2, n_col = 2;
+        int n_row = 20, n_col = 20;
 
         T length = 1.0 / 20.0 * sim.unit;
 
@@ -8960,6 +8960,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
                 crossing->on_rod_idx[row] = sim.Rods[row]->dof_node_location[col];
                 crossing->on_rod_idx[n_row + col] = sim.Rods[n_row + col]->dof_node_location[row];
                 
+                
                 // if (odd_even_cnt % 2 == 0)
                 // if (row % 2 == 0)
                     // crossing->is_fixed = true;
@@ -8976,6 +8977,9 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
                 odd_even_cnt++;
             }
         }    
+        for (int row = 0; row < n_row; row++)
+            for (int i = 0; i < sim.Rods[row]->dof_node_location.size(); i++)
+                sim.Rods[row]->fixed_by_crossing[i] = false;
 
         int dof_cnt = 0;
         markCrossingDoF(w_entry, dof_cnt);
@@ -9042,7 +9046,7 @@ void UnitPatch<T, dim>::buildGridScene(int sub_div)
             
         }
 
-        
+        GCodeGenerator<T, dim>(this->sim, "grid_new.gcode").buildGridScene(n_row, n_col, 0);
 
         // GCodeGenerator<T, dim>(this->sim, "dense_patch_free.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 2);
         // GCodeGenerator<T, dim>(this->sim, "dense_patch_free_change_boundary.gcode").generateGCodeFromRodsGridHardCoded(n_row, n_col, 3);

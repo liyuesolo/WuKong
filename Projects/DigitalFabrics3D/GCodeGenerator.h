@@ -57,6 +57,8 @@ public:
 
 public:
 
+    void buildGridScene(int n_row, int n_col, int type);
+
     void generateShelterScene();
 
     void generateGCodeShelter();
@@ -106,6 +108,10 @@ public:
         T extend_right = 0.3, T speed_first_half = 100, T speed_second_half = 300);
 
     void generateCodeSingleRod(int rod_idx, std::function<void(TV&)> scaleAndShift, 
+        bool is_first_layer,
+        T bd_height = 0.3, T inner_height = 0.3, T buffer_percentage = 0.3, T less = false, T extend = false);
+    
+    void generateCodeSingleRodMoveUpNozzle(int rod_idx, std::function<void(TV&)> scaleAndShift, 
         bool is_first_layer,
         T bd_height = 0.3, T inner_height = 0.3, T buffer_percentage = 0.3, T less = false, T extend = false);
 private:

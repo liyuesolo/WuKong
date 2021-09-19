@@ -280,6 +280,7 @@ bool Rod<T, dim>::isFixedNodeForPrinting(int node_idx, int rod_idx)
     auto iter = std::find(dof_node_idx.begin(), dof_node_idx.end(), node_idx);
     if (iter == dof_node_idx.end())
     {
+        return true;
         int left_node = 0;
         int right_node = indices.size() - 1;
         for (int i = 0; i < dof_node_location.size(); i++)

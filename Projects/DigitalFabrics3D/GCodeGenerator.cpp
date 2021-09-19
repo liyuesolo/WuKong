@@ -21,6 +21,140 @@ GCodeGenerator<T, dim>::GCodeGenerator(const EoLRodSim<T, dim>& _sim,
 }
 
 template<class T, int dim>
+void GCodeGenerator<T, dim>::buildGridScene(int n_row, int n_col, int type)
+{
+    auto scaleAndShift = [](TV& x)->void
+    {
+        x *= 1e3;
+        x.template segment<2>(0) += Vector<T, 2>(50, 40);
+    };
+
+    T rod_radius_in_mm = sim.Rods[0]->a * 1e3 * 2.0;
+    
+    if constexpr (dim == 3)
+    {
+        writeHeader();
+        T extend_percentage = 0.3;
+        TV bottom_left, top_right;
+        sim.computeBoundingBox(bottom_left, top_right);
+
+        scaleAndShift(bottom_left); scaleAndShift(top_right);
+        bottom_left[dim-1] = rod_radius_in_mm;
+        top_right[dim-1] = rod_radius_in_mm;
+
+        TV bottom_right = bottom_left;
+        bottom_right[0] = top_right[0];
+        TV top_left = top_right;
+        top_left[0] = bottom_left[0];
+
+        TV bottom_left_extend = bottom_left - (bottom_right - bottom_left) * 0.2;
+
+        if (type == 0)
+        {
+            for (int row = 0; row < n_row; row++)
+            {
+                auto rod = sim.Rods[row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                scaleAndShift(from); scaleAndShift(to);
+                left[dim-1] = 0.5 * rod_radius_in_mm; right[dim-1] = 0.5 * rod_radius_in_mm;
+                from[dim-1] = 0.5 * rod_radius_in_mm; to[dim-1] = 0.5 * rod_radius_in_mm;
+                
+                if (row % 2 == 0)
+                {
+                    moveTo(left, 3000, true);
+                    writeLine(left, from, 0.5 * rod_radius_in_mm, 600);
+                    writeLine(from, to, 0.5 * rod_radius_in_mm, 1200);
+                    writeLine(to, right, 0.5 * rod_radius_in_mm, 600);
+                    TV extend = right;
+                    extend += (right - left) * 0.1;
+                    moveTo(extend);
+                }
+                else
+                {
+                    moveTo(right, 3000, true);
+                    writeLine(right, to, 0.5 * rod_radius_in_mm, 600);
+                    writeLine(to, from, 0.5 * rod_radius_in_mm, 1200);
+                    writeLine(from, left, 0.5 * rod_radius_in_mm, 600);
+                    TV extend = left;
+                    extend -= (right - left) * 0.1;
+                    moveTo(extend);
+                }
+            }
+
+            for (int col = 0; col < n_col; col++)
+            {
+                // generateCodeSingleRod(col + n_row, scaleAndShift, true, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0.3, false, true);
+                auto rod = sim.Rods[col + n_row];
+                TV from, to, left, right;
+                rod->x(rod->indices.front(), from); rod->x(rod->indices.back(), to);
+                left = from - (to - from) * extend_percentage;
+                right = to + (to - from) * extend_percentage;
+
+                scaleAndShift(left); scaleAndShift(right);
+                left[dim-1] = rod_radius_in_mm; right[dim-1] = rod_radius_in_mm;
+                scaleAndShift(from); scaleAndShift(to);
+                from[dim-1] = 3.0 * rod_radius_in_mm; to[dim-1] = 3.0 * rod_radius_in_mm;
+                
+                if (col % 2 == 0)
+                {
+                    
+                    moveTo(right);
+                    right[dim-1] = 0.2;
+                    moveTo(right);
+                    to[1] = top_right[1];
+                    TV temp = 0.5 * (right + to);
+                    temp[2] = 0.2;
+                    writeLine(right, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, to, rod_radius_in_mm, 400);
+                    writeLine(to, from, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (from + left);
+                    temp[2] = 0.2;
+                    writeLine(from, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, left, rod_radius_in_mm, 200);
+                }
+                else
+                {
+                    moveTo(left);
+                    left[dim-1] = 0.2;
+                    moveTo(left);
+                    from[1] = bottom_left[1];
+                    TV temp = 0.5 * (left + from);
+                    temp[2] = 0.2;
+                    writeLine(left, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, from, rod_radius_in_mm, 400);
+                    writeLine(from, to, 4.0 * rod_radius_in_mm, 600);
+                    temp = 0.5 * (to + right);
+                    temp[2] = 0.2;
+                    writeLine(to, temp, rod_radius_in_mm, 200);
+                    writeLine(temp, right, rod_radius_in_mm, 200);
+                }
+            }
+            feed_rate_print = 800;
+            for (int row = 0; row < n_row; row++)
+                generateCodeSingleRodMoveUpNozzle(row, scaleAndShift, false, rod_radius_in_mm, 3.0 * rod_radius_in_mm, 0, false, true);
+            
+            TV top_right_extend = top_right + (top_right - top_left) * 0.2;
+
+            moveTo(top_right_extend);
+            top_left[dim - 1] = 1.5 * rod_radius_in_mm;
+            bottom_left[dim - 1] = 1.5 * rod_radius_in_mm;
+            bottom_right[dim - 1] = 1.5 * rod_radius_in_mm;
+            top_right[dim - 1] = 1.5 * rod_radius_in_mm;
+            writeLine(top_right_extend, top_left, rod_radius_in_mm, 1500);
+            writeLine(top_left, bottom_left, rod_radius_in_mm, 1500);
+            writeLine(bottom_left, bottom_right, rod_radius_in_mm, 1500);
+            writeLine(bottom_right, top_right, rod_radius_in_mm, 1500);
+        }
+        writeFooter();
+    }
+}
+
+template<class T, int dim>
 void GCodeGenerator<T, dim>::generateGCodeClosedGrid(int n_row, int n_col, int type)
 {
     auto scaleAndShift = [](TV& x)->void
@@ -2439,6 +2573,128 @@ void GCodeGenerator<T, dim>::addSingleTunnel(const TV& left, const TV& center, c
     }
 }
 
+
+template<class T, int dim>
+void GCodeGenerator<T, dim>::generateCodeSingleRodMoveUpNozzle(int rod_idx, std::function<void(TV&)> scaleAndShift, 
+        bool is_first_layer, T bd_height, T inner_height, T buffer_percentage, T less, T extend)
+{
+    auto rod = sim.Rods[rod_idx];
+
+    T rod_radius_in_mm;
+    rod_radius_in_mm = rod->a * 1e3 * 0.5;
+    
+    TV x0; rod->x(rod->indices.front(), x0);
+    TV front, back;
+    rod->x(rod->indices.front(), front); rod->x(rod->indices.back(), back);
+
+    TV extension = back + (back - front).normalized() * 0.6 * (front - back).norm();
+    scaleAndShift(extension);
+
+    //move slightly out of domain in case it doesn't stick at the beginning
+    x0 -= (back - front).normalized() * buffer_percentage * (front - back).norm();
+    scaleAndShift(x0);
+    TV front_scaled = front;
+    scaleAndShift(front_scaled);
+    front_scaled[dim-1] = bd_height;
+
+    // 2.0 is to avoid nozzle touching existing rods
+    // x0[dim - 1] = 1.5;
+    // retract(current_E - 0.5);
+    // moveTo(x0);
+
+    // // 0.2 is used for better sticking at the beginning
+    // x0[dim - 1] = 0.2;
+    // moveTo(x0, 200, false);
+    // retract(current_E + 0.5);
+
+    
+    x0[dim - 1] = bd_height;
+    moveTo(x0);
+
+    if (buffer_percentage > 1e-6)
+        writeLine(x0, front_scaled, rod_radius_in_mm);
+
+
+    // writeLine(x0, front_scaled, rod_radius_in_mm);
+    int running_cnt =0;
+
+    std::vector<bool> is_fused;
+    rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
+    {
+        is_fused.push_back(rod->isFixedNodeForPrinting(node_i, rod_idx));
+        if (rod_idx == rod->numSeg() - 1)
+            is_fused.push_back(rod->isFixedNodeForPrinting(node_j, rod_idx));        
+        // std::cout << "is_fused " << std::endl;
+        if (rod_idx == 0)
+            std::cout << is_fused.back() << std::endl;
+    }); 
+    
+    bool lift_head = false;
+
+    std::vector<bool> fused_buffer = is_fused;
+    for (int i = 0; i < is_fused.size(); i++)
+    {
+        if (!is_fused[i])
+        {
+            // lift_head = true;
+            // break;       
+            for (int j = i  ; j < i + 2; j++)
+            {
+                if (j >= 0 && j < rod->numSeg())
+                {
+                    fused_buffer[j] = false;
+                }
+            }
+        }
+    }
+
+
+
+    int node_cnt = 0;
+    rod->iterateSegments([&](int node_i, int node_j, int rod_idx)
+    {
+        // std::cout << is_fused[node_cnt] << std::endl;
+        TV xi, xj;
+        rod->x(node_i, xi); rod->x(node_j, xj);
+        // if (rod_idx == rod->numSeg() - 1 && buffer_percentage > 1e-6)
+        //     xj += (back - front).normalized() * buffer_percentage * (front - back).norm();
+        // else if (rod_idx == 0 && buffer_percentage > 1e-6)
+        //     xi -= (back - front).normalized() * buffer_percentage * (front - back).norm();
+        scaleAndShift(xi); scaleAndShift(xj);
+        
+        if (fused_buffer[node_cnt]) xi[dim - 1] = bd_height;
+        else xi[dim - 1] = inner_height; 
+        
+        if (fused_buffer[node_cnt + 1]) xj[dim - 1] = bd_height;
+        else xj[dim - 1] = inner_height; 
+        node_cnt++;
+
+        
+        if (less)
+            writeLine(xi, xj, 0.8 * rod_radius_in_mm, feed_rate_print);
+        else
+            writeLine(xi, xj, rod_radius_in_mm, feed_rate_print);
+    });
+    
+    
+    TV xn = back + (back - front).normalized() * buffer_percentage * (front - back).norm();
+    // 
+    scaleAndShift(xn);
+    scaleAndShift(back);
+    xn[dim - 1] = bd_height;
+    // // moveTo(xn, 100);
+    if (buffer_percentage > 1e-6)
+        writeLine(back, xn, rod_radius_in_mm);
+    // xn[dim - 1] = 2.0;
+    // retract(current_E - 0.5);
+    // moveTo(xn, 500, false);
+
+    // // move nozzle along printing direction to avoid detaching of current print
+    extension[dim - 1] = bd_height;
+    if (extend)
+        moveTo(extension);
+    // retract(current_E + 0.5);
+}
 
 
 template<class T, int dim>
