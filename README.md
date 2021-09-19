@@ -9,8 +9,14 @@
     TypenameExample
 
 ## Projects
-### DigitalFabric
+### Programmable Digital Weaves
     Eulerian-on-Lagrangian Simulation
+    Discrete Elastic Rod
+    C2 Interpolating Spline
+    G-code Generation
+### TopographyOptimization
+    HexFEMSolver
+    
 ### TopologyOptimization*
 ### FEM*
 ### MPM*
