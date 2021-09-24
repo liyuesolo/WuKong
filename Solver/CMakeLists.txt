@@ -1,7 +1,7 @@
 if(CUDA_FOUND)
-set(DEPS ziran tbbmalloc tbbmalloc_proxy amgcl VexCL::CUDA)
+set(DEPS tbbmalloc tbbmalloc_proxy amgcl VexCL::CUDA)
 else()
-set(DEPS ziran tbbmalloc tbbmalloc_proxy amgcl)
+set(DEPS tbbmalloc tbbmalloc_proxy amgcl)
 endif()
 
 set(SuiteSparse_ROOT "/home/yueli/Documents/SuiteSparse-5.9.0")
@@ -19,6 +19,5 @@ else()
   message("Use Eigen Direct Solver")
 endif()
 
-add_library(solver STATIC MMASolver.h LinearSolver.h MMASolver.cpp LinearSolver.cpp)
-target_link_libraries(solver ${DEPS})
+
 
