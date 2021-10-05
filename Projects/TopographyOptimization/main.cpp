@@ -5,7 +5,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 
-#include "FEMSolver.h"
+#include "TopographyOptimization.h"
 
 
 
@@ -16,16 +16,58 @@ Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
 
-using TV = Vector<T, dim>;
-using TVStack = Matrix<T, dim, Eigen::Dynamic>;
+Eigen::MatrixXd vtx_base;
+Eigen::MatrixXi face_base;
 
-FEMSolver<T, dim> solver;
+using TV = Vector<T, dim>;
+// FEMSolver<T, dim> solver;
+ShellFEMSolver<T, dim> solver;
+
+TopographyOptimization<T, dim, ShellFEMSolver<T, dim>> topo_opt(solver);
+// TopographyOptimization<T, dim, FEMSolver<T, dim>> topo_opt(solver);
+
+static int modes = 6;
+double t = 0.0;
+
+static bool load_baseline = false;
+
+
+Eigen::MatrixXd evectors;
+auto loadEigenVectors = [&]()
+{
+    std::ifstream in("/home/yueli/Documents/ETH/WuKong/bead_eigen_vectors.txt");
+    int row, col;
+    in >> row >> col;
+    evectors.resize(row, col);
+    double entry;
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < col; j++)
+            in >> evectors(i, j);
+    in.close();
+};
 
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
     viewer.data().clear();
-    solver.generateMeshForRendering(V, F, C);
+    topo_opt.generateMeshForRendering(V, F, C);
+    if (load_baseline)
+    {
+        int v_start = V.rows(), f_start = F.rows();
+        Eigen::MatrixXi offset_ones(face_base.rows(), 3);
+        offset_ones.setOnes();
+        offset_ones *= v_start;
+
+        V.conservativeResize(V.rows() + vtx_base.rows(), 3);
+        F.conservativeResize(F.rows() + face_base.rows(), 3);
+        C.conservativeResize(C.rows() + face_base.rows(), 3);
+
+        V.block(v_start, 0, vtx_base.rows(), 3) = vtx_base;
+        F.block(f_start, 0, face_base.rows(), 3) = face_base + offset_ones;
+
+        C.block(f_start, 0, face_base.rows(), 3).setZero();
+        C.block(f_start, 0, face_base.rows(), 1).setOnes();
+    }
     viewer.data().set_mesh(V, F);     
     viewer.data().set_colors(C);
 };
@@ -34,9 +76,28 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 {
     if (key == ' ')
     {
-        solver.staticSolve();
-        // solver.computeElementDeformationGradient3D();
+        topo_opt.forward();
+        
         updateScreen(viewer);
+        return true;
+    }
+    else if (key == '1')
+    {
+        std::cout << "1 pressed" << std::endl;
+        topo_opt.solver.computeEigenMode();
+        loadEigenVectors();
+        return true;
+    }
+    else if (key == '2')
+    {
+        modes++;
+        modes = (modes + evectors.cols()) % evectors.cols();
+        std::cout << "modes " << modes << std::endl;
+        return true;
+    }
+    else if (key == 'a')
+    {
+        viewer.core().is_animating = !viewer.core().is_animating;
         return true;
     }
     return false;
@@ -52,6 +113,21 @@ int main()
     viewer.plugins.push_back(&menu);
     menu.callback_draw_viewer_menu = [&]()
     {
+        if (ImGui::CollapsingHeader("Forward", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+
+        }
+        if (ImGui::CollapsingHeader("Inverse", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("LoadBaseline", &load_baseline))
+            {
+                if (load_baseline)
+                {
+                    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/TopographyOptimization/Data/current_mesh.obj", vtx_base, face_base);
+                }
+                updateScreen(viewer);
+            }
+        }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
             igl::writeOBJ("current_mesh.obj", V, F);
@@ -81,41 +157,23 @@ int main()
         return false;
     };
 
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating)
+        {
+            solver.u = evectors.col(modes) * std::sin(t);
+            t += 0.1;
+            viewer.data().clear();
+            topo_opt.generateMeshForRendering(V, F, C);
+            viewer.data().set_mesh(V, F);     
+            viewer.data().set_colors(C);
+        }
+        return false;
+    };
+
     auto setupScene = [&](igl::opengl::glfw::Viewer& viewer)
     {
-        T dx = 0.05;
-        TV min_corner = TV::Zero();
-        TV max_corner = TV(1.0, dx, 1.0);
-        solver.buildGrid3D(min_corner, max_corner, dx);
-        solver.fixAxisEnd(0);
-        auto forceFunc = [&, dx](const TV& pos, TV& force)->bool
-        {
-            // force = TV(0, -9.8 * std::pow(dx, dim), 0.0);
-            force = TV(0, -9.8, 0.0) * 0.1;
-            return true;
-
-            if (pos[0]>max_corner[0]-1e-4 && pos[1] < min_corner[1] + 1e-4)
-            {
-                force = TV(0, -1e-4, 0);
-                return true;
-            }
-            force = TV::Zero();
-            return false;
-        };
-
-        auto displaceFunc = [&, dx](const TV& pos, TV& delta)->bool
-        {
-            if (pos[0]>max_corner[0]-1e-4)// && pos[1] < min_corner[1] + 1e-4)
-            {
-                // delta = TV(-0.02, -0.05, 0);
-                delta = TV(0.1 * dx, 0, 0);
-                return true;
-            }
-            return false;
-        };
-        // solver.addDirichletLambda(displaceFunc);
-        solver.addNeumannLambda(forceFunc, solver.f);
-        
+        topo_opt.initializeScene(0);
         // solver.vol = 1.0;
         updateScreen(viewer);
     };

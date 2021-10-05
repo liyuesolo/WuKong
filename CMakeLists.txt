@@ -10,6 +10,10 @@ message(STATUS "${CMAKE_BUILD_TYPE} Build")
 
 set(CMAKE_BUILD_TYPE Release)
 
+set(VERSION_MAJOR 0)
+set(VERSION_MINOR 1)
+set(VERSION_PATCH 0)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libigl/cmake)
 
@@ -34,7 +38,20 @@ find_package (OpenMP REQUIRED)
 find_package(LIBIGL REQUIRED)
 find_package(CGAL REQUIRED COMPONENTS Core)
 
-# add_subdirectory(Libs)
+add_subdirectory(Deps)
+if(CUDA_FOUND)
+	add_definitions(-DENABLE_AMGCL_CUDA)
+endif()
+
+add_definitions(-DEIGEN_USE_MKL_ALL)
+add_definitions(-DMKL_LP64)
+
+include_directories(${CMAKE_SOURCE_DIR})
+include_directories(${MKLROOT}/include)
+include_directories(/home/yueli/Documents/ETH/WuKong/build/amgcl-src/)
+# add_library(${MKLROOT}/lib/intel64)
+add_subdirectory(Libs)
+add_subdirectory(Solver)
 add_subdirectory(Projects)
 
 

@@ -25,8 +25,10 @@ public:
     using TM = Matrix<T, dim, dim>;
     using Hessian = Eigen::Matrix<T, dim * dim, dim * dim>;
     using TVStack = Matrix<T, dim, Eigen::Dynamic>;
+    
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     // typedef long StorageIndex;
+    typedef int StorageIndex;
     // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using HexNodes = Matrix<T, 8, dim>;
@@ -43,18 +45,22 @@ public:
     std::unordered_map<int, T> dirichlet_data;
 
     
+    
     int num_nodes;   
     bool verbose = false;
     bool run_diff_test = false;
     
     // simulation-related data
     T vol = 1.0;
-    T E = 1e7;
-    T nu = 0.42;
+    T E = 221.88 * 1e6;
+    T nu = 0.3;
 
     T lambda, mu;
 
     T newton_tol = 1e-6;
+    int max_newton_iter = 1000;
+    
+    std::string name = "HexFEM";
     
     //scene related data
     TV min_corner, max_corner;
@@ -122,6 +128,8 @@ public:
 
     }
 
+    
+
     T computeTotalEnergy(const VectorXT& u);
 
     void buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K);
@@ -141,6 +149,8 @@ public:
 
     }
 
+    void computeEigenMode();
+
     inline int globalOffset(const IV& node_offset)
     {
         if constexpr (dim == 2)
@@ -159,174 +169,12 @@ public:
     void checkTotalHessian();
 
 
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
-    {
-        if constexpr (dim == 3)
-        {
-            deformed = undeformed + u;
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void buildGrid3D(const TV& _min_corner, const TV& _max_corner, T dx);
 
-            int n_vtx = deformed.size() / dim;
-            V.resize(n_vtx, 3);
-            tbb::parallel_for(0, n_vtx, [&](int i)
-            {
-                V.row(i) = deformed.template segment<dim>(i * dim).template cast<double>();
-            });
-            int n_faces = surface_indices.size() / 4 * 2;
-            F.resize(n_faces, 3);
-            C.resize(n_faces, 3);
-            tbb::parallel_for(0, (int)surface_indices.size()/4, [&](int i)
-            {
-                F.row(i * 2 + 0) = Eigen::Vector3i(surface_indices[i * 4 + 2], 
-                                                    surface_indices[i * 4 + 1],
-                                                    surface_indices[i * 4 + 0]);
-                F.row(i * 2 + 1) = Eigen::Vector3i(surface_indices[i * 4 + 3], 
-                                                    surface_indices[i * 4 + 2],
-                                                    surface_indices[i * 4 + 0]);
-                C.row(i * 2 + 0) = Eigen::Vector3d(0, 0.3, 1);
-                C.row(i * 2 + 1) = Eigen::Vector3d(0, 0.3, 1);
-            });
+    void createSceneFromNodes(const TV& _min_corner, const TV& _max_corner, T dx, 
+        const std::vector<TV>& nodal_position);
 
-            // std::cout << V << std::endl;
-            // std::cout << F << std::endl;
-        }
-    }
-
-// Scene.cpp
-    void buildGrid3D(const TV& _min_corner, const TV& _max_corner, T dx)
-    {
-        min_corner = _min_corner;
-        max_corner = _max_corner;
-
-        if constexpr (dim == 3)
-        {
-            vol = std::pow(dx, dim);
-            std::vector<TV> nodal_position;
-            for (T x = min_corner[0]; x < max_corner[0] + 0.1 * dx; x += dx)
-            {
-                for (T y = min_corner[1]; y < max_corner[1] + 0.1 * dx; y += dx)
-                {
-                    for (T z = min_corner[2]; z < max_corner[2] + 0.1 * dx; z += dx)
-                    {
-                        nodal_position.push_back(TV(x, y, z));
-                    }
-                }
-            }
-            deformed.resize(nodal_position.size() * dim);
-            tbb::parallel_for(0, (int)nodal_position.size(), [&](int i)
-            {
-                for (int d = 0; d < dim; d++)
-                    deformed[i * dim + d] = nodal_position[i][d];
-            });
-
-            undeformed = deformed;
-
-            num_nodes = deformed.rows() / dim;
-
-            f = VectorXT::Zero(deformed.rows());
-            u = VectorXT::Zero(deformed.rows());
-
-            int nx = std::floor((max_corner[0] - min_corner[0]) / dx) + 1;
-            int ny = std::floor((max_corner[1] - min_corner[1]) / dx) + 1;
-            int nz = std::floor((max_corner[2] - min_corner[2]) / dx) + 1;
-            
-            scene_range = IV(nx, ny, nz);
-            // std::cout << "# nodes" < nodal_position.size() << std::endl;
-            std::cout << "#nodes : " << scene_range.transpose() << std::endl;
-
-            indices.resize((nx-1) * (ny-1) * (nz-1) * 8);
-            surface_indices.resize(
-                (nx - 1) * (nz - 1) * 4 * 2 + (nx - 1) * (ny - 1) * 4 * 2 + (ny - 1) * (nz - 1) * 4 * 2
-            );
-            surface_indices.setZero();
-            indices.setZero();
-            
-            int cnt = 0;
-            int surface_cnt = 0;
-            for (int i = 0; i < nx - 1; i++)
-            {
-                for (int j = 0; j < ny - 1; j++)
-                {
-                    for (int k = 0; k < nz - 1; k++)
-                    {
-                        Vector<int, 8> idx;
-
-                        idx[0] = globalOffset(IV(i, j, k));
-                        idx[1] = globalOffset(IV(i, j, k+1));
-                        idx[2] = globalOffset(IV(i, j+1, k));
-                        idx[3] = globalOffset(IV(i, j+1, k+1));
-                        idx[4] = globalOffset(IV(i+1, j, k));
-                        idx[5] = globalOffset(IV(i+1, j, k+1));
-                        idx[6] = globalOffset(IV(i+1, j+1, k));
-                        idx[7] = globalOffset(IV(i+1, j+1, k+1));
-
-                        // idx[0] = globalOffset(IV(i, j, k));
-                        // idx[1] = globalOffset(IV(i+1, j, k));
-                        // idx[2] = globalOffset(IV(i+1, j+1, k));
-                        // idx[3] = globalOffset(IV(i, j+1, k));
-                        // idx[4] = globalOffset(IV(i, j, k+1));
-                        // idx[5] = globalOffset(IV(i+1, j, k+1));
-                        // idx[6] = globalOffset(IV(i+1, j+1, k+1));
-                        // idx[7] = globalOffset(IV(i, j+1, k+1));
-
-                        indices.template segment<8>(cnt*8) = idx;
-                        cnt ++;
-                        if (i == 0)
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i, j + 1, k));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k + 1));                        
-                            surface_cnt++;
-                        }
-                        if (i == nx - 2)
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i+1, j, k));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k+1));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j + 1, k));                        
-                            surface_cnt++;
-                        }
-                        if ( k == 0 )
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k));                        
-                            surface_cnt++;
-                        }
-                        if ( k == nz - 2 )
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k+1));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k+1));                        
-                            surface_cnt++;
-                        }
-                        if (j == 0)
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k+1));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j, k+1));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k));
-                            surface_cnt++;
-                        }
-                        if (j == ny - 2)
-                        {
-                            surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j+1, k+1));
-                            surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k));
-                            surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j+1, k));
-                            surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j+1, k+1));
-                            surface_cnt++;
-                        }
-                    }
-                }
-                
-            }
-            // std::cout << "done" << std::endl;
-        }
-        
-        
-    }
     void loadQuadMesh() {}
 };
 

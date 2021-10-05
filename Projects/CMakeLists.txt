@@ -1,4 +1,5 @@
-
+add_subdirectory(TopographyOptimization)
+add_subdirectory(Tiling3D)
 add_subdirectory(DigitalFabrics)
 add_subdirectory(DigitalFabrics3D)
 

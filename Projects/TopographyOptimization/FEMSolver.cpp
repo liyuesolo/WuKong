@@ -1,11 +1,100 @@
+// #include <filesystem>
+// using std::filesystem::current_path;
+#include <fstream>
 #include "FEMSolver.h"
 #include "autodiff/HexFEMNeoHookean3D.h"
 
-// #define USE_CHOLMOD
+#include "Timer.h"
+#include <Eigen/PardisoSupport>
 
-#ifdef USE_CHOLMOD
-    #include "/home/yueli/Documents/ETH/WuKong/Solver/CHOLMODSolver.hpp"
-#endif
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
+
+
+
+template<class T, int dim>
+void FEMSolver<T, dim>::computeEigenMode()
+{
+    int nmodes = 15;
+
+    StiffnessMatrix K(deformed.rows(), deformed.rows());
+    run_diff_test = true;
+    buildSystemMatrix(u, K);
+    // for (auto iter : dirichlet_data)
+    // {
+    //     K.coeffRef(iter.first, iter.first) = 1e10;
+    // }
+    std::cout << "build matrix" << std::endl;
+
+    // std::cout << K << std::endl;
+    bool use_Spectra = true;
+
+    if (use_Spectra)
+    {
+
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+        
+        std::cout << "pass K" << std::endl;
+
+        //0 cannot cannot be used as a shift
+        T shift = -0.1;
+        Spectra::SymEigsShiftSolver<T, 
+            Spectra::LARGEST_MAGN, 
+            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+        
+        std::cout << "init" << std::endl;
+
+        int nconv = eigs.compute();
+
+        std::cout << "compute" << std::endl;
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values << std::endl;
+            std::ofstream out("bead_eigen_vectors.txt");
+            out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+            for (int i = 0; i < eigen_vectors.rows(); i++)
+            {
+                // for (int j = 0; j < eigen_vectors.cols(); j++)
+                for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                    out << eigen_vectors(i, j) << " ";
+                out << std::endl;
+            }       
+            out << std::endl;
+            out.close();
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+    else
+    {
+        Eigen::SelfAdjointEigenSolver<StiffnessMatrix> eigs(K);
+        Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().block(0, 0, K.rows(), nmodes);
+        
+        Eigen::VectorXd eigen_values = eigs.eigenvalues().segment(0, nmodes);
+        std::cout << eigen_values << std::endl;
+        std::ofstream out("bead_eigen_vectors.txt");
+        out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+        for (int i = 0; i < eigen_vectors.rows(); i++)
+        {
+            for (int j = 0; j < eigen_vectors.cols(); j++)
+                out << eigen_vectors(i, j) << " ";
+            out << std::endl;
+        }       
+        out << std::endl;
+        out.close();
+    }
+
+}
 
 template<class T, int dim>
 T FEMSolver<T, dim>::computeTotalEnergy(const VectorXT& u)
@@ -195,19 +284,7 @@ bool FEMSolver<T, dim>::linearSolve(StiffnessMatrix& K,
 
     StiffnessMatrix H = K;
 
-#ifdef USE_CHOLMOD
-    Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> solver;
-    solver.set_pattern(K);
-    
-    solver.analyze_pattern();
-    solver.factorize();
-    
-    solver.solve(residual.data(), du.data(), true);
-#else
-    
-    Eigen::SimplicialLDLT<StiffnessMatrix> solver;
-    // Eigen::SimplicialLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
-    
+    Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
     T mu = 10e-6;
     solver.analyzePattern(K);
     for (int i = 0; i < 50; i++)
@@ -224,18 +301,19 @@ bool FEMSolver<T, dim>::linearSolve(StiffnessMatrix& K,
 
         T dot_dx_g = du.normalized().dot(residual.normalized());
 
-        VectorXT d_vector = solver.vectorD();
+        
+        // VectorXT d_vector = solver.vectorD();
         int num_negative_eigen_values = 0;
 
-        for (int i = 0; i < d_vector.size(); i++)
-        {
-            if (d_vector[i] < 0)
-            {
-                num_negative_eigen_values++;
-                break;
-            }
+        // for (int i = 0; i < d_vector.size(); i++)
+        // {
+        //     if (d_vector[i] < 0)
+        //     {
+        //         num_negative_eigen_values++;
+        //         break;
+        //     }
         
-        }
+        // }
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
         bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
@@ -247,9 +325,9 @@ bool FEMSolver<T, dim>::linearSolve(StiffnessMatrix& K,
             K = H + mu * I;        
             mu *= 10;
         }
-        // std::cout << i << std::endl;
+        if (i == 49)
+            return false;
     }
-#endif
     return true;
 }
 
@@ -305,7 +383,10 @@ bool FEMSolver<T, dim>::staticSolve()
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
 
-    int max_newton_iter = 1000;
+    iterateDirichletDoF([&](int offset, T target)
+    {
+        f[offset] = 0;
+    });
 
     while (true)
     {
@@ -349,7 +430,10 @@ T FEMSolver<T, dim>::lineSearchNewton(VectorXT& u, VectorXT& residual)
 
     StiffnessMatrix K(residual.rows(), residual.rows());
     buildSystemMatrix(u, K);
+    
+    // Timer ti(true);
     bool success = linearSolve(K, residual, du);
+    // std::cout << ti.elapsed_sec() << std::endl;
     if (!success)
         return 1e16;
     T norm = du.norm();
@@ -374,6 +458,277 @@ T FEMSolver<T, dim>::lineSearchNewton(VectorXT& u, VectorXT& residual)
     return norm;
 }
 
+template<class T, int dim>
+void FEMSolver<T, dim>::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+{
+    if constexpr (dim == 3)
+    {
+        deformed = undeformed + u;
+
+        int n_vtx = deformed.size() / dim;
+        V.resize(n_vtx, 3);
+        tbb::parallel_for(0, n_vtx, [&](int i)
+        {
+            V.row(i) = deformed.template segment<dim>(i * dim).template cast<double>();
+        });
+        int n_faces = surface_indices.size() / 4 * 2;
+        F.resize(n_faces, 3);
+        C.resize(n_faces, 3);
+        tbb::parallel_for(0, (int)surface_indices.size()/4, [&](int i)
+        {
+            F.row(i * 2 + 0) = Eigen::Vector3i(surface_indices[i * 4 + 2], 
+                                                surface_indices[i * 4 + 1],
+                                                surface_indices[i * 4 + 0]);
+            F.row(i * 2 + 1) = Eigen::Vector3i(surface_indices[i * 4 + 3], 
+                                                surface_indices[i * 4 + 2],
+                                                surface_indices[i * 4 + 0]);
+            C.row(i * 2 + 0) = Eigen::Vector3d(0, 0.3, 1);
+            C.row(i * 2 + 1) = Eigen::Vector3d(0, 0.3, 1);
+        });
+
+        // std::cout << V << std::endl;
+        // std::cout << F << std::endl;
+    }
+}
+
+template<class T, int dim>
+void FEMSolver<T, dim>::buildGrid3D(const TV& _min_corner, const TV& _max_corner, T dx)
+{
+    min_corner = _min_corner;
+    max_corner = _max_corner;
+
+    if constexpr (dim == 3)
+    {
+        vol = std::pow(dx, dim);
+        std::vector<TV> nodal_position;
+        for (T x = min_corner[0]; x < max_corner[0] + 0.1 * dx; x += dx)
+        {
+            for (T y = min_corner[1]; y < max_corner[1] + 0.1 * dx; y += dx)
+            {
+                for (T z = min_corner[2]; z < max_corner[2] + 0.1 * dx; z += dx)
+                {
+                    nodal_position.push_back(TV(x, y, z));
+                }
+            }
+        }
+        deformed.resize(nodal_position.size() * dim);
+        tbb::parallel_for(0, (int)nodal_position.size(), [&](int i)
+        {
+            for (int d = 0; d < dim; d++)
+                deformed[i * dim + d] = nodal_position[i][d];
+        });
+
+        undeformed = deformed;
+
+        num_nodes = deformed.rows() / dim;
+
+        f = VectorXT::Zero(deformed.rows());
+        u = VectorXT::Zero(deformed.rows());
+
+        int nx = std::floor((max_corner[0] - min_corner[0]) / dx) + 1;
+        int ny = std::floor((max_corner[1] - min_corner[1]) / dx) + 1;
+        int nz = std::floor((max_corner[2] - min_corner[2]) / dx) + 1;
+        
+        scene_range = IV(nx, ny, nz);
+        // std::cout << "# nodes" < nodal_position.size() << std::endl;
+        std::cout << "#nodes : " << scene_range.transpose() << std::endl;
+
+        indices.resize((nx-1) * (ny-1) * (nz-1) * 8);
+        surface_indices.resize(
+            (nx - 1) * (nz - 1) * 4 * 2 + (nx - 1) * (ny - 1) * 4 * 2 + (ny - 1) * (nz - 1) * 4 * 2
+        );
+        surface_indices.setZero();
+        indices.setZero();
+        
+        int cnt = 0;
+        int surface_cnt = 0;
+        for (int i = 0; i < nx - 1; i++)
+        {
+            for (int j = 0; j < ny - 1; j++)
+            {
+                for (int k = 0; k < nz - 1; k++)
+                {
+                    Vector<int, 8> idx;
+
+                    idx[0] = globalOffset(IV(i, j, k));
+                    idx[1] = globalOffset(IV(i, j, k+1));
+                    idx[2] = globalOffset(IV(i, j+1, k));
+                    idx[3] = globalOffset(IV(i, j+1, k+1));
+                    idx[4] = globalOffset(IV(i+1, j, k));
+                    idx[5] = globalOffset(IV(i+1, j, k+1));
+                    idx[6] = globalOffset(IV(i+1, j+1, k));
+                    idx[7] = globalOffset(IV(i+1, j+1, k+1));
+
+
+                    indices.template segment<8>(cnt*8) = idx;
+                    cnt ++;
+                    if (i == 0)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i, j + 1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k + 1));                        
+                        surface_cnt++;
+                    }
+                    if (i == nx - 2)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i+1, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j + 1, k));                        
+                        surface_cnt++;
+                    }
+                    if ( k == 0 )
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k));                        
+                        surface_cnt++;
+                    }
+                    if ( k == nz - 2 )
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k+1));                        
+                        surface_cnt++;
+                    }
+                    if (j == 0)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k));
+                        surface_cnt++;
+                    }
+                    if (j == ny - 2)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j+1, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j+1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j+1, k+1));
+                        surface_cnt++;
+                    }
+                }
+            }
+            
+        }
+        // std::cout << "done" << std::endl;
+    }   
+}
+
+template<class T, int dim>
+void FEMSolver<T, dim>::createSceneFromNodes(const TV& _min_corner, 
+    const TV& _max_corner, T dx, const std::vector<TV>& nodal_position)
+{
+    if constexpr (dim == 3)
+    {
+        deformed.resize(nodal_position.size() * dim);
+        tbb::parallel_for(0, (int)nodal_position.size(), [&](int i)
+        {
+            for (int d = 0; d < dim; d++)
+                deformed[i * dim + d] = nodal_position[i][d];
+        });
+
+        undeformed = deformed;
+
+        num_nodes = deformed.rows() / dim;
+
+        f = VectorXT::Zero(deformed.rows());
+        u = VectorXT::Zero(deformed.rows());
+
+        int nx = std::floor((max_corner[0] - min_corner[0]) / dx) + 1;
+        int ny = std::floor((max_corner[1] - min_corner[1]) / dx) + 1;
+        int nz = std::floor((max_corner[2] - min_corner[2]) / dx) + 1;
+        
+        scene_range = IV(nx, ny, nz);
+        // std::cout << "# nodes" < nodal_position.size() << std::endl;
+        std::cout << "#nodes : " << scene_range.transpose() << std::endl;
+
+        indices.resize((nx-1) * (ny-1) * (nz-1) * 8);
+        surface_indices.resize(
+            (nx - 1) * (nz - 1) * 4 * 2 + (nx - 1) * (ny - 1) * 4 * 2 + (ny - 1) * (nz - 1) * 4 * 2
+        );
+        surface_indices.setZero();
+        indices.setZero();
+        
+        int cnt = 0;
+        int surface_cnt = 0;
+        for (int i = 0; i < nx - 1; i++)
+        {
+            for (int j = 0; j < ny - 1; j++)
+            {
+                for (int k = 0; k < nz - 1; k++)
+                {
+                    Vector<int, 8> idx;
+
+                    idx[0] = globalOffset(IV(i, j, k));
+                    idx[1] = globalOffset(IV(i, j, k+1));
+                    idx[2] = globalOffset(IV(i, j+1, k));
+                    idx[3] = globalOffset(IV(i, j+1, k+1));
+                    idx[4] = globalOffset(IV(i+1, j, k));
+                    idx[5] = globalOffset(IV(i+1, j, k+1));
+                    idx[6] = globalOffset(IV(i+1, j+1, k));
+                    idx[7] = globalOffset(IV(i+1, j+1, k+1));
+
+
+                    indices.template segment<8>(cnt*8) = idx;
+                    cnt ++;
+                    if (i == 0)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i, j + 1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k + 1));                        
+                        surface_cnt++;
+                    }
+                    if (i == nx - 2)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i+1, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j + 1, k));                        
+                        surface_cnt++;
+                    }
+                    if ( k == 0 )
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i+1, j, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i, j + 1, k));                        
+                        surface_cnt++;
+                    }
+                    if ( k == nz - 2 )
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j + 1, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k+1));                        
+                        surface_cnt++;
+                    }
+                    if (j == 0)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j, k));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j, k+1));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j, k+1));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j, k));
+                        surface_cnt++;
+                    }
+                    if (j == ny - 2)
+                    {
+                        surface_indices[surface_cnt * 4 + 0] = globalOffset(IV(i, j+1, k+1));
+                        surface_indices[surface_cnt * 4 + 1] = globalOffset(IV(i, j+1, k));
+                        surface_indices[surface_cnt * 4 + 2] = globalOffset(IV(i+1, j+1, k));
+                        surface_indices[surface_cnt * 4 + 3] = globalOffset(IV(i+1, j+1, k+1));
+                        surface_cnt++;
+                    }
+                }
+            }
+            
+        }
+    }
+}
 
 // template class FEMSolver<float, 2>;
 // template class FEMSolver<float, 3>;
