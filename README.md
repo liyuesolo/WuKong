@@ -9,6 +9,9 @@
     TypenameExample
 
 ## Projects
+### Computational Morphogenesis
+    Cell Simulation
+
 ### Programmable Digital Weaves
     Eulerian-on-Lagrangian Simulation
     Discrete Elastic Rod
@@ -16,7 +19,7 @@
     G-code Generation
 ### TopographyOptimization
     HexFEMSolver
-    
+    ShellFEMSolver    
 ### TopologyOptimization*
 ### FEM*
 ### MPM*
