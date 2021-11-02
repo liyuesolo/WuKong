@@ -2,7 +2,7 @@
 // using std::filesystem::current_path;
 #include <fstream>
 #include "FEMSolver.h"
-#include "autodiff/HexFEMNeoHookean3D.h"
+#include "autodiff/HexFEM.h"
 
 #include "Timer.h"
 #include <Eigen/PardisoSupport>
@@ -12,7 +12,17 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
+template<class T, int dim>
+void FEMSolver<T, dim>::computeInternalForce(const VectorXT& _u, VectorXT& dPsidu)
+{
 
+}
+
+template<class T, int dim>
+void FEMSolver<T, dim>::computedfdX(const VectorXT& u, StiffnessMatrix& dfdX)
+{
+
+}
 
 template<class T, int dim>
 void FEMSolver<T, dim>::computeEigenMode()
@@ -60,6 +70,9 @@ void FEMSolver<T, dim>::computeEigenMode()
             std::cout << eigen_values << std::endl;
             std::ofstream out("bead_eigen_vectors.txt");
             out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+            for (int i = 0; i < eigen_vectors.cols(); i++)
+                out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+            out << std::endl;
             for (int i = 0; i < eigen_vectors.rows(); i++)
             {
                 // for (int j = 0; j < eigen_vectors.cols(); j++)
@@ -97,6 +110,13 @@ void FEMSolver<T, dim>::computeEigenMode()
 }
 
 template<class T, int dim>
+T FEMSolver<T, dim>::computeElasticPotential(const VectorXT& _u)
+{
+    std::cout << "not implemented yet" << std::endl;
+    return 0.0;
+}
+
+template<class T, int dim>
 T FEMSolver<T, dim>::computeTotalEnergy(const VectorXT& u)
 {
     T energy = 0.0;
@@ -116,11 +136,35 @@ T FEMSolver<T, dim>::computeTotalEnergy(const VectorXT& u)
             HexIdx nodal_indices = indices.segment<8>(cell_idx * 8);
             HexNodes x = getHexNodesDeformed(cell_idx);
             HexNodes X = getHexNodesUndeformed(cell_idx);
-            energy += computeHexFEMNeoHookeanEnergy<T>(lambda, mu, x.transpose(), X.transpose());
+            
+
+            if (model == NeoHookean)
+                energy += computeHexFEMNeoHookeanEnergy<T>(lambda, mu, x.transpose(), X.transpose());
+            else if (model == StVK)
+                energy += computeHexFEMStVKEnergy(lambda, mu, x.transpose(), X.transpose());
+            else
+                std::cout << "unknown consititutive model at " << __FILE__ << std::endl;
+
         });
         energy -= u.dot(f);
     }
     return energy;
+}
+
+template<class T, int dim>
+T FEMSolver<T, dim>:: computeTotalVolume()
+{
+    T volume = 0.0;
+    if constexpr (dim == 3)
+    {
+        iterateHexElementSerial([&](int cell_idx){
+            HexIdx nodal_indices = indices.segment<8>(cell_idx * 8);
+            HexNodes x = getHexNodesDeformed(cell_idx);
+            HexNodes X = getHexNodesUndeformed(cell_idx);
+            volume += computeHexFEMVolume(x.transpose(), X.transpose());
+        });
+    }
+    return volume;
 }
 
 template<class T, int dim>
@@ -251,7 +295,12 @@ T FEMSolver<T, dim>::computeResidual(const VectorXT& u,
 
             
             Vector<T, 24> F;
-            computeHexFEMNeoHookeanEnergyGradient<T>(lambda, mu, x.transpose(), X.transpose(), F);
+            if (model == NeoHookean)
+                computeHexFEMNeoHookeanEnergyGradient<T>(lambda, mu, x.transpose(), X.transpose(), F);
+            else if (model == StVK)
+                computeHexFEMStVKEnergyGradient(lambda, mu, x.transpose(), X.transpose(), F);
+            else
+                std::cout << "unknown consititutive model at " << __FILE__ << std::endl;
 
             F *= -1.0;
             for (int i = 0; i < nodal_indices.size(); i++)
@@ -352,8 +401,14 @@ void FEMSolver<T, dim>::buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K)
             HexNodes x = getHexNodesDeformed(cell_idx);
             HexNodes X = getHexNodesUndeformed(cell_idx);
             Matrix<T, 24, 24> J;
-            computeHexFEMNeoHookeanEnergyHessian<T>(lambda, mu, x.transpose(), X.transpose(), J);
-            
+
+            if (model == NeoHookean)
+                computeHexFEMNeoHookeanEnergyHessian<T>(lambda, mu, x.transpose(), X.transpose(), J);
+            else if (model == StVK)
+                computeHexFEMStVKEnergyHessian(lambda, mu, x.transpose(), X.transpose(), J);
+            else
+                std::cout << "unknown consititutive model at " << __FILE__ << std::endl;
+
             for (int i = 0; i < nodal_indices.size(); i++)
             {
                 int node_i = nodal_indices[i];
@@ -376,6 +431,8 @@ void FEMSolver<T, dim>::buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K)
     K.makeCompressed();
 
 }
+
+
 
 template<class T, int dim>
 bool FEMSolver<T, dim>::staticSolve()
@@ -622,6 +679,8 @@ template<class T, int dim>
 void FEMSolver<T, dim>::createSceneFromNodes(const TV& _min_corner, 
     const TV& _max_corner, T dx, const std::vector<TV>& nodal_position)
 {
+    model = StVK;
+
     if constexpr (dim == 3)
     {
         deformed.resize(nodal_position.size() * dim);
@@ -728,6 +787,16 @@ void FEMSolver<T, dim>::createSceneFromNodes(const TV& _min_corner,
             
         }
     }
+}
+
+template<class T, int dim>
+void FEMSolver<T, dim>::loadFromMesh(std::string filename)
+{
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+
+
+    
 }
 
 // template class FEMSolver<float, 2>;

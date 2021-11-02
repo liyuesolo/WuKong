@@ -44,7 +44,12 @@ public:
 
     std::unordered_map<int, T> dirichlet_data;
 
-    
+    enum ConstitutiveModel
+    {
+        NeoHookean, StVK
+    };
+
+    ConstitutiveModel model = NeoHookean;
     
     int num_nodes;   
     bool verbose = false;
@@ -52,8 +57,10 @@ public:
     
     // simulation-related data
     T vol = 1.0;
-    T E = 221.88 * 1e6;
+    T E = 221.88 * 1e9;
+    T density = 7.85e4; 
     T nu = 0.3;
+    T dx = 1e-3;
 
     T lambda, mu;
 
@@ -129,10 +136,15 @@ public:
     }
 
     
-
+    T computeElasticPotential(const VectorXT& _u);
+    
     T computeTotalEnergy(const VectorXT& u);
 
     void buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K);
+
+    void computedfdX(const VectorXT& u, StiffnessMatrix& dfdX);
+    
+    void computeInternalForce(const VectorXT& _u, VectorXT& dPsidu);
     
     T computeResidual(const VectorXT& u,  VectorXT& residual);
 
@@ -149,6 +161,12 @@ public:
 
     }
 
+    void updateRestshape() {}
+
+    T computeTotalVolume();
+
+    void loadFromMesh(std::string filename);
+    
     void computeEigenMode();
 
     inline int globalOffset(const IV& node_offset)
@@ -167,6 +185,7 @@ public:
     void derivativeTest();
     void checkTotalGradient();
     void checkTotalHessian();
+    void checkdfdX();
 
 
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);

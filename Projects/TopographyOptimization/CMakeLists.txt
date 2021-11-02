@@ -1,4 +1,4 @@
-set(DEPS partio openvdb tbb tbbmalloc tbbmalloc_proxy cholmod_solver mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::opengl_glfw_imgui igl::png amgcl VexCL::CUDA)
+set(DEPS partio openvdb tbb tbbmalloc tbbmalloc_proxy cholmod_solver mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png amgcl VexCL::CUDA)
 
 file(GLOB HEADERS "*.h" "*.hpp")
 file(GLOB SOURCES "*.c" "*.cpp")

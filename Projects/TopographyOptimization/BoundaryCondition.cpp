@@ -55,12 +55,12 @@ template<class T, int dim>
 void ShellFEMSolver<T, dim>::fixAxisEnd(int axis)
 {
     // std::cout << "fix end" << std::endl;
-    T dx = (undeformed.template segment<dim>(dim) - undeformed.template segment<dim>(0)).norm();
+    // T dx = (undeformed.template segment<dim>(dim) - undeformed.template segment<dim>(0)).norm();
     // T dx = 0.0;
     for (int i = 0; i < num_nodes; i++)
     {
         TV pos = undeformed.template segment<dim>(i * dim);
-        if (pos[axis] < min_corner[axis] + 3.0 * dx + 1e-6)
+        if (pos[axis] < min_corner[axis] + 2.0 * dx + 1e-6)
         {
             for (int d = 0; d < dim; d++)
                 dirichlet_data[i * dim + d] = 0.0;

@@ -20,7 +20,7 @@ enum OptimizationMethod
 
 enum BeadType
 {
-    BeadRib, VRib, DiagonalBead, FourParts, Circle, CurveBD
+    None, BeadRib, VRib, DiagonalBead, FourParts, Circle, CurveBD, Drawing, Levelset
 };
 
 template<class T, int dim, class Solver>
@@ -31,6 +31,7 @@ public:
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using TV = Vector<T, dim>;
+    using TV2 = Vector<T, 2>;
     using IV = Vector<int, dim>;
     using TM = Matrix<T, dim, dim>;
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
@@ -45,8 +46,13 @@ public:
 
     Timer timer;
 
+
+    std::vector<std::function<bool(const TV&, T&)>> bead_levelsets;
+
 public:
-    void initializeScene(int type);
+    void initializeScene(BeadType type);
+    
+    void addBeadLevelset(int type);
     
     void addBeads(BeadType bead_type, const TV& min_corner, const TV& max_corner, const TV& dx);     
 

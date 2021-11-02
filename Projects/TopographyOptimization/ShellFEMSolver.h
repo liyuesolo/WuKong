@@ -38,6 +38,11 @@ public:
 
     using Entry = Eigen::Triplet<T>;
 
+    enum ConstitutiveModel
+    {
+        NeoHookean, StVK
+    };
+
     VectorXT u;
     VectorXT deformed, undeformed;
     VectorXi faces;
@@ -49,7 +54,8 @@ public:
     VectorXT rest_area;
     VectorXT thickness;
 
-    
+    ConstitutiveModel model = NeoHookean;
+
     Hinges hinges;
 
     int num_nodes = 0;   
@@ -64,6 +70,7 @@ public:
 
     T E = 221.88 * 1e9;
     T nu = 0.3;
+    T dx = 1e-3;
 
     T lambda, mu;
 
@@ -170,9 +177,19 @@ public:
 
     int nFaces () { return faces.rows() / 3; }
 
+    T computeTotalVolume() { return rest_area.sum() * thickness[0]; }
+
+    void updateRestshape() { computeRestShape(); }
+
     T computeTotalEnergy(const VectorXT& _u);
 
+    T computeElasticPotential(const VectorXT& _u);
+
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
+
+    void computedfdX(const VectorXT& u, StiffnessMatrix& dfdX);
+
+    void computeInternalForce(const VectorXT& _u, VectorXT& dPsidu);
     
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
 
@@ -188,6 +205,8 @@ public:
 
     void createSceneFromNodes(const TV& _min_corner, const TV& _max_corner, T dx, 
         const std::vector<TV>& nodal_position);
+    
+    void createMeshFromNods(const TV& _min_corner, const TV& _max_corner, T dx);
 
     void addDirichletLambda(std::function<bool(const TV&, TV&)> node_helper);
     void addNeumannLambda(std::function<bool(const TV&, TV&)> node_helper, VectorXT& f);
@@ -195,9 +214,11 @@ public:
 
     void computeEigenMode();
 
+    void loadFromMesh(std::string filename);
+
     void derivativeTest();
     void checkTotalGradient();
     void checkTotalHessian();
-    
+    void checkdfdX();
 };
 #endif

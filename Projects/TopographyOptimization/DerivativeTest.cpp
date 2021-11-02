@@ -14,6 +14,12 @@ void FEMSolver<T, dim>::derivativeTest()
 }
 
 template<class T, int dim>
+void FEMSolver<T, dim>::checkdfdX()
+{
+
+}
+
+template<class T, int dim>
 void FEMSolver<T, dim>::checkTotalGradient()
 {
     run_diff_test = true;
@@ -174,6 +180,53 @@ void ShellFEMSolver<T, dim>::checkTotalHessian()
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
             //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
             std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    run_diff_test = false;
+}
+
+
+template<class T, int dim>
+void ShellFEMSolver<T, dim>::checkdfdX()
+{
+    add_bending = false;
+    gravitional_energy = false;
+
+    run_diff_test = true;
+    std::cout << "======================== CHECK dfdX ========================" << std::endl;
+    VectorXT du(num_nodes * dim);
+    du.setRandom();
+    du *= 1.0 / du.norm();
+    du *= 0.001;
+    u += du;
+
+    T epsilon = 1e-7;
+    int n_dof = num_nodes * dim;
+    StiffnessMatrix dfdX(n_dof, n_dof);
+    computedfdX(u, dfdX);
+
+    VectorXT g0(n_dof), g1(n_dof);
+    g0.setZero(); g1.setZero();
+    computeResidual(u, g0);
+    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    {
+        undeformed(dof_i) += epsilon;
+        computeResidual(u, g1);
+        undeformed(dof_i) -= epsilon;
+            
+        VectorXT row_FD = (g1 - g0) / (epsilon);
+
+        for(int i = 0; i < n_dof; i++)
+        {
+            if(dfdX.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+                continue;
+            // if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-4)
+            //     continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "dfdX(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << dfdX.coeff(dof_i, i) << std::endl;
             std::getchar();
         }
     }
