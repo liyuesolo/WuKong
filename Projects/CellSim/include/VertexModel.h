@@ -17,6 +17,7 @@ public:
     using TV = Vector<double, 3>;
     using TV2 = Vector<double, 2>;
     using TM2 = Matrix<double, 2, 2>;
+    using TM3 = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
@@ -27,12 +28,15 @@ public:
 
     using Edge = Vector<int, 2>;
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    using Entry = Eigen::Triplet<T>;
     
 public:
     T sigma = 1.0;
     T alpha = 2.13;
     T gamma = 0.98;
     T B = 100.0;
+    bool run_diff_test = false;
+    int num_nodes;
 
     template <typename OP>
     void iterateFaceSerial(const OP& f)
@@ -51,12 +55,6 @@ public:
         tbb::parallel_for(0, (int)faces.size(), [&](int i){
             f(faces[i], i);
         });
-    }
-
-    template <typename OP>
-    void iterateCellFaces(const OP& f)
-    {
-
     }
 
     template <typename OP>
@@ -92,7 +90,7 @@ public:
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
 
-    void computeCellInitialVolume();
+    void computeCellInitialVolume(VectorXT& cell_volume_list);
     void vertexModelFromMesh(const std::string& filename);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
@@ -100,8 +98,62 @@ public:
     T computeTotalEnergy(const VectorXT& _u);
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
 
+    void faceHessianChainRuleTest();
+    
+    void checkTotalGradient();
+    void checkTotalHessian();
+
+private:
+    template<int dim>
+    void addHessianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const Matrix<T, dim, dim>& hessian)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 3; k++)
+                    for (int l = 0; l < 3; l++)
+                        triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
+            }
+        }
+    }
+
+    template<int dim>
+    void addHessianBlock(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const Matrix<T, dim, dim>& hessian_block)
+    {
+
+        int dof_i = vtx_idx[0];
+        int dof_j = vtx_idx[1];
+
+        for (int k = 0; k < dim; k++)
+            for (int l = 0; l < dim; l++)
+            {
+                triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian_block(k, l)));
+            }
+    }
+
+    template<int dim>
+    void addForceEntry(VectorXT& residual, 
+        const std::vector<int>& vtx_idx, 
+        const Vector<T, dim>& gradent)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+            residual.segment<3>(vtx_idx[i] * 3) += gradent.template segment<3>(i * 3);
+    }
+
 public:
-    VertexModel() {}
+    VertexModel() 
+    {
+        
+    }
     ~VertexModel() {}
 };
 

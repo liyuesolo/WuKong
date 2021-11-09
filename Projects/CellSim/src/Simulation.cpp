@@ -5,7 +5,10 @@ void Simulation::initializeCells()
 {
     std::string sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     cells.vertexModelFromMesh(sphere_file);
-    cells.computeCellInitialVolume();
+    cells.computeCellInitialVolume(cells.cell_volume_init);
+    // cells.checkTotalGradient();
+    // cells.faceHessianChainRuleTest();
+    cells.checkTotalHessian();
 }
 
 void Simulation::generateMeshForRendering(Eigen::MatrixXd& V, 
