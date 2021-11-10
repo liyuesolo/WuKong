@@ -90,8 +90,9 @@ public:
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
 
-    void computeCellInitialVolume(VectorXT& cell_volume_list);
+    void computeVolumeAllCells(VectorXT& cell_volume_list);
     void vertexModelFromMesh(const std::string& filename);
+    void addTestPrism();
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
@@ -102,7 +103,8 @@ public:
     
     void checkTotalGradient();
     void checkTotalHessian();
-
+    
+    void positionsFromIndices(VectorXT& positions, const VtxList& indices);
 private:
     template<int dim>
     void addHessianEntry(
@@ -110,6 +112,9 @@ private:
         const std::vector<int>& vtx_idx, 
         const Matrix<T, dim, dim>& hessian)
     {
+        if (vtx_idx.size() * 3 != dim)
+            std::cout << "wrong hessian block size" << std::endl;
+
         for (int i = 0; i < vtx_idx.size(); i++)
         {
             int dof_i = vtx_idx[i];
@@ -145,6 +150,9 @@ private:
         const std::vector<int>& vtx_idx, 
         const Vector<T, dim>& gradent)
     {
+        if (vtx_idx.size() * 3 != dim)
+            std::cout << "wrong gradient block size" << std::endl;
+
         for (int i = 0; i < vtx_idx.size(); i++)
             residual.segment<3>(vtx_idx[i] * 3) += gradent.template segment<3>(i * 3);
     }
