@@ -31,12 +31,13 @@ public:
     using Entry = Eigen::Triplet<T>;
     
 public:
-    T sigma = 1.0;
-    T alpha = 2.13;
-    T gamma = 0.98;
-    T B = 100.0;
-    bool run_diff_test = false;
-    int num_nodes;
+    // iterators
+    template <class OP>
+    void iterateDirichletDoF(const OP& f) {
+        for (auto dirichlet: dirichlet_data){
+            f(dirichlet.first, dirichlet.second);
+        } 
+    }
 
     template <typename OP>
     void iterateFaceSerial(const OP& f)
@@ -67,6 +68,16 @@ public:
     }
 
     template <typename OP>
+    void iterateApicalEdgeSerial(const OP& f)
+    {
+        for (Edge& e : edges)
+        {
+            if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+                f(e);
+        }   
+    }
+
+    template <typename OP>
     void iterateEdgeParallel(const OP& f)
     {
         tbb::parallel_for(0, (int)edges.size(), [&](int i){
@@ -83,28 +94,66 @@ public:
     VectorXT cell_volume_init;
     std::vector<Edge> edges; // all edges
 
+    int num_nodes;
     int basal_vtx_start;
     int basal_face_start;
     int lateral_face_start;
 
+    T sigma = 1.0;
+    T alpha = 2.13;
+    T gamma = 0.98;
+    T B = 100.0;
+    T By = 100.0;
+
+    bool run_diff_test = false;
+    bool add_yolk_volume = true;
+    bool use_cell_centroid = false;
+
+    TV mesh_centroid;
+    T yolk_vol_init;
+
+    std::unordered_map<int, T> dirichlet_data;
+
+    void splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+
+    void saveIndividualCellsWithOffset();
+
+    void computeLinearModes();
+
+    void computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume);
+    void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
+
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
 
+    T computeYolkVolume(bool verbose = false);
     void computeVolumeAllCells(VectorXT& cell_volume_list);
     void vertexModelFromMesh(const std::string& filename);
     void addTestPrism();
+
+    void addTestPrismGrid(int n_row, int n_col);
+
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, 
+        const std::unordered_map<int, T>& data);
+
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
-    T computeTotalEnergy(const VectorXT& _u);
-    T computeResidual(const VectorXT& _u,  VectorXT& residual);
+    T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
+    T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
 
     void faceHessianChainRuleTest();
-    
+
     void checkTotalGradient();
     void checkTotalHessian();
+
+    void checkTotalHessianScale();
+    void checkTotalGradientScale();
     
     void positionsFromIndices(VectorXT& positions, const VtxList& indices);
+
+    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    
 private:
     template<int dim>
     void addHessianEntry(
@@ -155,6 +204,21 @@ private:
 
         for (int i = 0; i < vtx_idx.size(); i++)
             residual.segment<3>(vtx_idx[i] * 3) += gradent.template segment<3>(i * 3);
+    }
+
+    template<int dim>
+    void getSubVector(const VectorXT& _vector, 
+        const std::vector<int>& vtx_idx, 
+        Vector<T, dim>& sub_vec)
+    {
+        if (vtx_idx.size() * 3 != dim)
+            std::cout << "wrong gradient block size" << std::endl;
+
+        sub_vec = Vector<T, dim>::Zero(vtx_idx.size() * 3);
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            sub_vec.template segment<3>(i * 3) = _vector.segment<3>(vtx_idx[i] * 3);
+        }
     }
 
 public:

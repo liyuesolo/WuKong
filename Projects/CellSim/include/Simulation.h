@@ -33,11 +33,16 @@ public:
 
 public:
     void initializeCells();
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void generateMeshForRendering(
+        Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool show_rest = false,
+        bool split = false);
 
     void advanceOneStep();
 
     bool staticSolve();
+
+    void computeLinearModes();
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);

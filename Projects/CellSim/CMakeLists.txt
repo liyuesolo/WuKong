@@ -5,4 +5,5 @@ file(GLOB SOURCES "*.c" "*.cpp" "src/*.cpp")
 
 
 add_executable(CellSim ${HEADERS} ${SOURCES})
+target_include_directories(CellSim PUBLIC ../../Libs/spectra/include)
 target_link_libraries(CellSim ${DEPS})
