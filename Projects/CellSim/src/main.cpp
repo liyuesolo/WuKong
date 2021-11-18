@@ -13,6 +13,8 @@ Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
 
+using TV = Vector<double, 3>;
+
 Simulation simulation;
 
 static bool show_rest = false;
@@ -51,6 +53,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 
 int main()
 {
+
     igl::opengl::glfw::Viewer viewer;
 
     igl::opengl::glfw::imgui::ImGuiMenu menu;

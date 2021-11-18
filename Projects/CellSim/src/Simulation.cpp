@@ -10,8 +10,8 @@ void Simulation::initializeCells()
 {
     // std::string sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     std::string sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
-    // cells.vertexModelFromMesh(sphere_file);
-    cells.addTestPrism();
+    cells.vertexModelFromMesh(sphere_file);
+    // cells.addTestPrism(5);
     // cells.addTestPrismGrid(10, 10);
     cells.computeVolumeAllCells(cells.cell_volume_init);
 
@@ -21,7 +21,7 @@ void Simulation::initializeCells()
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 400;
+    max_newton_iter = 500;
     // verbose = true;
 }
 
@@ -61,8 +61,12 @@ bool Simulation::staticSolve()
 {
     VectorXT cell_volume_initial;
     cells.computeVolumeAllCells(cell_volume_initial);
-    T yolk_volume_init = cells.computeYolkVolume(true);
-    std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
+    if (cells.add_yolk_volume)
+    {
+        T yolk_volume_init = cells.computeYolkVolume(false);
+        std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
+    }
+
     std::cout << "total volume initial " << cell_volume_initial.sum() << std::endl;
     std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
     int cnt = 0;
@@ -106,9 +110,11 @@ bool Simulation::staticSolve()
     cells.computeVolumeAllCells(cell_volume_final);
     std::cout << "total volume " << cell_volume_final.sum() << std::endl;
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
-    T yolk_volume = cells.computeYolkVolume(true);
-    std::cout << "yolk volume final: " << yolk_volume << std::endl;
-    // cells.saveIndividualCellsWithOffset();
+    if (cells.add_yolk_volume)
+    {
+        T yolk_volume = cells.computeYolkVolume(false);
+        std::cout << "yolk volume final: " << yolk_volume << std::endl;
+    }
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
@@ -116,13 +122,18 @@ bool Simulation::staticSolve()
 
 bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
 {
+// #define USE_PARDISO
+
     StiffnessMatrix I(K.rows(), K.cols());
     I.setIdentity();
 
     StiffnessMatrix H = K;
 
-    // Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+#ifdef USE_PARDISO
+    Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+#else
     Eigen::SimplicialLDLT<StiffnessMatrix> solver;
+#endif
 
     T alpha = 10e-6;
     solver.analyzePattern(K);
@@ -144,6 +155,7 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
 
         int num_negative_eigen_values = 0;
         int num_zero_eigen_value = 0;
+#ifndef USE_PARDISO
         VectorXT d_vector = solver.vectorD();
         // std::cout << d_vector << std::endl;
         // std::getchar();
@@ -158,7 +170,11 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
                 num_zero_eigen_value++;
         }
         if (num_zero_eigen_value > 0)
+        {
             std::cout << "num_zero_eigen_value " << num_zero_eigen_value << std::endl;
+            return false;
+        }
+#endif
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
         bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
@@ -206,10 +222,11 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max)
     bool success = linearSolve(K, residual, du);
     
     if (!success)
+    {
         std::cout << "linear solve failed" << std::endl;
-    
-    if (!success)
         return 1e16;
+    }
+
     T norm = du.norm();
     
     T alpha = 1;

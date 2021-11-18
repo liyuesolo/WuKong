@@ -368,7 +368,7 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
     By = 1e4;
     alpha = 1.0; 
     gamma = 1.0;
-    sigma = 0.05;
+    sigma = 0.01;
 
     use_cell_centroid = true;
 
@@ -396,49 +396,83 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
     std::cout << "yolk volume init " << yolk_vol_init << std::endl;
 }
 
-void VertexModel::addTestPrism()
+void VertexModel::addTestPrism(int edge)
 {
-    deformed.resize(8 * 3);
-    deformed << -0.5, 0.5, 0.5, 
-            0.5, 0.5, 0.5, 
-            0.5, 0.5, -0.5,
-            -0.5, 0.5, -0.5,
-            -0.5, -0.5, 0.5, 
-            0.5, -0.5, 0.5, 
-            0.5, -0.5, -0.5,
-            -0.5, -0.5, -0.5;
-    basal_vtx_start = 4;
+    num_nodes = edge * 2;
+    if (edge == 4)
+    {
+        deformed.resize(8 * 3);
+        deformed << -0.5, 0.5, 0.5, 
+                0.5, 0.5, 0.5, 
+                0.5, 0.5, -0.5,
+                -0.5, 0.5, -0.5,
+                -0.5, -0.5, 0.5, 
+                0.5, -0.5, 0.5, 
+                0.5, -0.5, -0.5,
+                -0.5, -0.5, -0.5;
+        
+        faces.push_back({0, 1, 2, 3});
+        
+        faces.push_back({7, 6, 5, 4});
+        
+        faces.push_back({0, 4, 5, 1});
+        faces.push_back({1, 5, 6, 2});
+        faces.push_back({2, 6, 7, 3});
+        faces.push_back({3, 7, 4, 0});
+
+        for (VtxList& f : faces)
+            std::reverse(f.begin(), f.end());
+        
+    }
+    else if (edge == 5)
+    {
+        deformed.resize(10 * 3);
+        deformed.segment<3>(15) = TV(0, 0, 1);
+        deformed.segment<3>(18) = TV(std::sin(2.0/5.0 * M_PI), 0, std::cos(2.0/5.0 * M_PI));
+        deformed.segment<3>(21) = TV(std::sin(4.0/5.0 * M_PI), 0, -std::cos(1.0/5.0 * M_PI));
+        deformed.segment<3>(24) = TV(-std::sin(4.0/5.0 * M_PI), 0, -std::cos(1.0/5.0 * M_PI));
+        deformed.segment<3>(27) = TV(-std::sin(2.0/5.0 * M_PI), 0, std::cos(2.0/5.0 * M_PI));
+
+        deformed.segment<3>(0) = TV(0, 1, 1);
+        deformed.segment<3>(3) = TV(std::sin(2.0/5.0 * M_PI), 1, std::cos(2.0/5.0 * M_PI));
+        deformed.segment<3>(6) = TV(std::sin(4.0/5.0 * M_PI), 1, -std::cos(1.0/5.0 * M_PI));
+        deformed.segment<3>(9) = TV(-std::sin(4.0/5.0 * M_PI), 1, -std::cos(1.0/5.0 * M_PI));
+        deformed.segment<3>(12) = TV(-std::sin(2.0/5.0 * M_PI), 1, std::cos(2.0/5.0 * M_PI));
+        
+
+        faces.push_back({0, 1, 2, 3, 4});
+        faces.push_back({9, 8, 7, 6, 5});
+        
+        faces.push_back({0, 5, 6, 1});
+        faces.push_back({1, 6, 7, 2});
+        faces.push_back({2, 7, 8, 3});
+        faces.push_back({3, 8, 9, 4});
+        faces.push_back({4, 9, 5, 0});
+
+        for (VtxList& f : faces)
+            std::reverse(f.begin(), f.end());
+    }
+    
+    basal_vtx_start = edge;
+    basal_face_start = 1;
+    lateral_face_start = 2;
 
     u = VectorXT::Zero(deformed.size());
     undeformed = deformed;
 
-    faces.push_back({0, 1, 2, 3});
-    basal_face_start = 1;
-    faces.push_back({7, 6, 5, 4});
-    lateral_face_start = 2;
-    faces.push_back({0, 4, 5, 1});
-    faces.push_back({1, 5, 6, 2});
-    faces.push_back({2, 6, 7, 3});
-    faces.push_back({3, 7, 4, 0});
-
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < edge; i++)
     {
-        int j = (i + 1) % 4;
+        int j = (i + 1) % edge;
         edges.push_back(Edge(i, j));
-        edges.push_back(Edge(i + 4, j + 4));
-        edges.push_back(Edge(i, i + 4));
+        edges.push_back(Edge(i + edge, j + edge));
+        edges.push_back(Edge(i, i + edge));
     }
-
-    for (VtxList& f : faces)
-        std::reverse(f.begin(), f.end());
-    num_nodes = 8;
-
     for (int d = 0; d < 3; d++)
     {
         dirichlet_data[d] = 0.0;
     }
 
-    add_yolk_volume = true;
+    add_yolk_volume = false;
     mesh_centroid = TV(0, -1, 0);
     B = 1e6;
     By = 1.0;
@@ -573,7 +607,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     undeformed = deformed;
 
     B = 1e6;
-    By = 1e1;
+    By = 1e4;
     alpha = 1.0; 
     gamma = 1.0;
     sigma = 0.1;
@@ -585,6 +619,15 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         dirichlet_data[d] = 0.0;
     }
+
+    // for (int i = 0; i < basal_vtx_start; i++)
+    // {
+    //     for (int d = 0; d < 3; d++)
+    //     {
+    //         dirichlet_data[i * 3 + d] = 0.0;
+    //     }   
+    // }
+    
 
     add_yolk_volume = true;
 
@@ -703,6 +746,7 @@ void VertexModel::computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, 
         return 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
     };
 
+    
     TV v0 = prism_vertices.segment<3>(4 * 3);
     TV v1 = prism_vertices.segment<3>(5 * 3);
     TV v2 = prism_vertices.segment<3>(7 * 3);
@@ -715,11 +759,39 @@ void VertexModel::computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, 
 	
     Vector<T, 6> tet_vol;
     tet_vol[0] = computeTetVolume(v2, v4, v6, v5);
-    tet_vol[1] = computeTetVolume(v6, v5, v7, v2);
+    tet_vol[1] = computeTetVolume(v7, v2, v6, v5);
     tet_vol[2] = computeTetVolume(v3, v2, v7, v5);
     tet_vol[3] = computeTetVolume(v4, v2, v0, v5);
     tet_vol[4] = computeTetVolume(v1, v0, v2, v5);
-    tet_vol[5] = computeTetVolume(v5, v1, v3, v2);
+    tet_vol[5] = computeTetVolume(v3, v1, v2, v5);
+
+    auto saveTetObjs = [&](const std::vector<TV>& tets, int idx)
+    {
+        TV tet_center = TV::Zero();
+        for (const TV& vtx : tets)
+        {
+            tet_center += vtx;
+        }
+        tet_center *= 0.25;
+
+        TV shift = 0.5 * tet_center;
+        
+        std::ofstream out("tet" + std::to_string(idx) + ".obj");
+        for (const TV& vtx : tets)
+            out << "v " << (vtx + shift).transpose() << std::endl;
+        out << "f 3 2 1" << std::endl;
+        out << "f 4 3 1" << std::endl;
+        out << "f 2 4 1" << std::endl;
+        out << "f 3 4 2" << std::endl;
+        out.close();
+    };
+
+    // saveTetObjs({v2, v4, v6, v5}, 0);
+    // saveTetObjs({v7, v2, v6, v5}, 1);
+    // saveTetObjs({v3, v2, v7, v5}, 2);
+    // saveTetObjs({v4, v2, v0, v5}, 3);
+    // saveTetObjs({v1, v0, v2, v5}, 4);
+    // saveTetObjs({v3, v1, v2, v5}, 5);
 
     std::cout << "tet vol " << tet_vol.transpose() << std::endl;
 
@@ -791,13 +863,19 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
                 else
                     computeQuadBasePrismVolume(positions, cell_volume_list[face_idx]);
                 // T tet_vol;
-                // // computeCubeVolumeFromTet(positions, tet_vol);
-                // computeCubeVolumeCentroid(positions, tet_vol);
+                
+                // computeCubeVolumeFromTet(positions, tet_vol);
+                // // // computeCubeVolumeCentroid(positions, tet_vol);
                 // std::cout << tet_vol << std::endl;
                 // std::getchar();
             }
             else if (face_vtx_list.size() == 5)
-                computeVolume5Points(positions, cell_volume_list[face_idx]);
+            {
+                if (use_cell_centroid)
+                    computeVolume5Points(positions, cell_volume_list[face_idx]);
+                else
+                    computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
+            }
             else if (face_vtx_list.size() == 6)
                 computeVolume6Points(positions, cell_volume_list[face_idx]);
         }
@@ -872,8 +950,8 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     VectorXT current_cell_volume;
     computeVolumeAllCells(current_cell_volume);
     
-    if (verbose)
-        std::cout << "current cell volume " << current_cell_volume.transpose() << std::endl;
+    // if (verbose)
+        // std::cout << "current cell volume " << current_cell_volume.transpose() << std::endl;
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
@@ -889,7 +967,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         {
             T coeff = face_idx >= lateral_face_start ? alpha : gamma;
             if (face_vtx_list.size() == 4)
-                computeQuadFaceAreaEnergy(coeff, positions, area_energy);
+                computeQuadFaceArea(coeff, positions, area_energy);
             else if (face_vtx_list.size() == 5)
                 computePentFaceAreaEnergy(coeff, positions, area_energy);
             else if (face_vtx_list.size() == 6)
@@ -982,15 +1060,16 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                         computeVolume4PointsGradient(positions, dedx);
                     else
                         computeQuadBasePrismVolumeGradient(positions, dedx);
-                    // std::cout << dedx.transpose() << std::endl;
-                    // std::getchar();
                     dedx *= -coeff;
                     addForceEntry<24>(residual, cell_vtx_list, dedx);
                 }
                 else if (face_vtx_list.size() == 5)
                 {
                     Vector<T, 30> dedx;
-                    computeVolume5PointsGradient(positions, dedx);
+                    if (use_cell_centroid)
+                        computeVolume5PointsGradient(positions, dedx);
+                    else
+                        computePentaBasePrismVolumeGradient(positions, dedx);
                     dedx *= -coeff;
                     addForceEntry<30>(residual, cell_vtx_list, dedx);
                 }
@@ -1025,7 +1104,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             {
                 Vector<T, 12> dedx;
                 // computeArea4PointsGradient(coeff, positions, dedx);
-                computeQuadFaceAreaEnergyGradient(coeff, positions, dedx);
+                computeQuadFaceAreaGradient(coeff, positions, dedx);
                 // dedx *= -coeff;
                 dedx *=-1;
                 addForceEntry<12>(residual, face_vtx_list, dedx);
@@ -1237,10 +1316,16 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             else if (face_vtx_list.size() == 5)
             {
                 Matrix<T, 30, 30> d2Vdx2;
-                computeVolume5PointsHessian(positions, d2Vdx2);
+                if (use_cell_centroid)
+                    computeVolume5PointsHessian(positions, d2Vdx2);
+                else 
+                    computePentaBasePrismVolumeHessian(positions, d2Vdx2);
 
                 Vector<T, 30> dVdx;
-                computeVolume5PointsGradient(positions, dVdx);
+                if (use_cell_centroid)
+                    computeVolume5PointsGradient(positions, dVdx);
+                else
+                    computePentaBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 30, 30> hessian = B * (dVdx * dVdx.transpose() + 
@@ -1278,7 +1363,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 Matrix<T, 12, 12> hessian;
                 // computeArea4PointsHessian(coeff, positions, hessian);
                 // hessian *= coeff;
-                computeQuadFaceAreaEnergyHessian(coeff, positions, hessian);
+                computeQuadFaceAreaHessian(coeff, positions, hessian);
                 addHessianEntry<12>(entries, face_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 5)

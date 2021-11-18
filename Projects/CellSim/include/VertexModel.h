@@ -93,7 +93,8 @@ public:
     std::vector<FaceList> cell_faces; // face id list for each cell
     VectorXT cell_volume_init;
     std::vector<Edge> edges; // all edges
-
+    
+    
     int num_nodes;
     int basal_vtx_start;
     int basal_face_start;
@@ -129,7 +130,7 @@ public:
     T computeYolkVolume(bool verbose = false);
     void computeVolumeAllCells(VectorXT& cell_volume_list);
     void vertexModelFromMesh(const std::string& filename);
-    void addTestPrism();
+    void addTestPrism(int edge);
 
     void addTestPrismGrid(int n_row, int n_col);
 
