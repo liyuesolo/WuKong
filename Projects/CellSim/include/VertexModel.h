@@ -68,6 +68,15 @@ public:
     }
 
     template <typename OP>
+    void iterateContractingEdgeSerial(const OP& f)
+    {
+        for (Edge& e : contracting_edges)
+        {
+            f(e);
+        }   
+    }
+
+    template <typename OP>
     void iterateApicalEdgeSerial(const OP& f)
     {
         for (Edge& e : edges)
@@ -93,8 +102,8 @@ public:
     std::vector<FaceList> cell_faces; // face id list for each cell
     VectorXT cell_volume_init;
     std::vector<Edge> edges; // all edges
-    
-    
+    std::vector<Edge> contracting_edges;
+
     int num_nodes;
     int basal_vtx_start;
     int basal_face_start;
@@ -103,12 +112,25 @@ public:
     T sigma = 1.0;
     T alpha = 2.13;
     T gamma = 0.98;
+    T Gamma = 5.0;
     T B = 100.0;
     T By = 100.0;
+    T pressure_constant = 1e1;
+    T Rc = 1.2;
+    T bound_coeff = 10e-10;
+    int bound_power = 4;
+
+    bool single_prism = false;
 
     bool run_diff_test = false;
     bool add_yolk_volume = true;
     bool use_cell_centroid = false;
+    bool use_face_centroid = false;
+    bool add_contraction_term = false;
+    bool use_yolk_pressure = false;
+    bool use_sphere_radius_bound = false;
+    bool sphere_bound_penalty = false;
+
 
     TV mesh_centroid;
     T yolk_vol_init;
@@ -121,7 +143,11 @@ public:
 
     void computeLinearModes();
 
+    void initializeContractionData();
+    void approximateMembraneThickness();
+
     void computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume);
+    void computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices, T& volume);
     void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
 
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
@@ -143,13 +169,11 @@ public:
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
 
-    void faceHessianChainRuleTest();
+    void checkTotalGradient(bool perturb = false);
+    void checkTotalHessian(bool perturb = false);
 
-    void checkTotalGradient();
-    void checkTotalHessian();
-
-    void checkTotalHessianScale();
-    void checkTotalGradientScale();
+    void checkTotalHessianScale(bool perturb = false);
+    void checkTotalGradientScale(bool perturb = false);
     
     void positionsFromIndices(VectorXT& positions, const VtxList& indices);
 

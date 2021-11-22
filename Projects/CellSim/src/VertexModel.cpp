@@ -14,6 +14,35 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/VertexModelEnergy.h"
 
+void VertexModel::initializeContractionData()
+{
+    // VtxList contracting_vertices = {37, 36, 39, 49, 48, 50, 23, 67, 33, 32, 34};
+    VtxList contracting_vertices = {576, 577, 587, 618, 610, 608, 611, 615, 534,
+        529, 528, 530, 543, 526, 515, 512, 513, 523, 554, 
+        546, 544, 
+        547, 551, 598, 
+        593, 592, 594, 
+        607, 590, 579};
+    for (int i = 0; i < contracting_vertices.size(); i++)
+    {
+        int j = (i + 1) % contracting_vertices.size();
+        Edge e(contracting_vertices[i], contracting_vertices[j]);
+        contracting_edges.push_back(e);
+    }    
+}
+
+void VertexModel::approximateMembraneThickness()
+{
+    T radii_max = -1e6;
+    for (int i = 0; i < basal_vtx_start; i++)
+    {
+        radii_max = std::max(radii_max, (deformed.segment<3>(i * 3) - mesh_centroid).norm());
+    }
+    Rc = 1.01 * radii_max;
+    // Rc = radii_max;
+    
+}
+
 void VertexModel::computeLinearModes()
 {
     int nmodes = 15;
@@ -114,99 +143,182 @@ bool VertexModel::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& 
 
 void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
-    
-    int face_cnt = 0, vtx_cnt = 0;
-    T offset_percentage = 2.0;
-    std::vector<IV> tri_faces;
-    std::vector<TV> vertices;
-    std::vector<TV> colors;
-    // std::cout << basal_face_start << std::endl;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    if (single_prism)
     {
-        if (face_idx < basal_face_start)
+        if (use_cell_centroid)
         {
-            // std::cout << "f " << face_idx << std::endl;
-            VectorXT positions;
-            positionsFromIndices(positions, face_vtx_list);
-            VectorXT positions_basal;
-            VtxList basal_face_vtx_list = face_vtx_list;
-            
-            for (int& idx : basal_face_vtx_list)
-                idx += basal_vtx_start;
-
-            positionsFromIndices(positions_basal, basal_face_vtx_list);
-            TV apical_centroid, basal_centroid;
-            computeFaceCentroid(face_vtx_list, apical_centroid);
-
-            computeFaceCentroid(basal_face_vtx_list, basal_centroid);
-            
-            TV apical_centroid_shifted = mesh_centroid + (apical_centroid - mesh_centroid) * offset_percentage;
-            TV shift = apical_centroid_shifted - apical_centroid;
-            VtxList new_face_vtx;
-            // V.row(vtx_cnt) = apical_centroid_shifted;
-            vertices.push_back(apical_centroid_shifted);
-            // out << "v " << apical_centroid_shifted.transpose() << std::endl;
-            new_face_vtx.push_back(vtx_cnt);
-            for (int i = 0; i < face_vtx_list.size(); i++)
-                new_face_vtx.push_back(vtx_cnt + i + 1);
-            vtx_cnt++;
-            for (int i = 0; i < face_vtx_list.size(); i++)
-            {
-                int j = (i + 1) % face_vtx_list.size();
-                positions.segment<3>(i * 3) += shift;
-                // out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
-                // V.row(vtx_cnt) =  positions.segment<3>(i * 3);
-                vertices.push_back(positions.segment<3>(i * 3));
-                colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
-                tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[0], new_face_vtx[1 + j]));
-                vtx_cnt++;
-            }
-
-            VtxList new_face_vtx_basal;
-            TV basal_centroid_shifted = basal_centroid + shift;
-            // out << "v " << basal_centroid_shifted.transpose() << std::endl;
-            // V.row(vtx_cnt) =  basal_centroid_shifted;
-            vertices.push_back(basal_centroid_shifted);
-            new_face_vtx_basal.push_back(vtx_cnt);
-            for (int i = 0; i < basal_face_vtx_list.size(); i++)
-                new_face_vtx_basal.push_back(vtx_cnt + i + 1);
-            vtx_cnt++;
-            for (int i = 0; i < basal_face_vtx_list.size(); i++)
-            {
-                int j = (i + 1) % basal_face_vtx_list.size();
-                positions_basal.segment<3>(i * 3) += shift;
-                // out << "v " << positions_basal.segment<3>(i * 3).transpose() << std::endl;
-                // V.row(vtx_cnt) =  positions_basal.segment<3>(i * 3);
-                vertices.push_back(positions_basal.segment<3>(i * 3));
-                colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
-                tri_faces.push_back(IV(new_face_vtx_basal[0], new_face_vtx_basal[1 + i], new_face_vtx_basal[1 + j]));
-                vtx_cnt++;
-            }
-
-            for (int i = 0; i < basal_face_vtx_list.size(); i++)
-            {
-                int j = (i + 1) % basal_face_vtx_list.size();
-                tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[1 + j], new_face_vtx_basal[ 1 + j]));
-                tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx_basal[ 1 + j], new_face_vtx_basal[ 1 + i]));
-                colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
-                colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
-            }
 
         }
-    });
-    // std::cout << "set V done " << std::endl;
-    V.resize(vtx_cnt, 3);
-    F.resize(tri_faces.size(), 3);
-    C.resize(tri_faces.size(), 3);
-    for (int i = 0; i < vtx_cnt; i++)
-    {
-        V.row(i) = vertices[i];
+        else
+        {
+            if (num_nodes == 4 * 2)
+            {
+
+            }
+            else if (num_nodes == 5 * 2)
+            {
+                TV v0 = deformed.segment<3>(5 * 3);
+                TV v1 = deformed.segment<3>(6 * 3);
+                TV v2 = deformed.segment<3>(7 * 3);
+                TV v3 = deformed.segment<3>(8 * 3);
+                TV v4 = deformed.segment<3>(9 * 3);
+
+                TV v5 = deformed.segment<3>(0 * 3);
+                TV v6 = deformed.segment<3>(1 * 3);
+                TV v7 = deformed.segment<3>(2 * 3);
+                TV v8 = deformed.segment<3>(3 * 3);
+                TV v9 = deformed.segment<3>(4 * 3);
+                
+                std::vector<TV> vertices;
+                std::vector<IV> tri_faces;
+
+                auto appendTet = [&](const std::vector<TV>& tets, int tet_idx)
+                {
+                    int nv = vertices.size();
+                    TV tet_center = TV::Zero();
+                    for (const TV& vtx : tets)
+                    {
+                        tet_center += vtx;
+                    }
+                    tet_center *= 0.25;
+
+                    TV shift = 0.5 * tet_center;
+
+                    for (const TV& vtx : tets)
+                        vertices.push_back(vtx + shift);
+                    // tri_faces.push_back(IV(nv + 2, nv + 1, nv + 0));
+                    tri_faces.push_back(IV(nv + 1, nv + 2, nv + 0));
+                    // tri_faces.push_back(IV(nv + 3, nv + 2, nv + 0));
+                    tri_faces.push_back(IV(nv + 2, nv + 3, nv + 0));
+                    // tri_faces.push_back(IV(nv + 1, nv + 3, nv + 0));
+                    tri_faces.push_back(IV(nv + 3, nv + 1, nv + 0));
+                    // tri_faces.push_back(IV(nv + 2, nv + 3, nv + 1));
+                    tri_faces.push_back(IV(nv + 3, nv + 2, nv + 1));
+                };
+
+                appendTet({v8, v3, v9, v0}, 0);
+                appendTet({v9, v3, v4, v0}, 1);
+                appendTet({v0, v7, v2, v1}, 2);
+                appendTet({v8, v9, v5, v0}, 3);
+                appendTet({v0, v6, v7, v1}, 4);
+                appendTet({v0, v5, v7, v6}, 5);
+                appendTet({v8, v5, v7, v0}, 6);
+                appendTet({v0, v8, v2, v7}, 7);
+                appendTet({v3, v8, v2, v0}, 8);
+
+                V.resize(vertices.size(), 3);
+                F.resize(tri_faces.size(), 3);
+                C.resize(tri_faces.size(), 3);
+
+                for (int i = 0; i < vertices.size(); i++)
+                {
+                    V.row(i) = vertices[i];
+                }
+                
+                for (int i = 0; i < tri_faces.size(); i++)
+                {
+                    F.row(i) = tri_faces[i];
+                    C.row(i) = TV(0, 0.3, 1.0);
+                }
+
+            }
+        }
     }
-    
-    for (int i = 0; i < tri_faces.size(); i++)
+    else
     {
-        F.row(i) = tri_faces[i];
-        C.row(i) = colors[i];
+        int face_cnt = 0, vtx_cnt = 0;
+        T offset_percentage = 2.0;
+        std::vector<IV> tri_faces;
+        std::vector<TV> vertices;
+        std::vector<TV> colors;
+        // std::cout << basal_face_start << std::endl;
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            if (face_idx < basal_face_start)
+            {
+                // std::cout << "f " << face_idx << std::endl;
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                VectorXT positions_basal;
+                VtxList basal_face_vtx_list = face_vtx_list;
+                
+                for (int& idx : basal_face_vtx_list)
+                    idx += basal_vtx_start;
+
+                positionsFromIndices(positions_basal, basal_face_vtx_list);
+                TV apical_centroid, basal_centroid;
+                computeFaceCentroid(face_vtx_list, apical_centroid);
+
+                computeFaceCentroid(basal_face_vtx_list, basal_centroid);
+                
+                TV apical_centroid_shifted = mesh_centroid + (apical_centroid - mesh_centroid) * offset_percentage;
+                TV shift = apical_centroid_shifted - apical_centroid;
+                VtxList new_face_vtx;
+                // V.row(vtx_cnt) = apical_centroid_shifted;
+                vertices.push_back(apical_centroid_shifted);
+                // out << "v " << apical_centroid_shifted.transpose() << std::endl;
+                new_face_vtx.push_back(vtx_cnt);
+                for (int i = 0; i < face_vtx_list.size(); i++)
+                    new_face_vtx.push_back(vtx_cnt + i + 1);
+                vtx_cnt++;
+                for (int i = 0; i < face_vtx_list.size(); i++)
+                {
+                    int j = (i + 1) % face_vtx_list.size();
+                    positions.segment<3>(i * 3) += shift;
+                    // out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
+                    // V.row(vtx_cnt) =  positions.segment<3>(i * 3);
+                    vertices.push_back(positions.segment<3>(i * 3));
+                    colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
+                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[0], new_face_vtx[1 + j]));
+                    vtx_cnt++;
+                }
+
+                VtxList new_face_vtx_basal;
+                TV basal_centroid_shifted = basal_centroid + shift;
+                // out << "v " << basal_centroid_shifted.transpose() << std::endl;
+                // V.row(vtx_cnt) =  basal_centroid_shifted;
+                vertices.push_back(basal_centroid_shifted);
+                new_face_vtx_basal.push_back(vtx_cnt);
+                for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    new_face_vtx_basal.push_back(vtx_cnt + i + 1);
+                vtx_cnt++;
+                for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                {
+                    int j = (i + 1) % basal_face_vtx_list.size();
+                    positions_basal.segment<3>(i * 3) += shift;
+                    // out << "v " << positions_basal.segment<3>(i * 3).transpose() << std::endl;
+                    // V.row(vtx_cnt) =  positions_basal.segment<3>(i * 3);
+                    vertices.push_back(positions_basal.segment<3>(i * 3));
+                    colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
+                    tri_faces.push_back(IV(new_face_vtx_basal[0], new_face_vtx_basal[1 + i], new_face_vtx_basal[1 + j]));
+                    vtx_cnt++;
+                }
+
+                for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                {
+                    int j = (i + 1) % basal_face_vtx_list.size();
+                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[1 + j], new_face_vtx_basal[ 1 + j]));
+                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx_basal[ 1 + j], new_face_vtx_basal[ 1 + i]));
+                    colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
+                    colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
+                }
+
+            }
+        });
+        // std::cout << "set V done " << std::endl;
+        V.resize(vtx_cnt, 3);
+        F.resize(tri_faces.size(), 3);
+        C.resize(tri_faces.size(), 3);
+        for (int i = 0; i < vtx_cnt; i++)
+        {
+            V.row(i) = vertices[i];
+        }
+        
+        for (int i = 0; i < tri_faces.size(); i++)
+        {
+            F.row(i) = tri_faces[i];
+            C.row(i) = colors[i];
+        }
     }
     
 }
@@ -398,6 +510,7 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
 
 void VertexModel::addTestPrism(int edge)
 {
+    single_prism = true;
     num_nodes = edge * 2;
     if (edge == 4)
     {
@@ -474,16 +587,15 @@ void VertexModel::addTestPrism(int edge)
 
     add_yolk_volume = false;
     mesh_centroid = TV(0, -1, 0);
-    B = 1e6;
-    By = 1.0;
+    B = 1e4;
+    By = 1e4;
     alpha = 1.0; 
     gamma = 1.0;
+    sigma = 1.0;
 
     use_cell_centroid = true;
 
-    sigma = 1;
-
-
+    
     if (add_yolk_volume)
         yolk_vol_init = computeYolkVolume();
 }
@@ -608,12 +720,13 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     B = 1e6;
     By = 1e4;
-    alpha = 1.0; 
+    
+    alpha = 2.0; 
     gamma = 1.0;
     sigma = 0.1;
 
-    use_cell_centroid = false;
-
+    use_cell_centroid = true;
+    use_face_centroid = true;
 
     for (int d = 0; d < 3; d++)
     {
@@ -645,7 +758,35 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         yolk_vol_init = computeYolkVolume();
     }
     std::cout << "yolk volume init " << yolk_vol_init << std::endl;
-    std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
+    // std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
+
+    add_contraction_term = true;
+    // Gamma = 0.5;
+    Gamma = 2.0;
+
+    if (add_contraction_term)
+    {
+        initializeContractionData();
+    }
+
+    use_sphere_radius_bound = true;
+    sphere_bound_penalty = true;
+    if (use_sphere_radius_bound)
+    {
+        approximateMembraneThickness();
+        std::cout << "Rc " << Rc << std::endl;
+        
+        if (sphere_bound_penalty)
+            bound_coeff = 1e4;
+        else
+            bound_coeff = 1e-6;
+    }
+
+    std::cout << "# system DoF: " << deformed.rows() << std::endl;
+
+    use_yolk_pressure = true;
+    // pressure_constant = 1e-6; //low res worked
+    pressure_constant = 1e1;
 }
 
 
@@ -737,6 +878,73 @@ void VertexModel::computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid
         centroid += deformed.segment<3>(vtx_idx * 3);
 
     centroid /= T(face_vtx_list.size());
+}
+
+void VertexModel::computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices,
+ T& volume)
+{
+    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
+    {
+        return 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
+    };
+
+    TV v0 = prism_vertices.segment<3>(5 * 3);
+    TV v1 = prism_vertices.segment<3>(6 * 3);
+    TV v2 = prism_vertices.segment<3>(7 * 3);
+    TV v3 = prism_vertices.segment<3>(8 * 3);
+    TV v4 = prism_vertices.segment<3>(9 * 3);
+
+    TV v5 = prism_vertices.segment<3>(0 * 3);
+    TV v6 = prism_vertices.segment<3>(1 * 3);
+    TV v7 = prism_vertices.segment<3>(2 * 3);
+    TV v8 = prism_vertices.segment<3>(3 * 3);
+    TV v9 = prism_vertices.segment<3>(4 * 3);
+
+    Vector<T, 9> tet_vol;
+
+    tet_vol[0] = computeTetVolume(v8, v3, v9, v0);
+    tet_vol[1] = computeTetVolume(v9, v3, v4, v0);
+    tet_vol[2] = computeTetVolume(v0, v7, v2, v1);
+    tet_vol[3] = computeTetVolume(v8, v9, v5, v0);
+    tet_vol[4] = computeTetVolume(v0, v6, v7, v1);
+    tet_vol[5] = computeTetVolume(v0, v5, v7, v6);
+    tet_vol[6] = computeTetVolume(v8, v5, v7, v0);
+    tet_vol[7] = computeTetVolume(v0, v8, v2, v7);
+    tet_vol[8] = computeTetVolume(v3, v8, v2, v0);
+
+    auto saveTetObjs = [&](const std::vector<TV>& tets, int idx)
+    {
+        TV tet_center = TV::Zero();
+        for (const TV& vtx : tets)
+        {
+            tet_center += vtx;
+        }
+        tet_center *= 0.25;
+
+        TV shift = 0.5 * tet_center;
+        
+        std::ofstream out("tet" + std::to_string(idx) + ".obj");
+        for (const TV& vtx : tets)
+            out << "v " << (vtx + shift).transpose() << std::endl;
+        out << "f 3 2 1" << std::endl;
+        out << "f 4 3 1" << std::endl;
+        out << "f 2 4 1" << std::endl;
+        out << "f 3 4 2" << std::endl;
+        out.close();
+    };
+
+    saveTetObjs({v8, v3, v9, v0}, 0);
+    saveTetObjs({v9, v3, v4, v0}, 1);
+    saveTetObjs({v0, v7, v2, v1}, 2);
+    saveTetObjs({v8, v9, v5, v0}, 3);
+    saveTetObjs({v0, v6, v7, v1}, 4);
+    saveTetObjs({v0, v5, v7, v6}, 5);
+    saveTetObjs({v8, v5, v7, v0}, 6);
+    saveTetObjs({v0, v8, v2, v7}, 7);
+    saveTetObjs({v3, v8, v2, v0}, 8);
+
+    std::cout << "tets volume : " << tet_vol.transpose() << std::endl;
+    volume = tet_vol.sum();
 }
 
 void VertexModel::computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume)
@@ -875,6 +1083,11 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
                     computeVolume5Points(positions, cell_volume_list[face_idx]);
                 else
                     computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
+                
+                // T tet_vol;
+                // computePentaPrismVolumeFromTet(positions, tet_vol);
+                // std::cout << tet_vol << std::endl;
+                // std::getchar();
             }
             else if (face_vtx_list.size() == 6)
                 computeVolume6Points(positions, cell_volume_list[face_idx]);
@@ -898,8 +1111,8 @@ T VertexModel::computeYolkVolume(bool verbose)
         {
             T cone_volume;
             if (face_vtx_list.size() == 4) 
-                // computeConeVolume4Points(positions, mesh_centroid, cone_volume);
-                computeQuadConeVolume(positions, mesh_centroid, cone_volume);
+                computeConeVolume4Points(positions, mesh_centroid, cone_volume);
+                // computeQuadConeVolume(positions, mesh_centroid, cone_volume);
             else if (face_vtx_list.size() == 5) 
                 computeConeVolume5Points(positions, mesh_centroid, cone_volume);
             else if (face_vtx_list.size() == 6) 
@@ -933,19 +1146,37 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     }
     deformed = undeformed + projected;
 
-    T edge_length_term = 0.0, area_term = 0.0, volume_term = 0.0, yolk_volume_term = 0.0;
+    T edge_length_term = 0.0, area_term = 0.0, 
+        volume_term = 0.0, yolk_volume_term = 0.0,
+        edge_contraction_term = 0.0, sphere_bound_term = 0.0;
+    
     // edge length term
-    iterateApicalEdgeSerial([&](Edge& e){
-        
+    iterateApicalEdgeSerial([&](Edge& e){    
         TV vi = deformed.segment<3>(e[0] * 3);
         TV vj = deformed.segment<3>(e[1] * 3);
         T edge_length = computeEdgeSquaredNorm(vi, vj);
         edge_length_term += sigma * edge_length;
 
     });
+
+    if (add_contraction_term)
+    {
+        iterateContractingEdgeSerial([&](Edge& e){    
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            T edge_length = computeEdgeSquaredNorm(vi, vj);
+            edge_contraction_term += Gamma * edge_length;
+        });
+    }
+
     if (verbose)
+    {
         std::cout << "\tE_edge " << edge_length_term << std::endl;
+        if (add_contraction_term)
+            std::cout << "\tE_edge_contract " << edge_contraction_term << std::endl;
+    }
     energy += edge_length_term;
+    energy += edge_contraction_term;
 
     VectorXT current_cell_volume;
     computeVolumeAllCells(current_cell_volume);
@@ -967,11 +1198,20 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         {
             T coeff = face_idx >= lateral_face_start ? alpha : gamma;
             if (face_vtx_list.size() == 4)
-                computeQuadFaceArea(coeff, positions, area_energy);
+            {
+                computeArea4PointsSquared(coeff, positions, area_energy);
+                // computeQuadFaceArea(coeff, positions, area_energy);
+            }
             else if (face_vtx_list.size() == 5)
-                computePentFaceAreaEnergy(coeff, positions, area_energy);
+                if (use_face_centroid)
+                    computeArea5PointsSquared(coeff, positions, area_energy);
+                else
+                    computePentFaceAreaEnergy(coeff, positions, area_energy);
             else if (face_vtx_list.size() == 6)
-                computeHexFaceAreaEnergy(coeff, positions, area_energy);
+                if (use_face_centroid)
+                    computeArea6PointsSquared(coeff, positions, area_energy);
+                else
+                    computeHexFaceAreaEnergy(coeff, positions, area_energy);
             else
                 std::cout << "unknown polygon edge case" << std::endl;
         }
@@ -989,12 +1229,44 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     if (add_yolk_volume)
     {
         T yolk_vol_curr = computeYolkVolume();
-        yolk_volume_term +=  0.5 * By * std::pow(yolk_vol_curr - yolk_vol_init, 2);    
+        if (use_yolk_pressure)
+        {
+            yolk_volume_term += -pressure_constant * yolk_vol_curr;
+        }
+        else
+        {
+            yolk_volume_term +=  0.5 * By * std::pow(yolk_vol_curr - yolk_vol_init, 2);    
+        }
     }
     if (verbose)
         std::cout << "\tE_yolk_vol " << yolk_volume_term << std::endl;
 
     energy += yolk_volume_term;
+
+    if (use_sphere_radius_bound)
+    {
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            T e = 0.0;;
+            if (sphere_bound_penalty)
+            {
+                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
+                if (Rk >= Rc)
+                {
+                    computeRadiusPenalty(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, e);
+                    sphere_bound_term += e;
+                }
+            }
+            else
+            {
+                sphereBoundEnergy(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, e);
+                sphere_bound_term += e;
+            }
+        }
+        if (verbose)
+            std::cout << "\tE_inside_sphere " << sphere_bound_term << std::endl;
+    }
+    energy += sphere_bound_term;
 
     return energy;
 }
@@ -1021,6 +1293,18 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         dedx *= -sigma;
         addForceEntry<6>(residual, {e[0], e[1]}, dedx);
     });
+
+    if (add_contraction_term)
+    {
+        iterateContractingEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            dedx *= -Gamma;
+            addForceEntry<6>(residual, {e[0], e[1]}, dedx);
+        }); 
+    }
 
     if (verbose)
         std::cout << "edge length force norm: " << (residual - residual_temp).norm() << std::endl;
@@ -1104,7 +1388,8 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             {
                 Vector<T, 12> dedx;
                 // computeArea4PointsGradient(coeff, positions, dedx);
-                computeQuadFaceAreaGradient(coeff, positions, dedx);
+                // computeQuadFaceAreaGradient(coeff, positions, dedx);
+                computeArea4PointsSquaredGradient(coeff, positions, dedx);
                 // dedx *= -coeff;
                 dedx *=-1;
                 addForceEntry<12>(residual, face_vtx_list, dedx);
@@ -1114,7 +1399,10 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                 Vector<T, 15> dedx;
                 // computeArea5PointsGradient(coeff, positions, dedx);
                 // dedx *= -coeff;
-                computePentFaceAreaEnergyGradient(coeff, positions, dedx);
+                if (use_face_centroid)
+                    computeArea5PointsSquaredGradient(coeff, positions, dedx);
+                else
+                    computePentFaceAreaEnergyGradient(coeff, positions, dedx);
                 dedx *= -1.0;
                 addForceEntry<15>(residual, face_vtx_list, dedx);
             }
@@ -1123,7 +1411,11 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                 Vector<T, 18> dedx;
                 // computeArea6PointsGradient(coeff, positions, dedx);
                 // dedx *= -coeff;
-                computeHexFaceAreaEnergyGradient(coeff, positions, dedx);
+                // computeHexFaceAreaEnergyGradient(coeff, positions, dedx);
+                if (use_face_centroid)
+                    computeArea6PointsSquaredGradient(coeff, positions, dedx);
+                else
+                    computeHexFaceAreaEnergyGradient(coeff, positions, dedx);
                 dedx *= -1.0;
                 addForceEntry<18>(residual, face_vtx_list, dedx);
             }
@@ -1140,12 +1432,16 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                 
                 VectorXT positions;
                 positionsFromIndices(positions, face_vtx_list);
-                T coeff = By * (yolk_vol_curr - yolk_vol_init);
+                T coeff;
+                if (use_yolk_pressure)
+                    coeff = -pressure_constant;
+                else
+                    coeff = By * (yolk_vol_curr - yolk_vol_init);
                 if (face_vtx_list.size() == 4)
                 {
                     Vector<T, 12> dedx;
-                    // computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
+                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                    // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
                     addForceEntry<12>(residual, face_vtx_list, dedx);
                 }
@@ -1175,6 +1471,30 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         std::cout << "volume force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
     
+
+    if (use_sphere_radius_bound)
+    {
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            Vector<T, 3> dedx;
+            if (sphere_bound_penalty)
+            {
+                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
+                if (Rk >= Rc)
+                {
+                    computeRadiusPenaltyGradient(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, dedx);
+                    addForceEntry<3>(residual, {i}, -dedx);
+                }
+            }
+            else
+            {
+                sphereBoundEnergyGradient(bound_coeff, Rc, deformed.segment<3>(i*3), mesh_centroid, dedx);
+                // std::cout << dedx.transpose() << std::endl;
+                addForceEntry<3>(residual, {i}, -dedx);
+            }
+        }
+    }
+
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -1217,6 +1537,18 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
     });
 
+    if (add_contraction_term)
+    {
+        iterateContractingEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Matrix<T, 6, 6> hessian;
+            computeEdgeSquaredNormHessian(vi, vj, hessian);
+            hessian *= Gamma;
+            addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+        });
+    }
+
     VectorXT current_cell_volume;
     computeVolumeAllCells(current_cell_volume);
 
@@ -1226,54 +1558,57 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         yolk_vol_curr = computeYolkVolume();
     }
 
-    VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    if (!use_yolk_pressure)
     {
-        if (add_yolk_volume)
+        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
         {
-            if (face_idx < lateral_face_start && face_idx >= basal_face_start)
+            if (add_yolk_volume)
             {
-                
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                if (face_vtx_list.size() == 4)
+                if (face_idx < lateral_face_start && face_idx >= basal_face_start)
                 {
-                    Vector<T, 12> dedx;
-                    // computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<15>(dVdx_full, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<18>(dVdx_full, face_vtx_list, dedx);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge number" << std::endl;
+                    
+                    VectorXT positions;
+                    positionsFromIndices(positions, face_vtx_list);
+                    if (face_vtx_list.size() == 4)
+                    {
+                        Vector<T, 12> dedx;
+                        computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                        // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
+                        addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
+                    }
+                    else if (face_vtx_list.size() == 5)
+                    {
+                        Vector<T, 15> dedx;
+                        computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                        addForceEntry<15>(dVdx_full, face_vtx_list, dedx);
+                    }
+                    else if (face_vtx_list.size() == 6)
+                    {
+                        Vector<T, 18> dedx;
+                        computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                        addForceEntry<18>(dVdx_full, face_vtx_list, dedx);
+                    }
+                    else
+                    {
+                        std::cout << "unknown polygon edge number" << std::endl;
+                    }
                 }
             }
-        }
-    });
+        });
 
-    for (int dof_i = 0; dof_i < num_nodes; dof_i++)
-    {
-        for (int dof_j = 0; dof_j < num_nodes; dof_j++)
+        for (int dof_i = 0; dof_i < num_nodes; dof_i++)
         {
-            Vector<T, 6> dVdx;
-            getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
-            TV dVdxi = dVdx.segment<3>(0);
-            TV dVdxj = dVdx.segment<3>(3);
-            Matrix<T, 3, 3> hessian_partial = By * dVdxi * dVdxj.transpose();
-            addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+            for (int dof_j = 0; dof_j < num_nodes; dof_j++)
+            {
+                Vector<T, 6> dVdx;
+                getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
+                TV dVdxi = dVdx.segment<3>(0);
+                TV dVdxj = dVdx.segment<3>(3);
+                Matrix<T, 3, 3> hessian_partial = By * dVdxi * dVdxj.transpose();
+                addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+            }
         }
     }
     
@@ -1363,7 +1698,8 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 Matrix<T, 12, 12> hessian;
                 // computeArea4PointsHessian(coeff, positions, hessian);
                 // hessian *= coeff;
-                computeQuadFaceAreaHessian(coeff, positions, hessian);
+                // computeQuadFaceAreaHessian(coeff, positions, hessian);
+                computeArea4PointsSquaredHessian(coeff, positions, hessian);
                 addHessianEntry<12>(entries, face_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 5)
@@ -1371,7 +1707,10 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 Matrix<T, 15, 15> hessian;
                 // computeArea5PointsHessian(coeff, positions, hessian);
                 // hessian *= coeff;
-                computePentFaceAreaEnergyHessian(coeff, positions, hessian);
+                if (use_face_centroid)
+                    computeArea5PointsSquaredHessian(coeff, positions, hessian);
+                else
+                    computePentFaceAreaEnergyHessian(coeff, positions, hessian);
                 addHessianEntry<15>(entries, face_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 6)
@@ -1379,7 +1718,10 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 Matrix<T, 18, 18> hessian;
                 // computeArea6PointsHessian(coeff, positions, hessian);
                 // hessian *= coeff;
-                computeHexFaceAreaEnergyHessian(coeff, positions, hessian);
+                if (use_face_centroid)
+                    computeArea6PointsSquaredHessian(coeff, positions, hessian);
+                else
+                    computeHexFaceAreaEnergyHessian(coeff, positions, hessian);
                 addHessianEntry<18>(entries, face_vtx_list, hessian);
             }
             else
@@ -1394,13 +1736,18 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 
                 VectorXT positions;
                 positionsFromIndices(positions, face_vtx_list);
+                
                 if (face_vtx_list.size() == 4)
                 {
                     
                     Matrix<T, 12, 12> d2Vdx2;
-                    // computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 12, 12> hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
+                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    // computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 12, 12> hessian;
+                    if (use_yolk_pressure)
+                        hessian = -pressure_constant * d2Vdx2;
+                    else
+                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
                     
                     addHessianEntry<12>(entries, face_vtx_list, hessian);
                 }
@@ -1408,8 +1755,11 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 {
                     Matrix<T, 15, 15> d2Vdx2;
                     computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
-
-                    Matrix<T, 15, 15> hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
+                    Matrix<T, 15, 15> hessian;
+                    if (use_yolk_pressure)
+                        hessian = -pressure_constant * d2Vdx2;
+                    else
+                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
                     
                     addHessianEntry<15>(entries, face_vtx_list, hessian);
 
@@ -1418,8 +1768,11 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 {
                     Matrix<T, 18, 18> d2Vdx2;
                     computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
-
-                    Matrix<T, 18, 18> hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
+                    Matrix<T, 18, 18> hessian;
+                    if (use_yolk_pressure)
+                        hessian = -pressure_constant * d2Vdx2;
+                    else
+                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
                     
                     addHessianEntry<18>(entries, face_vtx_list, hessian);
                 }
@@ -1433,13 +1786,38 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         
     });
 
-    
+    if (use_sphere_radius_bound)
+    {
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            Matrix<T, 3, 3> hessian;
+            if (sphere_bound_penalty)
+            {
+                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
+                if (Rk >= Rc)
+                {
+                    computeRadiusPenaltyHessian(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, hessian);
+                    addHessianEntry<3>(entries, {i}, hessian);    
+                }
+            }
+            else
+            {
+                sphereBoundEnergyHessian(bound_coeff, Rc, deformed.segment<3>(i*3), mesh_centroid, hessian);
+                addHessianEntry<3>(entries, {i}, hessian);
+            }
+        }
+    }
 
         
     K.resize(num_nodes * 3, num_nodes * 3);
     K.setFromTriplets(entries.begin(), entries.end());
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
+    // std::cout << K << std::endl;
+    // std::ofstream out("hessian.txt");
+    // out << K;
+    // out.close();
+    // std::getchar();
     K.makeCompressed();
 }
 
@@ -1455,257 +1833,7 @@ void VertexModel::projectDirichletDoFMatrix(StiffnessMatrix& A,
 
 }
 
-void VertexModel::faceHessianChainRuleTest()
-{
-    TV v0(0, 0, 0), v1(1, 0, 0), v2(1, 1, 0), v3(0, 1, 0);
-    VectorXT positions(4 * 3);
-    positions << 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0;
-    TV centroid = 0.25 * (v0 + v1 + v2 + v3);
-
-    auto updateCentroid = [&]()
-    {
-        centroid.setZero();
-
-        for (int i = 0; i < 4; i++)
-        {
-            centroid += 0.25 * positions.segment<3>(i * 3);
-        }
-    };
-
-    VtxList face_vtx_list = {0 ,1, 2, 3};
-    auto computeEnergy = [&]()->T
-    {
-        updateCentroid();
-        T energy  = 0.0;
-        // for (int i = 0; i < face_vtx_list.size(); i++)
-        // {
-        //     int j = (i + 1) % face_vtx_list.size();
-        //     TV vi = positions.segment<3>(face_vtx_list[i] * 3);
-        //     TV vj = positions.segment<3>(face_vtx_list[j] * 3);
-
-        //     T area = computeArea(vi, vj, centroid);
-        //     energy += area;
-        // }
-        TV r0 = positions.segment<3>(0), r1 = positions.segment<3>(3), 
-            r2 = positions.segment<3>(6), r3 = positions.segment<3>(9);
-        energy = computeAreaFourPoints(r0, r1, r2, r3);
-        return energy;
-    };
-
-    auto computeGradient = [&](VectorXT& residual)
-    {
-        updateCentroid();
-        residual = VectorXT::Zero(positions.rows());
-        TV dedc = TV::Zero();
-        for (int i = 0; i < face_vtx_list.size(); i++)
-        {
-            int j = (i + 1) % face_vtx_list.size();
-            TV vi = positions.segment<3>(face_vtx_list[i] * 3);
-            TV vj = positions.segment<3>(face_vtx_list[j] * 3);
-            Vector<T, 9> dedx;
-            computeAreaGradient(vi, vj, centroid, dedx);
-            
-            // dedvij and dedcentroid/dcentroid dvij
-            dedc += -dedx.segment<3>(6);
-            addForceEntry<6>(residual, {face_vtx_list[i], face_vtx_list[j]}, -dedx.segment<6>(0));   
-        }
-        TM3 dcdx = TM3::Identity() / face_vtx_list.size();
-        for (int vtx_id : face_vtx_list)
-            addForceEntry<3>(residual, {vtx_id}, dedc.transpose() * dcdx );
-    };
-
-    auto computeGradientADFUll =[&](VectorXT& residual)
-    {
-        TV r0 = positions.segment<3>(0), r1 = positions.segment<3>(3), 
-            r2 = positions.segment<3>(6), r3 = positions.segment<3>(9);
-        Vector<T, 12> dedx;
-        computeAreaFourPointsGradient(r0, r1, r2, r3, dedx);
-        addForceEntry<12>(residual, face_vtx_list, -dedx);
-    };
-
-    auto hessianFullAutoDiff =[&](StiffnessMatrix& K)
-    {
-        TV r0 = positions.segment<3>(0), r1 = positions.segment<3>(3), 
-            r2 = positions.segment<3>(6), r3 = positions.segment<3>(9);
-        Matrix<T, 12, 12> d2edx2;
-        computeAreaFourPointsHessian(r0, r1, r2, r3, d2edx2);
-        std::vector<Entry> entries;
-        addHessianEntry<12>(entries, face_vtx_list, d2edx2);
-        K.resize(4 * 3, 4 * 3);
-        K.setFromTriplets(entries.begin(), entries.end());
-        K.makeCompressed();
-    };
-    
-    auto computeHessianNPoints = [&](StiffnessMatrix& K)
-    {
-        Matrix<T, 12, 12> d2edx2;
-        computeArea4PointsHessian(1.0, positions, d2edx2);
-        std::vector<Entry> entries;
-        addHessianEntry<12>(entries, face_vtx_list, d2edx2);
-        K.resize(4 * 3, 4 * 3);
-        K.setFromTriplets(entries.begin(), entries.end());
-        K.makeCompressed();
-    };
-
-    auto computeHessian = [&](StiffnessMatrix& K)
-    {
-        updateCentroid();
-        std::vector<Entry> entries;
-
-        TM3 dcdx = TM3::Identity() / face_vtx_list.size();
-
-        TM3 d2edc2_dcdvi_dcdvj = TM3::Zero();
-
-        std::vector<std::vector<TM3>> deidcidv_list(face_vtx_list.size(), 
-            std::vector<TM3>(face_vtx_list.size(), TM3::Zero()));
-        
-        for (int i = 0; i < face_vtx_list.size(); i++)
-        {
-            int j = (i + 1) % face_vtx_list.size();
-            TV vi = positions.segment<3>(face_vtx_list[i] * 3);
-            TV vj = positions.segment<3>(face_vtx_list[j] * 3);
-            Matrix<T, 9, 9> sub_hessian;
-            computeAreaHessian(vi, vj, centroid, sub_hessian);
-
-            addHessianEntry<6>(entries, {face_vtx_list[i], face_vtx_list[j]}, 
-                sub_hessian.block(0, 0, 6, 6));
-
-            std::cout << sub_hessian << std::endl;
-            std::cout << "--------------------------------" << std::endl;
-
-            TM3 d2edcdx0 = sub_hessian.block(0, 6, 3, 3);
-            TM3 d2edcdx1 = sub_hessian.block(3, 6, 3, 3);
-            TM3 d2edc2 = sub_hessian.block(6, 6, 3, 3);
-
-            std::cout << d2edcdx0 << std::endl;
-            std::cout << "--------------------------------" << std::endl;
-            std::cout << d2edcdx1 << std::endl;
-            std::cout << "--------------------------------" << std::endl;
-            std::cout << d2edc2 << std::endl;
-            std::cout << "--------------------------------" << std::endl;
-            std::getchar();
-            
-            d2edc2_dcdvi_dcdvj += d2edc2 * dcdx * dcdx;
-
-            TM3 d2edcdx0_dcdx = d2edcdx0 * dcdx;
-            TM3 d2edcdx1_dcdx = d2edcdx1 * dcdx;
-
-            deidcidv_list[i][i] += d2edcdx0_dcdx;
-            deidcidv_list[i][j] += d2edcdx1_dcdx;
-        }
-        // std::cout << d2edc2_dcdvi_dcdvj << std::endl;
-        // std::getchar();
-        for (int i = 0; i < face_vtx_list.size(); i++)
-        {
-            for (int j = 0; j < face_vtx_list.size(); j++)
-            {
-                // if (i == j)
-                //      continue;
-                TM3 chain_rule_term = d2edc2_dcdvi_dcdvj;
-                // chain_rule_term.setZero();
-                
-                for (int k = 0; k < face_vtx_list.size(); k++)
-                {
-                    // d2e_k/dcdv_j
-                    // std::cout <<deidcidv_list[k][j] << std::endl;
-                    chain_rule_term += 1.0 * deidcidv_list[k][j];
-                }
-                // std::cout << d2edc2 * dcdx << std::endl;
-                // std::cout << d2ecdx_list[i] << std::endl;
-                // std::cout << chain_rule_term << std::endl;
-                // std::cout << "--------------------------------" << std::endl;
-                // std::getchar();
-                addHessianBlock<3>(entries, {face_vtx_list[i], face_vtx_list[j]}, chain_rule_term);
-            }
-        }
-        K.resize(4 * 3, 4 * 3);
-        K.setFromTriplets(entries.begin(), entries.end());
-        K.makeCompressed();
-    };
-
-    auto checkGradient = [&]()
-    {
-        int n_dof = 4 * 3;
-        T epsilon = 1e-6;
-        VectorXT gradient_FD(n_dof);
-        gradient_FD.setZero();
-        VectorXT gradient(n_dof);
-        gradient.setZero();
-
-        computeGradient(gradient);
-        
-        int cnt = 0;
-        for(int dof_i = 0; dof_i < n_dof; dof_i++)
-        {
-            positions(dof_i) += epsilon;
-            // std::cout << W * dq << std::endl;
-            T E0 = computeEnergy();
-            
-            positions(dof_i) -= 2.0 * epsilon;
-            T E1 = computeEnergy();
-            positions(dof_i) += epsilon;
-            // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
-            gradient_FD(dof_i) = (E1 - E0) / (2.0 *epsilon);
-            if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
-                continue;
-            // if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
-            //     continue;
-            std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;
-            std::getchar();
-            cnt++;   
-        }
-    };
-
-    auto checkHessian = [&]()
-    {
-        T epsilon = 1e-6;
-        int n_dof = 4 * 3;
-        StiffnessMatrix A(n_dof, n_dof);
-        computeHessian(A);
-
-        StiffnessMatrix B = A;
-        hessianFullAutoDiff(B);
-
-        std::cout << A << std::endl;
-        std::cout << "--------------------------------" << std::endl;
-        std::cout << B << std::endl;
-        std::getchar();
-
-        for(int dof_i = 0; dof_i < n_dof; dof_i++)
-        {
-            positions(dof_i) += epsilon;
-            VectorXT g0(n_dof), g1(n_dof);
-            g0.setZero(); g1.setZero();
-            computeGradient(g0);
-
-            positions(dof_i) -= 2.0 * epsilon;
-            computeGradient(g1);
-            positions(dof_i) += epsilon;
-            VectorXT row_FD = (g1 - g0) / (2.0 * epsilon);
-
-            for(int i = 0; i < n_dof; i++)
-            {
-                if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
-                    continue;
-                std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
-                std::getchar();
-            }
-        }
-    };
-
-    // VectorXT g0, g1;
-    // computeGradient(g0);
-    // computeGradient(g1);
-    // std::cout << g0.transpose() << std::endl;
-    // std::cout << "--------------------------------" << std::endl;
-    // std::cout << g1.transpose() << std::endl;
-    // std::getchar();
-
-    // checkGradient();
-    checkHessian();
-}
-
-void VertexModel::checkTotalGradient()
+void VertexModel::checkTotalGradient(bool perturb)
 {
     // sigma = 0; alpha = 0; gamma = 0; B = 0; 
     
@@ -1714,7 +1842,8 @@ void VertexModel::checkTotalGradient()
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
-    u += du;
+    if (perturb)
+        u += du;
 
     std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
     int n_dof = num_nodes * 3;
@@ -1752,9 +1881,14 @@ void VertexModel::checkTotalGradient()
     run_diff_test = false;
 }
 
-void VertexModel::checkTotalHessian()
+void VertexModel::checkTotalHessian(bool perturb)
 {
-    // sigma = 0; alpha = 0; gamma = 0; B = 0; 
+    
+    // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
+    // Gamma = 0.0; 
+    // pressure_constant = 0.0;
+    run_diff_test = true;
+    
 
     std::cout << "======================== CHECK HESSIAN ========================" << std::endl;
     run_diff_test = true;
@@ -1765,7 +1899,8 @@ void VertexModel::checkTotalHessian()
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
-    u += du;
+    if (perturb)
+        u += du;
 
     StiffnessMatrix A(n_dof, n_dof);
     buildSystemMatrix(u, A);
@@ -1799,7 +1934,7 @@ void VertexModel::checkTotalHessian()
     run_diff_test = false;
 }
 
-void VertexModel::checkTotalGradientScale()
+void VertexModel::checkTotalGradientScale(bool perturb)
 {
     
     run_diff_test = true;
@@ -1809,7 +1944,8 @@ void VertexModel::checkTotalGradientScale()
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
-    u += du;
+    if (perturb)
+        u += du;
     
     int n_dof = num_nodes * 3;
 
@@ -1841,17 +1977,23 @@ void VertexModel::checkTotalGradientScale()
     run_diff_test = false;
 }
 
-void VertexModel::checkTotalHessianScale()
+void VertexModel::checkTotalHessianScale(bool perturb)
 {
+    // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
+    // pressure_constant = 0.0;
     run_diff_test = true;
-    
+    if (add_contraction_term)
+        Gamma = 0.0; 
+    if (sphere_bound_penalty)
+        bound_coeff = 0.0;
     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
 
     VectorXT du(num_nodes * 3);
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
-    u += du;
+    if (perturb)
+        u += du;
     
     int n_dof = num_nodes * 3;
 

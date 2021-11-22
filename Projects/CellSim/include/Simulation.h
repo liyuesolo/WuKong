@@ -2,6 +2,7 @@
 #define SIMULATION_H
 
 #include "VertexModel.h"
+#include "Timer.h"
 
 using T = double;
 
@@ -31,6 +32,7 @@ public:
     VectorXT& deformed = cells.deformed;
     VectorXT& u = cells.u;
 
+    Timer t;
 public:
     void initializeCells();
     void generateMeshForRendering(
@@ -48,7 +50,14 @@ public:
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     T computeTotalEnergy(const VectorXT& _u);
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
-    T lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max = 15);
+    T lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max = 15, bool wolfe_condition = false);
+
+
+    void sampleEnergyWithSearchAndGradientDirection(
+        const VectorXT& _u,  
+        const VectorXT& search_direction,
+        const VectorXT& negative_gradient
+    );
 
 public:
     Simulation() {}
