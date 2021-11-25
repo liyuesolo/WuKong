@@ -24,6 +24,7 @@ public:
     T newton_tol = 1e-6;
     int max_newton_iter = 500;
     bool verbose = false;
+    
 
 public:
     CellModel cells;
@@ -31,14 +32,20 @@ public:
     VectorXT& undeformed = cells.undeformed;
     VectorXT& deformed = cells.deformed;
     VectorXT& u = cells.u;
+    VectorXT& f = cells.f;
+    bool& sherman_morrison = cells.sherman_morrison;
 
     Timer t;
+    
 public:
     void initializeCells();
+    void reinitializeCells();
+
     void generateMeshForRendering(
         Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool show_rest = false,
         bool split = false);
+    void sampleBoundingSurface(Eigen::MatrixXd& V);
 
     void advanceOneStep();
 
@@ -47,6 +54,12 @@ public:
     void computeLinearModes();
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+
+    bool ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
+         VectorXT& residual, VectorXT& du);
+
+    void buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v);
+
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     T computeTotalEnergy(const VectorXT& _u);
     T computeResidual(const VectorXT& _u,  VectorXT& residual);

@@ -95,8 +95,12 @@ public:
     }
 
 public:
+    int scene_type = 0;
+
     // deformed and undeformed location of all vertices, u are the displacements
     VectorXT undeformed, deformed, u;
+
+    VectorXT f;
 
     std::vector<VtxList> faces; // all faces
     std::vector<FaceList> cell_faces; // face id list for each cell
@@ -121,6 +125,7 @@ public:
     int bound_power = 4;
 
     bool single_prism = false;
+    bool sherman_morrison = false;
 
     bool run_diff_test = false;
     bool add_yolk_volume = true;
@@ -130,13 +135,16 @@ public:
     bool use_yolk_pressure = false;
     bool use_sphere_radius_bound = false;
     bool sphere_bound_penalty = false;
+    bool add_single_tet_vol_barrier = false;
+
+    bool print_force_norm = false;
 
 
     TV mesh_centroid;
     T yolk_vol_init;
 
     std::unordered_map<int, T> dirichlet_data;
-
+    void sampleBoundingSurface(Eigen::MatrixXd& V);
     void splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
     void saveIndividualCellsWithOffset();
@@ -146,8 +154,11 @@ public:
     void initializeContractionData();
     void approximateMembraneThickness();
 
+    void saveHexTetsStep(int iteration);
+
     void computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume);
     void computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices, T& volume);
+    void computeHexPrismVolumeFromTet(const Vector<T, 36>& prism_vertices, T& volume, int iter = 0);
     void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
 
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
@@ -166,6 +177,10 @@ public:
         const std::unordered_map<int, T>& data);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
+    void buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v);
+
+    T computeAreaEnergy(const VectorXT& _u);
+
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
 
@@ -178,7 +193,8 @@ public:
     void positionsFromIndices(VectorXT& positions, const VtxList& indices);
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
-    
+
+    bool computeBoundingBox(TV& min_corner, TV& max_corner);    
 private:
     template<int dim>
     void addHessianEntry(

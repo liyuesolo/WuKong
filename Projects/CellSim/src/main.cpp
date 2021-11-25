@@ -8,6 +8,7 @@
 
 #include "../include/VertexModel.h"
 #include "../include/Simulation.h"
+#include "../include/Misc.h"
 
 Eigen::MatrixXd V;
 Eigen::MatrixXi F;
@@ -18,6 +19,7 @@ using TV = Vector<double, 3>;
 Simulation simulation;
 
 static bool show_rest = false;
+static bool show_membrane = false;
 static bool split = false;
 static int modes = 0;
 double t = 0.0;
@@ -44,15 +46,32 @@ auto loadEigenVectors = [&]()
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
-    viewer.data().clear();
     simulation.generateMeshForRendering(V, F, C, show_rest, split);
-    viewer.data().set_mesh(V, F);     
+
+    // viewer.data_list[0].clear();
+    // viewer.data_list[0].set_mesh(V, F);
+    // viewer.data_list[0].set_colors(C);
+
+    viewer.data().clear();
+    viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);
+
+    if (show_membrane)
+    {
+        Eigen::MatrixXd bounding_surface_samples;
+        Eigen::MatrixXd bounding_surface_samples_color;
+        simulation.sampleBoundingSurface(bounding_surface_samples);
+        bounding_surface_samples_color = bounding_surface_samples;
+        for (int i = 0; i < bounding_surface_samples.rows(); i++)
+            bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
+        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+    }
 };
 
 
 int main()
 {
+    // saveOBJPrism(6);
 
     igl::opengl::glfw::Viewer viewer;
 
@@ -62,12 +81,27 @@ int main()
 
     menu.callback_draw_viewer_menu = [&]()
     {
-        if (ImGui::Checkbox("ShowRest", &show_rest))
+        // if (ImGui::Checkbox("ShowRest", &show_rest))
+        // {
+        //     updateScreen(viewer);
+        // }
+        if (ImGui::Checkbox("Split", &split))
         {
             updateScreen(viewer);
         }
-        if (ImGui::Checkbox("Split", &split))
+        if (ImGui::Checkbox("ShowMembrane", &show_membrane))
         {
+            updateScreen(viewer);
+        }
+        if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
+        {
+            simulation.staticSolve();
+            updateScreen(viewer);
+        }
+        if (ImGui::Button("Reset", ImVec2(-1,0)))
+        {
+            simulation.deformed = simulation.undeformed;
+            simulation.u.setZero();
             updateScreen(viewer);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
@@ -102,8 +136,8 @@ int main()
     {
         if(viewer.core().is_animating)
         {
-            simulation.u = evectors.col(modes) * std::sin(t);
-            
+            simulation.deformed = simulation.undeformed + simulation.u + evectors.col(modes) * std::sin(t);
+
             t += 0.1;
             viewer.data().clear();
             simulation.generateMeshForRendering(V, F, C, show_rest);
@@ -142,6 +176,10 @@ int main()
             modes = (modes + evectors.cols()) % evectors.cols();
             std::cout << "modes " << modes << std::endl;
             return true;
+        case '3': //check modes at equilirium after static solve
+            loadEigenVectors();
+            modes = 0;
+            return true;
         case 'a':
             viewer.core().is_animating = !viewer.core().is_animating;
             return true;
@@ -154,7 +192,7 @@ int main()
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;
-    viewer.data().point_size = 25.0;
+    viewer.data().point_size = 10.0;
 
     viewer.data().set_mesh(V, F);     
     viewer.data().set_colors(C);

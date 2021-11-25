@@ -2,6 +2,7 @@
 #include <Eigen/PardisoSupport>
 #include <iomanip>
 
+
 void Simulation::computeLinearModes()
 {
     cells.computeLinearModes();
@@ -9,27 +10,46 @@ void Simulation::computeLinearModes()
 
 void Simulation::initializeCells()
 {
-    std::string sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
-    // std::string sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
+    sherman_morrison = true;
+
+    std::string sphere_file;
+    cells.scene_type = 1;
+
+    if (cells.scene_type == 1)
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
+    else if(cells.scene_type == 0)
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
     cells.vertexModelFromMesh(sphere_file);
-    // cells.addTestPrism(5);
+    // cells.addTestPrism(6);
     // cells.addTestPrismGrid(10, 10);
     cells.computeVolumeAllCells(cells.cell_volume_init);
 
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
-    // cells.checkTotalGradient();
+    // cells.checkTotalGradient(true);
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 300;
+    max_newton_iter = 50;
     // verbose = true;
+    cells.print_force_norm = true;
+
+}
+
+void Simulation::reinitializeCells()
+{
+    
+}
+
+void Simulation::sampleBoundingSurface(Eigen::MatrixXd& V)
+{
+    cells.sampleBoundingSurface(V);
 }
 
 void Simulation::generateMeshForRendering(Eigen::MatrixXd& V, 
     Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool show_rest, bool split)
 {
-    deformed = undeformed + 1.0 * u;
+    // deformed = undeformed + 1.0 * u;
     cells.generateMeshForRendering(V, F, C);
     if (show_rest)
     {
@@ -62,21 +82,22 @@ bool Simulation::staticSolve()
 {
     VectorXT cell_volume_initial;
     cells.computeVolumeAllCells(cell_volume_initial);
+    T yolk_volume_init = 0.0;
     if (cells.add_yolk_volume)
     {
-        T yolk_volume_init = cells.computeYolkVolume(false);
-        std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
+        yolk_volume_init = cells.computeYolkVolume(false);
+        // std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
     }
 
-    std::cout << "total volume initial " << cell_volume_initial.sum() << std::endl;
-    std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
+    
+    std::cout << cells.computeTotalEnergy(u, true) << std::endl;
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
 
-    // iterateDirichletDoF([&](int offset, T target)
-    // {
-    //     f[offset] = 0;
-    // });
+    cells.iterateDirichletDoF([&](int offset, T target)
+    {
+        f[offset] = 0;
+    });
 
     while (true)
     {
@@ -84,11 +105,16 @@ bool Simulation::staticSolve()
         residual.setZero();
         
         residual_norm = computeResidual(u, residual);
-        
+        // cells.saveHexTetsStep(cnt);
+        // std::getchar();
         // if (verbose)
             std::cout << "residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
-        
+        // if (cnt % 50 == 0)
+        // {
+        //     cells.checkTotalGradientScale();
+        //     cells.checkTotalHessianScale();
+        // }
         if (residual_norm < newton_tol)
             break;
         
@@ -107,22 +133,99 @@ bool Simulation::staticSolve()
         u[offset] = target;
     });
 
-    std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
+    // T total_energy_final = cells.computeTotalEnergy(u, true);
 
     deformed = undeformed + u;
 
     VectorXT cell_volume_final;
     cells.computeVolumeAllCells(cell_volume_final);
-    std::cout << "total volume " << cell_volume_final.sum() << std::endl;
-    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+
+    std::cout << "============================================================================" << std::endl;
+    std::cout << std::endl;
+    std::cout << "========================= Solver Info ================================="<< std::endl;
+    std::cout << "# of system DoF " << deformed.rows() << std::endl;
+    std::cout << "# of newton iter: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+    // cells.computeLinearModes();
+    std::cout << std::endl;
+    std::cout << "========================= Cell Info =================================" << std::endl;
+    std::cout << "\tcell volume sum initial " << cell_volume_initial.sum() << std::endl;
+    std::cout << "\tcell volume sum final " << cell_volume_final.sum() << std::endl;
     if (cells.add_yolk_volume)
     {
         T yolk_volume = cells.computeYolkVolume(false);
-        std::cout << "yolk volume final: " << yolk_volume << std::endl;
+        std::cout << "\tyolk volume initial: " << yolk_volume_init << std::endl;
+        std::cout << "\tyolk volume final: " << yolk_volume << std::endl;
     }
+    T total_energy_final = cells.computeTotalEnergy(u, true);
+    std::cout << "\ttotal energy final: " << total_energy_final << std::endl;
+    std::cout << "============================================================================" << std::endl;
+    // std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
+    // T vol;
+    
+    // cells.computeHexPrismVolumeFromTet(deformed, vol);
+    // std::cout << "tet vol last print " << vol << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
+}
+
+bool Simulation::ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
+         VectorXT& residual, VectorXT& du)
+{
+    StiffnessMatrix I(K.rows(), K.cols());
+    I.setIdentity();
+
+    StiffnessMatrix H = K;
+
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+
+    T alpha = 10e-6;
+    solver.analyzePattern(K);
+    int i = 0;
+    for (; i < 50; i++)
+    {
+        // std::cout << i << std::endl;
+        solver.factorize(K);
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            K = H + alpha * I;        
+            alpha *= 10;
+            continue;
+        }
+
+        VectorXT A_inv_g = solver.solve(residual);
+        VectorXT A_inv_u = solver.solve(v);
+
+        T dem = 1.0 + v.dot(A_inv_u);
+
+        du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+
+        T dot_dx_g = du.normalized().dot(residual.normalized());
+
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        bool solve_success = ((K + v * v.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+        if (positive_definte && search_dir_correct_sign && solve_success)
+        {
+            // std::cout << "\t===== Linear Solve ===== " << std::endl;
+            // std::cout << "\t# regularization step " << i << std::endl;
+            // std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+            // std::cout << "\t======================== " << std::endl;
+            return true;
+        }
+        else
+        {
+            K = H + alpha * I;        
+            alpha *= 10;
+        }
+    }
+    return false;
 }
 
 bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
@@ -229,11 +332,13 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
     T E0 = computeTotalEnergy(_u);
     
     std::cout << std::setprecision(12) << "E0 " << E0 << std::endl;
-    // T step_size = 5e-5;
-    // int step = 400;
+    T step_size = 5e-5;
+    int step = 400;
 
-    T step_size = 1e-1;
-    int step = 50;
+    // T step_size = 1e0;
+    // int step = 50;
+
+    
 
     std::vector<T> energies;
     std::vector<T> energies_gd;
@@ -241,15 +346,19 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
     int step_cnt = 1;
     for (T xi = -T(step/2) * step_size; xi < T(step/2) * step_size; xi+=step_size)
     {
-        cells.use_sphere_radius_bound = false;
-        cells.add_contraction_term = false;
+        // cells.use_sphere_radius_bound = false;
+        // cells.add_contraction_term = false;
         
-        cells.sigma = 0;
-        cells.gamma = 0;
+        // cells.sigma = 0;
+        // cells.gamma = 0;
         // cells.alpha = 0.0;
-        cells.B = 0;
-        cells.By = 0;
+        // cells.B = 0;
+        // cells.By = 0;
         T Ei = computeTotalEnergy(_u + xi * search_direction);
+        
+        // T Ei = cells.computeAreaEnergy(_u + xi * search_direction);
+        // if (std::abs(xi) < 1e-6)
+        //     std::getchar();
         energies.push_back(Ei);
         steps.push_back(xi);
     }
@@ -272,6 +381,11 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
 
 }
 
+void Simulation::buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v)
+{
+    cells.buildSystemMatrixShermanMorrison(u, K, v);
+}
+
 T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bool wolfe_condition)
 {
     // for wolfe condition
@@ -281,13 +395,20 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     du.setZero();
 
     StiffnessMatrix K(residual.rows(), residual.rows());
-    // t.start();
-    buildSystemMatrix(_u, K);
-    // std::cout << "\tbuild matrix " << t.elapsed_sec() << "s" << std::endl;
-    // cells.checkTotalHessianScale();
-    bool success = linearSolve(K, residual, du);    
-    // std::cout << "\tlinear solve " << t.elapsed_sec() << "s" << std::endl;
-    // t.stop();
+    
+    bool success = false;
+    if (sherman_morrison)
+    {
+        VectorXT v;
+        buildSystemMatrixShermanMorrison(_u, K, v);
+        success = ShermanMorrisonSolve(K, v, residual, du);    
+    }
+    else
+    {
+        buildSystemMatrix(_u, K);
+        success = linearSolve(K, residual, du);    
+    }
+    
     if (!success)
     {
         std::cout << "linear solve failed" << std::endl;
@@ -322,7 +443,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                 {
                     std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
-                    sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
+                    // sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
                     // cells.computeTotalEnergy(u_ls, true);
                     // cells.checkTotalGradientScale();
                     // cells.checkTotalHessianScale();
@@ -356,9 +477,10 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     if (cnt > ls_max)
     {
         // try gradien step
+        std::cout << "taking gradient step " << std::endl;
         // std::cout << "|du|: " << du.norm() << " |g| " << residual.norm() << std::endl;
         // std::cout << "E0 " << E0 << std::endl;
-        VectorXT negative_gradient_direction = -residual.normalized();
+        VectorXT negative_gradient_direction = residual.normalized();
         alpha = 1.0;
         cnt = 1;
         while (true)
@@ -368,15 +490,16 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
             // return 1e16;
             T E1 = computeTotalEnergy(u_ls);
             // std::cout << "ls gd # " << cnt << " E1 " << E1 << std::endl;
-            if (E1 - E0 < 0 || cnt > ls_max)
+            if (E1 - E0 < 0 || cnt > 30)
             {
                 _u = u_ls;
-                if (cnt > ls_max)
+                if (cnt > 30)
                 {
                     std::cout << "---gradient ls max---" << std::endl;
                     // cells.checkTotalGradient();
                     // std::cout << "|g|: " <<  residual.norm() << std::endl;
-                    cells.checkTotalGradientScale();
+                    // cells.checkTotalGradientScale();
+                    sampleEnergyWithSearchAndGradientDirection(_u, negative_gradient_direction, residual);
                     return 1e16;
                 }
                 // std::cout << "# ls " << cnt << std::endl;
