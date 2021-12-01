@@ -32,7 +32,7 @@ void VertexModel::sampleBoundingSurface(Eigen::MatrixXd& V)
     }
 }
 
-void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool a_bit)
 {
     if (single_prism)
     {
@@ -192,6 +192,8 @@ void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
     {
         int face_cnt = 0, vtx_cnt = 0;
         T offset_percentage = 2.0;
+        if (a_bit)
+            offset_percentage = 1.2;
         std::vector<IV> tri_faces;
         std::vector<TV> vertices;
         std::vector<TV> colors;
@@ -287,6 +289,56 @@ void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
     
 }
 
+void VertexModel::getYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool rest_shape)
+{
+    std::vector<TV> face_centroid;
+    iterateBasalFaceSerial([&](VtxList& face_vtx_list, int i){
+        TV centroid = rest_shape ? undeformed.segment<3>(faces[i][0] * 3) : deformed.segment<3>(faces[i][0] * 3);
+        for (int j = 1; j < faces[i].size(); j++)
+        {
+            if (rest_shape)
+                centroid += undeformed.segment<3>(faces[i][j] * 3);
+            else
+                centroid += deformed.segment<3>(faces[i][j] * 3);
+        }
+        face_centroid.push_back(centroid / T(faces[i].size()));
+    });
+
+    int centroids_start = basal_vtx_start;
+
+    V.resize(basal_vtx_start + face_centroid.size(), 3);
+    for (int i = 0; i < basal_vtx_start; i++)
+    {
+        V.row(i) = rest_shape ? undeformed.segment<3>((i + basal_vtx_start) * 3) : deformed.segment<3>((i + basal_vtx_start) * 3);
+    }
+
+    for (int i = 0; i < face_centroid.size(); i++)
+        V.row(basal_vtx_start + i) = face_centroid[i];
+    
+    int face_cnt = 0;
+    iterateBasalFaceSerial([&](VtxList& face_vtx_list, int i){
+        face_cnt += faces[i].size();
+    });
+
+    F.resize(face_cnt, 3);
+    C.resize(face_cnt, 3);
+
+    face_cnt = 0;
+    iterateBasalFaceSerial([&](VtxList& face_vtx_list, int i)
+    {
+        for (int j = 0; j < faces[i].size(); j++)
+        {
+            int next = (j + 1) % faces[i].size();
+            F.row(face_cnt) = Eigen::Vector3i(centroids_start + i - basal_face_start, 
+                faces[i][j]- basal_vtx_start, faces[i][next]- basal_vtx_start);
+            C.row(face_cnt++) = TV(0, 0.3, 1.0);
+        }  
+    });
+
+    // std::cout << F << std::endl;
+}
+
 void VertexModel::saveIndividualCellsWithOffset()
 {
     std::string filename = "cell_break_down.obj";
@@ -361,14 +413,15 @@ void VertexModel::saveIndividualCellsWithOffset()
 }
 
 void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V, 
-    Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+    Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest_state)
 {
+    bool triangulate_with_centroid = false;
     // compute polygon face centroid
     std::vector<TV> face_centroid(faces.size());
     tbb::parallel_for(0, (int)faces.size(), [&](int i){
-        TV centroid = deformed.segment<3>(faces[i][0] * 3);
+        TV centroid = rest_state ? undeformed.segment<3>(faces[i][0] * 3) : deformed.segment<3>(faces[i][0] * 3);
         for (int j = 1; j < faces[i].size(); j++)
-            centroid += deformed.segment<3>(faces[i][j] * 3);
+            centroid += rest_state ? undeformed.segment<3>(faces[i][j] * 3) : deformed.segment<3>(faces[i][j] * 3);
         face_centroid[i] = centroid / T(faces[i].size());
     });
 
@@ -377,7 +430,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     int centroids_start = deformed.rows() / 3;
     
     for (int i = 0; i < deformed.rows()/ 3; i++)
-        V.row(i) = deformed.segment<3>(i * 3);
+        V.row(i) = rest_state ? undeformed.segment<3>(i * 3) : deformed.segment<3>(i * 3);
     
     for (int i = 0; i < face_centroid.size(); i++)
         V.row(deformed.rows() / 3 + i) = face_centroid[i];
@@ -387,7 +440,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     int face_cnt = 0;
     for (int i = face_start; i < faces.size(); i++)
     {
-        if (true)
+        if (triangulate_with_centroid)
             face_cnt += faces[i].size();
         else
         {
@@ -404,7 +457,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     face_cnt = 0;
     for (int i = face_start; i < faces.size(); i++)
     {
-        if (true)
+        if (triangulate_with_centroid)
         {
             for (int j = 0; j < faces[i].size(); j++)
             {
@@ -441,7 +494,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     face_cnt = 0;
     for (int i = face_start; i < faces.size(); i++)
     {
-        if (true)
+        if (triangulate_with_centroid)
         {
             for (int j = 0; j < faces[i].size(); j++)
             {
@@ -496,3 +549,4 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     // });
 
 }
+

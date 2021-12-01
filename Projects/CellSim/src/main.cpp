@@ -19,8 +19,13 @@ using TV = Vector<double, 3>;
 Simulation simulation;
 
 static bool show_rest = false;
+static bool show_current = true;
 static bool show_membrane = false;
 static bool split = false;
+static bool split_a_bit = false;
+static bool yolk_only = false;
+static bool show_apical_polygon = false;
+static bool show_basal_polygon = false;
 static int modes = 0;
 double t = 0.0;
 
@@ -46,7 +51,7 @@ auto loadEigenVectors = [&]()
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
-    simulation.generateMeshForRendering(V, F, C, show_rest, split);
+    simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
 
     // viewer.data_list[0].clear();
     // viewer.data_list[0].set_mesh(V, F);
@@ -66,6 +71,13 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
         viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
     }
+    if (show_apical_polygon)
+    {
+        viewer.data().clear();
+        viewer.data().set_mesh(V, F);
+        viewer.data().set_colors(C);
+    }
+    
 };
 
 
@@ -81,17 +93,36 @@ int main()
 
     menu.callback_draw_viewer_menu = [&]()
     {
-        // if (ImGui::Checkbox("ShowRest", &show_rest))
-        // {
-        //     updateScreen(viewer);
-        // }
-        if (ImGui::Checkbox("Split", &split))
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            updateScreen(viewer);
-        }
-        if (ImGui::Checkbox("ShowMembrane", &show_membrane))
-        {
-            updateScreen(viewer);
+            if (ImGui::Checkbox("ShowCurrent", &show_current))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowRest", &show_rest))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("SplitPrism", &split))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("SplitPrismABit", &split_a_bit))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowMembrane", &show_membrane))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("YolkOnly", &yolk_only))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ApicalPolygon", &show_apical_polygon))
+            {
+                updateScreen(viewer);
+            }
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {

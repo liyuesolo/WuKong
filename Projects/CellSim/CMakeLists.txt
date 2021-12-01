@@ -5,5 +5,12 @@ file(GLOB SOURCES "*.c" "*.cpp" "src/*.cpp")
 
 
 add_executable(CellSim ${HEADERS} ${SOURCES})
+target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/libipc_toolkit.a)
+target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/predicates/libpredicates.a)
+target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/spdlog-build/libspdlog.a)
+target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/install/collisiondetection/build/libcollisiondetection.a)
+target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/tight_inclusion-build/libtight_inclusion.a)
 target_include_directories(CellSim PUBLIC ../../Libs/spectra/include)
+target_include_directories(CellSim PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
+
 target_link_libraries(CellSim ${DEPS})

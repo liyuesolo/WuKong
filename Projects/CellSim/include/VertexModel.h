@@ -51,6 +51,19 @@ public:
     }
 
     template <typename OP>
+    void iterateBasalFaceSerial(const OP& f)
+    {
+        int cnt = -1;
+        for (VtxList& cell_face : faces)
+        {
+            cnt++;
+            if (cnt < basal_face_start || cnt >= lateral_face_start)
+                continue;
+            f(cell_face, cnt);
+        }
+    }
+
+    template <typename OP>
     void iterateFaceParallel(const OP& f)
     {
         tbb::parallel_for(0, (int)faces.size(), [&](int i){
@@ -123,6 +136,13 @@ public:
     T Rc = 1.2;
     T bound_coeff = 10e-10;
     int bound_power = 4;
+    T tet_barrier_stiffness = 10e-10;
+
+    T barrier_distance = 1e-5;
+    T barrier_weight = 1e6;
+    Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXi ipc_edges;
+    Eigen::MatrixXi ipc_faces;
 
     bool single_prism = false;
     bool sherman_morrison = false;
@@ -136,6 +156,7 @@ public:
     bool use_sphere_radius_bound = false;
     bool sphere_bound_penalty = false;
     bool add_single_tet_vol_barrier = false;
+    bool use_ipc_contact = false;
 
     bool print_force_norm = false;
 
@@ -144,15 +165,9 @@ public:
     T yolk_vol_init;
 
     std::unordered_map<int, T> dirichlet_data;
-    void sampleBoundingSurface(Eigen::MatrixXd& V);
-    void splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
-
-    void saveIndividualCellsWithOffset();
+    
 
     void computeLinearModes();
-
-    void initializeContractionData();
-    void approximateMembraneThickness();
 
     void saveHexTetsStep(int iteration);
 
@@ -165,13 +180,9 @@ public:
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
 
     T computeYolkVolume(bool verbose = false);
-    void computeVolumeAllCells(VectorXT& cell_volume_list);
-    void vertexModelFromMesh(const std::string& filename);
-    void addTestPrism(int edge);
+    T computeTotalVolumeFromApicalSurface();
 
-    void addTestPrismGrid(int n_row, int n_col);
-
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void computeVolumeAllCells(VectorXT& cell_volume_list);    
 
     void projectDirichletDoFMatrix(StiffnessMatrix& A, 
         const std::unordered_map<int, T>& data);
@@ -194,7 +205,28 @@ public:
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
+    // scene.cpp
     bool computeBoundingBox(TV& min_corner, TV& max_corner);    
+    void vertexModelFromMesh(const std::string& filename);
+    void addTestPrism(int edge);
+    void addTestPrismGrid(int n_row, int n_col);
+    void initializeContractionData();
+    void computeIPCRestData();
+    void updateIPCVertices(const VectorXT& _u);
+    void saveIPCData();
+    void approximateMembraneThickness();
+
+    //Visualization.cpp
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool rest_state = false);
+    void sampleBoundingSurface(Eigen::MatrixXd& V);
+    void splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool a_bit = false);
+
+    void getYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool rest_shape = false);
+    void saveIndividualCellsWithOffset();
+
 private:
     template<int dim>
     void addHessianEntry(
@@ -260,6 +292,16 @@ private:
         {
             sub_vec.template segment<3>(i * 3) = _vector.segment<3>(vtx_idx[i] * 3);
         }
+    }
+
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    {
+        std::vector<Entry> triplets;
+
+        for (int k=0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+        return triplets;
     }
 
 public:

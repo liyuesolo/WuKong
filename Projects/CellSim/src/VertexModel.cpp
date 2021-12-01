@@ -14,20 +14,6 @@
 
 
 
-void VertexModel::approximateMembraneThickness()
-{
-    T radii_max = -1e6;
-    for (int i = 0; i < basal_vtx_start; i++)
-    {
-        radii_max = std::max(radii_max, (deformed.segment<3>(i * 3) - mesh_centroid).norm());
-    }
-    if (sphere_bound_penalty)
-        Rc = radii_max;
-    else
-        Rc = 1.01 * radii_max;
-        
-}
-
 void VertexModel::computeLinearModes()
 {
     int nmodes = 15;
@@ -147,250 +133,33 @@ void VertexModel::computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid
     centroid /= T(face_vtx_list.size());
 }
 
-void VertexModel::computeHexPrismVolumeFromTet(const Vector<T, 36>& prism_vertices, 
-    T& volume, int iter)
+
+T VertexModel::computeTotalVolumeFromApicalSurface()
 {
-    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
+    T volume = 0.0;
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
-        return 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
-    };
-
-    std::vector<TV> vtx(12);
-    for (int i = 0; i < 6; i++)
-    {
-        vtx[i] = prism_vertices.segment<3>((11 - i) * 3);
-        vtx[i + 6] = prism_vertices.segment<3>((5 - i) * 3);
-    }
-
-    Vector<T, 12> tet_vol;
-    
-    tet_vol[0] = computeTetVolume(vtx[9], vtx[2], vtx[10], vtx[3]);
-    tet_vol[1] = computeTetVolume(vtx[2], vtx[10], vtx[3], vtx[4]);
-    tet_vol[2] = computeTetVolume(vtx[1], vtx[11], vtx[0], vtx[7]);
-    tet_vol[3] = computeTetVolume(vtx[9], vtx[2], vtx[8], vtx[10]);
-    tet_vol[4] = computeTetVolume(vtx[10], vtx[1], vtx[7], vtx[11]);
-    tet_vol[5] = computeTetVolume(vtx[0], vtx[11], vtx[6], vtx[7]);
-    tet_vol[6] = computeTetVolume(vtx[1], vtx[11], vtx[4], vtx[5]);
-    tet_vol[7] = computeTetVolume(vtx[2], vtx[10], vtx[1], vtx[8]);
-    tet_vol[8] = computeTetVolume(vtx[2], vtx[10], vtx[4], vtx[1]);
-    tet_vol[9] = computeTetVolume(vtx[1], vtx[11], vtx[5], vtx[0]);
-    tet_vol[10] = computeTetVolume(vtx[10], vtx[1], vtx[8], vtx[7]);
-    tet_vol[11] = computeTetVolume(vtx[10], vtx[1], vtx[11], vtx[4]);
-
-    auto saveTetObjs = [&](const std::vector<TV>& tets, int idx, int iter)
-    {
-        TV tet_center = TV::Zero();
-        for (const TV& vtx : tets)
-        {
-            tet_center += vtx;
-        }
-        tet_center *= 0.25;
-
-        TV shift = 0.5 * tet_center;
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
         
-        std::ofstream out("output/cells/iter_" +std::to_string(iter)+ "_tet" + std::to_string(idx) + ".obj");
-        for (const TV& vtx : tets)
-            out << "v " << (vtx + shift).transpose() << std::endl;
-        out << "f 3 2 1" << std::endl;
-        out << "f 4 3 1" << std::endl;
-        out << "f 2 4 1" << std::endl;
-        out << "f 3 4 2" << std::endl;
-        out.close();
-    };
-
-    saveTetObjs({vtx[9], vtx[2], vtx[10], vtx[3]}, 0, iter);
-    saveTetObjs({vtx[2], vtx[10], vtx[3], vtx[4]}, 1, iter);
-    saveTetObjs({vtx[1], vtx[11], vtx[0], vtx[7]}, 2, iter);
-    saveTetObjs({vtx[9], vtx[2], vtx[8], vtx[10]}, 3, iter);
-    saveTetObjs({vtx[10], vtx[1], vtx[7], vtx[11]}, 4, iter);
-    saveTetObjs({vtx[0], vtx[11], vtx[6], vtx[7]}, 5, iter);
-    saveTetObjs({vtx[1], vtx[11], vtx[4], vtx[5]}, 6, iter);
-    saveTetObjs({vtx[2], vtx[10], vtx[1], vtx[8]}, 7, iter);
-    saveTetObjs({vtx[2], vtx[10], vtx[4], vtx[1]}, 8, iter);
-    saveTetObjs({vtx[1], vtx[11], vtx[5], vtx[0]}, 9, iter);
-    saveTetObjs({vtx[10], vtx[1], vtx[8], vtx[7]}, 10, iter);
-    saveTetObjs({vtx[10], vtx[1], vtx[11], vtx[4]}, 11, iter);
-    
-    std::cout << "tets volume : " << tet_vol.transpose() << std::endl;
-    volume = tet_vol.sum();
-}
-
-void VertexModel::computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices,
- T& volume)
-{
-    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
-    {
-        return 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
-    };
-
-    // TV v0 = prism_vertices.segment<3>(5 * 3);
-    // TV v1 = prism_vertices.segment<3>(6 * 3);
-    // TV v2 = prism_vertices.segment<3>(7 * 3);
-    // TV v3 = prism_vertices.segment<3>(8 * 3);
-    // TV v4 = prism_vertices.segment<3>(9 * 3);
-
-    // TV v5 = prism_vertices.segment<3>(0 * 3);
-    // TV v6 = prism_vertices.segment<3>(1 * 3);
-    // TV v7 = prism_vertices.segment<3>(2 * 3);
-    // TV v8 = prism_vertices.segment<3>(3 * 3);
-    // TV v9 = prism_vertices.segment<3>(4 * 3);
-
-    TV v0 = prism_vertices.segment<3>(9 * 3);
-    TV v1 = prism_vertices.segment<3>(8 * 3);
-    TV v2 = prism_vertices.segment<3>(7 * 3);
-    TV v3 = prism_vertices.segment<3>(6 * 3);
-    TV v4 = prism_vertices.segment<3>(5 * 3);
-
-    TV v5 = prism_vertices.segment<3>(4 * 3);
-    TV v6 = prism_vertices.segment<3>(3 * 3);
-    TV v7 = prism_vertices.segment<3>(2 * 3);
-    TV v8 = prism_vertices.segment<3>(1 * 3);
-    TV v9 = prism_vertices.segment<3>(0 * 3);
-
-    // TV v0 = prism_vertices.segment<3>(0 * 3);
-    // TV v1 = prism_vertices.segment<3>(1 * 3);
-    // TV v2 = prism_vertices.segment<3>(2 * 3);
-    // TV v3 = prism_vertices.segment<3>(3 * 3);
-    // TV v4 = prism_vertices.segment<3>(4 * 3);
-
-    // TV v5 = prism_vertices.segment<3>(5 * 3);
-    // TV v6 = prism_vertices.segment<3>(6 * 3);
-    // TV v7 = prism_vertices.segment<3>(7 * 3);
-    // TV v8 = prism_vertices.segment<3>(8 * 3);
-    // TV v9 = prism_vertices.segment<3>(9 * 3);
-
-    std::cout << v0.transpose() << std::endl;
-    std::cout << v1.transpose() << std::endl;
-    std::cout << v2.transpose() << std::endl;
-    std::cout << v3.transpose() << std::endl;
-    std::cout << v4.transpose() << std::endl;
-
-    std::getchar();
-
-
-    Vector<T, 9> tet_vol;
-
-    tet_vol[0] = computeTetVolume(v3, v8, v9, v0);
-    tet_vol[1] = computeTetVolume(v3, v9, v4, v0);
-    tet_vol[2] = computeTetVolume(v7, v0, v2, v1);
-    tet_vol[3] = computeTetVolume(v9, v8, v5, v0);
-    tet_vol[4] = computeTetVolume(v6, v0, v7, v1);
-    tet_vol[5] = computeTetVolume(v5, v0, v7, v6);
-    tet_vol[6] = computeTetVolume(v5, v8, v7, v0);
-    tet_vol[7] = computeTetVolume(v8, v0, v2, v7);
-    tet_vol[8] = computeTetVolume(v8, v3, v2, v0);
-
-    auto saveTetObjs = [&](const std::vector<TV>& tets, int idx)
-    {
-        TV tet_center = TV::Zero();
-        for (const TV& vtx : tets)
-        {
-            tet_center += vtx;
-        }
-        tet_center *= 0.25;
-
-        TV shift = 0.5 * tet_center;
-        
-        std::ofstream out("tet" + std::to_string(idx) + ".obj");
-        for (const TV& vtx : tets)
-            out << "v " << (vtx + shift).transpose() << std::endl;
-        out << "f 3 2 1" << std::endl;
-        out << "f 4 3 1" << std::endl;
-        out << "f 2 4 1" << std::endl;
-        out << "f 3 4 2" << std::endl;
-        out.close();
-    };
-
-    // saveTetObjs({v8, v3, v9, v0}, 0);
-    // saveTetObjs({v9, v3, v4, v0}, 1);
-    // saveTetObjs({v0, v7, v2, v1}, 2);
-    // saveTetObjs({v8, v9, v5, v0}, 3);
-    // saveTetObjs({v0, v6, v7, v1}, 4);
-    // saveTetObjs({v0, v5, v7, v6}, 5);
-    // saveTetObjs({v8, v5, v7, v0}, 6);
-    // saveTetObjs({v0, v8, v2, v7}, 7);
-    // saveTetObjs({v3, v8, v2, v0}, 8);
-
-    std::cout << "tets volume : " << tet_vol.transpose() << std::endl;
-    volume = tet_vol.sum();
-}
-
-void VertexModel::computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume)
-{
-    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
-    {
-        return 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
-    };
-
-    
-    TV v0 = prism_vertices.segment<3>(4 * 3);
-    TV v1 = prism_vertices.segment<3>(5 * 3);
-    TV v2 = prism_vertices.segment<3>(7 * 3);
-    TV v3 = prism_vertices.segment<3>(6 * 3);
-    TV v4 = prism_vertices.segment<3>(0 * 3);
-    TV v5 = prism_vertices.segment<3>(1 * 3);
-    TV v6 = prism_vertices.segment<3>(3 * 3);
-    TV v7 = prism_vertices.segment<3>(2 * 3);
-
-	
-    Vector<T, 6> tet_vol;
-    tet_vol[0] = computeTetVolume(v2, v4, v6, v5);
-    tet_vol[1] = computeTetVolume(v7, v2, v6, v5);
-    tet_vol[2] = computeTetVolume(v3, v2, v7, v5);
-    tet_vol[3] = computeTetVolume(v4, v2, v0, v5);
-    tet_vol[4] = computeTetVolume(v1, v0, v2, v5);
-    tet_vol[5] = computeTetVolume(v3, v1, v2, v5);
-
-    auto saveTetObjs = [&](const std::vector<TV>& tets, int idx)
-    {
-        TV tet_center = TV::Zero();
-        for (const TV& vtx : tets)
-        {
-            tet_center += vtx;
-        }
-        tet_center *= 0.25;
-
-        TV shift = 0.5 * tet_center;
-        
-        std::ofstream out("tet" + std::to_string(idx) + ".obj");
-        for (const TV& vtx : tets)
-            out << "v " << (vtx + shift).transpose() << std::endl;
-        out << "f 3 2 1" << std::endl;
-        out << "f 4 3 1" << std::endl;
-        out << "f 2 4 1" << std::endl;
-        out << "f 3 4 2" << std::endl;
-        out.close();
-    };
-
-    // saveTetObjs({v2, v4, v6, v5}, 0);
-    // saveTetObjs({v7, v2, v6, v5}, 1);
-    // saveTetObjs({v3, v2, v7, v5}, 2);
-    // saveTetObjs({v4, v2, v0, v5}, 3);
-    // saveTetObjs({v1, v0, v2, v5}, 4);
-    // saveTetObjs({v3, v1, v2, v5}, 5);
-
-    std::cout << "tet vol " << tet_vol.transpose() << std::endl;
-
-    volume = tet_vol.sum();
-}
-
-void VertexModel::saveHexTetsStep(int iteration)
-{
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
         if (face_idx < basal_face_start)
         {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-            
-            positionsFromIndices(positions, cell_vtx_list);
-            T tet_vol;
-            computeHexPrismVolumeFromTet(positions, tet_vol, iteration);
-            
+            T cone_volume;
+            if (face_vtx_list.size() == 4) 
+                computeConeVolume4Points(positions, mesh_centroid, cone_volume);
+            else if (face_vtx_list.size() == 5) 
+                computeConeVolume5Points(positions, mesh_centroid, cone_volume);
+            else if (face_vtx_list.size() == 6) 
+                computeConeVolume6Points(positions, mesh_centroid, cone_volume);
+            else
+                std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
+            volume += cone_volume;
         }
+        
     });
+    return -volume;
 }
+
 
 void VertexModel::computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume)
 {
@@ -510,7 +279,6 @@ T VertexModel::computeYolkVolume(bool verbose)
         VectorXT positions;
         positionsFromIndices(positions, face_vtx_list);
         
-        
         if (face_idx < lateral_face_start && face_idx >= basal_face_start)
         {
             T cone_volume;
@@ -525,14 +293,20 @@ T VertexModel::computeYolkVolume(bool verbose)
                 std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
             yolk_volume += cone_volume;
             if (verbose)
+            {
                 std::cout << cone_volume << " ";
+                if (cone_volume < 0)
+                    std::cout << "negative volume " << cone_volume << std::endl;
+            }
         }
         
     });
     if (verbose)
         std::cout << std::endl;
-    return yolk_volume;
+    return yolk_volume; 
 }
+
+
 
 T VertexModel::computeAreaEnergy(const VectorXT& _u)
 {
@@ -668,13 +442,48 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
+        // cell-wise volume preservation term
+        if (face_idx < basal_face_start)
+        {
+            VectorXT positions;
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + basal_vtx_start);
+            T volume_barrier_energy = 0.0;
+            positionsFromIndices(positions, cell_vtx_list);
+
+            // cell-wise volume preservation term
+            if (face_idx < basal_face_start)
+            {
+                if (add_single_tet_vol_barrier)
+                {
+                    if(face_vtx_list.size() == 6)
+                    {
+                        if (use_cell_centroid)
+                        {
+                            computeVolumeBarrier6Points(tet_barrier_stiffness, positions, volume_barrier_energy);
+                        }
+                        else
+                            computeHexBasePrismVolumeBarrier(tet_barrier_stiffness, positions, volume_barrier_energy);
+                        energy += volume_barrier_energy;
+                        // std::cout << volume_barrier_energy << std::endl;
+                    }
+                }
+            }
+        }
+    });
+
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
         VectorXT positions;
         positionsFromIndices(positions, face_vtx_list);
         T area_energy = 0.0;
+        
         // cell-wise volume preservation term
         if (face_idx < basal_face_start)
         {
             volume_term += 0.5 * B * std::pow(cell_volume_init[face_idx] - current_cell_volume[face_idx], 2);
+            
         }
         else // basal and lateral faces area term
         {
@@ -760,12 +569,46 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
             std::cout << "\tE_inside_sphere " << sphere_bound_term << std::endl;
     }
     energy += sphere_bound_term;
+    
+    T contact_energy = 0.0;
+
+    if (use_ipc_contact)
+    {
+        Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+        }
+        
+        ipc::Constraints ipc_constraints;
+        ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+
+        try
+        {
+            contact_energy = barrier_weight * ipc::compute_barrier_potential(ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
+        }
+        catch(const std::runtime_error& e)
+        {
+            std::cout << "error catch " << std::endl;
+            std::cerr << e.what() << '\n';
+        }
+        
+
+        energy += contact_energy;
+        if (verbose)
+            std::cout << "\tcontact energy: " << contact_energy << std::endl;
+        // std::getchar();
+    }
 
     return energy;
 }
 
 T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose)
 {
+    if (use_ipc_contact)
+        updateIPCVertices(_u);
     VectorXT residual_temp = residual;
     VectorXT projected = _u;
     if (!run_diff_test)
@@ -862,6 +705,16 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                         computeHexBasePrismVolumeGradient(positions, dedx);
                     dedx *= -coeff;
                     addForceEntry<36>(residual, cell_vtx_list, dedx);
+
+                    if (add_single_tet_vol_barrier)
+                    {
+                        if (use_cell_centroid)
+                            computeVolumeBarrier6PointsGradient(tet_barrier_stiffness, positions, dedx);
+                        else
+                            computeHexBasePrismVolumeBarrierGradient(tet_barrier_stiffness, positions, dedx);
+                        dedx *= -1;
+                        addForceEntry<36>(residual, cell_vtx_list, dedx);
+                    }
                 }
                 else
                 {
@@ -1008,7 +861,37 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         residual_temp = residual;
     }
 
+    if (use_ipc_contact)
+    {
+        Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+        }
+
+        ipc::Constraints ipc_constraints;
+        ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+
+        VectorXT contact_gradient;
+
+        try
+        {
+            contact_gradient = barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
+        }
+        catch(const std::runtime_error& e)
+        {
+            std::cerr << e.what() << '\n';
+        }
     
+        residual.segment(0, basal_vtx_start * 3) += -contact_gradient;
+
+    
+        if(print_force_norm)
+            std::cout << "\tcontact force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -1202,6 +1085,15 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
                     (V - cell_volume_init[face_idx]) * d2Vdx2);
                 
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
+
+                if(add_single_tet_vol_barrier)
+                {
+                    if (use_cell_centroid)
+                    {
+                        computeVolumeBarrier6PointsHessian(tet_barrier_stiffness, positions, hessian);
+                    }
+                    addHessianEntry<36>(entries, cell_vtx_list, hessian);
+                }
             }
             else
             {
@@ -1333,9 +1225,31 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
         }
     }
 
+
+    if (use_ipc_contact)
+    {
+        Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+        }
         
+        ipc::Constraints ipc_constraints;
+        ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+
+        StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, ipc_constraints, barrier_distance, false);
+
+        std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
+        entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
+
+    }
+
     K.resize(num_nodes * 3, num_nodes * 3);
     K.setFromTriplets(entries.begin(), entries.end());
+        
+        
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
     // std::cout << K << std::endl;
@@ -1520,6 +1434,15 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                     (V - cell_volume_init[face_idx]) * d2Vdx2);
                 
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
+
+                if (add_single_tet_vol_barrier)
+                {
+                    if (use_cell_centroid)
+                        computeVolumeBarrier6PointsHessian(tet_barrier_stiffness, positions, hessian);
+                    else
+                        computeHexBasePrismVolumeBarrierHessian(tet_barrier_stiffness, positions, hessian);
+                    addHessianEntry<36>(entries, cell_vtx_list, hessian);
+                }
             }
             else
             {
@@ -1649,6 +1572,26 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 addHessianEntry<3>(entries, {i}, hessian);
             }
         }
+    }
+
+    if (use_ipc_contact)
+    {
+        Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
+        for (int i = 0; i < basal_vtx_start; i++)
+        {
+            ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+        }
+        
+        ipc::Constraints ipc_constraints;
+        ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+
+        StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
+            ipc_edges, ipc_faces, ipc_constraints, barrier_distance, false);
+
+        std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
+        entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
+
     }
 
         

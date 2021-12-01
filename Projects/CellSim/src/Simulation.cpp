@@ -1,7 +1,14 @@
 #include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
 #include <iomanip>
+#include <ipc/ipc.hpp>
 
+
+void generatePolygonRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C)
+{
+
+}
 
 void Simulation::computeLinearModes()
 {
@@ -15,7 +22,7 @@ void Simulation::initializeCells()
     std::string sphere_file;
     cells.scene_type = 1;
 
-    if (cells.scene_type == 1)
+    if (cells.scene_type == 1 || cells.scene_type == 2)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
@@ -30,9 +37,9 @@ void Simulation::initializeCells()
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 50;
+    max_newton_iter = 300;
     // verbose = true;
-    cells.print_force_norm = true;
+    // cells.print_force_norm = true;
 
 }
 
@@ -47,29 +54,62 @@ void Simulation::sampleBoundingSurface(Eigen::MatrixXd& V)
 }
 
 void Simulation::generateMeshForRendering(Eigen::MatrixXd& V, 
-    Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool show_rest, bool split)
+    Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
+    bool show_deformed, bool show_rest, 
+    bool split, bool split_a_bit, bool yolk_only)
 {
     // deformed = undeformed + 1.0 * u;
-    cells.generateMeshForRendering(V, F, C);
+    V.resize(0, 0);
+    F.resize(0, 0);
+    C.resize(0, 0);
+    
+    Eigen::MatrixXd V_rest, C_rest;
+    Eigen::MatrixXi F_rest, offset;
+    
+    if (show_deformed)
+        cells.generateMeshForRendering(V, F, C);
+    int nv = V.rows(), nf = F.rows();
     if (show_rest)
     {
-        int nv = V.rows(), nf = F.rows();
-        
-        V.conservativeResize(V.rows() * 2, 3);
-        F.conservativeResize(F.rows() * 2, 3);
-        C.conservativeResize(C.rows() * 2, 3);
-        tbb::parallel_for(0, nv, [&](int i){
-            V.row(nv + i) = cells.undeformed.segment<3>(i * 3);
-        });
-        tbb::parallel_for(0, nf, [&](int i){
-            F.row(nf + i) = F.row(i) + Eigen::Vector3i(nv, nv, nv).transpose();
-            C.row(nf + i) = TV(1, 1, 0);
-        });
-        
+        cells.generateMeshForRendering(V_rest, F_rest, C_rest, true);
+        int nv_rest = V_rest.rows(), nf_rest = F_rest.rows();
+        V.conservativeResize(V.rows() + V_rest.rows(), 3);
+        F.conservativeResize(F.rows() + F_rest.rows(), 3);
+        C.conservativeResize(C.rows() + C_rest.rows(), 3);
+        C_rest.col(0).setConstant(1.0);
+        C_rest.col(1).setConstant(1.0);
+        C_rest.col(2).setConstant(0.0);
+        offset = F_rest;
+        offset.setConstant(nv);
+        V.block(nv, 0, nv_rest, 3) = V_rest;
+        F.block(nf, 0, nf_rest, 3) = F_rest + offset;
+        C.block(nf, 0, nf_rest, 3) = C_rest;
     }
-    if (split)
+    if (split || split_a_bit)
     {
-        cells.splitCellsForRendering(V, F, C);
+        cells.splitCellsForRendering(V, F, C, split_a_bit);
+    }
+    if (yolk_only)
+    {
+        if (show_deformed)
+            cells.getYolkForRendering(V, F, C);
+        int nv = V.rows(), nf = F.rows();
+        if (show_rest)
+        {
+            cells.getYolkForRendering(V_rest, F_rest, C_rest, true);
+            int nv_rest = V_rest.rows(), nf_rest = F_rest.rows();
+            V.conservativeResize(V.rows() + V_rest.rows(), 3);
+            F.conservativeResize(F.rows() + F_rest.rows(), 3);
+            C.conservativeResize(C.rows() + C_rest.rows(), 3);
+            C_rest.col(0).setConstant(1.0);
+            C_rest.col(1).setConstant(1.0);
+            C_rest.col(2).setConstant(0.0);
+            offset = F_rest;
+            offset.setConstant(nv);
+            V.block(nv, 0, nv_rest, 3) = V_rest;
+            F.block(nf, 0, nf_rest, 3) = F_rest + offset;
+            C.block(nf, 0, nf_rest, 3) = C_rest;
+        }
     }
 }
 
@@ -80,6 +120,8 @@ void Simulation::advanceOneStep()
 
 bool Simulation::staticSolve()
 {
+    // cells.saveHexTetsStep(0);
+    // std::exit(0);
     VectorXT cell_volume_initial;
     cells.computeVolumeAllCells(cell_volume_initial);
     T yolk_volume_init = 0.0;
@@ -88,6 +130,8 @@ bool Simulation::staticSolve()
         yolk_volume_init = cells.computeYolkVolume(false);
         // std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
     }
+
+    T total_volume_apical_surface = cells.computeTotalVolumeFromApicalSurface();
 
     
     std::cout << cells.computeTotalEnergy(u, true) << std::endl;
@@ -106,7 +150,7 @@ bool Simulation::staticSolve()
         
         residual_norm = computeResidual(u, residual);
         // cells.saveHexTetsStep(cnt);
-        // std::getchar();
+        // std::exit(0);
         // if (verbose)
             std::cout << "residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
@@ -136,6 +180,7 @@ bool Simulation::staticSolve()
     // T total_energy_final = cells.computeTotalEnergy(u, true);
 
     deformed = undeformed + u;
+    cells.saveIPCData();
 
     VectorXT cell_volume_final;
     cells.computeVolumeAllCells(cell_volume_final);
@@ -156,6 +201,9 @@ bool Simulation::staticSolve()
         std::cout << "\tyolk volume initial: " << yolk_volume_init << std::endl;
         std::cout << "\tyolk volume final: " << yolk_volume << std::endl;
     }
+    
+    std::cout << "\ttotal volume initial from apical surface: " << total_volume_apical_surface << std::endl;
+    std::cout << "\ttotal volume final from apical surface: " << cells.computeTotalVolumeFromApicalSurface() << std::endl;
     T total_energy_final = cells.computeTotalEnergy(u, true);
     std::cout << "\ttotal energy final: " << total_energy_final << std::endl;
     std::cout << "============================================================================" << std::endl;
@@ -418,6 +466,23 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     T norm = du.norm();
     
     T alpha = 1;
+
+    if (cells.use_ipc_contact)
+    {
+        Eigen::MatrixXd current_position(cells.basal_vtx_start, 3), 
+            next_step_position(cells.basal_vtx_start, 3);
+            
+        for (int i = 0; i < cells.basal_vtx_start; i++)
+        {
+            current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+            next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
+        }
+        
+        alpha = ipc::compute_collision_free_stepsize(current_position, 
+            next_step_position, cells.ipc_edges, cells.ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
+        // std::cout << "collision free step size " << alpha << std::endl;
+    }
+
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
     int cnt = 1;
@@ -462,7 +527,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                 {
                     std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
-                    sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
+                    // sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
                     // cells.checkTotalGradient();
                     return 1e16;
                 }

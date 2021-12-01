@@ -43,8 +43,16 @@ public:
 
     void generateMeshForRendering(
         Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
-        Eigen::MatrixXd& C, bool show_rest = false,
-        bool split = false);
+        Eigen::MatrixXd& C, 
+        bool show_deformed = true,
+        bool show_rest = false,
+        bool split = false,
+        bool split_a_bit = false,
+        bool yolk_only = false);
+
+    void generatePolygonRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C);
+    
     void sampleBoundingSurface(Eigen::MatrixXd& V);
 
     void advanceOneStep();
