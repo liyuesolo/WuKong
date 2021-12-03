@@ -21,6 +21,7 @@ public:
     using IV = Vector<int, 3>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
     using VtxList = std::vector<int>;
@@ -120,12 +121,14 @@ public:
     VectorXT cell_volume_init;
     std::vector<Edge> edges; // all edges
     std::vector<Edge> contracting_edges;
+    VectorXT fixed_cell_centroids;
 
     int num_nodes;
     int basal_vtx_start;
     int basal_face_start;
     int lateral_face_start;
 
+    // vertex model
     T sigma = 1.0;
     T alpha = 2.13;
     T gamma = 0.98;
@@ -137,7 +140,14 @@ public:
     T bound_coeff = 10e-10;
     int bound_power = 4;
     T tet_barrier_stiffness = 10e-10;
+    T total_volume = 0.0;
+    
+    // ALM
+    T kappa = 1.0;
+    T kappa_max = 1e9;
+    VectorXT lambda_cell_vol;
 
+    // IPC
     T barrier_distance = 1e-5;
     T barrier_weight = 1e6;
     Eigen::MatrixXd ipc_vertices;
@@ -145,7 +155,8 @@ public:
     Eigen::MatrixXi ipc_faces;
 
     bool single_prism = false;
-    bool sherman_morrison = false;
+    bool woodbury = false;
+    bool use_alm_on_cell_volume = false;
 
     bool run_diff_test = false;
     bool add_yolk_volume = true;
@@ -157,25 +168,25 @@ public:
     bool sphere_bound_penalty = false;
     bool add_single_tet_vol_barrier = false;
     bool use_ipc_contact = false;
+    bool use_fixed_cell_centroid = false;
+    bool add_pervitelline_liquid_volume = false;
+
 
     bool print_force_norm = false;
 
 
     TV mesh_centroid;
     T yolk_vol_init;
+    T previtelline_vol_init;
+    T Bp = 1e4;
 
     std::unordered_map<int, T> dirichlet_data;
-    
 
+    // VertexModel.cpp
+    void updateALMData(const VectorXT& _u);
     void computeLinearModes();
 
-    void saveHexTetsStep(int iteration);
-
-    void computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume);
-    void computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices, T& volume);
-    void computeHexPrismVolumeFromTet(const Vector<T, 36>& prism_vertices, T& volume, int iter = 0);
-    void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
-
+    void updateFixedCellCentroid();
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
 
@@ -188,22 +199,24 @@ public:
         const std::unordered_map<int, T>& data);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
-    void buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v);
+    void buildSystemMatrixWoodbury(const VectorXT& _u, 
+        StiffnessMatrix& K, MatrixXT& UV);
 
     T computeAreaEnergy(const VectorXT& _u);
 
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
 
+    void positionsFromIndices(VectorXT& positions, const VtxList& indices);
+
+    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+
+    // DerivativeTest.cpp
     void checkTotalGradient(bool perturb = false);
     void checkTotalHessian(bool perturb = false);
 
     void checkTotalHessianScale(bool perturb = false);
     void checkTotalGradientScale(bool perturb = false);
-    
-    void positionsFromIndices(VectorXT& positions, const VtxList& indices);
-
-    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
     // scene.cpp
     bool computeBoundingBox(TV& min_corner, TV& max_corner);    
@@ -213,8 +226,10 @@ public:
     void initializeContractionData();
     void computeIPCRestData();
     void updateIPCVertices(const VectorXT& _u);
-    void saveIPCData();
+    void saveIPCData(int iter = 0);
+    void saveCellMesh(int iter = 0);
     void approximateMembraneThickness();
+
 
     //Visualization.cpp
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -226,6 +241,13 @@ public:
     void getYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool rest_shape = false);
     void saveIndividualCellsWithOffset();
+
+    // Misc.cpp
+    void saveHexTetsStep(int iteration);
+    void computeCubeVolumeFromTet(const Vector<T, 24>& prism_vertices, T& volume);
+    void computePentaPrismVolumeFromTet(const Vector<T, 30>& prism_vertices, T& volume);
+    void computeHexPrismVolumeFromTet(const Vector<T, 36>& prism_vertices, T& volume, int iter = 0);
+    void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
 
 private:
     template<int dim>

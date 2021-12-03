@@ -16,6 +16,7 @@ public:
     using IV = Vector<int, 3>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
     using CellModel = VertexModel;
@@ -33,7 +34,7 @@ public:
     VectorXT& deformed = cells.deformed;
     VectorXT& u = cells.u;
     VectorXT& f = cells.f;
-    bool& sherman_morrison = cells.sherman_morrison;
+    bool& woodbury = cells.woodbury;
 
     Timer t;
     
@@ -63,10 +64,11 @@ public:
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
-    bool ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
+    bool WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du);
 
-    void buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v);
+    void buildSystemMatrixWoodbury(const VectorXT& _u, 
+        StiffnessMatrix& K, MatrixXT& UV);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     T computeTotalEnergy(const VectorXT& _u);

@@ -246,3 +246,44 @@ void VertexModel::saveHexTetsStep(int iteration)
     });
 }
 
+void VertexModel::computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume)
+{
+    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
+    {
+        T tet_vol = 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
+        std::cout << tet_vol << std::endl;
+        return tet_vol;
+    };
+
+    TV apical_centroid = TV::Zero(), basal_centroid = TV::Zero(), cell_centroid = TV::Zero();
+    for (int i = 0; i < 4; i++)
+    {
+        apical_centroid += prism_vertices.segment<3>(i * 3);
+        basal_centroid += prism_vertices.segment<3>((i + 4) * 3);
+    }
+    cell_centroid = (apical_centroid + basal_centroid) / T(8);
+    apical_centroid /= T(4);
+    basal_centroid /= T(4);
+
+    volume = 0.0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        
+        int j = (i + 1) % 4;
+        TV r0 = prism_vertices.segment<3>(i * 3);
+        TV r1 = prism_vertices.segment<3>(j * 3);
+        volume -= computeTetVolume(apical_centroid, r1, r0, cell_centroid);
+
+        TV r2 = prism_vertices.segment<3>((i + 4) * 3);
+        TV r3 = prism_vertices.segment<3>((j + 4) * 3);
+        volume += computeTetVolume(basal_centroid, r3, r2, cell_centroid);
+
+        TV lateral_centroid = T(0.25) * (r0 + r1 + r2 + r3);
+        volume += computeTetVolume(lateral_centroid, r1, r0, cell_centroid);
+        volume += computeTetVolume(lateral_centroid, r3, r1, cell_centroid);
+        volume += computeTetVolume(lateral_centroid, r2, r3, cell_centroid);
+        volume += computeTetVolume(lateral_centroid, r0, r2, cell_centroid);
+    }
+    
+}

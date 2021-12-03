@@ -16,76 +16,77 @@ void VertexModel::approximateMembraneThickness()
     if (sphere_bound_penalty)
         Rc = radii_min;
     else
-        Rc = 1.001 * radii_max;
-        
+        Rc = 1.01 * radii_max;
+    
+    total_volume = 4.0 / 3.0 * M_PI * std::pow(Rc, 3);
 }
 
 void VertexModel::initializeContractionData()
 {
-    VtxList contracting_vertices;
-    if (scene_type == 0)
-    {
-        // on low res sphere
-        contracting_vertices = {37, 36, 39, 49, 48, 50, 23, 67, 33, 32, 34};
-        for (int i = 0; i < contracting_vertices.size(); i++)
-        {
-            int j = (i + 1) % contracting_vertices.size();
-            Edge e(contracting_vertices[i], contracting_vertices[j]);
-            contracting_edges.push_back(e);
-        }
-    }
-    else if (scene_type == 1)
-    {
-        // on high res sphere
-        contracting_vertices = {576, 577, 587, 618, 610, 608, 611, 615, 534,
-            529, 528, 530, 543, 526, 515, 512, 513, 523, 554, 
-            546, 544, 
-            547, 551, 598, 
-            593, 592, 594, 
-            607, 590, 579};
-        
-        for (int i = 0; i < contracting_vertices.size(); i++)
-        {
-            int j = (i + 1) % contracting_vertices.size();
-            Edge e(contracting_vertices[i], contracting_vertices[j]);
-            contracting_edges.push_back(e);
-        }    
-    }
-    else if (scene_type == 2)
-    {
-        contracting_vertices = {238, 281, 324, 329, 331, 333, 334, 339, 
-        341, 343, 347, 349, 351, 366, 370, 372, 374, 375, 379, 380, 381, 385, 386, 387};
-
-        iterateEdgeSerial([&](Edge& e){
-            auto find_v0 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[0]);
-            auto find_v1 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[1]);
-
-            if (find_v0 != contracting_vertices.end() && find_v1 != contracting_vertices.end())
-            {
-                contracting_edges.push_back(e);
-            }
-        });
-        std::cout << contracting_edges.size() << std::endl;
-    }
-    
-    
-
-
-    // TV min_corner, max_corner;
-    // computeBoundingBox(min_corner, max_corner);
-
-    // for (auto e : edges)
+    // VtxList contracting_vertices;
+    // if (scene_type == 0)
     // {
-    //     TV x0 = deformed.segment<3>(e[0] * 3);
-    //     TV x1 = deformed.segment<3>(e[1] * 3);
-
-    //     if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-    //         x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-    //         e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+    //     // on low res sphere
+    //     contracting_vertices = {37, 36, 39, 49, 48, 50, 23, 67, 33, 32, 34};
+    //     for (int i = 0; i < contracting_vertices.size(); i++)
     //     {
+    //         int j = (i + 1) % contracting_vertices.size();
+    //         Edge e(contracting_vertices[i], contracting_vertices[j]);
     //         contracting_edges.push_back(e);
     //     }
     // }
+    // else if (scene_type == 1)
+    // {
+    //     // on high res sphere
+    //     contracting_vertices = {576, 577, 587, 618, 610, 608, 611, 615, 534,
+    //         529, 528, 530, 543, 526, 515, 512, 513, 523, 554, 
+    //         546, 544, 
+    //         547, 551, 598, 
+    //         593, 592, 594, 
+    //         607, 590, 579};
+        
+    //     for (int i = 0; i < contracting_vertices.size(); i++)
+    //     {
+    //         int j = (i + 1) % contracting_vertices.size();
+    //         Edge e(contracting_vertices[i], contracting_vertices[j]);
+    //         contracting_edges.push_back(e);
+    //     }    
+    // }
+    // else if (scene_type == 2)
+    // {
+    //     contracting_vertices = {238, 281, 324, 329, 331, 333, 334, 339, 
+    //     341, 343, 347, 349, 351, 366, 370, 372, 374, 375, 379, 380, 381, 385, 386, 387};
+
+    //     iterateEdgeSerial([&](Edge& e){
+    //         auto find_v0 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[0]);
+    //         auto find_v1 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[1]);
+
+    //         if (find_v0 != contracting_vertices.end() && find_v1 != contracting_vertices.end())
+    //         {
+    //             contracting_edges.push_back(e);
+    //         }
+    //     });
+    //     std::cout << contracting_edges.size() << std::endl;
+    // }
+    
+    
+
+
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+
+    for (auto e : edges)
+    {
+        TV x0 = deformed.segment<3>(e[0] * 3);
+        TV x1 = deformed.segment<3>(e[1] * 3);
+
+        if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+            x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+            e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+        {
+            contracting_edges.push_back(e);
+        }
+    }
 
 }
 
@@ -361,9 +362,9 @@ void VertexModel::updateIPCVertices(const VectorXT& _u)
         ipc_vertices.row(i) = deformed.segment<3>(i * 3);
 }
 
-void VertexModel::saveIPCData()
+void VertexModel::saveIPCData(int iter)
 {
-    std::ofstream out("ipc_mesh.obj");
+    std::ofstream out("output/cells/surface/ipc_mesh_iter_" + std::to_string(iter) +".obj");
     for (int i = 0; i < ipc_vertices.rows(); i++)
     {
         out << "v " << ipc_vertices.row(i) << std::endl;
@@ -371,6 +372,24 @@ void VertexModel::saveIPCData()
     for (int i = 0; i < ipc_faces.rows(); i++)
     {
         IV obj_face = ipc_faces.row(i).transpose() + IV::Ones();
+        out << "f " << obj_face.transpose() << std::endl;
+    }
+    out.close();
+}
+
+void VertexModel::saveCellMesh(int iter)
+{
+    std::ofstream out("output/cells/cell/cell_mesh_iter_" + std::to_string(iter) +".obj");
+    Eigen::MatrixXd V, C;
+    Eigen::MatrixXi F;
+    generateMeshForRendering(V, F, C, false);
+    for (int i = 0; i < V.rows(); i++)
+    {
+        out << "v " << V.row(i) << std::endl;
+    }
+    for (int i = 0; i < F.rows(); i++)
+    {
+        IV obj_face = F.row(i).transpose() + IV::Ones();
         out << "f " << obj_face.transpose() << std::endl;
     }
     out.close();
@@ -577,7 +596,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         alpha = 25.0; 
         gamma = 5.0;
-        if (sherman_morrison)
+        if (woodbury)
         {
             // use this when enable single tet volume term
             // alpha = 200.0;
@@ -585,7 +604,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             // sigma = 0.5;
 
             // use this when single tet volume term is disabled
-            alpha = 80.0;
+            alpha = 100.0;
             gamma = 20.0;
             sigma = 0.5;
         }
@@ -628,7 +647,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     add_contraction_term = true;
     // Gamma = 0.5;
     Gamma = 5.0;
-    if (sherman_morrison)
+    if (woodbury)
     {
         Gamma = 20.0;
     }
@@ -660,7 +679,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     pressure_constant = 0.1;
     // pressure_constant = 1e1;
 
-    add_single_tet_vol_barrier = false;
+    add_single_tet_vol_barrier = true;
     tet_barrier_stiffness = 10e-22;
 
 
@@ -670,5 +689,22 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         computeIPCRestData();
         barrier_weight = 1e10;
         barrier_distance = 1e-3;
+    }
+
+    if (use_alm_on_cell_volume)
+    {
+        lambda_cell_vol = VectorXT::Zero(deformed.rows());
+        kappa = 1e6;
+    }
+
+    use_fixed_cell_centroid = false;
+    if (use_fixed_cell_centroid)
+        updateFixedCellCentroid();
+
+    add_pervitelline_liquid_volume = true;
+    if (add_pervitelline_liquid_volume)
+    {
+        previtelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
+        Bp = 1e3; 
     }
 }

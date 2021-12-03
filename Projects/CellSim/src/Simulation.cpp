@@ -17,7 +17,8 @@ void Simulation::computeLinearModes()
 
 void Simulation::initializeCells()
 {
-    sherman_morrison = true;
+    woodbury = true;
+    cells.use_alm_on_cell_volume = false;
 
     std::string sphere_file;
     cells.scene_type = 1;
@@ -37,9 +38,9 @@ void Simulation::initializeCells()
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 300;
+    max_newton_iter = 500;
     // verbose = true;
-    // cells.print_force_norm = true;
+    cells.print_force_norm = true;
 
 }
 
@@ -147,14 +148,19 @@ bool Simulation::staticSolve()
     {
         VectorXT residual(deformed.rows());
         residual.setZero();
+        if (cells.use_fixed_cell_centroid)
+            cells.updateFixedCellCentroid();
         
         residual_norm = computeResidual(u, residual);
+        // cells.saveCellMesh(cnt);
+        // cells.saveIPCData(cnt);
         // cells.saveHexTetsStep(cnt);
         // std::exit(0);
         // if (verbose)
-            std::cout << "residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+            std::cout << "iter " << cnt << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
         // if (cnt % 50 == 0)
+        // if (cnt == 1)
         // {
         //     cells.checkTotalGradientScale();
         //     cells.checkTotalHessianScale();
@@ -164,6 +170,7 @@ bool Simulation::staticSolve()
         
         // t.start();
         dq_norm = lineSearchNewton(u, residual, 20, true);
+        cells.updateALMData(u);
         // t.stop();
         // std::cout << "newton single step costs " << t.elapsed_sec() << "s" << std::endl;
 
@@ -217,7 +224,7 @@ bool Simulation::staticSolve()
     return true;
 }
 
-bool Simulation::ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
+bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
     StiffnessMatrix I(K.rows(), K.cols());
@@ -241,12 +248,33 @@ bool Simulation::ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
             continue;
         }
 
-        VectorXT A_inv_g = solver.solve(residual);
-        VectorXT A_inv_u = solver.solve(v);
+        // sherman morrison
+        if (UV.cols() == 1)
+        {
+            VectorXT v = UV.col(0);
+            VectorXT A_inv_g = solver.solve(residual);
+            VectorXT A_inv_u = solver.solve(v);
 
-        T dem = 1.0 + v.dot(A_inv_u);
+            T dem = 1.0 + v.dot(A_inv_u);
 
-        du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+            du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+        }
+        // UV is actually only U, since UV is the same in the case
+        // C is assume to be Identity
+        else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+        {
+            VectorXT A_inv_g = solver.solve(residual);
+
+            MatrixXT A_inv_U(UV.rows(), UV.cols());
+            for (int col = 0; col < UV.cols(); col++)
+                A_inv_U.col(col) = solver.solve(UV.col(col));
+            
+            MatrixXT C(UV.cols(), UV.cols());
+            C.setIdentity();
+            C += UV.transpose() * A_inv_U;
+            du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+        }
+        
 
         T dot_dx_g = du.normalized().dot(residual.normalized());
 
@@ -255,16 +283,16 @@ bool Simulation::ShermanMorrisonSolve(StiffnessMatrix& K, const VectorXT& v,
 
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
-        bool solve_success = ((K + v * v.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
         // std::cout << "PD: " << positive_definte << " direction " 
         //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
-            // std::cout << "\t===== Linear Solve ===== " << std::endl;
-            // std::cout << "\t# regularization step " << i << std::endl;
-            // std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            // std::cout << "\t======================== " << std::endl;
+            std::cout << "\t===== Linear Solve ===== " << std::endl;
+            std::cout << "\t# regularization step " << i << std::endl;
+            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+            std::cout << "\t======================== " << std::endl;
             return true;
         }
         else
@@ -340,10 +368,10 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
-            // std::cout << "\t===== Linear Solve ===== " << std::endl;
-            // std::cout << "\t# regularization step " << i << std::endl;
-            // std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            // std::cout << "\t======================== " << std::endl;
+            std::cout << "\t===== Linear Solve ===== " << std::endl;
+            std::cout << "\t# regularization step " << i << std::endl;
+            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+            std::cout << "\t======================== " << std::endl;
             return true;
         }
         else
@@ -429,9 +457,9 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
 
 }
 
-void Simulation::buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v)
+void Simulation::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix& K, MatrixXT& UV)
 {
-    cells.buildSystemMatrixShermanMorrison(u, K, v);
+    cells.buildSystemMatrixWoodbury(u, K, UV);
 }
 
 T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bool wolfe_condition)
@@ -445,11 +473,11 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     StiffnessMatrix K(residual.rows(), residual.rows());
     
     bool success = false;
-    if (sherman_morrison)
+    if (woodbury)
     {
-        VectorXT v;
-        buildSystemMatrixShermanMorrison(_u, K, v);
-        success = ShermanMorrisonSolve(K, v, residual, du);    
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(_u, K, UV);
+        success = WoodburySolve(K, UV, residual, du);    
     }
     else
     {
@@ -514,7 +542,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.checkTotalHessianScale();
                     return 1e16;
                 }
-                // std::cout << "# ls " << cnt << std::endl;
+                std::cout << "# ls " << cnt << std::endl;
                 break;
             }
         }
@@ -531,7 +559,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.checkTotalGradient();
                     return 1e16;
                 }
-                // std::cout << "# ls " << cnt << std::endl;
+                std::cout << "# ls " << cnt << std::endl;
                 break;
             }
         }

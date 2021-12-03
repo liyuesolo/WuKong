@@ -108,7 +108,8 @@ void VertexModel::checkTotalGradientScale(bool perturb)
 {
     
     run_diff_test = true;
-    
+    if (use_alm_on_cell_volume)
+        lambda_cell_vol.setOnes();
     T _bound_coeff = bound_coeff;
     if (sphere_bound_penalty)
         bound_coeff = 0.0;
@@ -160,6 +161,8 @@ void VertexModel::checkTotalHessianScale(bool perturb)
 {
     // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
     // pressure_constant = 0.0;
+    if (use_alm_on_cell_volume)
+        lambda_cell_vol.setOnes();
     run_diff_test = true;
     T _Gamma = Gamma;
     T _bound_coeff = bound_coeff;
@@ -179,7 +182,16 @@ void VertexModel::checkTotalHessianScale(bool perturb)
     int n_dof = num_nodes * 3;
 
     StiffnessMatrix A;
-    buildSystemMatrix(u, A);
+    if (woodbury)
+    {
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(u, A, UV);
+        Eigen::MatrixXd UVT  = UV * UV.transpose();
+        UVT += A;
+        A = UVT.sparseView();
+    }
+    else
+        buildSystemMatrix(u, A);
 
     VectorXT f0(n_dof);
     f0.setZero();

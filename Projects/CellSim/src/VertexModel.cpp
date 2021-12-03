@@ -113,6 +113,25 @@ bool VertexModel::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& 
 }
 
 
+void VertexModel::updateFixedCellCentroid()
+{
+    fixed_cell_centroids = VectorXT::Zero(basal_face_start * 3);
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
+        T area_energy = 0.0;
+        
+        // cell-wise volume preservation term
+        if (face_idx < basal_face_start)
+        {
+            TV centroid;
+            computeCellCentroid(face_vtx_list, centroid);
+            fixed_cell_centroids.segment<3>(face_idx * 3) = centroid;
+        }
+    });
+}
+
 void VertexModel::computeCellCentroid(const VtxList& face_vtx_list, TV& centroid)
 {
     centroid = TV::Zero();
@@ -160,47 +179,39 @@ T VertexModel::computeTotalVolumeFromApicalSurface()
     return -volume;
 }
 
-
-void VertexModel::computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume)
+void VertexModel::updateALMData(const VectorXT& _u)
 {
-    auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)
-    {
-        T tet_vol = 1.0 / 6.0 * (b - a).cross(c - a).dot(d - a);
-        std::cout << tet_vol << std::endl;
-        return tet_vol;
-    };
-
-    TV apical_centroid = TV::Zero(), basal_centroid = TV::Zero(), cell_centroid = TV::Zero();
-    for (int i = 0; i < 4; i++)
-    {
-        apical_centroid += prism_vertices.segment<3>(i * 3);
-        basal_centroid += prism_vertices.segment<3>((i + 4) * 3);
-    }
-    cell_centroid = (apical_centroid + basal_centroid) / T(8);
-    apical_centroid /= T(4);
-    basal_centroid /= T(4);
-
-    volume = 0.0;
-
-    for (int i = 0; i < 4; i++)
-    {
-        
-        int j = (i + 1) % 4;
-        TV r0 = prism_vertices.segment<3>(i * 3);
-        TV r1 = prism_vertices.segment<3>(j * 3);
-        volume -= computeTetVolume(apical_centroid, r1, r0, cell_centroid);
-
-        TV r2 = prism_vertices.segment<3>((i + 4) * 3);
-        TV r3 = prism_vertices.segment<3>((j + 4) * 3);
-        volume += computeTetVolume(basal_centroid, r3, r2, cell_centroid);
-
-        TV lateral_centroid = T(0.25) * (r0 + r1 + r2 + r3);
-        volume += computeTetVolume(lateral_centroid, r1, r0, cell_centroid);
-        volume += computeTetVolume(lateral_centroid, r3, r1, cell_centroid);
-        volume += computeTetVolume(lateral_centroid, r2, r3, cell_centroid);
-        volume += computeTetVolume(lateral_centroid, r0, r2, cell_centroid);
-    }
+    if (!use_alm_on_cell_volume)
+        return;
     
+    VectorXT projected = _u;
+    iterateDirichletDoF([&](int offset, T target)
+    {
+        projected[offset] = target;
+    });
+    deformed = undeformed + projected;
+
+    if (use_alm_on_cell_volume)
+    {
+        VectorXT current_cell_volume;
+        computeVolumeAllCells(current_cell_volume);
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            VectorXT positions;
+            positionsFromIndices(positions, face_vtx_list);
+            T area_energy = 0.0;
+            
+            // cell-wise volume preservation term
+            if (face_idx < basal_face_start)
+            {
+                T ci = current_cell_volume[face_idx] - cell_volume_init[face_idx];
+                lambda_cell_vol[face_idx] -= kappa * ci;
+            }
+        });
+    }
+    // if (kappa < kappa_max)
+    //     kappa *= 2.0;
 }
 
 void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
@@ -254,7 +265,12 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
             else if (face_vtx_list.size() == 6)
             {
                 if (use_cell_centroid)
-                    computeVolume6Points(positions, cell_volume_list[face_idx]);
+                {
+                    if (use_fixed_cell_centroid)
+                        computeVolume6PointsFixedCentroid(positions, fixed_cell_centroids.segment<3>(face_idx * 3), cell_volume_list[face_idx]);
+                    else
+                        computeVolume6Points(positions, cell_volume_list[face_idx]);
+                }
                 else
                     computeHexBasePrismVolume(positions, cell_volume_list[face_idx]);
                 // std::cout << cell_volume_list[face_idx] << std::endl;
@@ -406,7 +422,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         volume_term = 0.0, yolk_volume_term = 0.0,
         edge_contraction_term = 0.0, sphere_bound_term = 0.0;
     
-    // edge length term
+    // ===================================== Edge length =====================================
     iterateApicalEdgeSerial([&](Edge& e){    
         TV vi = deformed.segment<3>(e[0] * 3);
         TV vj = deformed.segment<3>(e[1] * 3);
@@ -415,6 +431,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
     });
 
+    // ===================================== Edge constriction =====================================
     if (add_contraction_term)
     {
         iterateContractingEdgeSerial([&](Edge& e){    
@@ -434,15 +451,14 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     energy += edge_length_term;
     energy += edge_contraction_term;
 
+    
     VectorXT current_cell_volume;
     computeVolumeAllCells(current_cell_volume);
     
-    // if (verbose)
-        // std::cout << "current cell volume " << current_cell_volume.transpose() << std::endl;
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
-        // cell-wise volume preservation term
+        
         if (face_idx < basal_face_start)
         {
             VectorXT positions;
@@ -452,27 +468,24 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
             T volume_barrier_energy = 0.0;
             positionsFromIndices(positions, cell_vtx_list);
 
-            // cell-wise volume preservation term
-            if (face_idx < basal_face_start)
+            if (add_single_tet_vol_barrier)
             {
-                if (add_single_tet_vol_barrier)
+                if(face_vtx_list.size() == 6)
                 {
-                    if(face_vtx_list.size() == 6)
+                    if (use_cell_centroid)
                     {
-                        if (use_cell_centroid)
-                        {
-                            computeVolumeBarrier6Points(tet_barrier_stiffness, positions, volume_barrier_energy);
-                        }
-                        else
-                            computeHexBasePrismVolumeBarrier(tet_barrier_stiffness, positions, volume_barrier_energy);
-                        energy += volume_barrier_energy;
-                        // std::cout << volume_barrier_energy << std::endl;
+                        computeVolumeBarrier6Points(tet_barrier_stiffness, positions, volume_barrier_energy);
                     }
+                    else
+                        computeHexBasePrismVolumeBarrier(tet_barrier_stiffness, positions, volume_barrier_energy);
+                    energy += volume_barrier_energy;
+                    // std::cout << volume_barrier_energy << std::endl;
                 }
             }
         }
     });
 
+    // ===================================== Cell Volume =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         VectorXT positions;
@@ -482,7 +495,11 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         // cell-wise volume preservation term
         if (face_idx < basal_face_start)
         {
-            volume_term += 0.5 * B * std::pow(cell_volume_init[face_idx] - current_cell_volume[face_idx], 2);
+            T ci = current_cell_volume[face_idx] - cell_volume_init[face_idx];
+            if (use_alm_on_cell_volume)
+                volume_term += -lambda_cell_vol[face_idx] * ci + 0.5 * kappa * std::pow(ci, 2);
+            else
+                volume_term += 0.5 * B * std::pow(ci, 2);
             
         }
         else // basal and lateral faces area term
@@ -517,6 +534,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         }
         area_term += area_energy;
     });
+
     if (verbose)
     {
         std::cout << "\tE_area: " << area_term << std::endl;
@@ -598,8 +616,18 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
         energy += contact_energy;
         if (verbose)
-            std::cout << "\tcontact energy: " << contact_energy << std::endl;
+            std::cout << "\tE_contact: " << contact_energy << std::endl;
         // std::getchar();
+    }
+
+    if (add_pervitelline_liquid_volume)
+    {
+        T volume_penalty_previtelline = 0.0;
+        T previtelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+        volume_penalty_previtelline += 0.5 * Bp * std::pow(previtelline_vol_curr - previtelline_vol_init, 2);
+        energy += volume_penalty_previtelline;
+        if (verbose)
+            std::cout << "\tE_previtelline_vol: " << contact_energy << std::endl;
     }
 
     return energy;
@@ -620,7 +648,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     }
     deformed = undeformed + projected;
 
-    // edge length term
+    // ===================================== Edge length =====================================
     iterateApicalEdgeSerial([&](Edge& e){
         TV vi = deformed.segment<3>(e[0] * 3);
         TV vj = deformed.segment<3>(e[1] * 3);
@@ -630,6 +658,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         addForceEntry<6>(residual, {e[0], e[1]}, dedx);
     });
 
+    // ===================================== Edge constriction =====================================
     if (add_contraction_term)
     {
         iterateContractingEdgeSerial([&](Edge& e){
@@ -655,7 +684,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         yolk_vol_curr = computeYolkVolume();
     }
     
-    
+    // ===================================== Cell Volume =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         // cell-wise volume preservation term
@@ -671,8 +700,8 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             // cell-wise volume preservation term
             if (face_idx < basal_face_start)
             {
-                T coeff = B * (current_cell_volume[face_idx] - cell_volume_init[face_idx]);
-
+                T ci = (current_cell_volume[face_idx] - cell_volume_init[face_idx]);
+                
                 if (face_vtx_list.size() == 4)
                 {
                     Vector<T, 24> dedx;
@@ -680,8 +709,18 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                         computeVolume4PointsGradient(positions, dedx);
                     else
                         computeQuadBasePrismVolumeGradient(positions, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<24>(residual, cell_vtx_list, dedx);
+                    if (use_alm_on_cell_volume)
+                    {
+                        Vector<T, 24> negative_gradient =  
+                            lambda_cell_vol[face_idx] * dedx - kappa * ci * dedx;
+                        addForceEntry<24>(residual, cell_vtx_list, negative_gradient);
+                    }
+                    else
+                    {
+                        dedx *= -B * ci;
+                        addForceEntry<24>(residual, cell_vtx_list, dedx);
+                    }
+                    
                 }
                 else if (face_vtx_list.size() == 5)
                 {
@@ -690,21 +729,41 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
                         computeVolume5PointsGradient(positions, dedx);
                     else
                         computePentaBasePrismVolumeGradient(positions, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<30>(residual, cell_vtx_list, dedx);
-                    // T tet_vol;
-                    // computePentaPrismVolumeFromTet(positions, tet_vol);
-                    // std::getchar();
+                    if (use_alm_on_cell_volume)
+                    {
+                        Vector<T, 30> negative_gradient =  
+                            lambda_cell_vol[face_idx] * dedx - kappa * ci * dedx;
+                        addForceEntry<30>(residual, cell_vtx_list, negative_gradient);
+                    }
+                    else
+                    {
+                        dedx *= -B * ci;
+                        addForceEntry<30>(residual, cell_vtx_list, dedx);
+                    }
                 }
                 else if (face_vtx_list.size() == 6)
                 {
                     Vector<T, 36> dedx;
                     if (use_cell_centroid)
-                        computeVolume6PointsGradient(positions, dedx);
+                    {
+                        if (use_fixed_cell_centroid)
+                            computeVolume6PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dedx);
+                        else
+                            computeVolume6PointsGradient(positions, dedx);
+                    }
                     else
                         computeHexBasePrismVolumeGradient(positions, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<36>(residual, cell_vtx_list, dedx);
+                    if (use_alm_on_cell_volume)
+                    {
+                        Vector<T, 36> negative_gradient =  
+                            lambda_cell_vol[face_idx] * dedx - kappa * ci * dedx;
+                        addForceEntry<36>(residual, cell_vtx_list, negative_gradient);
+                    }
+                    else
+                    {
+                        dedx *= -B * ci;
+                        addForceEntry<36>(residual, cell_vtx_list, dedx);
+                    }
 
                     if (add_single_tet_vol_barrier)
                     {
@@ -727,7 +786,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     if (print_force_norm)
         std::cout << "\tcell volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
-
+    // ===================================== Face Area =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         // else // basal and lateral faces area term
@@ -739,10 +798,6 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             if (face_vtx_list.size() == 4)
             {
                 Vector<T, 12> dedx;
-                // computeArea4PointsGradient(coeff, positions, dedx);
-                // computeQuadFaceAreaGradient(coeff, positions, dedx);
-                // computeArea4PointsSquaredGradient(coeff, positions, dedx);
-                // computeArea4PointsSquaredSumGradient(coeff, positions, dedx);
                 if (use_face_centroid)
                     computeArea4PointsSquaredGradient(coeff, positions, dedx);
                 else
@@ -787,6 +842,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         std::cout << "\tarea force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
 
+    // ===================================== Yolk =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         if (add_yolk_volume)
@@ -835,6 +891,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
 
+    // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
         for (int i = 0; i < basal_vtx_start; i++)
@@ -861,6 +918,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         residual_temp = residual;
     }
 
+    // ===================================== IPC =====================================
     if (use_ipc_contact)
     {
         Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
@@ -893,6 +951,51 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         residual_temp = residual;
     }
 
+    
+    // ===================================== Previtelline Volume =====================================
+    if (add_pervitelline_liquid_volume)
+    {
+        T previtelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            VectorXT positions;
+            positionsFromIndices(positions, face_vtx_list);
+            
+            if (face_idx < basal_face_start)
+            {
+                T coeff = -Bp * (previtelline_vol_curr - previtelline_vol_init);
+                // negative is correct 
+                if (face_vtx_list.size() == 4)
+                {
+                    Vector<T, 12> dedx;
+                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                    dedx *= coeff;
+                    addForceEntry<12>(residual, face_vtx_list, dedx);
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    Vector<T, 15> dedx;
+                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                    dedx *= coeff;
+                    addForceEntry<15>(residual, face_vtx_list, dedx);
+                }
+                else if (face_vtx_list.size() == 6)
+                {
+                    Vector<T, 18> dedx;
+                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                    dedx *= coeff;
+                    addForceEntry<18>(residual, face_vtx_list, dedx);
+                }
+                else
+                {
+                    std::cout << "unknown polygon edge number" << std::endl;
+                }
+            }
+            
+        });
+    }
+
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -911,7 +1014,7 @@ void VertexModel::positionsFromIndices(VectorXT& positions, const VtxList& indic
     }
 }
 
-void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, StiffnessMatrix& K, VectorXT& v)
+void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix& K, MatrixXT& UV)
 {
     VectorXT projected = _u;
     if (!run_diff_test)
@@ -956,6 +1059,7 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
         yolk_vol_curr = computeYolkVolume();
     }
 
+    VectorXT v0 = VectorXT::Zero(deformed.rows());
     if (!use_yolk_pressure)
     {
         VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
@@ -996,21 +1100,67 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             }
         });
 
-        v = dVdx_full * std::sqrt(By);
+        v0 += dVdx_full * std::sqrt(By);
         if (!run_diff_test)
         {
             iterateDirichletDoF([&](int offset, T target)
             {
-                v[offset] = 0.0;
+                v0[offset] = 0.0;
             });
         }
     }
-    else
-    {
-        v = VectorXT::Zero(deformed.rows());
-    }
-    
 
+    VectorXT v1 = VectorXT::Zero(deformed.rows());
+    if (add_pervitelline_liquid_volume)
+    {
+        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            // negative sign is correct here
+            if (face_idx < basal_face_start)
+            {
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                if (face_vtx_list.size() == 4)
+                {
+                    Vector<T, 12> dedx;
+                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<12>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    Vector<T, 15> dedx;
+                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<15>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else if (face_vtx_list.size() == 6)
+                {
+                    Vector<T, 18> dedx;
+                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<18>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else
+                {
+                    std::cout << "unknown polygon edge number" << std::endl;
+                }
+            }
+        });
+
+        v1 += dVdx_full * std::sqrt(Bp);
+        if (!run_diff_test)
+        {
+            iterateDirichletDoF([&](int offset, T target)
+            {
+                v1[offset] = 0.0;
+            });
+        }
+    }
+
+    UV.resize(num_nodes * 3, 2);
+    UV.col(0) = v0; UV.col(1) = v1;
+    
+    // ===================================== Cell Volume =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         // cell-wise volume preservation term
@@ -1024,7 +1174,6 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             positionsFromIndices(positions, cell_vtx_list);
             T V = current_cell_volume[face_idx];
 
-            T coeff = B;
             if (face_vtx_list.size() == 4)
             {
                 
@@ -1041,9 +1190,19 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
                     computeQuadBasePrismVolumeGradient(positions, dVdx);
                     
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 24, 24> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
-
+                Matrix<T, 24, 24> hessian;
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+            
                 addHessianEntry<24>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 5)
@@ -1061,8 +1220,19 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
                     computePentaBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 30, 30> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
+                
+                Matrix<T, 30, 30> hessian;
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
                 
                 addHessianEntry<30>(entries, cell_vtx_list, hessian);
             }
@@ -1070,20 +1240,41 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             {
                 Matrix<T, 36, 36> d2Vdx2;
                 if (use_cell_centroid)
-                    computeVolume6PointsHessian(positions, d2Vdx2);
+                {
+                    if (use_fixed_cell_centroid)
+                        computeVolume6PointsFixedCentroidHessian(positions, fixed_cell_centroids.segment<3>(face_idx * 3), d2Vdx2);
+                    else
+                        computeVolume6PointsHessian(positions, d2Vdx2);
+                }
                 else
                     computeHexBasePrismVolumeHessian(positions, d2Vdx2);
 
                 Vector<T, 36> dVdx;
                 if (use_cell_centroid)
-                    computeVolume6PointsGradient(positions, dVdx);
+                {
+                    if (use_fixed_cell_centroid)
+                        computeVolume6PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dVdx);
+                    else
+                        computeVolume6PointsGradient(positions, dVdx);
+                }
                 else
                     computeHexBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 36, 36> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
+                Matrix<T, 36, 36> hessian;
                 
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
 
                 if(add_single_tet_vol_barrier)
@@ -1101,6 +1292,7 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             }
             // std::cout << "Cell " << face_idx << std::endl;
         }
+        // ===================================== Face Area =====================================
         else // basal and lateral faces area term
         {
             T coeff = face_idx >= lateral_face_start ? alpha : gamma;
@@ -1109,10 +1301,6 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             if (face_vtx_list.size() == 4)
             {
                 Matrix<T, 12, 12> hessian;
-                // computeArea4PointsHessian(coeff, positions, hessian);
-                // hessian *= coeff;
-                // computeQuadFaceAreaHessian(coeff, positions, hessian);
-                // computeArea4PointsSquaredHessian(coeff, positions, hessian);
                 if (use_face_centroid)
                     computeArea4PointsSquaredSumHessian(coeff, positions, hessian);
                 else
@@ -1146,6 +1334,7 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
                 std::cout << "unknown " << std::endl;
             }
         }
+        // ===================================== Yolk Volume =====================================
         if (add_yolk_volume)
         {
             if (face_idx < lateral_face_start && face_idx >= basal_face_start)
@@ -1200,9 +1389,52 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
             }
         }
 
+        if (add_pervitelline_liquid_volume)
+        {
+            T previtelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+
+            if (face_idx < basal_face_start)
+            {
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                T ci = previtelline_vol_curr - previtelline_vol_init;
+
+                if (face_vtx_list.size() == 4)
+                {
+                    
+                    Matrix<T, 12, 12> d2Vdx2;
+                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 12, 12> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<12>(entries, face_vtx_list, hessian);
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    Matrix<T, 15, 15> d2Vdx2;
+                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 15, 15> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<15>(entries, face_vtx_list, hessian);
+
+                }
+                else if (face_vtx_list.size() == 6)
+                {
+                    Matrix<T, 18, 18> d2Vdx2;
+                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 18, 18> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<18>(entries, face_vtx_list, hessian);
+                }
+                else
+                {
+                    std::cout << "unknown polygon edge case" << std::endl;
+                }
+            }
+        }
+
         
     });
-
+    // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
         for (int i = 0; i < basal_vtx_start; i++)
@@ -1225,7 +1457,7 @@ void VertexModel::buildSystemMatrixShermanMorrison(const VectorXT& _u, Stiffness
         }
     }
 
-
+    // ===================================== IPC =====================================
     if (use_ipc_contact)
     {
         Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
@@ -1322,7 +1554,6 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                     {
                         Vector<T, 12> dedx;
                         computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                        // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
                     }
                     else if (face_vtx_list.size() == 5)
@@ -1358,6 +1589,56 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             }
         }
     }
+
+    if (add_pervitelline_liquid_volume)
+    {
+        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            if (face_idx < basal_face_start)
+            {
+                
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                if (face_vtx_list.size() == 4)
+                {
+                    Vector<T, 12> dedx;
+                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<12>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    Vector<T, 15> dedx;
+                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<15>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else if (face_vtx_list.size() == 6)
+                {
+                    Vector<T, 18> dedx;
+                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<18>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else
+                {
+                    std::cout << "unknown polygon edge number" << std::endl;
+                }
+            }
+        });
+
+        for (int dof_i = 0; dof_i < num_nodes; dof_i++)
+        {
+            for (int dof_j = 0; dof_j < num_nodes; dof_j++)
+            {
+                Vector<T, 6> dVdx;
+                getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
+                TV dVdxi = dVdx.segment<3>(0);
+                TV dVdxj = dVdx.segment<3>(3);
+                Matrix<T, 3, 3> hessian_partial = Bp * dVdxi * dVdxj.transpose();
+                addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+            }
+        }
+    }
     
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -1373,7 +1654,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             positionsFromIndices(positions, cell_vtx_list);
             T V = current_cell_volume[face_idx];
 
-            T coeff = B;
+            T coeff = use_alm_on_cell_volume ? kappa : B;
             if (face_vtx_list.size() == 4)
             {
                 
@@ -1390,8 +1671,19 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                     computeQuadBasePrismVolumeGradient(positions, dVdx);
                     
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 24, 24> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
+                Matrix<T, 24, 24> hessian;
+
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
 
                 addHessianEntry<24>(entries, cell_vtx_list, hessian);
             }
@@ -1410,9 +1702,20 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                     computePentaBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 30, 30> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
-                
+                Matrix<T, 30, 30> hessian;
+
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+
                 addHessianEntry<30>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 6)
@@ -1430,9 +1733,20 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                     computeHexBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
-                Matrix<T, 36, 36> hessian = B * (dVdx * dVdx.transpose() + 
-                    (V - cell_volume_init[face_idx]) * d2Vdx2);
-                
+                Matrix<T, 36, 36> hessian;
+
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian = B * (dVdx * dVdx.transpose() + 
+                        (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
 
                 if (add_single_tet_vol_barrier)
@@ -1548,9 +1862,54 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 }
             }
         }
-
         
     });
+
+    if (add_pervitelline_liquid_volume)
+    {
+        T previtelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            // cell-wise volume preservation term
+            if (face_idx < basal_face_start)
+            {
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                T ci = previtelline_vol_curr - previtelline_vol_init;
+                if (face_vtx_list.size() == 4)
+                {
+                    
+                    Matrix<T, 12, 12> d2Vdx2;
+                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 12, 12> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<12>(entries, face_vtx_list, hessian);
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    Matrix<T, 15, 15> d2Vdx2;
+                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 15, 15> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<15>(entries, face_vtx_list, hessian);
+
+                }
+                else if (face_vtx_list.size() == 6)
+                {
+                    Matrix<T, 18, 18> d2Vdx2;
+                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 18, 18> hessian = Bp * ci * d2Vdx2;
+                    
+                    addHessianEntry<18>(entries, face_vtx_list, hessian);
+                }
+                else
+                {
+                    std::cout << "unknown polygon edge case" << std::endl;
+                }
+            }
+        });
+    }
 
     if (use_sphere_radius_bound)
     {
