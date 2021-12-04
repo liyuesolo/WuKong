@@ -18,7 +18,7 @@ void Simulation::computeLinearModes()
 void Simulation::initializeCells()
 {
     woodbury = true;
-    cells.use_alm_on_cell_volume = false;
+    cells.use_alm_on_cell_volume = true;
 
     std::string sphere_file;
     cells.scene_type = 1;
@@ -32,13 +32,13 @@ void Simulation::initializeCells()
     // cells.addTestPrismGrid(10, 10);
     cells.computeVolumeAllCells(cells.cell_volume_init);
 
-    // cells.checkTotalGradientScale(true);
-    // cells.checkTotalHessianScale(true);
+    cells.checkTotalGradientScale(true);
+    cells.checkTotalHessianScale(true);
     // cells.checkTotalGradient(true);
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 500;
+    max_newton_iter = 300;
     // verbose = true;
     cells.print_force_norm = true;
 
@@ -197,6 +197,7 @@ bool Simulation::staticSolve()
     std::cout << "========================= Solver Info ================================="<< std::endl;
     std::cout << "# of system DoF " << deformed.rows() << std::endl;
     std::cout << "# of newton iter: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+    // std::cout << "Smallest 15 eigenvalues " << std::endl;
     // cells.computeLinearModes();
     std::cout << std::endl;
     std::cout << "========================= Cell Info =================================" << std::endl;
@@ -237,6 +238,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     T alpha = 10e-6;
     solver.analyzePattern(K);
     int i = 0;
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
     for (; i < 50; i++)
     {
         // std::cout << i << std::endl;
@@ -245,6 +247,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         {
             K = H + alpha * I;        
             alpha *= 10;
+            indefinite_count_reg_cnt++;
             continue;
         }
 
@@ -283,14 +286,21 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        if (!search_dir_correct_sign)
+            invalid_search_dir_cnt++;
         bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        if (!solve_success)
+            invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 
         //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
             std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "\t# regularization step " << i << std::endl;
+            std::cout << "\t# regularization step " << i 
+                << " indefinite " << indefinite_count_reg_cnt 
+                << " invalid search dir " << invalid_search_dir_cnt
+                << " invalid solve " << invalid_residual_cnt << std::endl;
             std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
             std::cout << "\t======================== " << std::endl;
             return true;

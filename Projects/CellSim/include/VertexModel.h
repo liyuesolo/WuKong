@@ -11,6 +11,10 @@
 
 #include "VecMatDef.h"
 
+enum FaceRegion
+{
+    Apical, Basal, Lateral
+};
 class VertexModel
 {
 public:
@@ -121,6 +125,7 @@ public:
     VectorXT cell_volume_init;
     std::vector<Edge> edges; // all edges
     std::vector<Edge> contracting_edges;
+    std::vector<int> contracting_faces;
     VectorXT fixed_cell_centroids;
 
     int num_nodes;
@@ -169,7 +174,9 @@ public:
     bool add_single_tet_vol_barrier = false;
     bool use_ipc_contact = false;
     bool use_fixed_cell_centroid = false;
-    bool add_pervitelline_liquid_volume = false;
+    bool add_perivitelline_liquid_volume = false;
+    bool use_perivitelline_liquid_pressure = false;
+    bool contract_apical_face = true;
 
 
     bool print_force_norm = false;
@@ -177,39 +184,53 @@ public:
 
     TV mesh_centroid;
     T yolk_vol_init;
-    T previtelline_vol_init;
+    T perivitelline_vol_init;
     T Bp = 1e4;
+    T perivitelline_pressure = 0.1;
 
     std::unordered_map<int, T> dirichlet_data;
 
     // VertexModel.cpp
     void updateALMData(const VectorXT& _u);
     void computeLinearModes();
-
-    void updateFixedCellCentroid();
-    void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
-    void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
-
+    
     T computeYolkVolume(bool verbose = false);
     T computeTotalVolumeFromApicalSurface();
-
     void computeVolumeAllCells(VectorXT& cell_volume_list);    
-
     void projectDirichletDoFMatrix(StiffnessMatrix& A, 
         const std::unordered_map<int, T>& data);
-
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
-
     T computeAreaEnergy(const VectorXT& _u);
-
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
-
-    void positionsFromIndices(VectorXT& positions, const VtxList& indices);
-
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+
+    // face area related terms
+    void addFaceAreaEnergy(FaceRegion face_region, T w, T& energy);
+    void addFaceAreaForceEntries(FaceRegion face_region, T w, VectorXT& residual);
+    void addFaceAreaHessianEntries(FaceRegion face_region, T w, 
+        std::vector<Entry>& entries, bool projectPD = false);
+
+    // cell volume related terms
+    void addCellVolumePreservationEnergy(T& energy);
+    void addCellVolumePreservationForceEntries(VectorXT& residual);
+    void addCellVolumePreservationHessianEntries(std::vector<Entry>& entries, 
+        bool projectPD = false);
+
+
+    void addIPCEnergy(T& energy);
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries, 
+        bool projectPD = false);
+
+
+    // Helpers.cpp
+    void positionsFromIndices(VectorXT& positions, const VtxList& indices);
+    void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
+    void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
+    void updateFixedCellCentroid();
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb = false);
@@ -250,6 +271,45 @@ public:
     void computeCubeVolumeCentroid(const Vector<T, 24>& prism_vertices, T& volume);
 
 private:
+    template<int dim>
+    bool isHessianBlockPD(const Matrix<T, dim, dim> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, dim, dim>> eigenSolver(symMtr);
+        // sorted from the smallest to the largest
+        if (eigenSolver.eigenvalues()[0] >= 0.0) 
+            return true;
+        else
+            return false;
+        
+    }
+
+    template<int dim>
+    VectorXT computeHessianBlockEigenValues(const Matrix<T, dim, dim> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, dim, dim>> eigenSolver(symMtr);
+        return eigenSolver.eigenvalues();
+    }
+
+    template <int size>
+    void projectBlockPD(Eigen::Matrix<T, size, size>& symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        if (eigenSolver.eigenvalues()[0] >= 0.0) {
+            return;
+        }
+        Eigen::DiagonalMatrix<T, size> D(eigenSolver.eigenvalues());
+        int rows = ((size == Eigen::Dynamic) ? symMtr.rows() : size);
+        for (int i = 0; i < rows; i++) {
+            if (D.diagonal()[i] < 0.0) {
+                D.diagonal()[i] = 0.0;
+            }
+            else {
+                break;
+            }
+        }
+        symMtr = eigenSolver.eigenvectors() * D * eigenSolver.eigenvectors().transpose();
+    }
+
     template<int dim>
     void addHessianEntry(
         std::vector<Entry>& triplets,
@@ -324,6 +384,18 @@ private:
             for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
                 triplets.push_back(Entry(it.row(), it.col(), it.value()));
         return triplets;
+    }
+
+    bool validFaceIdx(FaceRegion face_region, int idx)
+    {
+        if (face_region == Apical)
+            return idx < basal_face_start;
+        else if (face_region == Basal)
+            return idx >= basal_face_start && idx < lateral_face_start;
+        else if (face_region == Lateral)
+            return idx >= lateral_face_start;
+        else
+            return false;
     }
 
 public:

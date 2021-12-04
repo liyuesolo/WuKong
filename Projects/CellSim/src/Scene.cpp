@@ -18,6 +18,7 @@ void VertexModel::approximateMembraneThickness()
     else
         Rc = 1.01 * radii_max;
     
+    Rc = 1.01 * radii_max;
     total_volume = 4.0 / 3.0 * M_PI * std::pow(Rc, 3);
 }
 
@@ -74,19 +75,40 @@ void VertexModel::initializeContractionData()
 
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
-
-    for (auto e : edges)
+    if (contract_apical_face)
     {
-        TV x0 = deformed.segment<3>(e[0] * 3);
-        TV x1 = deformed.segment<3>(e[1] * 3);
-
-        if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-            x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-            e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
         {
-            contracting_edges.push_back(e);
+            if (face_idx < basal_face_start)
+            {
+                bool contract = true;
+                for (int idx : face_vtx_list)
+                {
+                    TV x = deformed.segment<3>(idx * 3);
+                    if (x[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8)
+                        contract = false;
+                }
+                if (contract)
+                    contracting_faces.push_back(face_idx);
+            }
+        });
+    }
+    else
+    {
+        for (auto e : edges)
+        {
+            TV x0 = deformed.segment<3>(e[0] * 3);
+            TV x1 = deformed.segment<3>(e[1] * 3);
+
+            if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+                x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+                e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+            {
+                contracting_edges.push_back(e);
+            }
         }
     }
+    
 
 }
 
@@ -594,20 +616,23 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
     if (scene_type == 1 || scene_type == 2)
     {
-        alpha = 25.0; 
-        gamma = 5.0;
-        if (woodbury)
-        {
-            // use this when enable single tet volume term
-            // alpha = 200.0;
-            // gamma = 20.0;
-            // sigma = 0.5;
+        // alpha = 25.0; 
+        // gamma = 5.0;
+        // if (woodbury)
+        // {
+        //     // use this when enable single tet volume term
+        //     // alpha = 200.0;
+        //     // gamma = 20.0;
+        //     // sigma = 0.5;
 
-            // use this when single tet volume term is disabled
-            alpha = 100.0;
-            gamma = 20.0;
-            sigma = 0.5;
-        }
+        //     // use this when single tet volume term is disabled
+        //     alpha = 100.0;
+        //     gamma = 20.0;
+        //     sigma = 0.5;
+        // }
+            alpha = 1.0;
+            gamma = 1.0;
+            sigma = 0.1;
     }
     else
     {
@@ -645,6 +670,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
 
     add_contraction_term = true;
+    contract_apical_face = true;
     // Gamma = 0.5;
     Gamma = 5.0;
     if (woodbury)
@@ -679,7 +705,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     pressure_constant = 0.1;
     // pressure_constant = 1e1;
 
-    add_single_tet_vol_barrier = true;
+    add_single_tet_vol_barrier = false;
     tet_barrier_stiffness = 10e-22;
 
 
@@ -701,10 +727,17 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_fixed_cell_centroid)
         updateFixedCellCentroid();
 
-    add_pervitelline_liquid_volume = true;
-    if (add_pervitelline_liquid_volume)
+    add_perivitelline_liquid_volume = true;
+    use_perivitelline_liquid_pressure = false;
+
+    if (add_perivitelline_liquid_volume)
     {
-        previtelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
+        perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
         Bp = 1e3; 
+        if (use_perivitelline_liquid_pressure)
+        {
+            perivitelline_pressure = 1;
+        }
     }
+    
 }
