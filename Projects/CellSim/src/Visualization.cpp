@@ -9,6 +9,7 @@
 
 #include "../include/VertexModel.h"
 
+
 void VertexModel::sampleBoundingSurface(Eigen::MatrixXd& V)
 {
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();

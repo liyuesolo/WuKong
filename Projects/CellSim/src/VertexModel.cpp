@@ -11,7 +11,7 @@
 
 #include "../include/VertexModel.h"
 #include "../include/autodiff/VertexModelEnergy.h"
-
+#include "../include/autodiff/YolkEnergy.h"
 
 
 void VertexModel::computeLinearModes()
@@ -139,31 +139,7 @@ bool VertexModel::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& 
     return false;
 }
 
-T VertexModel::computeTotalVolumeFromApicalSurface()
-{
-    T volume = 0.0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        VectorXT positions;
-        positionsFromIndices(positions, face_vtx_list);
-        
-        if (face_idx < basal_face_start)
-        {
-            T cone_volume;
-            if (face_vtx_list.size() == 4) 
-                computeConeVolume4Points(positions, mesh_centroid, cone_volume);
-            else if (face_vtx_list.size() == 5) 
-                computeConeVolume5Points(positions, mesh_centroid, cone_volume);
-            else if (face_vtx_list.size() == 6) 
-                computeConeVolume6Points(positions, mesh_centroid, cone_volume);
-            else
-                std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
-            volume += cone_volume;
-        }
-        
-    });
-    return -volume;
-}
+
 
 void VertexModel::updateALMData(const VectorXT& _u)
 {
@@ -201,43 +177,6 @@ void VertexModel::updateALMData(const VectorXT& _u)
 }
 
 
-
-T VertexModel::computeYolkVolume(bool verbose)
-{
-    T yolk_volume = 0.0;
-    if (verbose)
-        std::cout << "yolk tet volume: " << std::endl;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        VectorXT positions;
-        positionsFromIndices(positions, face_vtx_list);
-        
-        if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-        {
-            T cone_volume;
-            if (face_vtx_list.size() == 4) 
-                computeConeVolume4Points(positions, mesh_centroid, cone_volume);
-                // computeQuadConeVolume(positions, mesh_centroid, cone_volume);
-            else if (face_vtx_list.size() == 5) 
-                computeConeVolume5Points(positions, mesh_centroid, cone_volume);
-            else if (face_vtx_list.size() == 6) 
-                computeConeVolume6Points(positions, mesh_centroid, cone_volume);
-            else
-                std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
-            yolk_volume += cone_volume;
-            if (verbose)
-            {
-                std::cout << cone_volume << " ";
-                if (cone_volume < 0)
-                    std::cout << "negative volume " << cone_volume << std::endl;
-            }
-        }
-        
-    });
-    if (verbose)
-        std::cout << std::endl;
-    return yolk_volume; 
-}
 
 T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 {
@@ -295,11 +234,6 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     energy += edge_length_term;
     energy += contraction_term;
 
-    
-    VectorXT current_cell_volume;
-    computeVolumeAllCells(current_cell_volume);
-    
-
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         
@@ -330,22 +264,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     });
 
     // ===================================== Cell Volume =====================================
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        VectorXT positions;
-        positionsFromIndices(positions, face_vtx_list);
-        
-        // cell-wise volume preservation term
-        if (face_idx < basal_face_start)
-        {
-            T ci = current_cell_volume[face_idx] - cell_volume_init[face_idx];
-            if (use_alm_on_cell_volume)
-                volume_term += -lambda_cell_vol[face_idx] * ci + 0.5 * kappa * std::pow(ci, 2);
-            else
-                volume_term += 0.5 * B * std::pow(ci, 2);
-            
-        }
-    });
+    addCellVolumePreservationEnergy(volume_term);
 
     // ===================================== Face Area =====================================
     addFaceAreaEnergy(Basal, gamma, area_term);
@@ -362,18 +281,10 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
     if (add_yolk_volume)
     {
-        T yolk_vol_curr = computeYolkVolume();
-        if (use_yolk_pressure)
-        {
-            yolk_volume_term += -pressure_constant * yolk_vol_curr;
-        }
-        else
-        {
-            yolk_volume_term +=  0.5 * By * std::pow(yolk_vol_curr - yolk_vol_init, 2);    
-        }
+        addYolkVolumePreservationEnergy(yolk_volume_term);
+        if (verbose)
+            std::cout << "\tE_yolk_vol " << yolk_volume_term << std::endl;
     }
-    if (verbose)
-        std::cout << "\tE_yolk_vol " << yolk_volume_term << std::endl;
 
     energy += yolk_volume_term;
 
@@ -418,14 +329,10 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
     if (add_perivitelline_liquid_volume)
     {
         T volume_penalty_previtelline = 0.0;
-        T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-        if (use_perivitelline_liquid_pressure)
-            volume_penalty_previtelline = -perivitelline_pressure * perivitelline_vol_curr;
-        else
-            volume_penalty_previtelline += 0.5 * Bp * std::pow(perivitelline_vol_curr - perivitelline_vol_init, 2);
+        addPerivitellineVolumePreservationEnergy(volume_penalty_previtelline);
         energy += volume_penalty_previtelline;
         if (verbose)
-            std::cout << "\tE_previtelline_vol: " << contact_energy << std::endl;
+            std::cout << "\tE_previtelline_vol: " << volume_penalty_previtelline << std::endl;
     }
 
     return energy;
@@ -477,15 +384,6 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         std::cout << "\tedge length force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
 
-    VectorXT current_cell_volume;
-    computeVolumeAllCells(current_cell_volume);
-
-    T yolk_vol_curr = 0.0;
-    if (add_yolk_volume)
-    {
-        yolk_vol_curr = computeYolkVolume();
-    }
-    
     // ===================================== Cell Volume =====================================
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -503,8 +401,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             // cell-wise volume preservation term
             if (face_idx < basal_face_start)
             {
-                T ci = (current_cell_volume[face_idx] - cell_volume_init[face_idx]);
-                
+                         
                 if (face_vtx_list.size() == 6)
                 {
                     Vector<T, 36> dedx;
@@ -537,49 +434,9 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     residual_temp = residual;
 
     // ===================================== Yolk =====================================
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        if (add_yolk_volume)
-        {
-            if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-            {
-                
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                T coeff;
-                if (use_yolk_pressure)
-                    coeff = -pressure_constant;
-                else
-                    coeff = By * (yolk_vol_curr - yolk_vol_init);
-                if (face_vtx_list.size() == 4)
-                {
-                    Vector<T, 12> dedx;
-                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<12>(residual, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<15>(residual, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                    dedx *= -coeff;
-                    addForceEntry<18>(residual, face_vtx_list, dedx);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge number" << std::endl;
-                }
-            }
-        }
-    });
+
+    if (add_yolk_volume)
+        addYolkVolumePreservationForceEntries(residual);
     
     if (print_force_norm)
         std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
@@ -626,46 +483,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     // ===================================== Previtelline Volume =====================================
     if (add_perivitelline_liquid_volume)
     {
-        T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            VectorXT positions;
-            positionsFromIndices(positions, face_vtx_list);
-            
-            if (face_idx < basal_face_start)
-            {
-                T coeff = use_perivitelline_liquid_pressure ? pressure_constant
-                    : -Bp * (perivitelline_vol_curr - perivitelline_vol_init);
-                // negative is correct 
-                if (face_vtx_list.size() == 4)
-                {
-                    Vector<T, 12> dedx;
-                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    dedx *= coeff;
-                    addForceEntry<12>(residual, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                    dedx *= coeff;
-                    addForceEntry<15>(residual, face_vtx_list, dedx);
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                    dedx *= coeff;
-                    addForceEntry<18>(residual, face_vtx_list, dedx);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge number" << std::endl;
-                }
-            }
-            
-        });
+        addPerivitellineVolumePreservationForceEntries(residual);
     }
 
     if (!run_diff_test)
@@ -718,115 +536,11 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
             });
     }
 
-    VectorXT current_cell_volume;
-    computeVolumeAllCells(current_cell_volume);
-
-    T yolk_vol_curr = 0.0;
     if (add_yolk_volume)
-    {
-        yolk_vol_curr = computeYolkVolume();
-    }
-
-    VectorXT v0 = VectorXT::Zero(deformed.rows());
-    if (!use_yolk_pressure)
-    {
-        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            if (add_yolk_volume)
-            {
-                if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-                {
-                    
-                    VectorXT positions;
-                    positionsFromIndices(positions, face_vtx_list);
-                    if (face_vtx_list.size() == 4)
-                    {
-                        Vector<T, 12> dedx;
-                        computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                        // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else if (face_vtx_list.size() == 5)
-                    {
-                        Vector<T, 15> dedx;
-                        computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<15>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else if (face_vtx_list.size() == 6)
-                    {
-                        Vector<T, 18> dedx;
-                        computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<18>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else
-                    {
-                        std::cout << "unknown polygon edge number" << std::endl;
-                    }
-                }
-            }
-        });
-
-        v0 += dVdx_full * std::sqrt(By);
-        if (!run_diff_test)
-        {
-            iterateDirichletDoF([&](int offset, T target)
-            {
-                v0[offset] = 0.0;
-            });
-        }
-    }
-
-    VectorXT v1 = VectorXT::Zero(deformed.rows());
-    if (add_perivitelline_liquid_volume && !use_perivitelline_liquid_pressure)
-    {
-        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            // negative sign is correct here
-            if (face_idx < basal_face_start)
-            {
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                if (face_vtx_list.size() == 4)
-                {
-                    Vector<T, 12> dedx;
-                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<12>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<15>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<18>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge number" << std::endl;
-                }
-            }
-        });
-
-        v1 += dVdx_full * std::sqrt(Bp);
-        if (!run_diff_test)
-        {
-            iterateDirichletDoF([&](int offset, T target)
-            {
-                v1[offset] = 0.0;
-            });
-        }
-    }
-
-    UV.resize(num_nodes * 3, 2);
-    UV.col(0) = v0; UV.col(1) = v1;
+        addYolkVolumePreservationHessianEntries(entries, UV, false);
+    if (add_perivitelline_liquid_volume)
+        addPerivitellineVolumePreservationHessianEntries(entries, UV, false);
+    
     
     // ===================================== Cell Volume =====================================
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -840,7 +554,7 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 cell_vtx_list.push_back(idx + basal_vtx_start);
 
             positionsFromIndices(positions, cell_vtx_list);
-            T V = current_cell_volume[face_idx];
+            
             if (face_vtx_list.size() == 6)
             {
                 Matrix<T, 36, 36> hessian;
@@ -856,109 +570,9 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
             }
         }
         
-        // ===================================== Yolk Volume =====================================
-        if (add_yolk_volume)
-        {
-            if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-            {
-                
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                
-                if (face_vtx_list.size() == 4)
-                {
-                    
-                    Matrix<T, 12, 12> d2Vdx2;
-                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    // computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 12, 12> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    //projectPD<12>(hessian);
-                    addHessianEntry<12>(entries, face_vtx_list, hessian);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Matrix<T, 15, 15> d2Vdx2;
-                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 15, 15> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    //projectPD<15>(hessian);
-                    addHessianEntry<15>(entries, face_vtx_list, hessian);
-
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Matrix<T, 18, 18> d2Vdx2;
-                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 18, 18> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    //projectPD<18>(hessian);
-                    addHessianEntry<18>(entries, face_vtx_list, hessian);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge case" << std::endl;
-                }
-            }
-        }
-
-        if (add_perivitelline_liquid_volume)
-        {
-            T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-
-            if (face_idx < basal_face_start)
-            {
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                T ci = perivitelline_vol_curr - perivitelline_vol_init;
-                T coeff = use_perivitelline_liquid_pressure ? -pressure_constant : Bp * ci;
-                if (face_vtx_list.size() == 4)
-                {
-                    
-                    Matrix<T, 12, 12> d2Vdx2;
-                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 12, 12> hessian = coeff * d2Vdx2;
-                    //projectPD<12>(hessian);
-                    addHessianEntry<12>(entries, face_vtx_list, hessian);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Matrix<T, 15, 15> d2Vdx2;
-                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 15, 15> hessian = coeff * d2Vdx2;
-                    //projectPD<15>(hessian);
-                    addHessianEntry<15>(entries, face_vtx_list, hessian);
-
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Matrix<T, 18, 18> d2Vdx2;
-                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 18, 18> hessian = coeff * d2Vdx2;
-                    //projectPD<18>(hessian);
-                    addHessianEntry<18>(entries, face_vtx_list, hessian);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge case" << std::endl;
-                }
-            }
-        }
-
-        
     });
 
     addCellVolumePreservationHessianEntries(entries, false);
-
     // ===================================== Face Area =====================================
     addFaceAreaHessianEntries(Basal, gamma, entries, false);
     addFaceAreaHessianEntries(Lateral, alpha, entries, false);
@@ -1045,118 +659,13 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             });
         }
     }
+    MatrixXT dummy_WoodBury_matrix;
 
-    VectorXT current_cell_volume;
-    computeVolumeAllCells(current_cell_volume);
-
-    T yolk_vol_curr = 0.0;
     if (add_yolk_volume)
-    {
-        yolk_vol_curr = computeYolkVolume();
-    }
-
-    if (!use_yolk_pressure)
-    {
-        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            if (add_yolk_volume)
-            {
-                if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-                {
-                    
-                    VectorXT positions;
-                    positionsFromIndices(positions, face_vtx_list);
-                    if (face_vtx_list.size() == 4)
-                    {
-                        Vector<T, 12> dedx;
-                        computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else if (face_vtx_list.size() == 5)
-                    {
-                        Vector<T, 15> dedx;
-                        computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<15>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else if (face_vtx_list.size() == 6)
-                    {
-                        Vector<T, 18> dedx;
-                        computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                        addForceEntry<18>(dVdx_full, face_vtx_list, dedx);
-                    }
-                    else
-                    {
-                        std::cout << "unknown polygon edge number" << std::endl;
-                    }
-                }
-            }
-        });
-
-        for (int dof_i = 0; dof_i < num_nodes; dof_i++)
-        {
-            for (int dof_j = 0; dof_j < num_nodes; dof_j++)
-            {
-                Vector<T, 6> dVdx;
-                getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
-                TV dVdxi = dVdx.segment<3>(0);
-                TV dVdxj = dVdx.segment<3>(3);
-                Matrix<T, 3, 3> hessian_partial = By * dVdxi * dVdxj.transpose();
-                addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
-            }
-        }
-    }
+        addYolkVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, false);
 
     if (add_perivitelline_liquid_volume)
-    {
-        VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            if (face_idx < basal_face_start)
-            {
-                
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                if (face_vtx_list.size() == 4)
-                {
-                    Vector<T, 12> dedx;
-                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<12>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<15>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
-                    addForceEntry<18>(dVdx_full, face_vtx_list, -dedx);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge number" << std::endl;
-                }
-            }
-        });
-
-        for (int dof_i = 0; dof_i < num_nodes; dof_i++)
-        {
-            for (int dof_j = 0; dof_j < num_nodes; dof_j++)
-            {
-                Vector<T, 6> dVdx;
-                getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
-                TV dVdxi = dVdx.segment<3>(0);
-                TV dVdxj = dVdx.segment<3>(3);
-                Matrix<T, 3, 3> hessian_partial = Bp * dVdxi * dVdxj.transpose();
-                addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
-            }
-        }
-    }
+        addPerivitellineVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, false);
     
 
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -1170,7 +679,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 cell_vtx_list.push_back(idx + basal_vtx_start);
 
             positionsFromIndices(positions, cell_vtx_list);
-            T V = current_cell_volume[face_idx];
+            
             if (face_vtx_list.size() == 6)
             {
                 Matrix<T, 36, 36> hessian;
@@ -1186,112 +695,13 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             
         }
         
-        if (add_yolk_volume)
-        {
-            if (face_idx < lateral_face_start && face_idx >= basal_face_start)
-            {
-                
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                
-                if (face_vtx_list.size() == 4)
-                {
-                    
-                    Matrix<T, 12, 12> d2Vdx2;
-                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    // computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 12, 12> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    
-                    addHessianEntry<12>(entries, face_vtx_list, hessian);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Matrix<T, 15, 15> d2Vdx2;
-                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 15, 15> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    
-                    addHessianEntry<15>(entries, face_vtx_list, hessian);
-
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Matrix<T, 18, 18> d2Vdx2;
-                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 18, 18> hessian;
-                    if (use_yolk_pressure)
-                        hessian = -pressure_constant * d2Vdx2;
-                    else
-                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
-                    
-                    addHessianEntry<18>(entries, face_vtx_list, hessian);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge case" << std::endl;
-                }
-            }
-        }
-        
     });
 
     addCellVolumePreservationHessianEntries(entries, false);
 
     addFaceAreaHessianEntries(Basal, gamma, entries, false);
     addFaceAreaHessianEntries(Lateral, gamma, entries, false);
-    if (add_perivitelline_liquid_volume)
-    {
-        T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-        {
-            // cell-wise volume preservation term
-            if (face_idx < basal_face_start)
-            {
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                T ci = perivitelline_vol_curr - perivitelline_vol_init;
-                T coeff = use_perivitelline_liquid_pressure ? -pressure_constant : Bp * ci;
-                if (face_vtx_list.size() == 4)
-                {
-                    
-                    Matrix<T, 12, 12> d2Vdx2;
-                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 12, 12> hessian = coeff * d2Vdx2;
-                    
-                    addHessianEntry<12>(entries, face_vtx_list, hessian);
-                }
-                else if (face_vtx_list.size() == 5)
-                {
-                    Matrix<T, 15, 15> d2Vdx2;
-                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 15, 15> hessian = coeff * d2Vdx2;
-                    
-                    addHessianEntry<15>(entries, face_vtx_list, hessian);
-
-                }
-                else if (face_vtx_list.size() == 6)
-                {
-                    Matrix<T, 18, 18> d2Vdx2;
-                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    Matrix<T, 18, 18> hessian = coeff * d2Vdx2;
-                    
-                    addHessianEntry<18>(entries, face_vtx_list, hessian);
-                }
-                else
-                {
-                    std::cout << "unknown polygon edge case" << std::endl;
-                }
-            }
-        });
-    }
+    
 
     if (use_sphere_radius_bound)
     {

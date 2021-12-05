@@ -202,29 +202,40 @@ public:
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
-    T computeAreaEnergy(const VectorXT& _u);
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
-    // face area related terms
+    // AreaTerms.cpp
+    T computeAreaEnergy(const VectorXT& _u);
     void addFaceAreaEnergy(FaceRegion face_region, T w, T& energy);
     void addFaceAreaForceEntries(FaceRegion face_region, T w, VectorXT& residual);
     void addFaceAreaHessianEntries(FaceRegion face_region, T w, 
         std::vector<Entry>& entries, bool projectPD = false);
 
-    // cell volume related terms
+    // CellVolume.cpp
     void addCellVolumePreservationEnergy(T& energy);
     void addCellVolumePreservationForceEntries(VectorXT& residual);
     void addCellVolumePreservationHessianEntries(std::vector<Entry>& entries, 
         bool projectPD = false);
 
-
+    // IPC.cpp
     void addIPCEnergy(T& energy);
     void addIPCForceEntries(VectorXT& residual);
     void addIPCHessianEntries(std::vector<Entry>& entries, 
         bool projectPD = false);
 
+    // Yolk.cpp
+    void addYolkVolumePreservationEnergy(T& energy);
+    void addYolkVolumePreservationForceEntries(VectorXT& residual);
+    void addYolkVolumePreservationHessianEntries(std::vector<Entry>& entries,
+    MatrixXT& WoodBuryMatrix, bool projectPD = false);
+
+    // Perivitelline.cpp
+    void addPerivitellineVolumePreservationEnergy(T& energy);
+    void addPerivitellineVolumePreservationForceEntries(VectorXT& residual);
+    void addPerivitellineVolumePreservationHessianEntries(std::vector<Entry>& entries,
+    MatrixXT& WoodBuryMatrix, bool projectPD = false);
 
     // Helpers.cpp
     void positionsFromIndices(VectorXT& positions, const VtxList& indices);

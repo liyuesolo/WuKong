@@ -670,12 +670,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
 
     add_contraction_term = true;
-    contract_apical_face = true;
+    contract_apical_face = false;
     // Gamma = 0.5;
     Gamma = 5.0;
     if (woodbury)
     {
-        Gamma = 20.0;
+        // Gamma = 20.0;
     }
 
     if (add_contraction_term)

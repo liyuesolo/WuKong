@@ -74,7 +74,27 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
 
 void VertexModel::addCellVolumePreservationEnergy(T& energy)
 {
+    VectorXT current_cell_volume;
+    computeVolumeAllCells(current_cell_volume);
 
+    T volume_term = 0.0;
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
+        
+        // cell-wise volume preservation term
+        if (face_idx < basal_face_start)
+        {
+            T ci = current_cell_volume[face_idx] - cell_volume_init[face_idx];
+            if (use_alm_on_cell_volume)
+                volume_term += -lambda_cell_vol[face_idx] * ci + 0.5 * kappa * std::pow(ci, 2);
+            else
+                volume_term += 0.5 * B * std::pow(ci, 2);
+            
+        }
+    });
+    energy += volume_term;
 }
 
 void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
