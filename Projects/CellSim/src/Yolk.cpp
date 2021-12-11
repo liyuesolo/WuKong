@@ -1,6 +1,9 @@
 
 #include "../include/VertexModel.h"
 #include "../include/autodiff/YolkEnergy.h"
+#include <fstream>
+
+bool use_centroid_subdivide_yolk = true;
 
 T VertexModel::computeYolkVolume(bool verbose)
 {
@@ -16,12 +19,26 @@ T VertexModel::computeYolkVolume(bool verbose)
         {
             T cone_volume;
             if (face_vtx_list.size() == 4) 
-                computeConeVolume4Points(positions, mesh_centroid, cone_volume);
-                // computeQuadConeVolume(positions, mesh_centroid, cone_volume);
+            {
+                if (use_centroid_subdivide_yolk)
+                    computeConeVolume4Points(positions, mesh_centroid, cone_volume);
+                else
+                    computeQuadConeVolume(positions, mesh_centroid, cone_volume);
+            }
             else if (face_vtx_list.size() == 5) 
-                computeConeVolume5Points(positions, mesh_centroid, cone_volume);
+            {
+                if (use_centroid_subdivide_yolk)
+                    computeConeVolume5Points(positions, mesh_centroid, cone_volume);
+                else
+                    computePentaConeVolume(positions, mesh_centroid, cone_volume);
+            }
             else if (face_vtx_list.size() == 6) 
-                computeConeVolume6Points(positions, mesh_centroid, cone_volume);
+            {
+                if (use_centroid_subdivide_yolk)
+                    computeConeVolume6Points(positions, mesh_centroid, cone_volume);
+                else
+                    computeHexConeVolume(positions, mesh_centroid, cone_volume);
+            }
             else
                 std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
             yolk_volume += cone_volume;
@@ -74,23 +91,157 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                 if (face_vtx_list.size() == 4)
                 {
                     Vector<T, 12> dedx;
-                    computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                    // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                    else
+                        computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
                     addForceEntry<12>(residual, face_vtx_list, dedx);
                 }
                 else if (face_vtx_list.size() == 5)
                 {
                     Vector<T, 15> dedx;
-                    computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                    else
+                        computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
+                    bool trouble_tet = false;
+                    for (int i = 0; i < 5; i++)
+                    {
+                        TV xi = positions.segment<3>(i * 3);
+                        if (dedx.norm() < 1e-8)
+                            continue;
+                        if (dedx.segment<3>(i * 3).dot(xi - mesh_centroid) > 0)
+                        {
+                            trouble_tet = true;
+                            break;
+                        }
+                    }
+                    if (trouble_tet)
+                    {
+                        saveBasalSurfaceMesh("trouble_surface.obj");
+                        std::exit(0);
+                        VectorXT rest_positions;
+                        positionsFromIndices(rest_positions, face_vtx_list, true);
+                        std::ofstream out("trouble_tet_rest.obj");
+                        for (int i = 0; i < 5; i++)
+                        {
+                            TV xi = rest_positions.segment<3>(i * 3);
+                            out << "v " <<  xi.transpose() << std::endl;
+                        }
+                        out << "v " <<  mesh_centroid.transpose() << std::endl;
+                        for (int i = 0; i < 5; i++)
+                        {
+                            
+                            out << "f 1 2 3" << std::endl; 
+                            out << "f 1 3 4" << std::endl; 
+                            out << "f 1 4 5" << std::endl; 
+                            out << "f 2 1 6" << std::endl; 
+                            out << "f 3 2 6" << std::endl; 
+                            out << "f 4 3 6" << std::endl; 
+                            out << "f 5 4 6" << std::endl; 
+                            out << "f 1 5 6" << std::endl; 
+                        }
+                        out.close();
+
+                        out.open("trouble_tet.obj");
+                        for (int i = 0; i < 5; i++)
+                        {
+                            TV xi = positions.segment<3>(i * 3);
+                            out << "v " <<  xi.transpose() << std::endl;
+                        }
+                        out << "v " <<  mesh_centroid.transpose() << std::endl;
+                        for (int i = 0; i < 5; i++)
+                        {
+                            
+                            out << "f 1 2 3" << std::endl; 
+                            out << "f 1 3 4" << std::endl; 
+                            out << "f 1 4 5" << std::endl; 
+                            out << "f 2 1 6" << std::endl; 
+                            out << "f 3 2 6" << std::endl; 
+                            out << "f 4 3 6" << std::endl; 
+                            out << "f 5 4 6" << std::endl; 
+                            out << "f 1 5 6" << std::endl; 
+                        }
+                        out.close();
+                        std::getchar();
+                    }
                     addForceEntry<15>(residual, face_vtx_list, dedx);
                 }
                 else if (face_vtx_list.size() == 6)
                 {
                     Vector<T, 18> dedx;
-                    computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                    else
+                        computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
+                    bool trouble_tet = false;
+                    for (int i = 0; i < 6; i++)
+                    {
+                        TV xi = positions.segment<3>(i * 3);
+                        if (dedx.norm() < 1e-8)
+                            continue;
+                        if (dedx.segment<3>(i * 3).dot(xi - mesh_centroid) > 0)
+                        {
+                            trouble_tet = true;
+                            break;
+                        }
+                    }
+                    if (trouble_tet)
+                    {
+                        saveBasalSurfaceMesh("trouble_surface.obj");
+                        std::exit(0);
+                        VectorXT rest_positions;
+                        positionsFromIndices(rest_positions, face_vtx_list, true);
+                        std::ofstream out("trouble_tet_rest.obj");
+                        for (int i = 0; i < 6; i++)
+                        {
+                            TV xi = rest_positions.segment<3>(i * 3);
+                            out << "v " <<  xi.transpose() << std::endl;
+                        }
+                        out << "v " <<  mesh_centroid.transpose() << std::endl;
+                        for (int i = 0; i < 6; i++)
+                        {
+                            
+                            out << "f 1 2 3" << std::endl; 
+                            out << "f 1 3 4" << std::endl; 
+                            out << "f 1 4 6" << std::endl; 
+                            out << "f 6 4 5" << std::endl; 
+                            out << "f 2 1 7" << std::endl; 
+                            out << "f 3 2 7" << std::endl; 
+                            out << "f 4 3 7" << std::endl; 
+                            out << "f 5 4 7" << std::endl; 
+                            out << "f 6 5 7" << std::endl; 
+                            out << "f 1 6 7" << std::endl; 
+                        }
+                        out.close();
+
+                        out.open("trouble_tet.obj");
+                        for (int i = 0; i < 5; i++)
+                        {
+                            TV xi = positions.segment<3>(i * 3);
+                            out << "v " <<  xi.transpose() << std::endl;
+                        }
+                        out << "v " <<  mesh_centroid.transpose() << std::endl;
+                        for (int i = 0; i < 6; i++)
+                        {
+                            
+                            out << "f 1 2 3" << std::endl; 
+                            out << "f 1 3 4" << std::endl; 
+                            out << "f 1 4 6" << std::endl; 
+                            out << "f 6 4 5" << std::endl; 
+                            out << "f 2 1 7" << std::endl; 
+                            out << "f 3 2 7" << std::endl; 
+                            out << "f 4 3 7" << std::endl; 
+                            out << "f 5 4 7" << std::endl; 
+                            out << "f 6 5 7" << std::endl; 
+                            out << "f 1 6 7" << std::endl; 
+                        }
+                        out.close();
+                        std::getchar();
+                    }
                     addForceEntry<18>(residual, face_vtx_list, dedx);
                 }
                 else
@@ -124,20 +275,28 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     if (face_vtx_list.size() == 4)
                     {
                         Vector<T, 12> dedx;
-                        computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
-                        // computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
+                        if (use_centroid_subdivide_yolk)
+                            computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
+                        else
+                            computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<12>(dVdx_full, face_vtx_list, dedx);
                     }
                     else if (face_vtx_list.size() == 5)
                     {
                         Vector<T, 15> dedx;
-                        computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                        if (use_centroid_subdivide_yolk)
+                            computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
+                        else
+                            computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<15>(dVdx_full, face_vtx_list, dedx);
                     }
                     else if (face_vtx_list.size() == 6)
                     {
                         Vector<T, 18> dedx;
-                        computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                        if (use_centroid_subdivide_yolk)
+                            computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
+                        else
+                            computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<18>(dVdx_full, face_vtx_list, dedx);
                     }
                     else
@@ -173,9 +332,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     TV dVdxi = dVdx.segment<3>(0);
                     TV dVdxj = dVdx.segment<3>(3);
                     Matrix<T, 3, 3> hessian_partial = By * dVdxi * dVdxj.transpose();
-                    if(projectPD)
-                        projectBlockPD<3>(hessian_partial);
-                    addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+                    if (hessian_partial.nonZeros() > 0)
+                        addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
                 }
             }
         }
@@ -196,8 +354,10 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 {
                     
                     Matrix<T, 12, 12> d2Vdx2;
-                    computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
-                    // computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    else
+                        computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
                     Matrix<T, 12, 12> hessian;
                     if (use_yolk_pressure)
                         hessian = -pressure_constant * d2Vdx2;
@@ -210,7 +370,10 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 else if (face_vtx_list.size() == 5)
                 {
                     Matrix<T, 15, 15> d2Vdx2;
-                    computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    else
+                        computePentaConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
                     Matrix<T, 15, 15> hessian;
                     if (use_yolk_pressure)
                         hessian = -pressure_constant * d2Vdx2;
@@ -224,7 +387,10 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 else if (face_vtx_list.size() == 6)
                 {
                     Matrix<T, 18, 18> d2Vdx2;
-                    computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    if (use_centroid_subdivide_yolk)
+                        computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    else
+                        computeHexConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
                     Matrix<T, 18, 18> hessian;
                     if (use_yolk_pressure)
                         hessian = -pressure_constant * d2Vdx2;

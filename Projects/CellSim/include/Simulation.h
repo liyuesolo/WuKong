@@ -21,6 +21,8 @@ public:
 
     using CellModel = VertexModel;
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    // typedef int StorageIndex;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
 
     T newton_tol = 1e-6;
     int max_newton_iter = 500;
@@ -35,6 +37,7 @@ public:
     VectorXT& u = cells.u;
     VectorXT& f = cells.f;
     bool& woodbury = cells.woodbury;
+    int& num_nodes = cells.num_nodes;
 
     Timer t;
     
@@ -69,6 +72,9 @@ public:
 
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
+    
+    bool solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
+         VectorXT& residual, VectorXT& du);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     T computeTotalEnergy(const VectorXT& _u);
@@ -81,6 +87,8 @@ public:
         const VectorXT& search_direction,
         const VectorXT& negative_gradient
     );
+
+    void loadDeformedState(const std::string& filename);
 
 public:
     Simulation() {}

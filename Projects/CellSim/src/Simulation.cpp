@@ -1,7 +1,12 @@
 #include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
+#include <Eigen/CholmodSupport>
+
+#include <igl/readOBJ.h>
+
 #include <iomanip>
 #include <ipc/ipc.hpp>
+
 
 
 void generatePolygonRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -18,12 +23,13 @@ void Simulation::computeLinearModes()
 void Simulation::initializeCells()
 {
     woodbury = true;
-    cells.use_alm_on_cell_volume = true;
+    cells.use_alm_on_cell_volume = false;
 
     std::string sphere_file;
     cells.scene_type = 1;
 
     if (cells.scene_type == 1 || cells.scene_type == 2)
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
@@ -32,13 +38,13 @@ void Simulation::initializeCells()
     // cells.addTestPrismGrid(10, 10);
     cells.computeVolumeAllCells(cells.cell_volume_init);
 
-    cells.checkTotalGradientScale(true);
-    cells.checkTotalHessianScale(true);
+    // cells.checkTotalGradientScale(true);
+    // cells.checkTotalHessianScale(true);
     // cells.checkTotalGradient(true);
     // cells.checkTotalHessian();
     // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 300;
+    max_newton_iter = 5000;
     // verbose = true;
     cells.print_force_norm = true;
 
@@ -144,6 +150,7 @@ bool Simulation::staticSolve()
         f[offset] = 0;
     });
 
+    T residual_norm_init = 0.0;
     while (true)
     {
         VectorXT residual(deformed.rows());
@@ -152,15 +159,18 @@ bool Simulation::staticSolve()
             cells.updateFixedCellCentroid();
         
         residual_norm = computeResidual(u, residual);
-        // cells.saveCellMesh(cnt);
+        if (cnt == 0)
+            residual_norm_init = residual_norm;
+
+        if (!cells.single_prism)
+            cells.saveCellMesh(cnt);
         // cells.saveIPCData(cnt);
         // cells.saveHexTetsStep(cnt);
         // std::exit(0);
         // if (verbose)
-            std::cout << "iter " << cnt << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+            std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
         // if (cnt % 50 == 0)
-        // if (cnt == 1)
         // {
         //     cells.checkTotalGradientScale();
         //     cells.checkTotalHessianScale();
@@ -196,7 +206,9 @@ bool Simulation::staticSolve()
     std::cout << std::endl;
     std::cout << "========================= Solver Info ================================="<< std::endl;
     std::cout << "# of system DoF " << deformed.rows() << std::endl;
-    std::cout << "# of newton iter: " << cnt << " exited with |g|: " << residual_norm << "|dq|: " << dq_norm  << std::endl;
+    std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
+        << residual_norm << " |ddu|: " << dq_norm  
+        << " |g_init|: " << residual_norm_init << std::endl;
     // std::cout << "Smallest 15 eigenvalues " << std::endl;
     // cells.computeLinearModes();
     std::cout << std::endl;
@@ -225,15 +237,16 @@ bool Simulation::staticSolve()
     return true;
 }
 
-bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
+bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
+    Timer t(true);
     StiffnessMatrix I(K.rows(), K.cols());
     I.setIdentity();
 
     StiffnessMatrix H = K;
 
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    Eigen::CholmodSimplicialLLT<StiffnessMatrix> solver;
 
     T alpha = 10e-6;
     solver.analyzePattern(K);
@@ -242,7 +255,9 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     for (; i < 50; i++)
     {
         // std::cout << i << std::endl;
+
         solver.factorize(K);
+        // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
             K = H + alpha * I;        
@@ -296,7 +311,106 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
+            t.stop();
             std::cout << "\t===== Linear Solve ===== " << std::endl;
+            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+            std::cout << "\t# regularization step " << i 
+                << " indefinite " << indefinite_count_reg_cnt 
+                << " invalid search dir " << invalid_search_dir_cnt
+                << " invalid solve " << invalid_residual_cnt << std::endl;
+            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+            std::cout << "\t======================== " << std::endl;
+            return true;
+        }
+        else
+        {
+            K = H + alpha * I;        
+            alpha *= 10;
+        }
+    }
+    return false;
+}
+
+
+bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
+         VectorXT& residual, VectorXT& du)
+{
+    Timer t(true);
+    StiffnessMatrix I(K.rows(), K.cols());
+    I.setIdentity();
+
+    StiffnessMatrix H = K;
+
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+
+    T alpha = 10e-6;
+    solver.analyzePattern(K);
+    int i = 0;
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    for (; i < 50; i++)
+    {
+        // std::cout << i << std::endl;
+
+        solver.factorize(K);
+        // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            K = H + alpha * I;        
+            alpha *= 10;
+            indefinite_count_reg_cnt++;
+            continue;
+        }
+
+        // sherman morrison
+        if (UV.cols() == 1)
+        {
+            VectorXT v = UV.col(0);
+            VectorXT A_inv_g = solver.solve(residual);
+            VectorXT A_inv_u = solver.solve(v);
+
+            T dem = 1.0 + v.dot(A_inv_u);
+
+            du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+        }
+        // UV is actually only U, since UV is the same in the case
+        // C is assume to be Identity
+        else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+        {
+            VectorXT A_inv_g = solver.solve(residual);
+
+            MatrixXT A_inv_U(UV.rows(), UV.cols());
+            for (int col = 0; col < UV.cols(); col++)
+                A_inv_U.col(col) = solver.solve(UV.col(col));
+            
+            MatrixXT C(UV.cols(), UV.cols());
+            C.setIdentity();
+            C += UV.transpose() * A_inv_U;
+            du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+        }
+        
+
+        T dot_dx_g = du.normalized().dot(residual.normalized());
+
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        if (!search_dir_correct_sign)
+            invalid_search_dir_cnt++;
+        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+        if (positive_definte && search_dir_correct_sign && solve_success)
+        {
+            t.stop();
+            std::cout << "\t===== Linear Solve ===== " << std::endl;
+            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
             std::cout << "\t# regularization step " << i 
                 << " indefinite " << indefinite_count_reg_cnt 
                 << " invalid search dir " << invalid_search_dir_cnt
@@ -512,13 +626,28 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
             
         for (int i = 0; i < cells.basal_vtx_start; i++)
         {
-            current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+            // current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+            current_position.row(i) = undeformed.segment<3>(i * 3);
             next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
         }
         
         alpha = ipc::compute_collision_free_stepsize(current_position, 
             next_step_position, cells.ipc_edges, cells.ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
         // std::cout << "collision free step size " << alpha << std::endl;
+    }
+
+    if (cells.sphere_bound_barrier)
+    {
+        T inside_membrane_step_size = cells.computeInsideMembraneStepSize(_u, du);
+        // std::cout << inside_membrane_step_size << std::endl;
+        alpha = std::min(alpha, inside_membrane_step_size);
+    }
+
+    if (cells.add_tet_vol_barrier)
+    {
+        T inversion_free_step_size = cells.computeInversionFreeStepSize(_u, du);
+        // std::cout << inversion_free_step_size << std::endl;
+        alpha = std::min(alpha, inversion_free_step_size);
     }
 
     T E0 = computeTotalEnergy(_u);
@@ -569,7 +698,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.checkTotalGradient();
                     return 1e16;
                 }
-                std::cout << "# ls " << cnt << std::endl;
+                std::cout << "# ls " << cnt << " |du| " << alpha * du.norm() << std::endl;
                 break;
             }
         }
@@ -615,4 +744,19 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     }
     
     return norm;
+}
+
+
+void Simulation::loadDeformedState(const std::string& filename)
+{
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+    igl::readOBJ(filename, V, F);
+
+    for (int i = 0; i < num_nodes; i++)
+    {
+        deformed.segment<3>(i * 3) = V.row(i);
+    }
+    u = deformed - undeformed;
+    cells.computeCellInfo();
 }

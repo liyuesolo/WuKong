@@ -15,6 +15,7 @@ Eigen::MatrixXi F;
 Eigen::MatrixXd C;
 
 using TV = Vector<double, 3>;
+using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 
 Simulation simulation;
 
@@ -26,9 +27,12 @@ static bool split_a_bit = false;
 static bool yolk_only = false;
 static bool show_apical_polygon = false;
 static bool show_basal_polygon = false;
+static bool show_contracting_edges = true;
 static int modes = 0;
+static bool enable_selection = false;
 double t = 0.0;
 
+int load_obj_iter_cnt = 1;
 
 Eigen::MatrixXd evectors;
 Eigen::VectorXd evalues;
@@ -71,9 +75,10 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
             bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
         viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
     }
-    if (show_apical_polygon)
+    if (show_contracting_edges)
     {
         viewer.data().clear();
+        simulation.cells.appendCylinderOnContractingEdges(V, F, C);
         viewer.data().set_mesh(V, F);
         viewer.data().set_colors(C);
     }
@@ -95,6 +100,10 @@ int main()
     {
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            if (ImGui::Checkbox("SelectVertex", &enable_selection))
+            {
+                updateScreen(viewer);
+            }
             if (ImGui::Checkbox("ShowCurrent", &show_current))
             {
                 updateScreen(viewer);
@@ -119,7 +128,7 @@ int main()
             {
                 updateScreen(viewer);
             }
-            if (ImGui::Checkbox("ApicalPolygon", &show_apical_polygon))
+            if (ImGui::Checkbox("ContractingEdges", &show_contracting_edges))
             {
                 updateScreen(viewer);
             }
@@ -143,6 +152,8 @@ int main()
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
     {
+        if (!enable_selection)
+            return false;
         double x = viewer.current_mouse_x;
         double y = viewer.core().viewport(3) - viewer.current_mouse_y;
 
@@ -171,7 +182,7 @@ int main()
 
             t += 0.1;
             viewer.data().clear();
-            simulation.generateMeshForRendering(V, F, C, show_rest);
+            simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
             viewer.data().set_mesh(V, F);     
             viewer.data().set_colors(C);
         }
@@ -181,12 +192,23 @@ int main()
     viewer.callback_key_pressed = 
         [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
     {
+        VectorXT residual(simulation.num_nodes * 3);
+        residual.setZero();
         switch(key)
         {
         default: 
             return false;
         case ' ':
             simulation.staticSolve();
+            // simulation.undeformed = simulation.deformed;
+            // simulation.u.setZero();
+            // simulation.cells.gamma = 10.0;
+            // simulation.staticSolve();
+            // simulation.undeformed = simulation.deformed;
+            // simulation.u.setZero();
+            // simulation.cells.alpha = 100.0;
+            // simulation.cells.gamma = 0.1;
+            // simulation.staticSolve();
             updateScreen(viewer);
             return true;
         case '1':
@@ -208,17 +230,29 @@ int main()
             std::cout << "modes " << modes << std::endl;
             return true;
         case '3': //check modes at equilirium after static solve
-            loadEigenVectors();
-            modes = 0;
+            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            std::cout << simulation.computeResidual(simulation.u, residual) << std::endl;
+            updateScreen(viewer);
             return true;
         case 'a':
             viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case 'n':
+            load_obj_iter_cnt++;
+            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            updateScreen(viewer);
+            return true;
+        case 'l':
+            load_obj_iter_cnt--;
+            load_obj_iter_cnt = std::max(0, load_obj_iter_cnt);
+            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            updateScreen(viewer);
             return true;
         }
     };
 
     simulation.initializeCells();
-    simulation.generateMeshForRendering(V, F, C);
+    updateScreen(viewer);
 
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);

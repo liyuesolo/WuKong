@@ -43,11 +43,11 @@ void VertexModel::computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid
     centroid /= T(face_vtx_list.size());
 }
 
-void VertexModel::positionsFromIndices(VectorXT& positions, const VtxList& indices)
+void VertexModel::positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state)
 {
     positions = VectorXT::Zero(indices.size() * 3);
     for (int i = 0; i < indices.size(); i++)
     {
-        positions.segment<3>(i * 3) = deformed.segment<3>(indices[i] * 3);
+        positions.segment<3>(i * 3) = rest_state ? undeformed.segment<3>(indices[i] * 3) : deformed.segment<3>(indices[i] * 3);
     }
 }

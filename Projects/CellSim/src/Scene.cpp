@@ -75,6 +75,8 @@ void VertexModel::initializeContractionData()
 
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
+    TV mid_point = 0.5 * (min_corner + max_corner);
+    TV delta = max_corner - min_corner;
     if (contract_apical_face)
     {
         iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -82,12 +84,12 @@ void VertexModel::initializeContractionData()
             if (face_idx < basal_face_start)
             {
                 bool contract = true;
-                for (int idx : face_vtx_list)
-                {
-                    TV x = deformed.segment<3>(idx * 3);
-                    if (x[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8)
-                        contract = false;
-                }
+                TV centroid;
+                computeFaceCentroid(face_vtx_list, centroid);
+                if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.92
+                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.35 
+                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.35)
+                    contract = false;
                 if (contract)
                     contracting_faces.push_back(face_idx);
             }
@@ -95,7 +97,7 @@ void VertexModel::initializeContractionData()
     }
     else
     {
-        for (auto e : edges)
+        auto validEdge = [&](const Edge& e)
         {
             TV x0 = deformed.segment<3>(e[0] * 3);
             TV x1 = deformed.segment<3>(e[1] * 3);
@@ -103,10 +105,47 @@ void VertexModel::initializeContractionData()
             if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
                 x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
                 e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+                return true;
+            return false;
+        };
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            if (face_idx < basal_face_start)
             {
-                contracting_edges.push_back(e);
+                bool add_all_edges_in_this_face = false;
+                for (int i = 0; i < face_vtx_list.size(); i++)
+                {
+                    int j = (i + 1) % face_vtx_list.size();
+                    if (validEdge(Edge(face_vtx_list[i], face_vtx_list[j])))
+                    {
+                        add_all_edges_in_this_face = true;
+                        break;
+                    }
+                }
+                if (add_all_edges_in_this_face)
+                {
+                    for (int i = 0; i < face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % face_vtx_list.size();
+                        contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));
+                    }
+                }
+                
             }
-        }
+        });
+        // for (auto e : edges)
+        // {
+        //     TV x0 = deformed.segment<3>(e[0] * 3);
+        //     TV x1 = deformed.segment<3>(e[1] * 3);
+
+        //     if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+        //         x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+        //         e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+        //     {
+        //         contracting_edges.push_back(e);
+        //     }
+        // }
     }
     
 
@@ -242,6 +281,8 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
 
 void VertexModel::addTestPrism(int edge)
 {
+    woodbury = false;
+
     single_prism = true;
     num_nodes = edge * 2;
     if (edge == 4)
@@ -351,7 +392,10 @@ void VertexModel::addTestPrism(int edge)
     add_yolk_volume = false;
     add_contraction_term = false;
     use_sphere_radius_bound = false;
-    
+    perivitelline_pressure = false;
+    use_yolk_pressure = false; 
+    use_ipc_contact = false;
+    add_perivitelline_liquid_volume = false;
 
     mesh_centroid = TV(0, -1, 0);
     B = 1e6;
@@ -364,24 +408,25 @@ void VertexModel::addTestPrism(int edge)
     use_cell_centroid = false;
     use_face_centroid = false;
 
-    add_single_tet_vol_barrier = true;
-    tet_barrier_stiffness = 10e-10;
+    use_elastic_potential = true;
+
+    if (use_elastic_potential)
+    {
+        use_cell_centroid = false;
+        E = 100;
+        nu = 0.48;
+    }
+
+
+    preserve_tet_vol = true;
+    
 
     if (add_yolk_volume)
         yolk_vol_init = computeYolkVolume();
-    
-}
 
-void VertexModel::updateIPCVertices(const VectorXT& _u)
-{
-    VectorXT projected = _u;
-    iterateDirichletDoF([&](int offset, T target)
-    {
-        projected[offset] = target;
-    });
-    deformed = undeformed + projected;
-    for (int i = 0; i < basal_vtx_start; i++)
-        ipc_vertices.row(i) = deformed.segment<3>(i * 3);
+    if (preserve_tet_vol)
+        computeTetVolInitial();
+
 }
 
 void VertexModel::saveIPCData(int iter)
@@ -417,80 +462,7 @@ void VertexModel::saveCellMesh(int iter)
     out.close();
 }
 
-void VertexModel::computeIPCRestData()
-{
-    ipc_vertices.resize(basal_vtx_start, 3);
-    for (int i = 0; i < basal_vtx_start; i++)
-        ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
-    
-    int face_cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int i){
-        if (i < basal_face_start)
-        {
-            if (face_vtx_list.size() == 4)
-                face_cnt += 2;
-            else if (face_vtx_list.size() == 5)
-                face_cnt += 3;
-            else if (face_vtx_list.size() == 6)
-                face_cnt += 4;
-        }
-    });
-    std::vector<Edge> edges_vec;
-    ipc_faces.resize(face_cnt, 3);
-    face_cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int i)
-    {
-        if (i < basal_face_start)
-        {
-            if (face_vtx_list.size() == 4)
-            {
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[0]));
-            }
-            else if (face_vtx_list.size() == 5)
-            {
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[0]);
 
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[4]));
-                edges_vec.push_back(Edge(face_vtx_list[4], face_vtx_list[0]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
-
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[0]);
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[5]);
-
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[4]));
-                edges_vec.push_back(Edge(face_vtx_list[4], face_vtx_list[5]));
-                edges_vec.push_back(Edge(face_vtx_list[5], face_vtx_list[0]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
-            }
-        }
-    });
-
-    
-    ipc_edges.resize(edges_vec.size(), 2);
-    for (int i = 0; i < edges_vec.size(); i++)
-        ipc_edges.row(i) = edges_vec[i];    
-}
 
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
@@ -613,26 +585,52 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     B = 1e6;
     By = 1e4;
+
+    contract_apical_face = false;
+    use_cell_centroid = false;
     
+    use_elastic_potential = false;
+
+    if (use_elastic_potential)
+    {
+        use_cell_centroid = false;
+        E = 100;
+        nu = 0.48;
+    }
+
     if (scene_type == 1 || scene_type == 2)
     {
-        // alpha = 25.0; 
-        // gamma = 5.0;
-        // if (woodbury)
-        // {
-        //     // use this when enable single tet volume term
-        //     // alpha = 200.0;
-        //     // gamma = 20.0;
-        //     // sigma = 0.5;
+            if (contract_apical_face)
+            {
+                alpha = 0.4; // lateral
+                gamma = 1.0; // basal
+                sigma = 0.6; // apical
+            }
+            else
+            {
+                // this weights converge at rest state when height = 0.5
+                // alpha = 50.0;
+                // gamma = 20.0;
+                // sigma = 0.5;
 
-        //     // use this when single tet volume term is disabled
-        //     alpha = 100.0;
-        //     gamma = 20.0;
-        //     sigma = 0.5;
-        // }
-            alpha = 1.0;
-            gamma = 1.0;
-            sigma = 0.1;
+                // this weights lead to invagination when height = 1.0
+                if (use_cell_centroid)
+                {
+                    // alpha = 100.0; //without tet
+                    alpha = 200.0;
+                    gamma = 10.0;
+                    sigma = 0.5;
+                }
+                else
+                {
+                    // fixed tet sub div
+                    alpha = 300.0;
+                    gamma = 40.0;
+                    sigma = 0.5;
+                }
+                
+
+            }
     }
     else
     {
@@ -642,8 +640,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
 
 
-    use_cell_centroid = true;
     use_face_centroid = false;
+
 
     for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
     {
@@ -670,12 +668,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
 
     add_contraction_term = true;
-    contract_apical_face = false;
+    
     // Gamma = 0.5;
     Gamma = 5.0;
     if (woodbury)
     {
-        // Gamma = 20.0;
+        if (contract_apical_face)
+            Gamma = 2000.0;
+        else 
+        {
+            if (use_cell_centroid)
+                Gamma = 10.0; //worked for the centroid formulation
+            else
+                Gamma = 40.0; // used for fixed tet subdiv
+        }
     }
 
     if (add_contraction_term)
@@ -685,7 +691,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     use_sphere_radius_bound = true;
     
-    sphere_bound_penalty = false;
+    sphere_bound_penalty = true;
+
+    sphere_bound_barrier = false;
+
 
     if (use_sphere_radius_bound)
     {
@@ -694,8 +703,15 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         
         if (sphere_bound_penalty)
             bound_coeff = 1e4;
+        else if (sphere_bound_barrier)
+        {
+            bound_coeff = 0.1;
+            membrane_dhat = 1e-2;
+        }
         else
+        {
             bound_coeff = 10e-15;
+        }
     }
 
     std::cout << "# system DoF: " << deformed.rows() << std::endl;
@@ -703,13 +719,17 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     use_yolk_pressure = false;
     // pressure_constant = 1e-6; //low res worked
     pressure_constant = 0.1;
-    // pressure_constant = 1e1;
+    
 
-    add_single_tet_vol_barrier = false;
-    tet_barrier_stiffness = 10e-22;
+    preserve_tet_vol = !use_face_centroid;
+    tet_vol_penalty = 1e6;
 
+    if (preserve_tet_vol)
+        computeTetVolInitial();
 
     use_ipc_contact = true;
+    add_friction = false;
+    
     if (use_ipc_contact)
     {
         computeIPCRestData();
@@ -721,6 +741,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         lambda_cell_vol = VectorXT::Zero(deformed.rows());
         kappa = 1e6;
+        kappa_max = 1e3 * kappa;
     }
 
     use_fixed_cell_centroid = false;
@@ -733,11 +754,24 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (add_perivitelline_liquid_volume)
     {
         perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
-        Bp = 1e3; 
+        if (use_cell_centroid)
+            Bp = 1e5; 
+        else
+            Bp = 1e6; 
         if (use_perivitelline_liquid_pressure)
         {
             perivitelline_pressure = 1;
         }
     }
+    project_block_hessian_PD = false;
+
+    weights_all_edges = 0.1;
+
+    add_tet_vol_barrier = true;
+    tet_vol_barrier_dhat = 1e-7;
+    if (use_cell_centroid)
+        tet_vol_barrier_w = 10e-22;
+    else
+        tet_vol_barrier_w = 1e3;
     
 }

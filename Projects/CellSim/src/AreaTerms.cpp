@@ -2,7 +2,7 @@
 #include "../include/autodiff/AreaEnergy.h"
 
 
-void VertexModel::addFaceAreaEnergy(FaceRegion face_region, T w, T& energy)
+void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
 {
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
@@ -14,6 +14,7 @@ void VertexModel::addFaceAreaEnergy(FaceRegion face_region, T w, T& energy)
             if (face_vtx_list.size() == 4)
             {
                 if (use_face_centroid)
+                //this is sum squared
                     computeArea4PointsSquared(w, positions, area_energy);
                 else
                     computeQuadFaceAreaSquaredSum(w, positions, area_energy);
@@ -39,7 +40,7 @@ void VertexModel::addFaceAreaEnergy(FaceRegion face_region, T w, T& energy)
     });
 }
 
-void VertexModel::addFaceAreaForceEntries(FaceRegion face_region, T w, VectorXT& residual)
+void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& residual)
 {
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
@@ -81,7 +82,7 @@ void VertexModel::addFaceAreaForceEntries(FaceRegion face_region, T w, VectorXT&
         }
     });
 }
-void VertexModel::addFaceAreaHessianEntries(FaceRegion face_region, T w, 
+void VertexModel::addFaceAreaHessianEntries(Region face_region, T w, 
     std::vector<Entry>& entries, bool projectPD)
 {
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -94,7 +95,7 @@ void VertexModel::addFaceAreaHessianEntries(FaceRegion face_region, T w,
             {
                 Matrix<T, 12, 12> hessian;
                 if (use_face_centroid)
-                    computeArea4PointsSquaredSumHessian(w, positions, hessian);
+                    computeArea4PointsSquaredHessian(w, positions, hessian);
                 else
                     computeQuadFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
@@ -182,7 +183,6 @@ T VertexModel::computeAreaEnergy(const VectorXT& _u)
                 if (use_face_centroid)
                 {
                     computeArea4PointsSquared(coeff, positions, area_energy);
-                    area_energy = std::sqrt(area_energy);
                 }
                 else
                     computeQuadFaceAreaSquaredSum(coeff, positions, area_energy);

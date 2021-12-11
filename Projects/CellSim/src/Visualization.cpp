@@ -290,6 +290,39 @@ void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
     
 }
 
+void VertexModel::saveBasalSurfaceMesh(const std::string& filename, bool invert_normal)
+{
+    std::ofstream out(filename);
+    for (int i = basal_vtx_start; i < num_nodes; i++)
+    {
+        out << "v " << deformed.segment<3>(i * 3).transpose() << std::endl;
+    }
+    iterateBasalFaceSerial([&](VtxList& face_vtx_list, int i)
+    {
+        if (face_vtx_list.size() == 5)
+        {
+            IV idx(face_vtx_list[0], face_vtx_list[1], face_vtx_list[2]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+            idx = IV(face_vtx_list[0], face_vtx_list[2], face_vtx_list[3]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+            idx = IV(face_vtx_list[0], face_vtx_list[3], face_vtx_list[4]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+        }
+        else if (face_vtx_list.size() == 6)
+        {
+            IV idx(face_vtx_list[0], face_vtx_list[1], face_vtx_list[2]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+            idx = IV(face_vtx_list[0], face_vtx_list[2], face_vtx_list[3]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+            idx = IV(face_vtx_list[0], face_vtx_list[3], face_vtx_list[5]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+            idx = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[4]);
+            out << "f " << (idx - IV::Ones() *(basal_vtx_start - 1)).transpose() << std::endl;
+        }
+    });
+    out.close();
+}
+
 void VertexModel::getYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool rest_shape)
 {
@@ -505,6 +538,11 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                     C.row(face_cnt) = Eigen::Vector3d(0.0, 1.0, 0.0);
                 else
                     C.row(face_cnt) = Eigen::Vector3d(0, 0.3, 1.0);
+                if (contract_apical_face)
+                {
+                    if (std::find(contracting_faces.begin(), contracting_faces.end(), i) != contracting_faces.end())
+                        C.row(face_cnt) = Eigen::Vector3d(1.0, 0.5, 0.5);
+                }   
                 face_cnt++;
             }
         }
@@ -517,7 +555,13 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 color = Eigen::Vector3d(0.0, 1.0, 0.0);
             else
                 color = Eigen::Vector3d(0, 0.3, 1.0);
-            
+
+            if (contract_apical_face)
+            {
+                if (std::find(contracting_faces.begin(), contracting_faces.end(), i) != contracting_faces.end())
+                    color = Eigen::Vector3d(1.0, 0.0, 0.0);
+            }   
+
             if (faces[i].size() == 4)
             {
                 C.row(face_cnt++) = color;
@@ -549,5 +593,127 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
     //         C.row(i) = Eigen::Vector3d(0, 0.3, 1.0);
     // });
 
+}
+
+void VertexModel::appendCylinderOnContractingEdges(
+    Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+{
+    T visual_R = 0.01;
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
+        0.0, visual_R*std::sin(theta*T(i)));
+    
+    int rod_offset_v = n_div * 2;
+    int rod_offset_f = n_div * 2;
+
+    int n_row_V = V.rows();
+    int n_row_F = F.rows();
+
+    int n_contracting_edges = contracting_edges.size();
+    
+    V.conservativeResize(n_row_V + n_contracting_edges * rod_offset_v, 3);
+    F.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+    C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+
+    for (int i = 0; i < n_contracting_edges; i++)
+    {
+        int rov = n_row_V + i * rod_offset_v;
+        int rof = n_row_F + i * rod_offset_f;
+
+        TV vtx_from = deformed.segment<3>(contracting_edges[i][0] * 3);
+        TV vtx_to = deformed.segment<3>(contracting_edges[i][1] * 3);
+
+        TV axis_world = vtx_to - vtx_from;
+        TV axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                V(rov + i, d) = points[i * 3 + d];
+                V(rov + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    V(rov + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+            V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+
+            F.row(rof + i*2 ) = IV(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+            F.row(rof + i*2 + 1) = IV(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+
+            C.row(rof + i*2 ) = TV(1.0, 0.0, 0.0);
+            C.row(rof + i*2 + 1) = TV(1.0, 0.0, 0.0);
+        }
+    }   
+}
+
+void VertexModel::appendCylinderOnApicalEdges(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C)
+{
+    // T visual_R = 0.01;
+    // int n_div = 10;
+    // T theta = 2.0 * EIGEN_PI / T(n_div);
+    // VectorXT points = VectorXT::Zero(n_div * 3);
+    // for(int i = 0; i < n_div; i++)
+    //     points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
+    //     0.0, visual_R*std::sin(theta*T(i)));
+    
+    // int rod_offset_v = n_div * 2;
+    // int rod_offset_f = n_div * 2;
+
+    // int n_row_V = V.rows();
+    // int n_row_F = F.rows();
+
+    // int n_edges_draw = 0;
+    // iterateApicalEdgeSerial([&](Edge e))
+    // {
+    //     n_edges_draw++;
+    // });
+    
+    // V.conservativeResize(n_row_V + n_contracting_edges * rod_offset_v, 3);
+    // F.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+    // C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+
+    // for (int i = 0; i < n_contracting_edges; i++)
+    // {
+    //     int rov = n_row_V + i * rod_offset_v;
+    //     int rof = n_row_F + i * rod_offset_f;
+
+    //     TV vtx_from = deformed.segment<3>(contracting_edges[i][0] * 3);
+    //     TV vtx_to = deformed.segment<3>(contracting_edges[i][1] * 3);
+
+    //     TV axis_world = vtx_to - vtx_from;
+    //     TV axis_local(0, axis_world.norm(), 0);
+
+    //     Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+    //     for(int i = 0; i < n_div; i++)
+    //     {
+    //         for(int d = 0; d < 3; d++)
+    //         {
+    //             V(rov + i, d) = points[i * 3 + d];
+    //             V(rov + i+n_div, d) = points[i * 3 + d];
+    //             if (d == 1)
+    //                 V(rov + i+n_div, d) += axis_world.norm();
+    //         }
+
+    //         // central vertex of the top and bottom face
+    //         V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+    //         V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+
+    //         F.row(rof + i*2 ) = IV(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+    //         F.row(rof + i*2 + 1) = IV(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+
+    //         C.row(rof + i*2 ) = TV(0.0, 0.0, 1.0);
+    //         C.row(rof + i*2 + 1) = TV(0.0, 0.0, 1.0);
+    //     }
+    // }   
 }
 

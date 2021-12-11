@@ -160,6 +160,9 @@ void VertexModel::checkTotalGradientScale(bool perturb)
 void VertexModel::checkTotalHessianScale(bool perturb)
 {
     // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
+    // Gamma = 0; weights_all_edges = 0.0;
+    
+
     // pressure_constant = 0.0;
     if (use_alm_on_cell_volume)
         lambda_cell_vol.setOnes();

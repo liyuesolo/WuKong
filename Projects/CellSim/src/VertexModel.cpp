@@ -12,6 +12,8 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/VertexModelEnergy.h"
 #include "../include/autodiff/YolkEnergy.h"
+#include "../include/autodiff/TetVolBarrier.h"
+#include "../include/autodiff/EdgeEnergy.h"
 
 
 void VertexModel::computeLinearModes()
@@ -20,8 +22,19 @@ void VertexModel::computeLinearModes()
 
     StiffnessMatrix K(deformed.rows(), deformed.rows());
     run_diff_test = true;
-    buildSystemMatrix(u, K);
+
+    // buildSystemMatrix(u, K);
+
+    std::vector<Entry> entries;
+    deformed = undeformed + u;
+    MatrixXT dummy;
+    addFaceAreaHessianEntries(Basal, gamma, entries);
+    addFaceAreaHessianEntries(Lateral, alpha, entries);
+    // addYolkVolumePreservationHessianEntries(entries, dummy);
+    // addCellVolumePreservationHessianEntries(entries);
     
+    K.setFromTriplets(entries.begin(), entries.end());
+    std::cout << "build K" << std::endl;
     bool use_Spectra = true;
 
     if (use_Spectra)
@@ -69,28 +82,39 @@ void VertexModel::computeLinearModes()
     {
         Eigen::MatrixXd A_dense = K;
         Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
-        eigen_solver.compute(A_dense, /* computeEigenvectors = */ false);
+        eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
         auto eigen_values = eigen_solver.eigenvalues();
-        T min_ev = 1e10;
-        T second_min_ev = 1e10;
-        for (int i = 0; i < A_dense.cols(); i++)
-            if (eigen_values[i].real() < min_ev)
-            {
-                min_ev = eigen_values[i].real();
-            }
-        
-        // std::cout << min_ev << std::endl;
+        auto eigen_vectors = eigen_solver.eigenvectors();
         
         std::vector<T> ev_all(A_dense.cols());
         for (int i = 0; i < A_dense.cols(); i++)
         {
             ev_all[i] = eigen_values[i].real();
         }
-        std::sort(ev_all.begin(), ev_all.end());
-        // for (int i = 0; i < 10; i++)
+        
+        std::vector<int> indices;
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            indices.push_back(i);    
+        }
+        std::sort(indices.begin(), indices.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
+        // std::sort(ev_all.begin(), ev_all.end());
+
         for (int i = 0; i < nmodes; i++)
-            std::cout << ev_all[i] << " ";
-        std::cout << std::endl;
+            std::cout << ev_all[indices[i]] << std::endl;
+        
+
+        std::ofstream out("cell_eigen_vectors.txt");
+        out << nmodes << " " << A_dense.cols() << std::endl;
+        for (int i = 0; i < nmodes; i++)
+            out << ev_all[indices[i]] << " ";
+        out << std::endl;
+        for (int i = 0; i < nmodes; i++)
+        {
+            out << eigen_vectors.col(indices[i]).real() << std::endl;
+        }
+
+        out.close();
     }
 }
 
@@ -176,7 +200,28 @@ void VertexModel::updateALMData(const VectorXT& _u)
     //     kappa *= 2.0;
 }
 
+void VertexModel::computeCellInfo()
+{
+    std::cout << "=================== Cell Info ===================" << std::endl;
+    if (preserve_tet_vol)
+    {
+        VectorXT tet_vol_curr;
+        computeTetVolCurent(tet_vol_curr);
+        std::cout << "\ttet vol sum: " << tet_vol_curr.sum() << std::endl;
+    }
+    else
+    {
+        VectorXT current_cell_volume;
+        computeVolumeAllCells(current_cell_volume);
+        std::cout << "\ttet vol sum: " << current_cell_volume.sum() << std::endl;
+    }
 
+    T yolk_vol_curr = computeYolkVolume();
+    std::cout << "\tyolk vol sum: " << yolk_vol_curr << std::endl;
+
+    T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+    std::cout << "\tperivitelline vol sum: " << perivitelline_vol_curr << std::endl;
+}
 
 T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 {
@@ -198,15 +243,6 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         volume_term = 0.0, yolk_volume_term = 0.0,
         contraction_term = 0.0, sphere_bound_term = 0.0;
     
-    // ===================================== Edge length =====================================
-    iterateApicalEdgeSerial([&](Edge& e){    
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        T edge_length = computeEdgeSquaredNorm(vi, vj);
-        edge_length_term += sigma * edge_length;
-
-    });
-
     // ===================================== Edge constriction =====================================
     if (add_contraction_term)
     {
@@ -224,61 +260,67 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
             });
         }
     }
-
-    if (verbose)
-    {
-        std::cout << "\tE_edge " << edge_length_term << std::endl;
-        if (add_contraction_term)
-            std::cout << "\tE_contract " << contraction_term << std::endl;
-    }
-    energy += edge_length_term;
+    
     energy += contraction_term;
 
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    if (use_elastic_potential)
     {
-        
-        if (face_idx < basal_face_start)
-        {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-            T volume_barrier_energy = 0.0;
-            positionsFromIndices(positions, cell_vtx_list);
-
-            if (add_single_tet_vol_barrier)
-            {
-                if(face_vtx_list.size() == 6)
-                {
-                    if (use_cell_centroid)
-                    {
-                        computeVolumeBarrier6Points(tet_barrier_stiffness, positions, volume_barrier_energy);
-                    }
-                    else
-                        computeHexBasePrismVolumeBarrier(tet_barrier_stiffness, positions, volume_barrier_energy);
-                    energy += volume_barrier_energy;
-                    // std::cout << volume_barrier_energy << std::endl;
-                }
-            }
-        }
-    });
-
-    // ===================================== Cell Volume =====================================
-    addCellVolumePreservationEnergy(volume_term);
-
-    // ===================================== Face Area =====================================
-    addFaceAreaEnergy(Basal, gamma, area_term);
-    addFaceAreaEnergy(Lateral, alpha, area_term);
-
-    if (verbose)
-    {
-        std::cout << "\tE_area: " << area_term << std::endl;
-        std::cout << "\tE_volume: " << volume_term << std::endl;
+        T elastic_energy;
+        addElasticityEnergy(elastic_energy);
+        energy += elastic_energy;
+        if (verbose)
+            std::cout << "\tE_neo " << elastic_energy << std::endl;    
     }
+    else
+    {
+        // ===================================== Edge length =====================================
+        if (contract_apical_face)
+        {
+            addFaceAreaEnergy(Apical, sigma, contraction_term);
+        }
+        else
+            addEdgeEnergy(Apical, sigma, edge_length_term);
 
-    energy += volume_term;
-    energy += area_term;
+        addEdgeEnergy(ALL, weights_all_edges, edge_length_term);
 
+        if (verbose)
+        {
+            std::cout << "\tE_edge " << edge_length_term << std::endl;
+            if (add_contraction_term)
+                std::cout << "\tE_contract " << contraction_term << std::endl;
+        }
+        energy += edge_length_term;
+
+        // ===================================== Cell Volume =====================================
+        if (preserve_tet_vol)
+            addTetVolumePreservationEnergy(volume_term);
+        else
+            addCellVolumePreservationEnergy(volume_term);
+
+        // ===================================== Face Area =====================================
+        addFaceAreaEnergy(Basal, gamma, area_term);
+        addFaceAreaEnergy(Lateral, alpha, area_term);
+
+        if (verbose)
+        {
+            std::cout << "\tE_area: " << area_term << std::endl;
+            std::cout << "\tE_volume: " << volume_term << std::endl;
+        }
+
+        energy += volume_term;
+        energy += area_term;
+    }
+    T vol_barrier_energy = 0.0;
+    if (add_tet_vol_barrier)
+    {
+        if (use_cell_centroid)
+            addSingleTetVolBarrierEnergy(vol_barrier_energy);
+        else
+            addFixedTetLogBarrierEnergy(vol_barrier_energy);
+        energy += vol_barrier_energy;
+        if (verbose)
+            std::cout << "\tE_tet_barrier " << vol_barrier_energy << std::endl;
+    }
     if (add_yolk_volume)
     {
         addYolkVolumePreservationEnergy(yolk_volume_term);
@@ -290,26 +332,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
     if (use_sphere_radius_bound)
     {
-        for (int i = 0; i < basal_vtx_start; i++)
-        {
-            T e = 0.0;;
-            T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
-            if (sphere_bound_penalty)
-            {
-                if (Rk >= Rc)
-                {
-                    computeRadiusPenalty(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, e);
-                    sphere_bound_term += e;
-                }
-            }
-            else
-            {
-                sphereBoundEnergy(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, e);
-                // std::cout << e << " Rk " << Rk << " Rc " << Rc << std::endl;
-                // std::getchar();
-                sphere_bound_term += e;
-            }
-        }
+        addMembraneBoundEnergy(sphere_bound_term);
         if (verbose)
             std::cout << "\tE_inside_sphere " << sphere_bound_term << std::endl;
     }
@@ -341,8 +364,8 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
 T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose)
 {
-    if (use_ipc_contact)
-        updateIPCVertices(_u);
+    // if (use_ipc_contact)
+    //     updateIPCVertices(_u);
     VectorXT residual_temp = residual;
     VectorXT projected = _u;
     if (!run_diff_test)
@@ -353,16 +376,6 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         });
     }
     deformed = undeformed + projected;
-
-    // ===================================== Edge length =====================================
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Vector<T, 6> dedx;
-        computeEdgeSquaredNormGradient(vi, vj, dedx);
-        dedx *= -sigma;
-        addForceEntry<6>(residual, {e[0], e[1]}, dedx);
-    });
 
     // ===================================== Edge constriction =====================================
     if (add_contraction_term)
@@ -381,63 +394,91 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     }
 
     if (print_force_norm)
-        std::cout << "\tedge length force norm: " << (residual - residual_temp).norm() << std::endl;
+        std::cout << "\tcontracting force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
 
-    // ===================================== Cell Volume =====================================
 
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    if (use_elastic_potential)
     {
-        // cell-wise volume preservation term
-        if (face_idx < basal_face_start)
+        addElasticityForceEntries(residual);
+        if (print_force_norm)
+            std::cout << "\telastic force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
+    else
+    {
+        if (contract_apical_face)
         {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-
-            positionsFromIndices(positions, cell_vtx_list);
-
-            // cell-wise volume preservation term
-            if (face_idx < basal_face_start)
-            {
-                         
-                if (face_vtx_list.size() == 6)
-                {
-                    Vector<T, 36> dedx;
-                    if (add_single_tet_vol_barrier)
-                    {
-                        if (use_cell_centroid)
-                            computeVolumeBarrier6PointsGradient(tet_barrier_stiffness, positions, dedx);
-                        else
-                            computeHexBasePrismVolumeBarrierGradient(tet_barrier_stiffness, positions, dedx);
-                        dedx *= -1;
-                        addForceEntry<36>(residual, cell_vtx_list, dedx);
-                    }
-                }
-            }
+            addFaceAreaForceEntries(Apical, sigma, residual);
+            if (print_force_norm)
+                std::cout << "\tapical area force norm: " << (residual - residual_temp).norm() << std::endl;
         }
-    });
+        else
+        {
+            addEdgeForceEntries(Apical, sigma, residual);
+            if (print_force_norm)
+                std::cout << "\tapical edge force norm: " << (residual - residual_temp).norm() << std::endl;
+        }
+        
+        addEdgeForceEntries(ALL, weights_all_edges, residual);
+        if (print_force_norm)
+            std::cout << "\tall edges contraction force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
 
-    addCellVolumePreservationForceEntries(residual);
+        if (preserve_tet_vol)
+            addTetVolumePreservationForceEntries(residual);
+        else
+            addCellVolumePreservationForceEntries(residual);
 
-    if (print_force_norm)
-        std::cout << "\tcell volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
-    residual_temp = residual;
-    // ===================================== Face Area =====================================
-    
-    addFaceAreaForceEntries(Basal, gamma, residual);
-    addFaceAreaForceEntries(Lateral, alpha, residual);
+        if (print_force_norm)
+            std::cout << "\tcell volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+        
+        addFaceAreaForceEntries(Basal, gamma, residual);
+        addFaceAreaForceEntries(Lateral, alpha, residual);
 
-    if (print_force_norm)
-        std::cout << "\tarea force norm: " << (residual - residual_temp).norm() << std::endl;
-    residual_temp = residual;
+        if (print_force_norm)
+            std::cout << "\tbasal and lateral area force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
 
-    // ===================================== Yolk =====================================
+
+    if (add_tet_vol_barrier)
+    {
+        if (use_cell_centroid)
+            addSingleTetVolBarrierForceEntries(residual);
+        else
+            addFixedTetLogBarrierForceEneries(residual);
+        if (print_force_norm)
+            std::cout << "\ttet barrier force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
 
     if (add_yolk_volume)
         addYolkVolumePreservationForceEntries(residual);
     
+    {
+        VectorXT yolk_force = (residual - residual_temp);
+        int cnt = 0, negative_cnt = 0;
+        for (int i = basal_vtx_start; i < num_nodes; i++)
+        {
+            TV xi = deformed.segment<3>(i * 3);
+            T dot_pro = yolk_force.segment<3>(i * 3).dot(xi - mesh_centroid);
+            if (dot_pro < -1e-8)
+            {
+                negative_cnt++;
+            }
+            // else 
+            // {
+            //     if (yolk_force.norm() > 1e-8)
+            //         std::cout << "!!!!dot " << dot_pro << std::endl;
+            // }
+            
+            cnt ++;
+        }
+        std::cout << "yolk force " << negative_cnt << "/" << cnt << " is negative" << std::endl;
+    }
+
     if (print_force_norm)
         std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
@@ -445,25 +486,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
-        for (int i = 0; i < basal_vtx_start; i++)
-        {
-            Vector<T, 3> dedx;
-            if (sphere_bound_penalty)
-            {
-                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
-                if (Rk >= Rc)
-                {
-                    computeRadiusPenaltyGradient(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, dedx);
-                    addForceEntry<3>(residual, {i}, -dedx);
-                }
-            }
-            else
-            {
-                sphereBoundEnergyGradient(bound_coeff, Rc, deformed.segment<3>(i*3), mesh_centroid, dedx);
-                // std::cout << dedx.transpose() << std::endl;
-                addForceEntry<3>(residual, {i}, -dedx);
-            }
-        }
+        addMembraneBoundForceEntries(residual);
         if(print_force_norm)
             std::cout << "\tsphere bound norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
@@ -484,6 +507,9 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     if (add_perivitelline_liquid_volume)
     {
         addPerivitellineVolumePreservationForceEntries(residual);
+        if (print_force_norm)
+            std::cout << "\tprevitelline vol force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
     }
 
     if (!run_diff_test)
@@ -511,20 +537,10 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
 
     std::vector<Entry> entries;
     
-    // edge length term
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Matrix<T, 6, 6> hessian;
-        computeEdgeSquaredNormHessian(vi, vj, hessian);
-        hessian *= sigma;
-        addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-    });
-
     if (add_contraction_term)
     {
         if (contract_apical_face)
-            addFaceAreaHessianEntries(Apical, Gamma, entries, false);
+            addFaceAreaHessianEntries(Apical, Gamma, entries, project_block_hessian_PD);
         else
             iterateContractingEdgeSerial([&](Edge& e){
                 TV vi = deformed.segment<3>(e[0] * 3);
@@ -535,74 +551,59 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
             });
     }
-
-    if (add_yolk_volume)
-        addYolkVolumePreservationHessianEntries(entries, UV, false);
-    if (add_perivitelline_liquid_volume)
-        addPerivitellineVolumePreservationHessianEntries(entries, UV, false);
     
-    
-    // ===================================== Cell Volume =====================================
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    if (use_elastic_potential)
     {
-        // cell-wise volume preservation term
-        if (face_idx < basal_face_start)
+        addElasticityHessianEntries(entries, project_block_hessian_PD);
+    }
+    else
+    {
+        if (contract_apical_face)
         {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-
-            positionsFromIndices(positions, cell_vtx_list);
-            
-            if (face_vtx_list.size() == 6)
-            {
-                Matrix<T, 36, 36> hessian;
-
-                if(add_single_tet_vol_barrier)
-                {
-                    if (use_cell_centroid)
-                    {
-                        computeVolumeBarrier6PointsHessian(tet_barrier_stiffness, positions, hessian);
-                    }
-                    addHessianEntry<36>(entries, cell_vtx_list, hessian);
-                }
-            }
+            addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        }
+        else
+        {
+            addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
         }
         
-    });
+        addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
 
-    addCellVolumePreservationHessianEntries(entries, false);
-    // ===================================== Face Area =====================================
-    addFaceAreaHessianEntries(Basal, gamma, entries, false);
-    addFaceAreaHessianEntries(Lateral, alpha, entries, false);
+        if (preserve_tet_vol)
+            addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        else
+            addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        // ===================================== Face Area =====================================
+
+        addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
+        addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
+
+    }
+
+    if (add_tet_vol_barrier)
+    {
+        if (use_cell_centroid)
+            addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+        else
+            addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
+    }
+
+    if (add_yolk_volume)
+        addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
+    if (add_perivitelline_liquid_volume)
+        addPerivitellineVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
+    
+
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
-        for (int i = 0; i < basal_vtx_start; i++)
-        {
-            Matrix<T, 3, 3> hessian;
-            if (sphere_bound_penalty)
-            {
-                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
-                if (Rk >= Rc)
-                {
-                    computeRadiusPenaltyHessian(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, hessian);
-                    addHessianEntry<3>(entries, {i}, hessian);    
-                }
-            }
-            else
-            {
-                sphereBoundEnergyHessian(bound_coeff, Rc, deformed.segment<3>(i*3), mesh_centroid, hessian);
-                addHessianEntry<3>(entries, {i}, hessian);
-            }
-        }
+        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
     }
 
     // ===================================== IPC =====================================
     if (use_ipc_contact)
     {
-        addIPCHessianEntries(entries);
+        addIPCHessianEntries(entries, project_block_hessian_PD);
     }
 
     K.resize(num_nodes * 3, num_nodes * 3);
@@ -633,20 +634,10 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
     std::vector<Entry> entries;
     
-    // edge length term
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Matrix<T, 6, 6> hessian;
-        computeEdgeSquaredNormHessian(vi, vj, hessian);
-        hessian *= sigma;
-        addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-    });
-
     if (add_contraction_term)
     {
         if (contract_apical_face)
-            addFaceAreaHessianEntries(Apical, Gamma, entries, false);
+            addFaceAreaHessianEntries(Apical, Gamma, entries, project_block_hessian_PD);
         else
         {
             iterateContractingEdgeSerial([&](Edge& e){
@@ -659,76 +650,56 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             });
         }
     }
+
+    if (use_elastic_potential)
+    {
+        addElasticityHessianEntries(entries, project_block_hessian_PD);
+    }
+    else
+    {
+        if (contract_apical_face)
+        {
+            addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        }
+        else
+            addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        
+        addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
+        if (preserve_tet_vol)
+            addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        else
+            addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+
+        addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
+        addFaceAreaHessianEntries(Lateral, gamma, entries, project_block_hessian_PD);
+        
+    }
+    
+    if (add_tet_vol_barrier)
+    {
+        if (use_cell_centroid)
+            addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+        else
+            addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
+    }
+
     MatrixXT dummy_WoodBury_matrix;
 
     if (add_yolk_volume)
-        addYolkVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, false);
+        addYolkVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, project_block_hessian_PD);
 
     if (add_perivitelline_liquid_volume)
-        addPerivitellineVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, false);
-    
-
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        // cell-wise volume preservation term
-        if (face_idx < basal_face_start)
-        {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-
-            positionsFromIndices(positions, cell_vtx_list);
-            
-            if (face_vtx_list.size() == 6)
-            {
-                Matrix<T, 36, 36> hessian;
-                if (add_single_tet_vol_barrier)
-                {
-                    if (use_cell_centroid)
-                        computeVolumeBarrier6PointsHessian(tet_barrier_stiffness, positions, hessian);
-                    else
-                        computeHexBasePrismVolumeBarrierHessian(tet_barrier_stiffness, positions, hessian);
-                    addHessianEntry<36>(entries, cell_vtx_list, hessian);
-                }
-            }
-            
-        }
-        
-    });
-
-    addCellVolumePreservationHessianEntries(entries, false);
-
-    addFaceAreaHessianEntries(Basal, gamma, entries, false);
-    addFaceAreaHessianEntries(Lateral, gamma, entries, false);
+        addPerivitellineVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, project_block_hessian_PD);
     
 
     if (use_sphere_radius_bound)
     {
-        for (int i = 0; i < basal_vtx_start; i++)
-        {
-            Matrix<T, 3, 3> hessian;
-            if (sphere_bound_penalty)
-            {
-                T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
-                if (Rk >= Rc)
-                {
-                    computeRadiusPenaltyHessian(bound_coeff, Rc, deformed.segment<3>(i * 3), mesh_centroid, hessian);
-                    addHessianEntry<3>(entries, {i}, hessian);    
-                }
-            }
-            else
-            {
-                sphereBoundEnergyHessian(bound_coeff, Rc, deformed.segment<3>(i*3), mesh_centroid, hessian);
-                addHessianEntry<3>(entries, {i}, hessian);
-            }
-        }
+        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
     }
 
     if (use_ipc_contact)
     {
-        addIPCHessianEntries(entries);
-
+        addIPCHessianEntries(entries, project_block_hessian_PD);
     }
 
         
