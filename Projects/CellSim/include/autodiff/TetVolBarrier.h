@@ -22,4 +22,9 @@ void computeTetInversionBarrier(double stiffness, double dhat, const Eigen::Matr
 void computeTetInversionBarrierGradient(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, Eigen::Matrix<double, 12, 1>& energygradient);
 void computeTetInversionBarrierHessian(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, Eigen::Matrix<double, 12, 12>& energyhessian);
 
+
+void computeTetInversionBarrierFixedCentroid(double stiffness, double dhat, const Eigen::Matrix<double,3,3> & x, const Eigen::Matrix<double,3,1> & centroid, double& energy);
+void computeTetInversionBarrierFixedCentroidGradient(double stiffness, double dhat, const Eigen::Matrix<double,3,3> & x, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 9, 1>& energygradient);
+void computeTetInversionBarrierFixedCentroidHessian(double stiffness, double dhat, const Eigen::Matrix<double,3,3> & x, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 9, 9>& energyhessian);
+
 #endif

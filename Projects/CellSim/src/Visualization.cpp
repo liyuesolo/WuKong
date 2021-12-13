@@ -366,7 +366,7 @@ void VertexModel::getYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
             int next = (j + 1) % faces[i].size();
             F.row(face_cnt) = Eigen::Vector3i(centroids_start + i - basal_face_start, 
                 faces[i][j]- basal_vtx_start, faces[i][next]- basal_vtx_start);
-            C.row(face_cnt++) = TV(0, 0.3, 1.0);
+            C.row(face_cnt++) = TV(0, 1.0, 0.0);
         }  
     });
 
@@ -717,3 +717,92 @@ void VertexModel::appendCylinderOnApicalEdges(Eigen::MatrixXd& V, Eigen::MatrixX
     // }   
 }
 
+
+void VertexModel::saveAPrism(const std::string& filename, const VtxList& face_vtx_list)
+{
+    VectorXT positions;
+    int n_points = face_vtx_list.size();
+    VtxList cell_vtx_list(n_points * 2);
+    for (int i = 0; i < n_points; i++)
+    {
+        cell_vtx_list[i + n_points] = face_vtx_list[i];
+        cell_vtx_list[i] = face_vtx_list[i] - basal_vtx_start;
+    }
+    
+    positionsFromIndices(positions, cell_vtx_list);
+
+
+    std::ofstream out(filename);
+    for (int i = 0; i < n_points * 2; i++)
+    {
+        out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;        
+    }
+
+    if (n_points == 5)
+    {
+        out << "f 1 2 3" << std::endl;
+        out << "f 1 3 4" << std::endl;
+        out << "f 1 4 5" << std::endl;
+        out << "f 6 7 8" << std::endl;
+        out << "f 6 8 9" << std::endl;
+        out << "f 6 9 10" << std::endl;
+
+        for (int i = 0; i < n_points; i++)
+        {
+            out << "f " << i + n_points + 1 << " " << (i + 1) % n_points + 1 <<  " " << i + 1 << std::endl;
+            out << "f " << i + n_points + 1 << " " << (i + 1) % n_points + n_points + 1 <<  " " << (i + 1) % n_points + 1 << std::endl;
+        }
+        
+    }
+    else if (n_points == 6)
+    {
+        out << "f 1 2 3" << std::endl;
+        out << "f 1 3 4" << std::endl;
+        out << "f 1 4 6" << std::endl;
+        out << "f 6 4 5" << std::endl;
+        out << "f 8 7 9" << std::endl;
+        out << "f 9 7 10" << std::endl;
+        out << "f 10 7 12" << std::endl;
+        out << "f 10 12 11" << std::endl;
+
+        for (int i = 0; i < n_points; i++)
+        {
+            out << "f " << i + n_points + 1 << " " << (i + 1) % n_points + 1 <<  " " << i + 1 << std::endl;
+            out << "f " << i + n_points + 1 << " " << (i + 1) % n_points + n_points + 1 <<  " " << (i + 1) % n_points + 1 << std::endl;
+        }
+    }
+    out.close();
+}
+
+
+void VertexModel::saveLowVolumeTets(const std::string& filename)
+{
+    std::vector<TM3> low_vol_tet_vtx;
+    iterateFixedYolkTetsSerial([&](TM3& x_deformed, VtxList& indices)
+    {
+        T ei = 0.0;
+        T d = computeTetVolume(mesh_centroid, x_deformed.col(0), x_deformed.col(1), x_deformed.col(2));
+        if (d < 1e-6)
+        {
+            low_vol_tet_vtx.push_back(x_deformed);
+        }
+    });
+    std::ofstream out(filename);
+    for (auto vtx : low_vol_tet_vtx)
+        for (int i = 0; i < vtx.cols(); i++)
+        {
+            out << "v " << vtx.col(i).transpose() << std::endl;
+        }
+    out << "v " << mesh_centroid.transpose() << std::endl;
+    int centrod_idx = low_vol_tet_vtx.size() * 4;
+
+    for (int i = 0; i < low_vol_tet_vtx.size(); i++)
+    {
+        out << "f " << i * 4 + 1 << " " << i * 4 + 2 << " " << i * 4 + 3 << std::endl;
+        out << "f " << i * 4 + 1 << " " << i * 4 + 2 << " " << centrod_idx << std::endl;
+        out << "f " << i * 4 + 2 << " " << i * 4 + 3 << " " << centrod_idx << std::endl;
+        out << "f " << i * 4 + 3 << " " << i * 4 + 1 << " " << centrod_idx << std::endl;
+    }
+    out.close();
+    
+}

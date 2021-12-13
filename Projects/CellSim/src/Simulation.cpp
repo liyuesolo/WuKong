@@ -197,7 +197,7 @@ bool Simulation::staticSolve()
     // T total_energy_final = cells.computeTotalEnergy(u, true);
 
     deformed = undeformed + u;
-    cells.saveIPCData();
+    // cells.saveIPCData();
 
     VectorXT cell_volume_final;
     cells.computeVolumeAllCells(cell_volume_final);
@@ -229,7 +229,7 @@ bool Simulation::staticSolve()
     std::cout << "============================================================================" << std::endl;
     // std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
     // T vol;
-    
+    cells.saveBasalSurfaceMesh("stuck_basal_surface.obj");
     // cells.computeHexPrismVolumeFromTet(deformed, vol);
     // std::cout << "tet vol last print " << vol << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
@@ -650,6 +650,13 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
         alpha = std::min(alpha, inversion_free_step_size);
     }
 
+    if (cells.add_yolk_tet_barrier)
+    {
+        T inversion_free_step_size = cells.computeYolkInversionFreeStepSize(_u, du);
+        std::cout << "yolk inversion free step size: " << inversion_free_step_size << std::endl;
+        alpha = std::min(alpha, inversion_free_step_size);
+    }
+
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
     int cnt = 1;
@@ -695,7 +702,10 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
                     // sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
-                    // cells.checkTotalGradient();
+                    // cells.checkTotalGradientScale();
+                    // cells.checkTotalHessianScale();
+                    // cells.saveLowVolumeTets("low_vol_tet.obj");
+                    // cells.saveBasalSurfaceMesh("low_vol_tet_basal_surface.obj");
                     return 1e16;
                 }
                 std::cout << "# ls " << cnt << " |du| " << alpha * du.norm() << std::endl;

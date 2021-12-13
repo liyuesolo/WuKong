@@ -330,6 +330,15 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
 
     energy += yolk_volume_term;
 
+    if (add_yolk_tet_barrier)
+    {
+        T yolk_tet_barrier_energy = 0.0;
+        addYolkTetLogBarrierEnergy(yolk_tet_barrier_energy);
+        energy += yolk_tet_barrier_energy;
+        if (verbose)
+            std::cout << "\tE_yolk_tet_barrier " << yolk_tet_barrier_energy << std::endl;
+    }
+
     if (use_sphere_radius_bound)
     {
         addMembraneBoundEnergy(sphere_bound_term);
@@ -483,6 +492,14 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
 
+    if (add_yolk_tet_barrier)
+    {
+        addYolkTetLogBarrierForceEneries(residual);
+        if (print_force_norm)
+            std::cout << "\tyolk tet barrier force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
+
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
@@ -590,6 +607,9 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
+    if (add_yolk_tet_barrier)
+        addYolkTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
+        
     if (add_perivitelline_liquid_volume)
         addPerivitellineVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
     
@@ -687,7 +707,8 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, project_block_hessian_PD);
-
+    if (add_yolk_tet_barrier)
+        addYolkTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
     if (add_perivitelline_liquid_volume)
         addPerivitellineVolumePreservationHessianEntries(entries, dummy_WoodBury_matrix, project_block_hessian_PD);
     

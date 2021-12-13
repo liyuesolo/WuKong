@@ -118,6 +118,39 @@ public:
     }
 
     template <typename OP>
+    void iterateFixedYolkTetsSerial(const OP& f)
+    {
+        int cnt = 0;
+        for (VtxList& cell_face : faces)
+        {
+            if (cnt < lateral_face_start && cnt >= basal_face_start)
+            {
+                VectorXT positions;
+                positionsFromIndices(positions, cell_face);
+                std::vector<VtxList> tet_indices;
+                if (cell_face.size() == 4)
+                    continue;
+                else if (cell_face.size() == 5)
+                    tet_indices = {{0, 1, 2}, {0, 2, 3}, {0, 3, 4}};
+                else if (cell_face.size() == 6)
+                    tet_indices = {{0, 1, 2}, {0, 2, 3}, {0, 3, 5}, {5, 3, 4}};
+                for (auto tet : tet_indices)
+                {
+                    Matrix<T, 3, 3> tet_vtx;
+                    VtxList global_idx(3);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        tet_vtx.col(i) = positions.segment<3>(tet[i] * 3);
+                        global_idx[i] = cell_face[tet[i]];
+                    }   
+                    f(tet_vtx, global_idx);
+                }
+            }
+            cnt++;
+        }
+    }
+
+    template <typename OP>
     void iterateBasalFaceSerial(const OP& f)
     {
         int cnt = -1;
@@ -264,6 +297,11 @@ public:
     T tet_vol_barrier_dhat = 1e-3;
     T tet_vol_barrier_w = 1e6;
 
+    // yolk tet barrier
+    bool add_yolk_tet_barrier = false;
+    T yolk_tet_vol_barrier_dhat = 1e-3;
+    T yolk_tet_vol_barrier_w = 1e6;
+
     bool single_prism = false;
     bool woodbury = false;
     bool use_alm_on_cell_volume = false;
@@ -359,7 +397,11 @@ public:
     void addYolkVolumePreservationEnergy(T& energy);
     void addYolkVolumePreservationForceEntries(VectorXT& residual);
     void addYolkVolumePreservationHessianEntries(std::vector<Entry>& entries,
-    MatrixXT& WoodBuryMatrix, bool projectPD = false);
+        MatrixXT& WoodBuryMatrix, bool projectPD = false);
+    T computeYolkInversionFreeStepSize(const VectorXT& _u, const VectorXT& du);
+    void addYolkTetLogBarrierEnergy(T& energy);
+    void addYolkTetLogBarrierForceEneries(VectorXT& residual);
+    void addYolkTetLogBarrierHessianEneries(std::vector<Entry>& entries, bool projectPD = false);
 
     // Perivitelline.cpp
     void addPerivitellineVolumePreservationEnergy(T& energy);
@@ -428,6 +470,8 @@ public:
     void saveIndividualCellsWithOffset();
 
     void saveBasalSurfaceMesh(const std::string& filename, bool invert_normal = true);
+    void saveAPrism(const std::string& filename, const VtxList& face_vtx_list);
+    void saveLowVolumeTets(const std::string& filename);
 
     // Misc.cpp
     void saveHexTetsStep(int iteration);

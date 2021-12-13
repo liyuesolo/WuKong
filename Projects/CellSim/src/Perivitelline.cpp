@@ -2,7 +2,7 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/YolkEnergy.h"
 
-bool use_centroid_subdivide = true;
+bool use_centroid_subdivide = false;
 
 T VertexModel::computeTotalVolumeFromApicalSurface()
 {

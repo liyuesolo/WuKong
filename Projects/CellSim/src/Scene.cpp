@@ -594,7 +594,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_elastic_potential)
     {
         use_cell_centroid = false;
-        E = 100;
+        E = 10;
         nu = 0.48;
     }
 
@@ -727,7 +727,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (preserve_tet_vol)
         computeTetVolInitial();
 
-    use_ipc_contact = true;
+    use_ipc_contact = false;
     add_friction = false;
     
     if (use_ipc_contact)
@@ -774,4 +774,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     else
         tet_vol_barrier_w = 1e3;
     
+    add_yolk_tet_barrier = false;
+    yolk_tet_vol_barrier_dhat = 1e-5;
+    yolk_tet_vol_barrier_w = 1e6;
 }
