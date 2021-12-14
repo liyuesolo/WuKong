@@ -624,9 +624,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 else
                 {
                     // fixed tet sub div
-                    alpha = 300.0;
-                    gamma = 40.0;
-                    sigma = 0.5;
+                    // alpha = 300.0; //tet barrier
+                    // gamma = 40.0;
+
+                    alpha = 100.0; //tet barrier
+                    gamma = 20.0;
+                    sigma = 5;
                 }
                 
 
@@ -680,7 +683,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             if (use_cell_centroid)
                 Gamma = 10.0; //worked for the centroid formulation
             else
-                Gamma = 40.0; // used for fixed tet subdiv
+                Gamma = 80.0; // used for fixed tet subdiv
         }
     }
 
@@ -722,7 +725,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
 
     preserve_tet_vol = !use_face_centroid;
-    tet_vol_penalty = 1e6;
+    tet_vol_penalty = 1e7;
 
     if (preserve_tet_vol)
         computeTetVolInitial();
@@ -765,14 +768,14 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
     project_block_hessian_PD = false;
 
-    weights_all_edges = 0.1;
+    weights_all_edges = 4;
 
     add_tet_vol_barrier = true;
-    tet_vol_barrier_dhat = 1e-7;
+    tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid)
         tet_vol_barrier_w = 10e-22;
     else
-        tet_vol_barrier_w = 1e3;
+        tet_vol_barrier_w = 1e6;
     
     add_yolk_tet_barrier = false;
     yolk_tet_vol_barrier_dhat = 1e-5;

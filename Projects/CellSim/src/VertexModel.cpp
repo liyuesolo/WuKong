@@ -465,7 +465,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
 
     if (add_yolk_volume)
         addYolkVolumePreservationForceEntries(residual);
-    
+    if(false)
     {
         VectorXT yolk_force = (residual - residual_temp);
         int cnt = 0, negative_cnt = 0;

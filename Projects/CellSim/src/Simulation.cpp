@@ -40,11 +40,8 @@ void Simulation::initializeCells()
 
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
-    // cells.checkTotalGradient(true);
-    // cells.checkTotalHessian();
-    // cells.faceHessianChainRuleTest();
     
-    max_newton_iter = 5000;
+    max_newton_iter = 1000;
     // verbose = true;
     cells.print_force_norm = true;
 
@@ -166,7 +163,15 @@ bool Simulation::staticSolve()
             cells.saveCellMesh(cnt);
         // cells.saveIPCData(cnt);
         // cells.saveHexTetsStep(cnt);
-        // std::exit(0);
+        // if (cnt % 20 == 0)
+        // {
+            
+        //     if (cells.alpha > 300)
+        //         cells.alpha = 300;
+        //     else
+        //         cells.alpha *= 1.5;
+            
+        // }
         // if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
@@ -396,7 +401,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         int num_zero_eigen_value = 0;
 
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        bool search_dir_correct_sign = dot_dx_g > 1e-2;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
         bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
@@ -646,7 +651,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     if (cells.add_tet_vol_barrier)
     {
         T inversion_free_step_size = cells.computeInversionFreeStepSize(_u, du);
-        // std::cout << inversion_free_step_size << std::endl;
+        std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
         alpha = std::min(alpha, inversion_free_step_size);
     }
 

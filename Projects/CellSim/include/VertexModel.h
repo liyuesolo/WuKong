@@ -325,6 +325,8 @@ public:
     bool use_elastic_potential = false;
     bool project_block_hessian_PD = false;
 
+    bool add_centroid_points = false;
+
 
     bool print_force_norm = false;
 

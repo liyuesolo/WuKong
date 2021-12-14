@@ -198,80 +198,184 @@ void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
         std::vector<IV> tri_faces;
         std::vector<TV> vertices;
         std::vector<TV> colors;
-        // std::cout << basal_face_start << std::endl;
-        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        
+        if (use_cell_centroid)
         {
-            if (face_idx < basal_face_start)
+            iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
             {
-                // std::cout << "f " << face_idx << std::endl;
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
-                VectorXT positions_basal;
-                VtxList basal_face_vtx_list = face_vtx_list;
-                
-                for (int& idx : basal_face_vtx_list)
-                    idx += basal_vtx_start;
-
-                positionsFromIndices(positions_basal, basal_face_vtx_list);
-                TV apical_centroid, basal_centroid;
-                computeFaceCentroid(face_vtx_list, apical_centroid);
-
-                computeFaceCentroid(basal_face_vtx_list, basal_centroid);
-                
-                TV apical_centroid_shifted = mesh_centroid + (apical_centroid - mesh_centroid) * offset_percentage;
-                TV shift = apical_centroid_shifted - apical_centroid;
-                VtxList new_face_vtx;
-                // V.row(vtx_cnt) = apical_centroid_shifted;
-                vertices.push_back(apical_centroid_shifted);
-                // out << "v " << apical_centroid_shifted.transpose() << std::endl;
-                new_face_vtx.push_back(vtx_cnt);
-                for (int i = 0; i < face_vtx_list.size(); i++)
-                    new_face_vtx.push_back(vtx_cnt + i + 1);
-                vtx_cnt++;
-                for (int i = 0; i < face_vtx_list.size(); i++)
+                if (face_idx < basal_face_start)
                 {
-                    int j = (i + 1) % face_vtx_list.size();
-                    positions.segment<3>(i * 3) += shift;
-                    // out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
-                    // V.row(vtx_cnt) =  positions.segment<3>(i * 3);
-                    vertices.push_back(positions.segment<3>(i * 3));
-                    colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
-                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[0], new_face_vtx[1 + j]));
+                    // std::cout << "f " << face_idx << std::endl;
+                    VectorXT positions;
+                    positionsFromIndices(positions, face_vtx_list);
+                    VectorXT positions_basal;
+                    VtxList basal_face_vtx_list = face_vtx_list;
+                    
+                    for (int& idx : basal_face_vtx_list)
+                        idx += basal_vtx_start;
+
+                    positionsFromIndices(positions_basal, basal_face_vtx_list);
+                    TV apical_centroid, basal_centroid;
+                    computeFaceCentroid(face_vtx_list, apical_centroid);
+
+                    computeFaceCentroid(basal_face_vtx_list, basal_centroid);
+                    
+                    TV apical_centroid_shifted = mesh_centroid + (apical_centroid - mesh_centroid) * offset_percentage;
+                    TV shift = apical_centroid_shifted - apical_centroid;
+                    VtxList new_face_vtx;
+                    // V.row(vtx_cnt) = apical_centroid_shifted;
+                    vertices.push_back(apical_centroid_shifted);
+                    // out << "v " << apical_centroid_shifted.transpose() << std::endl;
+                    new_face_vtx.push_back(vtx_cnt);
+                    for (int i = 0; i < face_vtx_list.size(); i++)
+                        new_face_vtx.push_back(vtx_cnt + i + 1);
                     vtx_cnt++;
-                }
+                    for (int i = 0; i < face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % face_vtx_list.size();
+                        positions.segment<3>(i * 3) += shift;
+                        // out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
+                        // V.row(vtx_cnt) =  positions.segment<3>(i * 3);
+                        vertices.push_back(positions.segment<3>(i * 3));
+                        colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
+                        tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[0], new_face_vtx[1 + j]));
+                        vtx_cnt++;
+                    }
 
-                VtxList new_face_vtx_basal;
-                TV basal_centroid_shifted = basal_centroid + shift;
-                // out << "v " << basal_centroid_shifted.transpose() << std::endl;
-                // V.row(vtx_cnt) =  basal_centroid_shifted;
-                vertices.push_back(basal_centroid_shifted);
-                new_face_vtx_basal.push_back(vtx_cnt);
-                for (int i = 0; i < basal_face_vtx_list.size(); i++)
-                    new_face_vtx_basal.push_back(vtx_cnt + i + 1);
-                vtx_cnt++;
-                for (int i = 0; i < basal_face_vtx_list.size(); i++)
-                {
-                    int j = (i + 1) % basal_face_vtx_list.size();
-                    positions_basal.segment<3>(i * 3) += shift;
-                    // out << "v " << positions_basal.segment<3>(i * 3).transpose() << std::endl;
-                    // V.row(vtx_cnt) =  positions_basal.segment<3>(i * 3);
-                    vertices.push_back(positions_basal.segment<3>(i * 3));
-                    colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
-                    tri_faces.push_back(IV(new_face_vtx_basal[0], new_face_vtx_basal[1 + i], new_face_vtx_basal[1 + j]));
+                    VtxList new_face_vtx_basal;
+                    TV basal_centroid_shifted = basal_centroid + shift;
+                    // out << "v " << basal_centroid_shifted.transpose() << std::endl;
+                    // V.row(vtx_cnt) =  basal_centroid_shifted;
+                    vertices.push_back(basal_centroid_shifted);
+                    new_face_vtx_basal.push_back(vtx_cnt);
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                        new_face_vtx_basal.push_back(vtx_cnt + i + 1);
                     vtx_cnt++;
-                }
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % basal_face_vtx_list.size();
+                        positions_basal.segment<3>(i * 3) += shift;
+                        // out << "v " << positions_basal.segment<3>(i * 3).transpose() << std::endl;
+                        // V.row(vtx_cnt) =  positions_basal.segment<3>(i * 3);
+                        vertices.push_back(positions_basal.segment<3>(i * 3));
+                        colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
+                        tri_faces.push_back(IV(new_face_vtx_basal[0], new_face_vtx_basal[1 + i], new_face_vtx_basal[1 + j]));
+                        vtx_cnt++;
+                    }
 
-                for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % basal_face_vtx_list.size();
+                        tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[1 + j], new_face_vtx_basal[ 1 + j]));
+                        tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx_basal[ 1 + j], new_face_vtx_basal[ 1 + i]));
+                        colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
+                        colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
+                    }
+                    
+                }
+            });
+        }
+        else
+        {
+            iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+            {
+                if (face_idx < basal_face_start)
                 {
-                    int j = (i + 1) % basal_face_vtx_list.size();
-                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[1 + j], new_face_vtx_basal[ 1 + j]));
-                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx_basal[ 1 + j], new_face_vtx_basal[ 1 + i]));
-                    colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
-                    colors.push_back(Eigen::Vector3d(0.0, 0.3, 1.0));
-                }
+                    VectorXT positions;
+                    positionsFromIndices(positions, face_vtx_list);
+                    VectorXT positions_basal;
+                    VtxList basal_face_vtx_list = face_vtx_list;
+                    
+                    for (int& idx : basal_face_vtx_list)
+                        idx += basal_vtx_start;
 
-            }
-        });
+                    positionsFromIndices(positions_basal, basal_face_vtx_list);
+                    TV apical_centroid, basal_centroid;
+                    computeFaceCentroid(face_vtx_list, apical_centroid);
+
+                    computeFaceCentroid(basal_face_vtx_list, basal_centroid);
+                    
+                    TV apical_centroid_shifted = mesh_centroid + (apical_centroid - mesh_centroid) * offset_percentage;
+                    TV shift = apical_centroid_shifted - apical_centroid;
+
+                    
+                    auto appendFace = [&](int n_edge, Region region, const VtxList& vtx_list)
+                    {
+                        TV c;
+                        if (region == Apical)
+                            c = Eigen::Vector3d(1.0, 0.3, 0.0);
+                        else if (region == Lateral)
+                            c = Eigen::Vector3d(0.0, 0.3, 1.0);
+                        else
+                            c = Eigen::Vector3d(0.0, 1.0, 0.0);
+                        
+                        if (n_edge == 4)
+                        {
+                            colors.push_back(c); colors.push_back(c);
+                            tri_faces.push_back(IV(vtx_list[1], vtx_list[0], vtx_list[2]));
+                            tri_faces.push_back(IV(vtx_list[2], vtx_list[0], vtx_list[3]));
+                        }
+                        else if (n_edge == 5)
+                        {
+                            colors.push_back(c); colors.push_back(c); colors.push_back(c);
+                            tri_faces.push_back(IV(vtx_list[1], vtx_list[0], vtx_list[2]));
+                            tri_faces.push_back(IV(vtx_list[2], vtx_list[0], vtx_list[3]));
+                            tri_faces.push_back(IV(vtx_list[3], vtx_list[0], vtx_list[4]));
+                        }
+                        else if (n_edge == 6)
+                        {
+                            colors.push_back(c); colors.push_back(c); colors.push_back(c); colors.push_back(c);
+                            tri_faces.push_back(IV(vtx_list[1], vtx_list[0], vtx_list[2]));
+                            tri_faces.push_back(IV(vtx_list[2], vtx_list[0], vtx_list[3]));
+                            tri_faces.push_back(IV(vtx_list[3], vtx_list[0], vtx_list[5]));
+                            tri_faces.push_back(IV(vtx_list[3], vtx_list[5], vtx_list[4]));
+                        }
+                    };
+
+                    VtxList new_face_vtx;
+                    for (int i = 0; i < face_vtx_list.size(); i++)
+                        new_face_vtx.push_back(vtx_cnt + i);
+
+                    for (int i = 0; i < face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % face_vtx_list.size();
+                        positions.segment<3>(i * 3) += shift;
+                        vertices.push_back(positions.segment<3>(i * 3));
+                        vtx_cnt++;
+                    }
+                    appendFace(face_vtx_list.size(), Apical, new_face_vtx);
+
+                    VtxList new_face_vtx_basal;
+                
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                        new_face_vtx_basal.push_back(vtx_cnt + i );
+                    
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % basal_face_vtx_list.size();
+                        positions_basal.segment<3>(i * 3) += shift;
+                        vertices.push_back(positions_basal.segment<3>(i * 3));
+                        vtx_cnt++;
+                    }
+                    std::reverse(new_face_vtx_basal.begin(), new_face_vtx_basal.end());
+                    appendFace(face_vtx_list.size(), Basal, new_face_vtx_basal);
+                    std::reverse(new_face_vtx_basal.begin(), new_face_vtx_basal.end());
+
+                    for (int i = 0; i < basal_face_vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % basal_face_vtx_list.size();
+                        
+                        VtxList new_face_vtx_lateral = {new_face_vtx[i], new_face_vtx[j], new_face_vtx_basal[j], new_face_vtx_basal[i]};
+                        std::reverse(new_face_vtx_lateral.begin(), new_face_vtx_lateral.end());
+                        appendFace(4, Lateral, new_face_vtx_lateral);
+                    }
+                    
+
+                    
+                }
+            });
+        }
+        
         // std::cout << "set V done " << std::endl;
         V.resize(vtx_cnt, 3);
         F.resize(tri_faces.size(), 3);

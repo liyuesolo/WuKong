@@ -1,6 +1,8 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/TetVolBarrier.h"
 
+#include <fstream>
+
 void VertexModel::addFixedTetLogBarrierEnergy(T& energy)
 {
     T barrier_energy = 0.0;
@@ -140,7 +142,7 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
                     return;
                 
                 T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
-                if (d < 1e-7)
+                if (d < 1e-8)
                 {
                     constraint_violated = true;
                 }
@@ -150,7 +152,39 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
         if (constraint_violated)
             step_size *= 0.8;
         else
+        {
+            // if (step_size < 1e-4)
+            // {
+            //     std::vector<TetVtx> low_vol_tet_vtx;
+            //     iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
+            //     {
+            //         T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+            //         if (d < 1e-6)
+            //         {
+            //             low_vol_tet_vtx.push_back(x_deformed);
+            //         }
+            //     });
+            //     std::ofstream out("low_vol_tet_cell.obj");
+            //     for (auto vtx : low_vol_tet_vtx)
+            //         for (int i = 0; i < vtx.cols(); i++)
+            //         {
+            //             out << "v " << vtx.col(i).transpose() << std::endl;
+            //         }
+                
+            //     for (int i = 0; i < low_vol_tet_vtx.size(); i++)
+            //     {
+            //         out << "f " << i * 4 + 1 << " " << i * 4 + 2 << " " << i * 4 + 3 << std::endl;
+            //         out << "f " << i * 4 + 1 << " " << i * 4 + 2 << " " << i * 4 + 4 << std::endl;
+            //         out << "f " << i * 4 + 2 << " " << i * 4 + 3 << " " << i * 4 + 4 << std::endl;
+            //         out << "f " << i * 4 + 3 << " " << i * 4 + 1 << " " << i * 4 + 4 << std::endl;
+            //     }
+            //     out.close();
+
+            //     // generateMeshForRendering();
+            //     std::exit(0);
+            // }
             return step_size;
+        }
     }
 }
 
