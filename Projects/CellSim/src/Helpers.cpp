@@ -4,14 +4,14 @@
 
 
 
-void VertexModel::updateFixedCellCentroid()
+void VertexModel::updateFixedCentroids()
 {
     fixed_cell_centroids = VectorXT::Zero(basal_face_start * 3);
+    fixed_face_centroids = VectorXT::Zero(faces.size() * 3);
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         VectorXT positions;
         positionsFromIndices(positions, face_vtx_list);
-        T area_energy = 0.0;
         
         // cell-wise volume preservation term
         if (face_idx < basal_face_start)
@@ -20,6 +20,9 @@ void VertexModel::updateFixedCellCentroid()
             computeCellCentroid(face_vtx_list, centroid);
             fixed_cell_centroids.segment<3>(face_idx * 3) = centroid;
         }
+        TV face_centroid;
+        computeFaceCentroid(face_vtx_list, face_centroid);
+        fixed_face_centroids.segment<3>(face_idx * 3) = face_centroid;
     });
 }
 

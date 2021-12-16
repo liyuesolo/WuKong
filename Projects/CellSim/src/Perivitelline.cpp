@@ -2,7 +2,7 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/YolkEnergy.h"
 
-bool use_centroid_subdivide = false;
+// bool use_cell_centroid = false;
 
 T VertexModel::computeTotalVolumeFromApicalSurface()
 {
@@ -17,21 +17,21 @@ T VertexModel::computeTotalVolumeFromApicalSurface()
             T cone_volume;
             if (face_vtx_list.size() == 4) 
             {
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume4Points(positions, mesh_centroid, cone_volume);
                 else
                     computeQuadConeVolume(positions, mesh_centroid, cone_volume);
             }
             else if (face_vtx_list.size() == 5) 
             {
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume5Points(positions, mesh_centroid, cone_volume);
                 else
                     computePentaConeVolume(positions, mesh_centroid, cone_volume);
             }
             else if (face_vtx_list.size() == 6) 
             {
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume6Points(positions, mesh_centroid, cone_volume);
                 else
                     computeHexConeVolume(positions, mesh_centroid, cone_volume);
@@ -73,7 +73,7 @@ void VertexModel::addPerivitellineVolumePreservationForceEntries(VectorXT& resid
             if (face_vtx_list.size() == 4)
             {
                 Vector<T, 12> dedx;
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
                 else
                     computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -83,7 +83,7 @@ void VertexModel::addPerivitellineVolumePreservationForceEntries(VectorXT& resid
             else if (face_vtx_list.size() == 5)
             {
                 Vector<T, 15> dedx;
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
                 else
                     computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -93,7 +93,7 @@ void VertexModel::addPerivitellineVolumePreservationForceEntries(VectorXT& resid
             else if (face_vtx_list.size() == 6)
             {
                 Vector<T, 18> dedx;
-                if (use_centroid_subdivide)
+                if (use_cell_centroid)
                     computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
                 else
                     computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -127,7 +127,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 if (face_vtx_list.size() == 4)
                 {
                     Vector<T, 12> dedx;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -136,7 +136,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 else if (face_vtx_list.size() == 5)
                 {
                     Vector<T, 15> dedx;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -145,7 +145,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 else if (face_vtx_list.size() == 6)
                 {
                     Vector<T, 18> dedx;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -207,7 +207,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 {
                     
                     Matrix<T, 12, 12> d2Vdx2;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
@@ -219,7 +219,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 else if (face_vtx_list.size() == 5)
                 {
                     Matrix<T, 15, 15> d2Vdx2;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computePentaConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
@@ -232,7 +232,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 else if (face_vtx_list.size() == 6)
                 {
                     Matrix<T, 18, 18> d2Vdx2;
-                    if (use_centroid_subdivide)
+                    if (use_cell_centroid)
                         computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computeHexConeVolumeHessian(positions, mesh_centroid, d2Vdx2);

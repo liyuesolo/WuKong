@@ -27,4 +27,16 @@ void computeTetInversionBarrierFixedCentroid(double stiffness, double dhat, cons
 void computeTetInversionBarrierFixedCentroidGradient(double stiffness, double dhat, const Eigen::Matrix<double,3,3> & x, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 9, 1>& energygradient);
 void computeTetInversionBarrierFixedCentroidHessian(double stiffness, double dhat, const Eigen::Matrix<double,3,3> & x, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 9, 9>& energyhessian);
 
+void computeVolLogBarrier4Points(double stiffness, double dhat, const Eigen::Matrix<double,24,1> & cell_vertices, double& energy);
+void computeVolLogBarrier4PointsGradient(double stiffness, double dhat, const Eigen::Matrix<double,24,1> & cell_vertices, Eigen::Matrix<double, 24, 1>& energygradient);
+void computeVolLogBarrier4PointsHessian(double stiffness, double dhat, const Eigen::Matrix<double,24,1> & cell_vertices, Eigen::Matrix<double, 24, 24>& energyhessian);
+
+void computeVolLogBarrier5Points(double stiffness, double dhat, const Eigen::Matrix<double,30,1> & cell_vertices, double& energy);
+void computeVolLogBarrier5PointsGradient(double stiffness, double dhat, const Eigen::Matrix<double,30,1> & cell_vertices, Eigen::Matrix<double, 30, 1>& energygradient);
+void computeVolLogBarrier5PointsHessian(double stiffness, double dhat, const Eigen::Matrix<double,30,1> & cell_vertices, Eigen::Matrix<double, 30, 30>& energyhessian);
+
+void computeVolLogBarrier6Points(double stiffness, double dhat, const Eigen::Matrix<double,36,1> & cell_vertices, double& energy);
+void computeVolLogBarrier6PointsGradient(double stiffness, double dhat, const Eigen::Matrix<double,36,1> & cell_vertices, Eigen::Matrix<double, 36, 1>& energygradient);
+void computeVolLogBarrier6PointsHessian(double stiffness, double dhat, const Eigen::Matrix<double,36,1> & cell_vertices, Eigen::Matrix<double, 36, 36>& energyhessian);
+
 #endif

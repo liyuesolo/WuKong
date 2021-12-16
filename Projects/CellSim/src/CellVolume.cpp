@@ -1,6 +1,6 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/CellVolume.h"
-
+#include "../include/autodiff/TetVolPenalty.h"
 
 void VertexModel::computePentaPrismTetVol(const Vector<T, 30>& prism_vertices, Vector<T, 9>& tet_vol)
 {
@@ -141,119 +141,143 @@ void VertexModel::computeTetVolInitial()
 
 void VertexModel::addTetVolumePreservationEnergy(T& energy)
 {
-    int cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // int cnt = 0;
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     if (face_idx < basal_face_start)
+    //     {
+    //         T tet_vol_preservation_energy = 0.0;
+    //         VectorXT positions;
+    //         VtxList cell_vtx_list = face_vtx_list;
+    //         for (int idx : face_vtx_list)
+    //             cell_vtx_list.push_back(idx + basal_vtx_start);
+
+    //         positionsFromIndices(positions, cell_vtx_list);
+
+    //         if (face_vtx_list.size() == 4)
+    //         {
+
+    //         }
+    //         else if (face_vtx_list.size() == 5)
+    //         {
+    //             computePentaBasePrismVolumePenalty(tet_vol_penalty, positions, tet_vol_init.segment<9>(cnt), tet_vol_preservation_energy);
+    //             cnt += 9;
+    //         }
+    //         else if (face_vtx_list.size() == 6)
+    //         {
+    //             computeHexBasePrismVolumePenalty(tet_vol_penalty, positions, tet_vol_init.segment<12>(cnt), tet_vol_preservation_energy);
+    //             cnt += 12;
+    //         }
+
+    //         energy += tet_vol_preservation_energy;
+    //     }
+    // });
+
+    T tet_vol_penalty_energy = 0.0;
+    iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
     {
-        if (face_idx < basal_face_start)
-        {
-            T tet_vol_preservation_energy = 0.0;
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-
-            positionsFromIndices(positions, cell_vtx_list);
-
-            if (face_vtx_list.size() == 4)
-            {
-
-            }
-            else if (face_vtx_list.size() == 5)
-            {
-                computePentaBasePrismVolumePenalty(tet_vol_penalty, positions, tet_vol_init.segment<9>(cnt), tet_vol_preservation_energy);
-                cnt += 9;
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                computeHexBasePrismVolumePenalty(tet_vol_penalty, positions, tet_vol_init.segment<12>(cnt), tet_vol_preservation_energy);
-                cnt += 12;
-            }
-
-            energy += tet_vol_preservation_energy;
-        }
+        T ei;
+        computeSingleTetVolPenalty(tet_vol_penalty, x_deformed, x_undeformed, ei);
+        tet_vol_penalty_energy += ei;
     });
+    energy += tet_vol_penalty_energy;
 }
 void VertexModel::addTetVolumePreservationForceEntries(VectorXT& residual)
 {
-    int cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        if (face_idx < basal_face_start)
-        {
+    // int cnt = 0;
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     if (face_idx < basal_face_start)
+    //     {
             
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
+    //         VectorXT positions;
+    //         VtxList cell_vtx_list = face_vtx_list;
+    //         for (int idx : face_vtx_list)
+    //             cell_vtx_list.push_back(idx + basal_vtx_start);
 
-            positionsFromIndices(positions, cell_vtx_list);
+    //         positionsFromIndices(positions, cell_vtx_list);
 
-            if (face_vtx_list.size() == 4)
-            {
+    //         if (face_vtx_list.size() == 4)
+    //         {
 
-            }
-            else if (face_vtx_list.size() == 5)
-            {
-                Vector<T, 30> dedx;
-                computePentaBasePrismVolumePenaltyGradient(tet_vol_penalty, positions, 
-                    tet_vol_init.segment<9>(cnt), dedx);
-                addForceEntry<30>(residual, cell_vtx_list, -dedx);
-                cnt += 9;
+    //         }
+    //         else if (face_vtx_list.size() == 5)
+    //         {
+    //             Vector<T, 30> dedx;
+    //             computePentaBasePrismVolumePenaltyGradient(tet_vol_penalty, positions, 
+    //                 tet_vol_init.segment<9>(cnt), dedx);
+    //             addForceEntry<30>(residual, cell_vtx_list, -dedx);
+    //             cnt += 9;
                 
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                Vector<T, 36> dedx;
-                computeHexBasePrismVolumePenaltyGradient(tet_vol_penalty, positions, 
-                    tet_vol_init.segment<12>(cnt), dedx);
-                addForceEntry<36>(residual, cell_vtx_list, -dedx);
-                cnt += 12;
-            }
-        }
+    //         }
+    //         else if (face_vtx_list.size() == 6)
+    //         {
+    //             Vector<T, 36> dedx;
+    //             computeHexBasePrismVolumePenaltyGradient(tet_vol_penalty, positions, 
+    //                 tet_vol_init.segment<12>(cnt), dedx);
+    //             addForceEntry<36>(residual, cell_vtx_list, -dedx);
+    //             cnt += 12;
+    //         }
+    //     }
+    // });
+    iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
+    {
+        Vector<T, 12> dedx;
+        computeSingleTetVolPenaltyGradient(tet_vol_penalty, x_deformed, x_undeformed, dedx);
+        addForceEntry<12>(residual, indices, -dedx);
     });
 }
 void VertexModel::addTetVolumePreservationHessianEntries(std::vector<Entry>& entries, 
     bool projectPD)
 {
-    int cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        if (face_idx < basal_face_start)
-        {
-            T tet_vol_preservation_energy = 0.0;
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
+    // int cnt = 0;
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     if (face_idx < basal_face_start)
+    //     {
+    //         T tet_vol_preservation_energy = 0.0;
+    //         VectorXT positions;
+    //         VtxList cell_vtx_list = face_vtx_list;
+    //         for (int idx : face_vtx_list)
+    //             cell_vtx_list.push_back(idx + basal_vtx_start);
 
-            positionsFromIndices(positions, cell_vtx_list);
+    //         positionsFromIndices(positions, cell_vtx_list);
 
-            if (face_vtx_list.size() == 4)
-            {
+    //         if (face_vtx_list.size() == 4)
+    //         {
 
-            }
-            else if (face_vtx_list.size() == 5)
-            {
-                Matrix<T, 30, 30> hessian;
-                computePentaBasePrismVolumePenaltyHessian(tet_vol_penalty, positions, 
-                    tet_vol_init.segment<9>(cnt), hessian);
-                if (projectPD)
-                    projectBlockPD<30>(hessian);
-                addHessianEntry<30>(entries, cell_vtx_list, hessian);
-                cnt += 9;
+    //         }
+    //         else if (face_vtx_list.size() == 5)
+    //         {
+    //             Matrix<T, 30, 30> hessian;
+    //             computePentaBasePrismVolumePenaltyHessian(tet_vol_penalty, positions, 
+    //                 tet_vol_init.segment<9>(cnt), hessian);
+    //             if (projectPD)
+    //                 projectBlockPD<30>(hessian);
+    //             addHessianEntry<30>(entries, cell_vtx_list, hessian);
+    //             cnt += 9;
                 
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                Matrix<T, 36, 36> hessian;
-                computeHexBasePrismVolumePenaltyHessian(tet_vol_penalty, positions, 
-                    tet_vol_init.segment<12>(cnt), hessian);
-                if (projectPD)
-                    projectBlockPD<36>(hessian);
-                addHessianEntry<36>(entries, cell_vtx_list, hessian);
-                cnt += 12;
-            }
-        }
+    //         }
+    //         else if (face_vtx_list.size() == 6)
+    //         {
+    //             Matrix<T, 36, 36> hessian;
+    //             computeHexBasePrismVolumePenaltyHessian(tet_vol_penalty, positions, 
+    //                 tet_vol_init.segment<12>(cnt), hessian);
+    //             if (projectPD)
+    //                 projectBlockPD<36>(hessian);
+    //             addHessianEntry<36>(entries, cell_vtx_list, hessian);
+    //             cnt += 12;
+    //         }
+    //     }
+    // });
+
+    iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
+    {
+        Matrix<T, 12, 12> hessian;
+        computeSingleTetVolPenaltyHessian(tet_vol_penalty, x_deformed, x_undeformed, hessian);
+        if (projectPD)
+            projectBlockPD<12>(hessian);
+        addHessianEntry<12>(entries, indices, hessian);
     });
 }
 
@@ -262,79 +286,95 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
     // each apical face corresponds to one cell
     cell_volume_list = VectorXT::Zero(basal_face_start);
 
-    // use apical face to iterate other faces within this cell for now
-    int cnt = 0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
-        if (face_idx < basal_face_start)
+    if (preserve_tet_vol)
+    {
+        int cnt = 0;
+        T vol_sum = 0.0;
+        iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
         {
-            VectorXT positions;
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + basal_vtx_start);
-            
-
-            positionsFromIndices(positions, cell_vtx_list);
-            
-            if (face_vtx_list.size() == 4)
+            T vi;
+            computeSingleTetVol(x_deformed, vi);
+            vol_sum += vi;
+            cnt ++;
+        });
+        cell_volume_list = VectorXT::Ones(cnt) * vol_sum / T(cnt);
+    }
+    else
+    {
+        int cnt = 0;
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
+            if (face_idx < basal_face_start)
             {
-                if (preserve_tet_vol)
-                {
+                VectorXT positions;
+                VtxList cell_vtx_list = face_vtx_list;
+                for (int idx : face_vtx_list)
+                    cell_vtx_list.push_back(idx + basal_vtx_start);
+                
 
-                }
-                else
+                positionsFromIndices(positions, cell_vtx_list);
+                
+                if (face_vtx_list.size() == 4)
                 {
-                    if (use_cell_centroid)
-                        computeVolume4Points(positions, cell_volume_list[face_idx]);
-                    else
-                        computeQuadBasePrismVolume(positions, cell_volume_list[face_idx]);
-                }
-            }
-            else if (face_vtx_list.size() == 5)
-            {
-                if (preserve_tet_vol)
-                {
-                    Vector<T, 9> tet_vol;
-                    computePentaPrismTetVol(positions, tet_vol);
-                    cell_volume_list[face_idx] += tet_vol.sum();
-                }
-                else
-                {
-                    if (use_cell_centroid)
+                    if (preserve_tet_vol)
                     {
-                        if (use_fixed_cell_centroid)
-                            computeVolume5PointsFixedCentroid(positions, fixed_cell_centroids.segment<3>(face_idx * 3), cell_volume_list[face_idx]);
-                        else
-                            computeVolume5Points(positions, cell_volume_list[face_idx]);
+
                     }
                     else
-                        computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
-                }
-                
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                if (preserve_tet_vol)
-                {
-                    Vector<T, 12> tet_vol;
-                    computeHexPrismTetVol(positions, tet_vol);
-                    cell_volume_list[face_idx] += tet_vol.sum();
-                }
-                else
-                {
-                    if (use_cell_centroid)
                     {
-                        if (use_fixed_cell_centroid)
-                            computeVolume6PointsFixedCentroid(positions, fixed_cell_centroids.segment<3>(face_idx * 3), cell_volume_list[face_idx]);
+                        if (use_cell_centroid)
+                            computeVolume4Points(positions, cell_volume_list[face_idx]);
                         else
-                            computeVolume6Points(positions, cell_volume_list[face_idx]);
+                            computeQuadBasePrismVolume(positions, cell_volume_list[face_idx]);
+                    }
+                }
+                else if (face_vtx_list.size() == 5)
+                {
+                    if (preserve_tet_vol)
+                    {
+                        Vector<T, 9> tet_vol;
+                        computePentaPrismTetVol(positions, tet_vol);
+                        cell_volume_list[face_idx] += tet_vol.sum();
                     }
                     else
-                        computeHexBasePrismVolume(positions, cell_volume_list[face_idx]);
+                    {
+                        if (use_cell_centroid)
+                        {
+                            if (use_fixed_centroid)
+                                computeVolume5PointsFixedCentroid(positions, fixed_cell_centroids.segment<3>(face_idx * 3), cell_volume_list[face_idx]);
+                            else
+                                computeVolume5Points(positions, cell_volume_list[face_idx]);
+                        }
+                        else
+                            computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
+                    }
+                    
                 }
-                
+                else if (face_vtx_list.size() == 6)
+                {
+                    if (preserve_tet_vol)
+                    {
+                        Vector<T, 12> tet_vol;
+                        computeHexPrismTetVol(positions, tet_vol);
+                        cell_volume_list[face_idx] += tet_vol.sum();
+                    }
+                    else
+                    {
+                        if (use_cell_centroid)
+                        {
+                            if (use_fixed_centroid)
+                                computeVolume6PointsFixedCentroid(positions, fixed_cell_centroids.segment<3>(face_idx * 3), cell_volume_list[face_idx]);
+                            else
+                                computeVolume6Points(positions, cell_volume_list[face_idx]);
+                        }
+                        else
+                            computeHexBasePrismVolume(positions, cell_volume_list[face_idx]);
+                    }
+                    
+                }
             }
-        }
-    });
+        });
+    }
+    
 }
 
 
@@ -410,7 +450,7 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 30> dedx;
                     if (use_cell_centroid)
                     {
-                        if (use_fixed_cell_centroid)
+                        if (use_fixed_centroid)
                             computeVolume5PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dedx);
                         else
                             computeVolume5PointsGradient(positions, dedx);
@@ -434,7 +474,7 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 36> dedx;
                     if (use_cell_centroid)
                     {
-                        if (use_fixed_cell_centroid)
+                        if (use_fixed_centroid)
                             computeVolume6PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dedx);
                         else
                             computeVolume6PointsGradient(positions, dedx);
@@ -519,7 +559,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 30, 30> d2Vdx2;
                 if (use_cell_centroid)
                 {
-                    if (use_fixed_cell_centroid)
+                    if (use_fixed_centroid)
                         computeVolume5PointsFixedCentroidHessian(positions, fixed_cell_centroids.segment<3>(face_idx * 3), d2Vdx2);
                     else
                         computeVolume5PointsHessian(positions, d2Vdx2);
@@ -530,7 +570,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Vector<T, 30> dVdx;
                 if (use_cell_centroid)
                 {
-                    if (use_fixed_cell_centroid)
+                    if (use_fixed_centroid)
                         computeVolume5PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dVdx);
                     else
                         computeVolume5PointsGradient(positions, dVdx);
@@ -562,7 +602,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 36, 36> d2Vdx2;
                 if (use_cell_centroid)
                 {
-                    if (use_fixed_cell_centroid)
+                    if (use_fixed_centroid)
                         computeVolume6PointsFixedCentroidHessian(positions, fixed_cell_centroids.segment<3>(face_idx * 3), d2Vdx2);
                     else
                         computeVolume6PointsHessian(positions, d2Vdx2);
@@ -573,7 +613,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Vector<T, 36> dVdx;
                 if (use_cell_centroid)
                 {
-                    if (use_fixed_cell_centroid)
+                    if (use_fixed_centroid)
                         computeVolume6PointsFixedCentroidGradient(positions, fixed_cell_centroids.segment<3>(face_idx * 3), dVdx);
                     else
                         computeVolume6PointsGradient(positions, dVdx);

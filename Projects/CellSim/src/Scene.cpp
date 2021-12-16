@@ -584,10 +584,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     undeformed = deformed;
 
     B = 1e6;
-    By = 1e4;
+    By = 1e5;
 
     contract_apical_face = false;
-    use_cell_centroid = false;
+    use_cell_centroid = true;
     
     use_elastic_potential = false;
 
@@ -616,8 +616,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 // this weights lead to invagination when height = 1.0
                 if (use_cell_centroid)
                 {
-                    // alpha = 100.0; //without tet
-                    alpha = 200.0;
+                    alpha = 100.0; //without tet
+                    // alpha = 200.0;
                     gamma = 10.0;
                     sigma = 0.5;
                 }
@@ -627,9 +627,13 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                     // alpha = 300.0; //tet barrier
                     // gamma = 40.0;
 
-                    alpha = 100.0; //tet barrier
-                    gamma = 20.0;
-                    sigma = 5;
+                    // alpha = 40.0; //tet barrier
+                    // gamma = 20.0;
+                    // sigma = 80.0;
+
+                    alpha = 0.0; //tet barrier
+                    gamma = 0.0;
+                    sigma = 0.0;
                 }
                 
 
@@ -643,7 +647,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
 
 
-    use_face_centroid = false;
+    use_face_centroid = true;
 
 
     for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
@@ -683,7 +687,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             if (use_cell_centroid)
                 Gamma = 10.0; //worked for the centroid formulation
             else
-                Gamma = 80.0; // used for fixed tet subdiv
+                Gamma = 1e3; // used for fixed tet subdiv
         }
     }
 
@@ -724,19 +728,19 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     pressure_constant = 0.1;
     
 
-    preserve_tet_vol = !use_face_centroid;
-    tet_vol_penalty = 1e7;
+    // preserve_tet_vol = !use_cell_centroid;
+    tet_vol_penalty = 1e10;
 
     if (preserve_tet_vol)
         computeTetVolInitial();
 
-    use_ipc_contact = false;
+    use_ipc_contact = true;
     add_friction = false;
     
     if (use_ipc_contact)
     {
         computeIPCRestData();
-        barrier_weight = 1e10;
+        barrier_weight = 1e6;
         barrier_distance = 1e-3;
     }
 
@@ -747,9 +751,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         kappa_max = 1e3 * kappa;
     }
 
-    use_fixed_cell_centroid = false;
-    if (use_fixed_cell_centroid)
-        updateFixedCellCentroid();
+    use_fixed_centroid = false;
+    if (use_fixed_centroid)
+        updateFixedCentroids();
 
     add_perivitelline_liquid_volume = true;
     use_perivitelline_liquid_pressure = false;
@@ -768,7 +772,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
     project_block_hessian_PD = false;
 
-    weights_all_edges = 4;
+    weights_all_edges = 500.0;
+    if (use_cell_centroid)
+        weights_all_edges = 0.1;
 
     add_tet_vol_barrier = true;
     tet_vol_barrier_dhat = 1e-6;
@@ -777,7 +783,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     else
         tet_vol_barrier_w = 1e6;
     
+    
+
     add_yolk_tet_barrier = false;
     yolk_tet_vol_barrier_dhat = 1e-5;
     yolk_tet_vol_barrier_w = 1e6;
 }
+

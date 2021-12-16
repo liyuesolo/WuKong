@@ -4,7 +4,7 @@
 #include "../include/autodiff/TetVolBarrier.h"
 #include <fstream>
 
-bool use_centroid_subdivide_yolk = false;
+// bool use_cell_centroid = false;
 
 T VertexModel::computeYolkInversionFreeStepSize(const VectorXT& _u, const VectorXT& du)
 {
@@ -14,7 +14,7 @@ T VertexModel::computeYolkInversionFreeStepSize(const VectorXT& _u, const Vector
         deformed = undeformed + _u + step_size * du;
         
         bool constraint_violated = false;
-        if (use_centroid_subdivide_yolk)
+        if (use_cell_centroid)
         {
             iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
             {
@@ -131,21 +131,21 @@ T VertexModel::computeYolkVolume(bool verbose)
             T cone_volume;
             if (face_vtx_list.size() == 4) 
             {
-                if (use_centroid_subdivide_yolk)
+                if (use_cell_centroid)
                     computeConeVolume4Points(positions, mesh_centroid, cone_volume);
                 else
                     computeQuadConeVolume(positions, mesh_centroid, cone_volume);
             }
             else if (face_vtx_list.size() == 5) 
             {
-                if (use_centroid_subdivide_yolk)
+                if (use_cell_centroid)
                     computeConeVolume5Points(positions, mesh_centroid, cone_volume);
                 else
                     computePentaConeVolume(positions, mesh_centroid, cone_volume);
             }
             else if (face_vtx_list.size() == 6) 
             {
-                if (use_centroid_subdivide_yolk)
+                if (use_cell_centroid)
                     computeConeVolume6Points(positions, mesh_centroid, cone_volume);
                 else
                     computeHexConeVolume(positions, mesh_centroid, cone_volume);
@@ -203,7 +203,7 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                 if (face_vtx_list.size() == 4)
                 {
                     Vector<T, 12> dedx;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -213,7 +213,7 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                 else if (face_vtx_list.size() == 5)
                 {
                     Vector<T, 15> dedx;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -284,7 +284,7 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                 else if (face_vtx_list.size() == 6)
                 {
                     Vector<T, 18> dedx;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
                     else
                         computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -388,7 +388,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     if (face_vtx_list.size() == 4)
                     {
                         Vector<T, 12> dedx;
-                        if (use_centroid_subdivide_yolk)
+                        if (use_cell_centroid)
                             computeConeVolume4PointsGradient(positions, mesh_centroid, dedx);
                         else
                             computeQuadConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -397,7 +397,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     else if (face_vtx_list.size() == 5)
                     {
                         Vector<T, 15> dedx;
-                        if (use_centroid_subdivide_yolk)
+                        if (use_cell_centroid)
                             computeConeVolume5PointsGradient(positions, mesh_centroid, dedx);
                         else
                             computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -406,7 +406,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     else if (face_vtx_list.size() == 6)
                     {
                         Vector<T, 18> dedx;
-                        if (use_centroid_subdivide_yolk)
+                        if (use_cell_centroid)
                             computeConeVolume6PointsGradient(positions, mesh_centroid, dedx);
                         else
                             computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
@@ -467,7 +467,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 {
                     
                     Matrix<T, 12, 12> d2Vdx2;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
@@ -483,7 +483,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 else if (face_vtx_list.size() == 5)
                 {
                     Matrix<T, 15, 15> d2Vdx2;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computePentaConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
@@ -500,7 +500,7 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                 else if (face_vtx_list.size() == 6)
                 {
                     Matrix<T, 18, 18> d2Vdx2;
-                    if (use_centroid_subdivide_yolk)
+                    if (use_cell_centroid)
                         computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
                     else
                         computeHexConeVolumeHessian(positions, mesh_centroid, d2Vdx2);

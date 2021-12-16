@@ -58,6 +58,30 @@ public:
         }
     }
 
+    // template <typename OP>
+    // void iterateCentroidTetsSerial(const OP& f)
+    // {
+
+    //     int cnt = 0;
+    //     for (VtxList& cell_face : faces)
+    //     {
+            
+    //         if (cnt < basal_face_start)
+    //         {
+    //             VtxList face_vtx_list = cell_face;
+    //             VtxList cell_vtx_list = face_vtx_list;
+    //             for (int idx : face_vtx_list)
+    //                 cell_vtx_list.push_back(idx + basal_vtx_start);
+                
+    //             VectorXT positions, postions_undeformed;
+    //             positionsFromIndices(positions);
+                
+                
+    //         }
+    //         cnt++;
+    //     }
+    // }
+
     template <typename OP>
     void iterateFixedTetsSerial(const OP& f)
     {
@@ -252,6 +276,7 @@ public:
     std::vector<Edge> contracting_edges;
     std::vector<int> contracting_faces;
     VectorXT fixed_cell_centroids;
+    VectorXT fixed_face_centroids;
     VectorXT tet_vol_init;
 
     int num_nodes;
@@ -316,7 +341,7 @@ public:
     bool sphere_bound_penalty = false;
     bool sphere_bound_barrier = false;
     bool use_ipc_contact = false;
-    bool use_fixed_cell_centroid = false;
+    bool use_fixed_centroid = false;
     bool add_perivitelline_liquid_volume = false;
     bool use_perivitelline_liquid_pressure = false;
     bool contract_apical_face = true;
@@ -435,7 +460,7 @@ public:
     void positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state = false);
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
-    void updateFixedCellCentroid();
+    void updateFixedCentroids();
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb = false);

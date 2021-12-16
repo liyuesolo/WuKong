@@ -41,7 +41,7 @@ void Simulation::initializeCells()
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
     
-    max_newton_iter = 1000;
+    max_newton_iter = 10000;
     // verbose = true;
     cells.print_force_norm = true;
 
@@ -152,8 +152,8 @@ bool Simulation::staticSolve()
     {
         VectorXT residual(deformed.rows());
         residual.setZero();
-        if (cells.use_fixed_cell_centroid)
-            cells.updateFixedCellCentroid();
+        if (cells.use_fixed_centroid)
+            cells.updateFixedCentroids();
         
         residual_norm = computeResidual(u, residual);
         if (cnt == 0)
@@ -234,7 +234,7 @@ bool Simulation::staticSolve()
     std::cout << "============================================================================" << std::endl;
     // std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
     // T vol;
-    cells.saveBasalSurfaceMesh("stuck_basal_surface.obj");
+    // cells.saveBasalSurfaceMesh("stuck_basal_surface.obj");
     // cells.computeHexPrismVolumeFromTet(deformed, vol);
     // std::cout << "tet vol last print " << vol << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
@@ -401,7 +401,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         int num_zero_eigen_value = 0;
 
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-2;
+        bool search_dir_correct_sign = dot_dx_g > 1e-1;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
         bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;

@@ -14,15 +14,14 @@ void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
             if (face_vtx_list.size() == 4)
             {
                 if (use_face_centroid)
-                //this is sum squared
-                    computeArea4PointsSquared(w, positions, area_energy);
+                    computeArea4PointsSquaredSum(w, positions, area_energy);
                 else
                     computeQuadFaceAreaSquaredSum(w, positions, area_energy);
             }
             else if (face_vtx_list.size() == 5)
             {
                 if (use_face_centroid)
-                    computeArea5PointsSquared(w, positions, area_energy);
+                    computeArea5PointsSquaredSum(w, positions, area_energy);
                 else
                     computePentFaceAreaSquaredSum(w, positions, area_energy);
             }
@@ -52,7 +51,7 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
             {
                 Vector<T, 12> dedx;
                 if (use_face_centroid)
-                    computeArea4PointsSquaredGradient(w, positions, dedx);
+                    computeArea4PointsSquaredSumGradient(w, positions, dedx);
                 else
                     computeQuadFaceAreaSquaredSumGradient(w, positions, dedx);
                 addForceEntry<12>(residual, face_vtx_list, -dedx);
@@ -61,7 +60,7 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
             {
                 Vector<T, 15> dedx;
                 if (use_face_centroid)
-                    computeArea5PointsSquaredGradient(w, positions, dedx);
+                    computeArea5PointsSquaredSumGradient(w, positions, dedx);
                 else
                     computePentFaceAreaSquaredSumGradient(w, positions, dedx);
                 addForceEntry<15>(residual, face_vtx_list, -dedx);
@@ -95,7 +94,7 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
             {
                 Matrix<T, 12, 12> hessian;
                 if (use_face_centroid)
-                    computeArea4PointsSquaredHessian(w, positions, hessian);
+                    computeArea4PointsSquaredSumHessian(w, positions, hessian);
                 else
                     computeQuadFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
@@ -106,7 +105,7 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
             {
                 Matrix<T, 15, 15> hessian;
                 if (use_face_centroid)
-                    computeArea5PointsSquaredHessian(w, positions, hessian);
+                    computeArea5PointsSquaredSumHessian(w, positions, hessian);
                 else
                     computePentFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
@@ -117,7 +116,7 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
             {
                 Matrix<T, 18, 18> hessian;
                 if (use_face_centroid)
-                    computeArea6PointsSquaredHessian(w, positions, hessian);
+                    computeArea6PointsSquaredSumHessian(w, positions, hessian);
                 else
                     computeHexFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
