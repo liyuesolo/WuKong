@@ -11,6 +11,33 @@
 
 #include "VecMatDef.h"
 
+template <int dim>
+struct VectorHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const IV& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a(d)) + 0x9e3779b9 + (h << 6) + (h >> 2); 
+        }
+        return h;
+    }
+};
+
+template <int dim>
+struct VectorPairHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const std::pair<IV, IV>& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a.first(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(a.second(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+};  
+
 enum Region
 {
     Apical, Basal, Lateral, ALL
@@ -23,6 +50,7 @@ public:
     using TM2 = Matrix<double, 2, 2>;
     using TM3 = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
+    using IV2 = Vector<int, 2>;
     using TetVtx = Matrix<T, 3, 4>;
 
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
@@ -58,29 +86,123 @@ public:
         }
     }
 
-    // template <typename OP>
-    // void iterateCentroidTetsSerial(const OP& f)
-    // {
+    template <typename OP>
+    void iterateCellCentroidDoFSerial(const OP& f)
+    {
+        int cnt = 0;
+        for (VtxList& cell_face : faces)
+        {
+            if (cnt < basal_face_start)
+            {
+                VtxList face_vtx_list = cell_face;
+                VtxList cell_vtx_list = face_vtx_list;
+                for (int idx : face_vtx_list)
+                    cell_vtx_list.push_back(idx + basal_vtx_start);
+                
+                VectorXT positions;
+                positionsFromIndices(positions, cell_vtx_list);       
 
-    //     int cnt = 0;
-    //     for (VtxList& cell_face : faces)
-    //     {
-            
-    //         if (cnt < basal_face_start)
-    //         {
-    //             VtxList face_vtx_list = cell_face;
-    //             VtxList cell_vtx_list = face_vtx_list;
-    //             for (int idx : face_vtx_list)
-    //                 cell_vtx_list.push_back(idx + basal_vtx_start);
+                int n_point = cell_face.size();
+                VectorXT centroids((n_point + 3) * 3);
+                centroids.segment<3>(0) = fixed_cell_centroids.segment<3>(cnt * 3);
+                centroids.segment<3>(3) = fixed_face_centroids.segment<3>(cnt * 3);
+                centroids.segment<3>(6) = fixed_face_centroids.segment<3>((cnt + basal_face_start) * 3);
+                // lateral tets
+                for (int i = 0; i < n_point; i++)
+                {
+                    int j = (i + 1) % n_point;
+                    int lateral_face_idx = lateral_edge_face_map[Edge(cell_face[i], cell_face[j])];
+                    centroids.segment<3>((3 + i) * 3) = fixed_face_centroids.segment<3>(lateral_face_idx * 3);
+                }
+                f(positions, centroids, cell_vtx_list, cnt);
+            }
+            cnt++;
+        }
+    }
+
+    template <typename OP>
+    void iterateCentroidTetsSerial(const OP& f)
+    {
+
+        int cnt = 0;
+        for (VtxList& cell_face : faces)
+        {
+            if (cnt < basal_face_start)
+            {
+                VtxList face_vtx_list = cell_face;
+                VtxList cell_vtx_list = face_vtx_list;
+                for (int idx : face_vtx_list)
+                    cell_vtx_list.push_back(idx + basal_vtx_start);
                 
-    //             VectorXT positions, postions_undeformed;
-    //             positionsFromIndices(positions);
+                VectorXT positions;
+                positionsFromIndices(positions, cell_vtx_list);       
+
+                std::vector<TetVtx> cell_tets;
+                std::vector<VtxList> vtx_ids;
+
+                int n_point = cell_face.size();
+                // apical tets
+                for (int i = 0; i < n_point; i++)
+                {
+                    int j = (i + 1) % n_point;
+                    TetVtx tet_vtx;
+                    VtxList global_indices(2);
+                    tet_vtx.col(0) = positions.segment<3>(j * 3);
+                    tet_vtx.col(1) = positions.segment<3>(i * 3);
+                    tet_vtx.col(2) = fixed_face_centroids.segment<3>(cnt * 3);
+                    tet_vtx.col(3) = fixed_cell_centroids.segment<3>(cnt * 3);
+                    cell_tets.push_back(tet_vtx);
+                    global_indices[0] = cell_vtx_list[j];
+                    global_indices[1] = cell_vtx_list[i];
+                    vtx_ids.push_back(global_indices);
+                }
+
+                // basal tets
+                for (int i = 0; i < n_point; i++)
+                {
+                    int j = (i + 1) % n_point;
+                    TetVtx tet_vtx;
+                    VtxList global_indices(2);
+                    tet_vtx.col(0) = positions.segment<3>((i + n_point) * 3);
+                    tet_vtx.col(1) = positions.segment<3>((j + n_point) * 3);
+                    tet_vtx.col(2) = fixed_face_centroids.segment<3>((cnt + basal_face_start) * 3);
+                    tet_vtx.col(3) = fixed_cell_centroids.segment<3>(cnt * 3);
+                    cell_tets.push_back(tet_vtx);
+                    global_indices[0] = cell_vtx_list[i + n_point];
+                    global_indices[1] = cell_vtx_list[j + n_point];
+                    vtx_ids.push_back(global_indices);
+                }
+
+                // lateral tets
+                for (int i = 0; i < n_point; i++)
+                {
+                    int j = (i + 1) % n_point;
+
+                    int lateral_face_idx = lateral_edge_face_map[Edge(cell_face[i], cell_face[j])];
+
+                    std::vector<int> lateral_vtx = {i, j, j + n_point, i + n_point};
+                    for (int k = 0; k < 4; k++)
+                    {
+                        int l = (k + 1) % 4;
+                        TetVtx tet_vtx;
+                        VtxList global_indices(2);
+                        tet_vtx.col(0) = positions.segment<3>(lateral_vtx[k] * 3);
+                        tet_vtx.col(1) = positions.segment<3>(lateral_vtx[l] * 3);
+                        tet_vtx.col(2) = fixed_face_centroids.segment<3>(lateral_face_idx * 3);
+                        tet_vtx.col(3) = fixed_cell_centroids.segment<3>(cnt * 3);
+                        cell_tets.push_back(tet_vtx);
+                        global_indices[0] = cell_vtx_list[lateral_vtx[k]];
+                        global_indices[1] = cell_vtx_list[lateral_vtx[l]];
+                        vtx_ids.push_back(global_indices);
+                    }
+                    
+                }
                 
-                
-    //         }
-    //         cnt++;
-    //     }
-    // }
+                f(cell_tets, vtx_ids);
+            }
+            cnt++;
+        }
+    }
 
     template <typename OP>
     void iterateFixedTetsSerial(const OP& f)
@@ -269,6 +391,8 @@ public:
 
     VectorXT f;
 
+    T TET_VOL_MIN = 1e-8;
+
     std::vector<VtxList> faces; // all faces
     std::vector<FaceList> cell_faces; // face id list for each cell
     VectorXT cell_volume_init;
@@ -277,7 +401,10 @@ public:
     std::vector<int> contracting_faces;
     VectorXT fixed_cell_centroids;
     VectorXT fixed_face_centroids;
+    std::vector<VtxList> cell_face_indices;
     VectorXT tet_vol_init;
+
+    std::unordered_map<Edge, int, VectorHash<2>> lateral_edge_face_map;
 
     int num_nodes;
     int basal_vtx_start;
@@ -319,8 +446,15 @@ public:
 
     // single tet barrier
     bool add_tet_vol_barrier = false;
-    T tet_vol_barrier_dhat = 1e-3;
+    T tet_vol_barrier_dhat = 1e-6;
     T tet_vol_barrier_w = 1e6;
+    T tet_vol_qubic_w = 1e3;
+    T log_active_percentage = 0.01;
+    
+    T add_qubic_unilateral_term = false;
+    T add_log_tet_barrier = false;
+    T qubic_active_percentage = 0.5;
+
 
     // yolk tet barrier
     bool add_yolk_tet_barrier = false;
@@ -351,7 +485,7 @@ public:
     bool project_block_hessian_PD = false;
 
     bool add_centroid_points = false;
-
+    bool check_all_vtx_membrane = false;
 
     bool print_force_norm = false;
 
@@ -405,6 +539,10 @@ public:
     void addCellVolumePreservationForceEntries(VectorXT& residual);
     void addCellVolumePreservationHessianEntries(std::vector<Entry>& entries, 
         bool projectPD = false);
+    void addCellVolumePreservationEnergyFixedCentroid(T& energy);
+    void addCellVolumePreservationForceEntriesFixedCentroid(VectorXT& residual);
+    void addCellVolumePreservationHessianEntriesFixedCentroid(std::vector<Entry>& entries, 
+        bool projectPD = false);
 
     void addTetVolumePreservationEnergy(T& energy);
     void addTetVolumePreservationForceEntries(VectorXT& residual);
@@ -447,6 +585,10 @@ public:
     void addElasticityHessianEntries(std::vector<Entry>& entries, bool projectPD = false);
 
     // VolumeBarrier.cpp
+    void computeTetBarrierWeightMask(const VectorXT& positions, 
+        const VtxList& face_vtx_list, VectorXT& mask_log_term, 
+        VectorXT& mask_qubic_term, T cell_volume);
+
     T computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& du);
     void addFixedTetLogBarrierEnergy(T& energy);
     void addFixedTetLogBarrierForceEneries(VectorXT& residual);

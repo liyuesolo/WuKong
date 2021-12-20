@@ -18,7 +18,7 @@ void VertexModel::approximateMembraneThickness()
     else
         Rc = 1.01 * radii_max;
     
-    Rc = 1.01 * radii_max;
+    Rc = 1.005 * radii_max;
     total_volume = 4.0 / 3.0 * M_PI * std::pow(Rc, 3);
 }
 
@@ -562,6 +562,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
     lateral_face_start = faces.size();
 
+    cell_face_indices.resize(basal_face_start, VtxList());
+
     std::vector<Edge> basal_and_lateral_edges;
 
     for (Edge edge : edges)
@@ -574,6 +576,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         basal_and_lateral_edges.push_back(lateral1);
 
         VtxList lateral_face = {edge[0], edge[1], basal_edge[1], basal_edge[0]};
+        lateral_edge_face_map[edge] = faces.size();
+        Edge edge_rev(edge[1], edge[0]);
+        lateral_edge_face_map[edge_rev] = faces.size();
         faces.push_back(lateral_face);
     }
     edges.insert(edges.end(), basal_and_lateral_edges.begin(), basal_and_lateral_edges.end());
@@ -627,13 +632,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                     // alpha = 300.0; //tet barrier
                     // gamma = 40.0;
 
-                    // alpha = 40.0; //tet barrier
-                    // gamma = 20.0;
-                    // sigma = 80.0;
-
-                    alpha = 0.0; //tet barrier
-                    gamma = 0.0;
-                    sigma = 0.0;
+                    alpha = 40.0; //tet barrier
+                    gamma = 20.0;
+                    sigma = 80.0;
                 }
                 
 
@@ -647,7 +648,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
 
 
-    use_face_centroid = true;
+    use_face_centroid = use_cell_centroid;
 
 
     for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
@@ -685,9 +686,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             if (use_cell_centroid)
-                Gamma = 10.0; //worked for the centroid formulation
+                // Gamma = 10.0; //worked for the centroid formulation
+                Gamma = 1.0; //worked for the centroid formulation
             else
-                Gamma = 1e3; // used for fixed tet subdiv
+                Gamma = 1.0; // used for fixed tet subdiv
         }
     }
 
@@ -734,7 +736,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (preserve_tet_vol)
         computeTetVolInitial();
 
-    use_ipc_contact = true;
+    use_ipc_contact = false;
     add_friction = false;
     
     if (use_ipc_contact)
@@ -770,23 +772,36 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             perivitelline_pressure = 1;
         }
     }
+    else
+    {
+        perivitelline_vol_init = 0.0;
+    }
     project_block_hessian_PD = false;
+
+    woodbury = add_perivitelline_liquid_volume || add_yolk_volume;
 
     weights_all_edges = 500.0;
     if (use_cell_centroid)
         weights_all_edges = 0.1;
 
     add_tet_vol_barrier = true;
+
+    add_log_tet_barrier = true;
     tet_vol_barrier_dhat = 1e-6;
-    if (use_cell_centroid)
+    if (use_cell_centroid && !add_log_tet_barrier)
         tet_vol_barrier_w = 10e-22;
     else
-        tet_vol_barrier_w = 1e6;
+        tet_vol_barrier_w = 1e10;
     
-    
+    add_qubic_unilateral_term = true;
+    qubic_active_percentage = 0.1;
+    tet_vol_qubic_w = 1e3;
 
+    
     add_yolk_tet_barrier = false;
     yolk_tet_vol_barrier_dhat = 1e-5;
     yolk_tet_vol_barrier_w = 1e6;
+
+    check_all_vtx_membrane = true;
 }
 

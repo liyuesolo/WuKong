@@ -54,8 +54,15 @@ void VertexModel::checkTotalGradient(bool perturb)
 void VertexModel::checkTotalHessian(bool perturb)
 {
     
-    // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
-    // Gamma = 0.0; 
+    sigma = 0; alpha = 0; gamma = 0; 
+    Gamma = 0; weights_all_edges = 0.0;
+    B = 0; 
+    // By = 0.0;
+    Bp = 0.0;
+    bound_coeff = 0.0;
+    add_tet_vol_barrier = false;
+
+    Gamma = 0.0; 
     // pressure_constant = 0.0;
     run_diff_test = true;
     
@@ -72,12 +79,22 @@ void VertexModel::checkTotalHessian(bool perturb)
     if (perturb)
         u += du;
 
-    StiffnessMatrix A(n_dof, n_dof);
-    buildSystemMatrix(u, A);
+    StiffnessMatrix A;
+    if (woodbury)
+    {
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(u, A, UV);
+        Eigen::MatrixXd UVT  = UV * UV.transpose();
+        UVT += A;
+        A = UVT.sparseView();
+    }
+    else
+        buildSystemMatrix(u, A);
     // std::cout << "Full hessian" << std::endl;
     // std::cout << A << std::endl;
     for(int dof_i = 0; dof_i < n_dof; dof_i++)
     {
+        // std::cout << dof_i << std::endl;
         u(dof_i) += epsilon;
         VectorXT g0(n_dof), g1(n_dof);
         g0.setZero(); g1.setZero();
@@ -161,6 +178,17 @@ void VertexModel::checkTotalHessianScale(bool perturb)
 {
     // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0;
     // Gamma = 0; weights_all_edges = 0.0;
+    
+    // sigma = 0; 
+    // alpha = 0; 
+    // gamma = 0; 
+    // Gamma = 0; weights_all_edges = 0.0;
+    // B = 0; 
+    // By = 0.0;
+    // Bp = 0.0;
+    
+    // add_tet_vol_barrier = false;
+
     
 
     // pressure_constant = 0.0;

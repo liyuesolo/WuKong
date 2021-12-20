@@ -295,7 +295,12 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
         if (preserve_tet_vol)
             addTetVolumePreservationEnergy(volume_term);
         else
-            addCellVolumePreservationEnergy(volume_term);
+        {
+            if (use_fixed_centroid)
+                addCellVolumePreservationEnergyFixedCentroid(volume_term);
+            else
+                addCellVolumePreservationEnergy(volume_term);
+        }
 
         // ===================================== Face Area =====================================
         addFaceAreaEnergy(Basal, gamma, area_term);
@@ -437,7 +442,12 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         if (preserve_tet_vol)
             addTetVolumePreservationForceEntries(residual);
         else
-            addCellVolumePreservationForceEntries(residual);
+        {
+            if (use_fixed_centroid)
+                addCellVolumePreservationForceEntriesFixedCentroid(residual);
+            else
+                addCellVolumePreservationForceEntries(residual);
+        }
 
         if (print_force_norm)
             std::cout << "\tcell volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
@@ -589,7 +599,12 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         if (preserve_tet_vol)
             addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);
         else
-            addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        {
+            if (use_fixed_centroid)
+                addCellVolumePreservationHessianEntriesFixedCentroid(entries, project_block_hessian_PD);
+            else
+                addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        }
         // ===================================== Face Area =====================================
 
         addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
@@ -688,7 +703,12 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         if (preserve_tet_vol)
             addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);
         else
-            addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        {
+            if (use_fixed_centroid)
+                addCellVolumePreservationHessianEntriesFixedCentroid(entries, project_block_hessian_PD);
+            else
+                addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        }
 
         addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
         addFaceAreaHessianEntries(Lateral, gamma, entries, project_block_hessian_PD);

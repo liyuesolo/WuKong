@@ -61,11 +61,6 @@ void computeArea4PointsSumSquared(double stiffness, const Matrix<double,12,1> & 
 void computeArea4PointsSumSquaredGradient(double stiffness, const Matrix<double,12,1> & face_vertices, Matrix<double, 12, 1>& energygradient);
 void computeArea4PointsSumSquaredHessian(double stiffness, const Matrix<double,12,1> & face_vertices, Matrix<double, 12, 12>& energyhessian);
 
-void computeArea4PointsSquaredSum(double stiffness, const Matrix<double,12,1> & face_vertices, double& energy);
-void computeArea4PointsSquaredSumGradient(double stiffness, const Matrix<double,12,1> & face_vertices, Matrix<double, 12, 1>& energygradient);
-void computeArea4PointsSquaredSumHessian(double stiffness, const Matrix<double,12,1> & face_vertices, Matrix<double, 12, 12>& energyhessian);
-
-
 // centroid squared sum
 void computeArea4PointsSquaredSum(double stiffness, const Eigen::Matrix<double,12,1> & face_vertices, double& energy);
 void computeArea4PointsSquaredSumGradient(double stiffness, const Eigen::Matrix<double,12,1> & face_vertices, Eigen::Matrix<double, 12, 1>& energygradient);

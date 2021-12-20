@@ -28,7 +28,7 @@ void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
             else if (face_vtx_list.size() == 6)
             {
                 if (use_face_centroid)
-                    computeArea6PointsSquared(w, positions, area_energy);
+                    computeArea6PointsSquaredSum(w, positions, area_energy);
                 else
                     computeHexFaceAreaSquaredSum(w, positions, area_energy);
             }
@@ -69,7 +69,7 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
             {
                 Vector<T, 18> dedx;
                 if (use_face_centroid)
-                    computeArea6PointsSquaredGradient(w, positions, dedx);
+                    computeArea6PointsSquaredSumGradient(w, positions, dedx);
                 else
                     computeHexFaceAreaSquaredSumGradient(w, positions, dedx);
                 addForceEntry<18>(residual, face_vtx_list, -dedx);

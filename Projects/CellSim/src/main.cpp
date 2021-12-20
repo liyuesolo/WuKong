@@ -199,16 +199,16 @@ int main()
         default: 
             return false;
         case ' ':
+            // simulation.cells.Gamma = 2.0;
+            // simulation.staticSolve();
+            // simulation.undeformed = simulation.deformed;
+            // simulation.u.setZero();
+            // simulation.cells.Gamma = 6.0;
+            // simulation.staticSolve();
+            // simulation.undeformed = simulation.deformed;
+            // simulation.u.setZero();
+            // simulation.cells.Gamma = 10.0;
             simulation.staticSolve();
-            // simulation.undeformed = simulation.deformed;
-            // simulation.u.setZero();
-            // simulation.cells.gamma = 10.0;
-            // simulation.staticSolve();
-            // simulation.undeformed = simulation.deformed;
-            // simulation.u.setZero();
-            // simulation.cells.alpha = 100.0;
-            // simulation.cells.gamma = 0.1;
-            // simulation.staticSolve();
             updateScreen(viewer);
             return true;
         case '1':

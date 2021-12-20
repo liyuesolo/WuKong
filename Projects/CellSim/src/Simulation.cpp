@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <ipc/ipc.hpp>
 
+#define FOREVER 30000
 
 
 void generatePolygonRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -40,8 +41,9 @@ void Simulation::initializeCells()
 
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
+    // cells.checkTotalHessian(true);
     
-    max_newton_iter = 10000;
+    max_newton_iter = FOREVER;
     // verbose = true;
     cells.print_force_norm = true;
 
@@ -664,12 +666,14 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
 
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
+    // std::getchar();
     int cnt = 1;
     while (true)
     {
         VectorXT u_ls = _u + alpha * du;
         T E1 = computeTotalEnergy(u_ls);
-        // std::cout << "ls# " << cnt << " E1 " << E1 << std::endl;
+        // std::cout << "ls# " << cnt << " E1 " << E1 << " alpha " << alpha << std::endl;
+        // std::getchar();
         // cells.computeTotalEnergy(u_ls, true);
         // if (wolfe_condition)
         if (false)

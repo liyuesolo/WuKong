@@ -3,8 +3,10 @@
 
 void VertexModel::addMembraneBoundEnergy(T& energy)
 {
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+
     T sphere_bound_term = 0.0;
-    for (int i = 0; i < basal_vtx_start; i++)
+    for (int i = 0; i < n_vtx; i++)
     {
         T e = 0.0;;
         T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
@@ -38,7 +40,8 @@ void VertexModel::addMembraneBoundEnergy(T& energy)
 }
 void VertexModel::addMembraneBoundForceEntries(VectorXT& residual)
 {
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+    for (int i = 0; i < n_vtx; i++)
     {
         Vector<T, 3> dedx;
         if (sphere_bound_penalty)
@@ -71,7 +74,9 @@ void VertexModel::addMembraneBoundForceEntries(VectorXT& residual)
 
 void VertexModel::addMembraneBoundHessianEntries(std::vector<Entry>& entries, bool projectPD)
 {
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+
+    for (int i = 0; i < n_vtx; i++)
     {
         Matrix<T, 3, 3> hessian;
         if (sphere_bound_penalty)
@@ -104,11 +109,14 @@ void VertexModel::addMembraneBoundHessianEntries(std::vector<Entry>& entries, bo
 T VertexModel::computeInsideMembraneStepSize(const VectorXT& _u, const VectorXT& du)
 {
     T step_size = 1.0;
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+
     while (true)
     {
         deformed = undeformed + _u + step_size * du;
         bool constraint_violated = false;
-        for (int i = 0; i < basal_vtx_start; i++)
+
+        for (int i = 0; i < n_vtx; i++)
         {
             T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
             T d = Rc - Rk;
@@ -119,7 +127,7 @@ T VertexModel::computeInsideMembraneStepSize(const VectorXT& _u, const VectorXT&
             }
         }
         if (constraint_violated)
-            step_size *= 0.5;
+            step_size *= 0.8;
         else
             return step_size;
     }
