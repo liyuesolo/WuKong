@@ -686,7 +686,6 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             if (use_cell_centroid)
-                // Gamma = 10.0; //worked for the centroid formulation
                 Gamma = 1.0; //worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv

@@ -403,7 +403,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         int num_zero_eigen_value = 0;
 
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-1;
+        bool search_dir_correct_sign = dot_dx_g > 1e-3;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
         bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
