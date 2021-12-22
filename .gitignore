@@ -4,5 +4,6 @@ ext/cache/*
 CMakeLists.txt.user
 .gcode
 output/
+Projects/DigitalFabrics
 Projects/DigitalFabrics3D/IsohedraTiling
 Libs/lbfgs

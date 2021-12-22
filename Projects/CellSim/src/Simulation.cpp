@@ -163,7 +163,7 @@ bool Simulation::staticSolve()
 
         if (!cells.single_prism)
             cells.saveCellMesh(cnt);
-        // cells.saveIPCData(cnt);
+        
         // cells.saveHexTetsStep(cnt);
         // if (cnt % 20 == 0)
         // {
@@ -180,7 +180,9 @@ bool Simulation::staticSolve()
         // if (cnt % 50 == 0)
         // {
         //     cells.checkTotalGradientScale();
+        //     cells.print_force_norm = false;
         //     cells.checkTotalHessianScale();
+        //     cells.print_force_norm = true;
         // }
         if (residual_norm < newton_tol)
             break;
@@ -624,45 +626,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
 
     T norm = du.norm();
     
-    T alpha = 1;
-
-    if (cells.use_ipc_contact)
-    {
-        Eigen::MatrixXd current_position(cells.basal_vtx_start, 3), 
-            next_step_position(cells.basal_vtx_start, 3);
-            
-        for (int i = 0; i < cells.basal_vtx_start; i++)
-        {
-            // current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
-            current_position.row(i) = undeformed.segment<3>(i * 3);
-            next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
-        }
-        
-        alpha = ipc::compute_collision_free_stepsize(current_position, 
-            next_step_position, cells.ipc_edges, cells.ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
-        // std::cout << "collision free step size " << alpha << std::endl;
-    }
-
-    if (cells.sphere_bound_barrier)
-    {
-        T inside_membrane_step_size = cells.computeInsideMembraneStepSize(_u, du);
-        // std::cout << inside_membrane_step_size << std::endl;
-        alpha = std::min(alpha, inside_membrane_step_size);
-    }
-
-    if (cells.add_tet_vol_barrier)
-    {
-        T inversion_free_step_size = cells.computeInversionFreeStepSize(_u, du);
-        std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
-        alpha = std::min(alpha, inversion_free_step_size);
-    }
-
-    if (cells.add_yolk_tet_barrier)
-    {
-        T inversion_free_step_size = cells.computeYolkInversionFreeStepSize(_u, du);
-        std::cout << "yolk inversion free step size: " << inversion_free_step_size << std::endl;
-        alpha = std::min(alpha, inversion_free_step_size);
-    }
+    T alpha = cells.computeLineSearchInitStepsize(_u, du);
 
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
@@ -695,7 +659,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.computeTotalEnergy(u_ls, true);
                     // cells.checkTotalGradientScale();
                     // cells.checkTotalHessianScale();
-                    return 1e16;
+                    // return 1e16;
                 }
                 std::cout << "# ls " << cnt << std::endl;
                 break;
@@ -715,7 +679,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.checkTotalHessianScale();
                     // cells.saveLowVolumeTets("low_vol_tet.obj");
                     // cells.saveBasalSurfaceMesh("low_vol_tet_basal_surface.obj");
-                    return 1e16;
+                    // return 1e16;
                 }
                 std::cout << "# ls " << cnt << " |du| " << alpha * du.norm() << std::endl;
                 break;
@@ -777,5 +741,6 @@ void Simulation::loadDeformedState(const std::string& filename)
         deformed.segment<3>(i * 3) = V.row(i);
     }
     u = deformed - undeformed;
+    // std::cout << u.segment<3>(cells.basal_vtx_start * 3).transpose() << std::endl;
     cells.computeCellInfo();
 }

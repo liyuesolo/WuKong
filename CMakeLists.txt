@@ -44,6 +44,7 @@ if(CUDA_FOUND)
 endif()
 
 add_definitions(-DEIGEN_USE_MKL_ALL)
+add_definitions(-DUSE_CHOLMOD)
 add_definitions(-DMKL_LP64)
 
 include_directories(${CMAKE_SOURCE_DIR})

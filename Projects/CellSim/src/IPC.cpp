@@ -5,8 +5,9 @@
 void VertexModel::addIPCEnergy(T& energy)
 {
     T contact_energy = 0.0;
-    Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    Eigen::MatrixXd ipc_vertices_deformed(n_ipc_vtx, 3);
+    for (int i = 0; i < n_ipc_vtx; i++) 
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
     }
@@ -39,8 +40,9 @@ void VertexModel::addIPCEnergy(T& energy)
 }
 void VertexModel::addIPCForceEntries(VectorXT& residual)
 {
-    Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    Eigen::MatrixXd ipc_vertices_deformed(n_ipc_vtx, 3);
+    for (int i = 0; i < n_ipc_vtx; i++)
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
     }
@@ -63,17 +65,18 @@ void VertexModel::addIPCForceEntries(VectorXT& residual)
             ipc_vertices, ipc_vertices_deformed, ipc_edges,
             ipc_faces, ipc_friction_constraints, epsv_times_h
         );
-        residual.segment(0, basal_vtx_start * 3) += -friction_energy_gradient;
+        residual.segment(0, n_ipc_vtx * 3) += -friction_energy_gradient;
     }
 
-    residual.segment(0, basal_vtx_start * 3) += -contact_gradient;
+    residual.segment(0, n_ipc_vtx * 3) += -contact_gradient;
 }
 
 void VertexModel::addIPCHessianEntries(std::vector<Entry>& entries,
     bool projectPD)
 {
-    Eigen::MatrixXd ipc_vertices_deformed(basal_vtx_start, 3);
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    Eigen::MatrixXd ipc_vertices_deformed(n_ipc_vtx, 3);
+    for (int i = 0; i < n_ipc_vtx; i++)
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
     }
@@ -106,13 +109,16 @@ void VertexModel::addIPCHessianEntries(std::vector<Entry>& entries,
 
 void VertexModel::computeIPCRestData()
 {
-    ipc_vertices.resize(basal_vtx_start, 3);
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    int n_ipc_face = add_basal_faces_ipc ? lateral_face_start : basal_face_start;
+
+    ipc_vertices.resize(n_ipc_vtx, 3);
+    for (int i = 0; i < n_ipc_vtx; i++)
         ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
     
     int face_cnt = 0;
     iterateFaceSerial([&](VtxList& face_vtx_list, int i){
-        if (i < basal_face_start)
+        if (i < n_ipc_face)
         {
             if (face_vtx_list.size() == 4)
                 face_cnt += 2;
@@ -122,12 +128,14 @@ void VertexModel::computeIPCRestData()
                 face_cnt += 4;
         }
     });
+    
+
     std::vector<Edge> edges_vec;
     ipc_faces.resize(face_cnt, 3);
     face_cnt = 0;
     iterateFaceSerial([&](VtxList& face_vtx_list, int i)
     {
-        if (i < basal_face_start)
+        if (i < n_ipc_face)
         {
             if (face_vtx_list.size() == 4)
             {
@@ -187,6 +195,23 @@ void VertexModel::updateIPCVertices(const VectorXT& _u)
         projected[offset] = target;
     });
     deformed = undeformed + projected;
-    for (int i = 0; i < basal_vtx_start; i++)
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    for (int i = 0; i < n_ipc_vtx; i++)
         ipc_vertices.row(i) = deformed.segment<3>(i * 3);
+}
+
+T VertexModel::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+    Eigen::MatrixXd current_position(n_ipc_vtx, 3), 
+        next_step_position(n_ipc_vtx, 3);
+        
+    for (int i = 0; i < n_ipc_vtx; i++)
+    {
+        // current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+        current_position.row(i) = undeformed.segment<3>(i * 3);
+        next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
+    }
+    return ipc::compute_collision_free_stepsize(current_position, 
+            next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
 }

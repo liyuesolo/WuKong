@@ -710,11 +710,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         std::cout << "Rc " << Rc << std::endl;
         
         if (sphere_bound_penalty)
-            bound_coeff = 1e4;
+            bound_coeff = 1e1;
         else if (sphere_bound_barrier)
         {
-            bound_coeff = 0.1;
-            membrane_dhat = 1e-2;
+            bound_coeff = 1e3;
+            membrane_dhat = 1e-3;
         }
         else
         {
@@ -735,14 +735,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (preserve_tet_vol)
         computeTetVolInitial();
 
-    use_ipc_contact = false;
+    use_ipc_contact = true;
     add_friction = false;
     
     if (use_ipc_contact)
     {
+        add_basal_faces_ipc = false;
         computeIPCRestData();
-        barrier_weight = 1e6;
+        barrier_weight = 1e7;
         barrier_distance = 1e-3;
+        if (add_friction)
+        {
+            friction_mu = 0.2;
+            
+        }
     }
 
     if (use_alm_on_cell_volume)
@@ -785,7 +791,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     add_tet_vol_barrier = true;
 
-    add_log_tet_barrier = true;
+    add_log_tet_barrier = false;
     tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid && !add_log_tet_barrier)
         tet_vol_barrier_w = 10e-22;

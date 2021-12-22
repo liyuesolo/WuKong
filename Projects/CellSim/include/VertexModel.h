@@ -438,6 +438,7 @@ public:
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
+    bool add_basal_faces_ipc = false;
     T add_friction = false;
     T friction_mu = 0.5;
     T epsv_times_h = 1e-5;
@@ -500,7 +501,7 @@ public:
     std::unordered_map<int, T> dirichlet_data;
 
     // VertexModel.cpp
-
+    T computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du);
     void computeCellInfo();
 
     void updateALMData(const VectorXT& _u);
@@ -550,6 +551,7 @@ public:
         bool projectPD = false);
 
     // IPC.cpp
+    T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void computeIPCRestData();
     void updateIPCVertices(const VectorXT& _u);
     void addIPCEnergy(T& energy);

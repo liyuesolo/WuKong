@@ -711,7 +711,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         }
 
         addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
-        addFaceAreaHessianEntries(Lateral, gamma, entries, project_block_hessian_PD);
+        addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
         
     }
     
@@ -766,4 +766,41 @@ void VertexModel::projectDirichletDoFMatrix(StiffnessMatrix& A,
         A.coeffRef(iter.first, iter.first) = 1.0;
     }
 
+}
+
+T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    std::cout << "** step size **" << std::endl;
+    T step_size = 1.0;
+    if (use_ipc_contact)
+    {
+        T ipc_step_size = computeCollisionFreeStepsize(_u, du);
+        std::cout << "after ipc step size: " << ipc_step_size << std::endl;
+        step_size = std::min(step_size, ipc_step_size);
+    }
+
+    if (use_sphere_radius_bound && !sphere_bound_penalty)
+    {
+        T inside_membrane_step_size = computeInsideMembraneStepSize(_u, du);
+        step_size = std::min(step_size, inside_membrane_step_size);
+        std::cout << "after inside membrane step size: " << step_size << std::endl;
+    }
+
+    if (add_tet_vol_barrier)
+    {
+        T inversion_free_step_size = computeInversionFreeStepSize(_u, du);
+        // std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
+        step_size = std::min(step_size, inversion_free_step_size);
+        std::cout << "after tet inverison step size: " << step_size << std::endl;
+    }
+
+    if (add_yolk_tet_barrier)
+    {
+        T inversion_free_step_size = computeYolkInversionFreeStepSize(_u, du);
+        // std::cout << "yolk inversion free step size: " << inversion_free_step_size << std::endl;
+        step_size = std::min(step_size, inversion_free_step_size);
+    }
+
+    std::cout << "**       **" << std::endl;
+    return step_size;
 }

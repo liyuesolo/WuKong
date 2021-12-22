@@ -54,15 +54,18 @@ void VertexModel::checkTotalGradient(bool perturb)
 void VertexModel::checkTotalHessian(bool perturb)
 {
     
-    sigma = 0; alpha = 0; gamma = 0; 
-    Gamma = 0; weights_all_edges = 0.0;
-    B = 0; 
-    // By = 0.0;
-    Bp = 0.0;
-    bound_coeff = 0.0;
-    add_tet_vol_barrier = false;
+    // sigma = 0; 
+    // alpha = 0; 
+    // gamma = 0; 
+    // Gamma = 0; 
+    // weights_all_edges = 0.0;
+    // B = 0; 
+    // // By = 0.0;
+    // Bp = 0.0;
+    // bound_coeff = 0.0;
+    // add_tet_vol_barrier = false;
 
-    Gamma = 0.0; 
+    // Gamma = 0.0; 
     // pressure_constant = 0.0;
     run_diff_test = true;
     
