@@ -1,10 +1,10 @@
-#include "include/Tiling3D.h"
+#include "../include/Tiling3D.h"
 
 #include <random>
 #include <cmath>
-#include<fstream>
+#include <fstream>
 
-#include "Util.h"
+#include "../include/Util.h"
 
 std::random_device rd;
 std::mt19937 gen( rd() );
@@ -38,8 +38,8 @@ void Tiling3D::fetchOneFamilyFillRegion(int IH, T* params,
         // ej.push_back( dvec2( zeta() * 0.75, zeta() * 0.6 - 0.3 ) );
         // ej.push_back( 
         //     dvec2( zeta() * 0.75 + 0.25, zeta() * 0.6 - 0.3 ) );
-        ej.push_back( dvec2( 0.25, 0 ) );
-        ej.push_back( dvec2( 0.75, 0) );
+        // ej.push_back( dvec2( 0.25, 0 ) );
+        // ej.push_back( dvec2( 0.75, 0) );
         ej.push_back( dvec2( 1, 0 ) );
 
         // Now, depending on the edge shape class, enforce symmetry 
@@ -488,441 +488,295 @@ void Tiling3D::getMeshForPrinting(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen:
 
 }
 
-void Tiling3D::cropTranslationalUnitByparallelogram(const std::vector<PointLoops>& input_points,
-    std::vector<TV2>& output_points, const TV2& top_left, const TV2& top_right,
-    const TV2& bottom_right, const TV2& bottom_left, std::vector<Vector<int, 2>>& edge_pairs)
+void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
-    std::vector<TV2> parallogram = {top_left, top_right, bottom_right, bottom_left};
+    std::vector<PointLoops> raw_points;
+    // int IH = 5;
+    // T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
 
-    using Edge = std::pair<TV2, TV2>;
+    int IH = 0;
+    T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
 
-    std::vector<Edge> edges;
-
-    for (auto one_tile : input_points)
-    {
-        // -2 because the tile vertices loop back to the first one
-        for (int i = 0; i < one_tile.size() - 2; i++)
-        {
-            const TV2 xi = one_tile[i];
-            const TV2 xj = one_tile[i+ 1];
-            
-            bool xi_inside = insidePolygon(parallogram, xi);
-            bool xj_inside = insidePolygon(parallogram, xj);
-
-            // both points are inside the parallelogram
-            if (xi_inside && xj_inside)
-            {
-                
-                Edge xij = std::make_pair(xi, xj);
-
-                auto find_edge_iter = std::find_if(edges.begin(), edges.end(), [&xij](Edge e)
-                    {   
-                        return (((e.first - xij.first).norm() < 1e-6) && ((e.second - xij.second).norm() < 1e-6)) || 
-                            (((e.first - xij.second).norm() < 1e-6) && ((e.second - xij.first).norm() < 1e-6));
-                    }
-                );
-
-                bool new_edge = find_edge_iter == edges.end();
-                
-                if(new_edge)
-                {
-                    edges.push_back(std::make_pair(xi, xj));
-                    // std::cout << xi.transpose() << " " << xj.transpose() << std::endl;
-                    auto find_xi_iter = std::find_if(output_points.begin(), output_points.end(), 
-                        [&xi](const TV2 x)->bool
-                            { return (x - xi).norm() < 1e-6; }
-                            );
-
-                    int xi_idx = -1, xj_idx = -1;
-                
-                    if (find_xi_iter == output_points.end())
-                    {
-                        // xi is a new vtx
-                        output_points.push_back(xi);
-                        xi_idx = int(output_points.size()) - 1;
-                        //pre push this edge
-                        
-                    }
-                    else
-                    {
-                        int index = std::distance(output_points.begin(), find_xi_iter);
-                        
-                        xi_idx = index;
-                    }
-
-                    auto find_xj_iter = std::find_if(output_points.begin(), output_points.end(), 
-                            [&xj](const TV2 x)->bool
-                            { return (x - xj).norm() < 1e-6; }
-                    );
-                    if (find_xj_iter == output_points.end())
-                    {
-                        output_points.push_back(xj);
-                        xj_idx = int(output_points.size()) - 1;
-                        
-                    }
-                    else
-                    {
-                        int index = std::distance(output_points.begin(), find_xj_iter);
-                        
-                        xj_idx = index;
-                    }
-                    
-                    edge_pairs.push_back(Vector<int,2>(xi_idx, xj_idx));
-                }
-            }
-            else if(!xi_inside && xj_inside)
-            {
-                
-                // std::cout << "One is inside" << std::endl;
-                Edge xij = std::make_pair(xi, xj);
-                auto find_edge_iter = std::find_if(edges.begin(), edges.end(), [&xij](Edge e)
-                    {   
-                        return (((e.first - xij.first).norm() < 1e-6) && ((e.second - xij.second).norm() < 1e-6)) || 
-                            (((e.first - xij.second).norm() < 1e-6) && ((e.second - xij.first).norm() < 1e-6));
-                    }
-                );
-
-                bool new_edge = find_edge_iter == edges.end();
-
-                if(new_edge)
-                {
-                    edges.push_back(std::make_pair(xi, xj));
-                    TV2 intersection;
-                    int xj_idx = -1;
-                    bool intersected = false;
-                    int intersecting_edge = -1;
-                    if (lineSegementsIntersect2D(xi, xj, parallogram[0], parallogram[1], intersection))
-                    {
-                        intersected = true;
-                        intersecting_edge = 0;
-                    }
-                    else if(lineSegementsIntersect2D(xi, xj, parallogram[1], parallogram[2], intersection))
-                    {
-                        intersected = true;
-                        intersecting_edge = 1;
-                    }
-                    else if(lineSegementsIntersect2D(xi, xj, parallogram[2], parallogram[3], intersection))
-                    {
-                        intersected = true;
-                        intersecting_edge = 2;
-                    }
-                    else if (lineSegementsIntersect2D(xi, xj, parallogram[3], parallogram[0], intersection))
-                    {
-                        intersected = true;
-                        intersecting_edge = 3;
-                    }
-                    if (intersected)
-                    {
-                        
-                        output_points.push_back(intersection);
-                        int xi_idx = output_points.size() - 1;
-
-                        auto find_xj_iter = std::find_if(output_points.begin(), output_points.end(), [&xj](const TV2 x)->bool
-                            { return (x - xj).norm() < 1e-6; }
-                            );
-                        if (find_xj_iter == output_points.end())
-                        {
-                            output_points.push_back(xj);
-                            xj_idx = int(output_points.size()) - 1;
-                            
-                        }
-                        else
-                        {
-                            int index = std::distance(output_points.begin(), find_xj_iter);
-                            
-                            xj_idx = index;
-                        }
-
-                        edge_pairs.push_back(Vector<int,2>(xj_idx, xi_idx));
-                    }
-                }
-                
-            }
-            else if(!xj_inside && xi_inside)
-            {
-                // ignored due to duplicated edges
-            }
-            else
-            {
-                // continue;
-            }
-        }
-        // return;
-    }  
-}
-
-
-void Tiling3D::clapBottomLayerWithSquare(int IH, T* params, 
-    PointLoops& point_loop_unit,
-    std::vector<TV2>& valid_points, 
-    std::vector<Vector<int, 2>>& edge_pairs,
-    T square_width)
-{
-    TV2 T1, T2;
-
-    fetchOneFamily(IH, params, T1, T2, point_loop_unit, 10, 10);
-
-    TV2 min_corner = TV2(1e6, 1e6), max_corner = TV2(-1e6, -1e6);
-
-    std::vector<PointLoops> all_points;
-
-    int n_tile_T1 = 20, n_tile_T2 = 20;
-
-    for (int tile_T1 = 0; tile_T1 < n_tile_T1; tile_T1++)
-    {
-        for (int tile_T2 = 0; tile_T2 < n_tile_T2; tile_T2++)
-        {
-            std::vector<TV2> shifted_points = point_loop_unit;
-            for (TV2& pt : shifted_points)
-            {
-                pt += T(tile_T1) * T1 + T(tile_T2) * T2;
-                for (int d = 0; d < 2; d++)
-                {
-                    max_corner[d] = std::max(pt[d], max_corner[d]);
-                    min_corner[d] = std::min(pt[d], min_corner[d]);
-                }
-            }
-            all_points.push_back(shifted_points);
-        }
-    }
-
-    for (PointLoops& points_loop : all_points)
-    {
-        for (TV2 & pt : points_loop)
-        {
-            pt = (pt - 0.5 * (max_corner + min_corner)) / (max_corner - min_corner).norm() * 5.0;
-        }
-    }
-
-    T width = 0.5;
-
-    cropTranslationalUnitByparallelogram(all_points, valid_points, 
-        TV2(-width, width),TV2(width, width), TV2(width, -width), 
-        TV2(-width, -width), edge_pairs);
-    int n_inner_vtx = valid_points.size();
-
-    valid_points.push_back(TV2(-width, width));
-    valid_points.push_back(TV2(width, width));
-    valid_points.push_back(TV2(width, -width));
-    valid_points.push_back(TV2(-width, -width));
-
-    for (TV2 & pt : valid_points)
-        pt *= square_width;
-
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 0, n_inner_vtx + 1));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 1, n_inner_vtx + 2));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 2, n_inner_vtx + 3));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 3, n_inner_vtx + 0));
-}
-
-
-void Tiling3D::thickenLines(const std::vector<TV2>& valid_points, 
-    const std::vector<Vector<int, 2>>& edge_pairs,
-    std::vector<TV>& vertices, std::vector<Face>& faces, T thickness,
-    std::vector<IdList>& boundary_indices)
-{
-    TM2 R90 = TM2::Zero();
-
-    R90.row(0) = TV2(0, -1);
-    R90.row(1) = TV2(1, 0);
-
-    auto getEndPoint = [&](const Vector<int, 2>& edge_pair)
-    {
-        TV2 from = valid_points[edge_pair[0]];
-        TV2 to = valid_points[edge_pair[1]];
-        return std::make_pair(TV(from[0], from[1], 0.0), TV(to[0], to[1], 0));
-    };
-    
-    // for (int i = 0; i < edge_pairs.size(); i++)
-    // {
-    //     IdList id_list0, id_list1;
-    //     int sub_division = 5;
-    //     auto from_to = getEndPoint(edge_pairs[i]);
-    //     TV from = from_to.first, to = from_to.second;
-    //     TV extend = 0.01 * (to - from);
-        
-    //     int idx_from = edge_pairs[i][0];
-    //     int idx_to = edge_pairs[i][1];
-
-    //     TV2 ortho_dir_2D = (R90 * (to.head<2>() - from.head<2>())).normalized();
-    //     TV ortho_dir(ortho_dir_2D[0], ortho_dir_2D[1], 0.0);
-    //     TV v0, v1;
-    //     int idx0, idx1;
-    //     for (int j = 0; j < sub_division + 1; j++)
-    //     {
-    //         TV sub_point = from + (to - from) * T(j) / T(sub_division);
-    //         TV v2 = sub_point + 0.5 * thickness * ortho_dir;
-    //         TV v3 = sub_point - 0.5 * thickness * ortho_dir;
-    //         vertices.push_back(v2);
-    //         int idx2 = vertices.size() - 1;
-    //         vertices.push_back(v3);
-    //         int idx3 = vertices.size() - 1;
-    //         id_list0.push_back(idx2);
-    //         id_list1.push_back(idx3);
-
-    //         if ( j != 0 )
-    //         {
-    //             faces.push_back(Face(idx0, idx2, idx1));
-    //             faces.push_back(Face(idx3, idx1, idx2));
-    //         }
-    //         v0 = v2; v1 = v3;
-    //         idx0 = idx2; idx1 = idx3;
-    //     }
-    //     boundary_indices.push_back(id_list0);
-    //     boundary_indices.push_back(id_list1);
-    // }
-
-    for (int i = 0; i < valid_points.size(); i++)
-    {
-        vertices.push_back(TV(valid_points[i][0], valid_points[i][1], 0.0));
-    }
-    
-
-    for (int i = 0; i < edge_pairs.size(); i++)
-    {
-        IdList id_list0, id_list1;
-        int sub_division = 200;
-        auto from_to = getEndPoint(edge_pairs[i]);
-        TV from = from_to.first, to = from_to.second;
-        TV extend = 0.01 * (to - from);
-        
-        int idx_from = edge_pairs[i][0];
-        int idx_to = edge_pairs[i][1];
-
-        TV2 ortho_dir_2D = (R90 * (to.head<2>() - from.head<2>())).normalized();
-        TV ortho_dir(ortho_dir_2D[0], ortho_dir_2D[1], 0.0);
-        TV v0, v1;
-        int idx0, idx1;
-        id_list0.push_back(edge_pairs[i][0]);
-        id_list1.push_back(edge_pairs[i][0]);
-        for (int j = 1; j < sub_division; j++)
-        {
-            TV sub_point = from + (to - from) * T(j) / T(sub_division);
-            TV v2 = sub_point + 0.5 * thickness * ortho_dir;
-            TV v3 = sub_point - 0.5 * thickness * ortho_dir;
-            vertices.push_back(v2);
-            int idx2 = vertices.size() - 1;
-            vertices.push_back(v3);
-            int idx3 = vertices.size() - 1;
-            if (j == 1)
-            {
-                faces.push_back(Face(edge_pairs[i][0], idx2, idx3));
-            }
-            else if (j == sub_division - 1)
-            {
-                faces.push_back(Face(idx0, idx2, idx1));
-                faces.push_back(Face(idx3, idx1, idx2));
-                faces.push_back(Face(idx2, edge_pairs[i][1], idx3));
-            }
-            else
-            {
-                faces.push_back(Face(idx0, idx2, idx1));
-                faces.push_back(Face(idx3, idx1, idx2));
-            }
-            id_list0.push_back(idx2);
-            id_list1.push_back(idx3);
-            v0 = v2; v1 = v3;
-            idx0 = idx2; idx1 = idx3;
-        }
-        id_list0.push_back(edge_pairs[i][1]);
-        id_list1.push_back(edge_pairs[i][1]);
-        boundary_indices.push_back(id_list0);
-        boundary_indices.push_back(id_list1);
-    }
-    
-}
-
-
-void Tiling3D::extrudeInZ(std::vector<TV>& vertices, std::vector<Face>& faces, 
-    T height, std::vector<IdList>& boundary_indices)
-{
-    std::vector<TV> extruded_vertices;
-    std::vector<Face> extruded_faces;
-
-    for(int i = 0; i < vertices.size(); i++)
-        extruded_vertices.push_back(vertices[i]);
-
-    for(int i = 0; i < vertices.size(); i++)
-        extruded_vertices.push_back(TV(vertices[i][0], vertices[i][1], height));
-
-    int nv = vertices.size();
-    int nf = faces.size();
-    
-    extruded_faces = faces;
-    for (int i = 0; i < nf; i++)
-    {
-        extruded_faces.push_back(Face(
-          faces[i][2] + nv, faces[i][1] + nv, faces[i][0] + nv
-        ));
-    }
-
-    for (IdList id_list : boundary_indices)
-    {
-        for (int i = 0; i < id_list.size() - 1; i++)
-        {
-            extruded_faces.push_back(Face(
-                id_list[i], id_list[i] + nv, id_list[i + 1]
-            ));
-            extruded_faces.push_back(Face(
-                id_list[i + 1], id_list[i] + nv, id_list[i + 1] + nv
-            ));
-        }
-        
-    }
-    faces = extruded_faces;
-    vertices = extruded_vertices;
-}
-
-
-void Tiling3D::getMeshForPrintingWithLines(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
-{
-    PointLoops point_loop_unit;
-
-    
-    //IH 10 work
-    int IH = 9;
-    T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
+    // int IH = 13;
+    // T params[] = {0.1, 0.2}; //Isohedral 7
 
     // int IH = 29;
     // T params[] = {0}; //Isohedral 29
 
-    // int IH = 0;
-    // T params[] = {0.1224, 0.6434, 0.207, 0.8131}; //Isohedral 0
+    // int IH = 6;
+    // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
 
-    // unit is mm here to be used for Prusa directly
+    // int IH = 1;
+    // T params[] = {0.207, 0.7403, 0.304, 1.2373}; //Isohedral 01
 
-    T square_width = 50;
-    T width = 0.5, height = 5;
+    // int IH = 2;
+	// T params[] = {0.3767, 0.5949, 0, 0}; //Isohedral 02
+
+    TV2 T1, T2;
+
+    fetchOneFamilyFillRegion(IH, params, raw_points, 10, 10);
+
+    T height = 1.0;
+    T thickness = 0.04;
+    std::vector<TV> mesh_vertices;
+    std::vector<Face> mesh_faces;
+    std::vector<TV2> unique_points;
+    std::vector<IdList> polygon_ids;
+
+    for (const PointLoops& pl : raw_points)
+    {
+        TV2 center = TV2::Zero();
+        IdList id_list;
+        for (int i = 0; i < pl.size() - 1; i++)
+        {
+            TV2 pt = pl[i];
+            auto find_iter = std::find_if(unique_points.begin(), unique_points.end(), 
+                            [&pt](const TV2 x)->bool
+                               { return (x - pt).norm() < 1e-6; }
+                             );
+            if (find_iter == unique_points.end())
+            {
+                unique_points.push_back(pt);
+                id_list.push_back(unique_points.size() - 1);
+            }
+            else
+                id_list.push_back(std::distance(unique_points.begin(), find_iter));
+        }
+        polygon_ids.push_back(id_list);
+    }
+
+    struct Vertex
+    {
+        TV x;
+        std::vector<TV> neighbors;
+        std::vector<Edge> edges;
+        Vertex(const TV& _x) : x(_x) {}
+    };
     
-    std::vector<TV2> valid_points;
-    std::vector<Vector<int, 2>> edge_pairs;
+    std::vector<Vertex> vertices;
+    for (TV2& pt : unique_points)
+    {
+        vertices.push_back(Vertex(TV(pt[0], pt[1], 0.0)));
+    }
 
-    clapBottomLayerWithSquare(IH, params, point_loop_unit, valid_points, edge_pairs, square_width);
-
-    std::vector<TV> vertices;
-    std::vector<Face> faces;
-
-    std::vector<IdList> boundary_indices;
-
-    thickenLines(valid_points, edge_pairs, vertices, faces, width, boundary_indices);
-
-    extrudeInZ(vertices, faces, height, boundary_indices);
-
-    std::string name = "IH_" + std::to_string(IH) + ".obj";
-
-    std::ofstream out(name);
-    for (TV pt : vertices)
-        out << "v " << pt.transpose() << std::endl;
+    T width = 0.04; // nozzle diameter
     
-    for (Face face : faces)
-        out << "f " << face[0] + 1 << " " << face[1] + 1 << " " << face[2] + 1 << std::endl;
+    std::vector<Edge> edges;
+
+    for (const auto& id_list : polygon_ids)
+    {
+        for (int i = 0; i < id_list.size(); i++)
+        {
+            int j = (i + 1) % id_list.size();
+            Edge ei(id_list[i], id_list[j]);
+            
+            auto find_iter = std::find_if(edges.begin(), edges.end(), 
+                [&ei](const Edge e)->bool {return (ei[0] == e[0] && ei[1] == e[1] ) 
+                    || (ei[0] == e[1] && ei[1] == e[0]); });
+            if (find_iter == edges.end())
+            {
+                edges.push_back(ei);
+
+                vertices[id_list[i]].edges.push_back(ei);
+                vertices[id_list[j]].edges.push_back(Edge(ei[1], ei[0]));
+                vertices[id_list[i]].neighbors.push_back(vertices[id_list[j]].x);
+                vertices[id_list[j]].neighbors.push_back(vertices[id_list[i]].x);
+            }   
+        }
+    }
+
+    std::unordered_map<Edge, IdList, VectorHash<2>> edge_vtx_tracker;
+    
+    auto appendVtxToEdge = [&](const Vertex& vtx, const Edge& edge, int vtx_idx)
+    {
+        if (edge_vtx_tracker.find(edge) == edge_vtx_tracker.end())
+            edge_vtx_tracker[edge] = {vtx_idx};
+        else
+            edge_vtx_tracker[edge].push_back(vtx_idx);
+    };
+
+    // insert bisecting vector vtx
+    for (const Vertex& vtx : vertices)
+    {
+        IdList ixn_vtx_ids;
+        for (int i = 0; i < vtx.edges.size(); i++)
+        {
+            int j = (i + 1) % vtx.edges.size();
+            
+            TV vi = vtx.x, vj = vertices[vtx.edges[i][1]].x, vk = vertices[vtx.edges[j][1]].x;
+            
+            TV bisec;
+            // only two edges here and this is the larger angle
+            if (j == 0 && i == 1)
+                bisec = vi - ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+            else
+                bisec = vi + ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+            mesh_vertices.push_back(bisec);
+            int vtx_idx = mesh_vertices.size() - 1;            
+            ixn_vtx_ids.push_back(vtx_idx);
+            appendVtxToEdge(vtx, vtx.edges[i], vtx_idx);
+            appendVtxToEdge(vtx, vtx.edges[j], vtx_idx);
+        }
+        if (ixn_vtx_ids.size() == 3)
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[1], ixn_vtx_ids[2]));
+        else if (ixn_vtx_ids.size() > 3)
+            std::cout << "ixn_vtx_ids.size() > 3, add more faces" << std::endl;
+    }
+
+    // thicken line
+    std::vector<Edge> boundary_edges;
+
+    for (const Edge& edge : edges)
+    {
+        IdList left_vtx = edge_vtx_tracker[edge];
+        IdList right_vtx = edge_vtx_tracker[Edge(edge[1], edge[0])];
+        TV v0 = mesh_vertices[left_vtx[0]], v1 = mesh_vertices[left_vtx[1]];
+        TV v2 = mesh_vertices[right_vtx[0]], v3 = mesh_vertices[right_vtx[1]];
+        TV from = vertices[edge[0]].x, to = vertices[edge[1]].x;
+
+        TV2 intersection;
+        bool insec = lineSegementsIntersect2D<T>(v0.head<2>(), v2.head<2>(), from.head<2>(), to.head<2>(), intersection);
+
+        if (insec) // v0->v3, v1->v2
+        {
+            int n_sub_div = std::floor(std::min((v3 - v0).norm(), (v2-v1).norm()) / thickness);
+            TV delta1 = (v3 - v0) / T(n_sub_div);
+            TV delta2 = (v2 - v1) / T(n_sub_div);
+            
+            int loop0 = left_vtx[0], loop1 = left_vtx[1];
+
+            for (int i = 1; i < n_sub_div; i++)
+            {
+                mesh_vertices.push_back(v0 + i * delta1);
+                int idx0 = mesh_vertices.size() - 1;
+                mesh_vertices.push_back(v1 + i * delta2);    
+                int idx1 = mesh_vertices.size() - 1;
+                mesh_faces.push_back(Face(loop0, loop1, idx0));
+                mesh_faces.push_back(Face(loop1, idx1, idx0));
+                boundary_edges.push_back(Edge(loop0, idx0));
+                boundary_edges.push_back(Edge(loop1, idx1));
+                loop0 = idx0;
+                loop1 = idx1;
+            }
+            mesh_faces.push_back(Face(loop0, loop1, right_vtx[0]));
+            mesh_faces.push_back(Face(loop0, right_vtx[0], right_vtx[1]));
+            boundary_edges.push_back(Edge(loop0, right_vtx[1]));
+            boundary_edges.push_back(Edge(loop1, right_vtx[0]));
+        }
+        else // v0->v2, v1->v3
+        {
+            int n_sub_div = std::floor(std::min((v2 - v0).norm(), (v3-v1).norm()) / thickness);
+            TV delta1 = (v2 - v0) / T(n_sub_div);
+            TV delta2 = (v3 - v1) / T(n_sub_div);
+            
+            int loop0 = left_vtx[0], loop1 = left_vtx[1];
+
+            for (int i = 1; i < n_sub_div; i++)
+            {
+                mesh_vertices.push_back(v0 + i * delta1);
+                int idx0 = mesh_vertices.size() - 1;
+                mesh_vertices.push_back(v1 + i * delta2);    
+                int idx1 = mesh_vertices.size() - 1;
+                mesh_faces.push_back(Face(loop0, loop1, idx0));
+                mesh_faces.push_back(Face(loop1, idx1, idx0));
+                boundary_edges.push_back(Edge(loop0, idx0));
+                boundary_edges.push_back(Edge(loop1, idx1));
+                loop0 = idx0;
+                loop1 = idx1;
+            }
+            mesh_faces.push_back(Face(loop0, loop1, right_vtx[0]));
+            mesh_faces.push_back(Face(right_vtx[0], loop1, right_vtx[1]));
+            boundary_edges.push_back(Edge(loop0, right_vtx[0]));
+            boundary_edges.push_back(Edge(loop1, right_vtx[1]));
+        }
+    }
+
+    // unify face normal due to different edge orientation
+    for (Face& face : mesh_faces)
+    {
+        TV v0 = mesh_vertices[face[0]];
+        TV v1 = mesh_vertices[face[1]];
+        TV v2 = mesh_vertices[face[2]];
+
+        if ((v2 - v0).cross(v1 - v0).dot(TV(0, 0, 1)) < 0)
+            face = Face(face[1], face[0], face[2]);
+    }
+    
+
+    int nv = mesh_vertices.size();
+    for (const TV& vtx : mesh_vertices)
+        mesh_vertices.push_back(vtx + TV(0, 0, height));
+    
+    int nf = mesh_faces.size();
+
+    for (int i = 0; i < nf; i++)
+    {
+        mesh_faces.push_back(Face(
+          mesh_faces[i][2] + nv, mesh_faces[i][1] + nv, mesh_faces[i][0] + nv
+        ));
+    }
+
+    // for (const Edge& edge : boundary_edges)
+    // {
+    //     mesh_faces.push_back(Face(edge[0], edge[1], edge[0] + nv));
+    //     mesh_faces.push_back(Face(edge[0] + nv, edge[1], edge[1] + nv));
+    // }
+
+    auto normal = [&](const Face& face)
+    {
+        TV v0 = mesh_vertices[face[0]];
+        TV v1 = mesh_vertices[face[1]];
+        TV v2 = mesh_vertices[face[2]];
+
+        return (v2 - v0).cross(v1 - v0).normalized();
+    };
+
+    auto inverseNormal = [&](const Face& face)
+    {
+        return Face(face[1], face[0], face[2]);
+    };
+
+    for (int i = 0; i < boundary_edges.size() / 2; i++)
+    {
+        Edge ei = boundary_edges[i * 2 + 0];
+        Edge ei_oppo = boundary_edges[i * 2 + 1];
+        TV v0 = mesh_vertices[ei[0]], v1 = mesh_vertices[ei[1]];
+        TV v2 = mesh_vertices[ei_oppo[0]], v3 = mesh_vertices[ei_oppo[1]];
+        
+        Face f0 = Face(ei[1], ei[0], ei[0] + nv);
+        Face f1 = Face(ei[1], ei[0] + nv, ei[1] + nv);
+        
+        TV n0 = normal(f0), n1 = normal(f1);
+        TV edge_vec = (v2 - v0 + TV(1e-4, 1e-4, 1e-4)).normalized();
+
+        if (edge_vec.dot(n0) < 0)
+        {
+            f0 = inverseNormal(f0);
+            f1 = inverseNormal(f1);
+        }
+        mesh_faces.push_back(f0); mesh_faces.push_back(f1);
+
+        Face f2 = Face(ei_oppo[0], ei_oppo[1], ei_oppo[0] + nv);
+        Face f3 = Face(ei_oppo[0] + nv, ei_oppo[1], ei_oppo[1] + nv);
+        TV n2 = normal(f2), n3 = normal(f3);
+        if (-edge_vec.dot(n2) < 0)
+        {
+            f2 = inverseNormal(f2);
+            f3 = inverseNormal(f3);
+        }
+        mesh_faces.push_back(f2);
+        mesh_faces.push_back(f3);
+    }
+    
+
+    std::ofstream out("test_tiling.obj");
+    
+    for (const TV& vtx : mesh_vertices)
+    {
+        out << "v " << vtx.transpose() << std::endl;
+    }
+    for (const Face& face : mesh_faces)
+        out << "f " << face.transpose() + IV::Ones().transpose() << std::endl;
+
     out.close();
-
-    // std::ofstream out("line_mesh.obj");
-    // for (TV2 pt : valid_points)
-    //     out << "v " << pt.transpose() << " 0" << std::endl;
-    
-    // for (Vector<int, 2> line : edge_pairs)
-    //     out << "l " << line[0] + 1 << " " << line[1] + 1 << std::endl;
-    // out.close();
 }

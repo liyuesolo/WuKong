@@ -5,7 +5,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 
-#include "include/Tiling3D.h"
+#include "../include/Tiling3D.h"
 
 #define T double 
 #define dim 3
@@ -18,8 +18,8 @@ int main()
 {
     Tiling3D tiling;
 
-    tiling.getMeshForPrintingWithLines(V, F, C);
-    
+    // tiling.getMeshForPrintingWithLines(V, F, C);
+    tiling.buildSimulationMesh(V, F, C);
     // igl::opengl::glfw::Viewer viewer;
 
 
