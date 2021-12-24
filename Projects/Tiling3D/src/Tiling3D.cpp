@@ -4,6 +4,8 @@
 #include <cmath>
 #include <fstream>
 
+#include <igl/copyleft/tetgen/tetrahedralize.h>
+
 #include "../include/Util.h"
 
 std::random_device rd;
@@ -518,6 +520,8 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
 
     T height = 1.0;
     T thickness = 0.04;
+    int sub_divide_width = 5;
+    int sub_divide_height = 5;
     std::vector<TV> mesh_vertices;
     std::vector<Face> mesh_faces;
     std::vector<TV2> unique_points;
@@ -639,7 +643,8 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
 
         if (insec) // v0->v3, v1->v2
         {
-            int n_sub_div = std::floor(std::min((v3 - v0).norm(), (v2-v1).norm()) / thickness);
+            // int n_sub_div = std::floor(std::min((v3 - v0).norm(), (v2-v1).norm()) / thickness);
+            int n_sub_div = sub_divide_width;
             TV delta1 = (v3 - v0) / T(n_sub_div);
             TV delta2 = (v2 - v1) / T(n_sub_div);
             
@@ -665,7 +670,8 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
         }
         else // v0->v2, v1->v3
         {
-            int n_sub_div = std::floor(std::min((v2 - v0).norm(), (v3-v1).norm()) / thickness);
+            // int n_sub_div = std::floor(std::min((v2 - v0).norm(), (v3-v1).norm()) / thickness);
+            int n_sub_div = sub_divide_width;
             TV delta1 = (v2 - v0) / T(n_sub_div);
             TV delta2 = (v3 - v1) / T(n_sub_div);
             
@@ -716,12 +722,6 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
         ));
     }
 
-    // for (const Edge& edge : boundary_edges)
-    // {
-    //     mesh_faces.push_back(Face(edge[0], edge[1], edge[0] + nv));
-    //     mesh_faces.push_back(Face(edge[0] + nv, edge[1], edge[1] + nv));
-    // }
-
     auto normal = [&](const Face& face)
     {
         TV v0 = mesh_vertices[face[0]];
@@ -769,14 +769,45 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
     }
     
 
-    std::ofstream out("test_tiling.obj");
+    // std::ofstream out("test_tiling.obj");
     
-    for (const TV& vtx : mesh_vertices)
-    {
-        out << "v " << vtx.transpose() << std::endl;
-    }
-    for (const Face& face : mesh_faces)
-        out << "f " << face.transpose() + IV::Ones().transpose() << std::endl;
+    // for (const TV& vtx : mesh_vertices)
+    // {
+    //     out << "v " << vtx.transpose() << std::endl;
+    // }
+    // for (const Face& face : mesh_faces)
+    //     out << "f " << face.transpose() + IV::Ones().transpose() << std::endl;
 
-    out.close();
+    // out.close();
+    V.resize(mesh_vertices.size(), 3);
+    F.resize(mesh_faces.size(), 3);
+    C.resize(mesh_faces.size(), 3);
+
+    for (int i = 0; i < mesh_vertices.size(); i++)
+    {
+        V.row(i) = mesh_vertices[i];    
+    }
+    for (int i = 0; i < mesh_faces.size(); i++)
+    {
+        F.row(i) = mesh_faces[i];
+        C.row(i) = TV(0, 0.3, 1.0);
+    }
+
+    
+}
+
+void Tiling3D::initializeSimulationData()
+{
+    Eigen::MatrixXd V, C;
+    Eigen::MatrixXi F;
+    buildSimulationMesh(V, F, C);
+    
+    Eigen::MatrixXd TV;
+    Eigen::MatrixXi TT;
+    Eigen::MatrixXi TF;
+
+    igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
+    
+    solver.initializeElementData(TV, TF, TT);
+
 }

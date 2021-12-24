@@ -14,6 +14,8 @@
 
 #include "VecMatDef.h"
 
+#include "FEMSolver.h"
+
 template <int dim>
 struct VectorHash
 {
@@ -41,10 +43,13 @@ public:
     using Face = Vector<int, 3>;
     using Edge = Vector<int, 2>;
     
-    
+    FEMSolver solver;
+
 public:
     Tiling3D() {}
     ~Tiling3D() {}
+
+    void initializeSimulationData();
 
     void fetchOneFamily(int IH, T* params, TV2& T1, TV2& T2, 
         PointLoops& raw_points, T width, T height);
