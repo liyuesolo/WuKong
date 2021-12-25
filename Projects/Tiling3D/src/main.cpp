@@ -14,6 +14,9 @@ Eigen::MatrixXd V;
 Eigen::MatrixXi F;
 Eigen::MatrixXd C;
 
+static bool enable_selection = false;
+static bool show_cylinder = false;
+
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 
@@ -21,10 +24,14 @@ Tiling3D tiling;
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
-    viewer.data().clear();
-
     tiling.solver.generateMeshForRendering(V, F, C);
+    
+    if (show_cylinder)
+    {
+        tiling.solver.appendCylinder(V, F, C, tiling.solver.center, TV(0, 1, 0), 2);
+    }
 
+    viewer.data().clear();
     viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);
 };
@@ -41,7 +48,15 @@ int main()
     {
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            
+            if (ImGui::Checkbox("SelectVertex", &enable_selection))
+            {
+                // updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowCylinder", &show_cylinder))
+            {
+                updateScreen(viewer);
+            }
+
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
@@ -70,8 +85,33 @@ int main()
             return false;
         case ' ':
             tiling.solver.staticSolve();
+            updateScreen(viewer);
             return true;
         }
+    };
+
+    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+    {
+        if (!enable_selection)
+            return false;
+        double x = viewer.current_mouse_x;
+        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+
+        for (int i = 0; i < tiling.solver.num_nodes; i++)
+        {
+            Vector<T, 3> pos = tiling.solver.deformed.segment<3>(i * 3);
+            Eigen::MatrixXd x3d(1, 3); x3d.setZero();
+            x3d.row(0).segment<3>(0) = pos;
+
+            Eigen::MatrixXd pxy(1, 3);
+            igl::project(x3d, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+            if(abs(pxy.row(0)[0]-x)<20 && abs(pxy.row(0)[1]-y)<20)
+            {
+                std::cout << "selected " << i << std::endl;
+                return true;
+            }
+        }
+        return false;
     };
 
     tiling.initializeSimulationData();
@@ -83,9 +123,6 @@ int main()
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;
     viewer.data().point_size = 25.0;
-
-    viewer.data().set_mesh(V, F);     
-    viewer.data().set_colors(C);
 
     viewer.core().align_camera_center(V);
     viewer.core().animation_max_fps = 24.;

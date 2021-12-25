@@ -18,6 +18,7 @@ public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
     using TV = Vector<T, 3>;
+    using IV = Vector<int, 3>;
     using TM = Matrix<T, 3, 3>;
 
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
@@ -37,6 +38,8 @@ public:
     VectorXi surface_indices;
 
     std::unordered_map<int, T> dirichlet_data;
+
+    std::vector<int> dirichlet_vertices;
 
     int num_nodes;   
     int num_ele;
@@ -58,6 +61,8 @@ public:
     int max_newton_iter = 1000;
 
     TV min_corner, max_corner;
+    TV center;
+
 
 public:
 
@@ -84,6 +89,14 @@ public:
             TetNodes tet_undeformed = getTetNodesUndeformed(tet_idx);
             f(tet_deformed, tet_undeformed, tet_idx, i);
         });
+    }
+
+    template <class OP>
+    void iterateDirichletVertices(const OP& f) {
+        for (auto vtx_idx : dirichlet_vertices){
+            TV vtx = deformed.segment<3>(vtx_idx * dim);
+            f(vtx, vtx_idx);
+        } 
     }
 
     template <class OP>
@@ -159,6 +172,9 @@ public:
     // Scene.cpp
     void initializeElementData(const Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void computeBoundingBox();
+    void appendCylinder(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
+        const TV& _center, const TV& direction, T R);
 
     // FEMSolver.cpp
     T computeTotalEnergy(const VectorXT& u);
@@ -181,6 +197,12 @@ public:
 
     //Helper.cpp
     void saveTetOBJ(const std::string& filename, const TetNodes& tet_vtx);
+
+
+    // BoundaryCondition.cpp
+    void imposeCylindricalBending();
+    void fixEndPointsX();
+    void dragMiddle();
 
     FEMSolver() {}
     ~FEMSolver() {}

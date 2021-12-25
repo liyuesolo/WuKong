@@ -490,13 +490,11 @@ void Tiling3D::getMeshForPrinting(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen:
 
 }
 
-void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+void Tiling3D::fetchTilingVtxLoop(std::vector<PointLoops>& raw_points)
 {
-    std::vector<PointLoops> raw_points;
-    // int IH = 5;
-    // T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
-
-    int IH = 0;
+    
+    
+    int IH = 0
     T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
 
     // int IH = 13;
@@ -508,20 +506,19 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
     // int IH = 6;
     // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
 
-    // int IH = 1;
-    // T params[] = {0.207, 0.7403, 0.304, 1.2373}; //Isohedral 01
 
-    // int IH = 2;
-	// T params[] = {0.3767, 0.5949, 0, 0}; //Isohedral 02
-
-    TV2 T1, T2;
+    
 
     fetchOneFamilyFillRegion(IH, params, raw_points, 10, 10);
+}
 
+void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
+    Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+{
     T height = 1.0;
-    T thickness = 0.04;
+    T thickness = 0.1;
     int sub_divide_width = 5;
-    int sub_divide_height = 5;
+    int sub_divide_height = std::floor(height / thickness);
     std::vector<TV> mesh_vertices;
     std::vector<Face> mesh_faces;
     std::vector<TV2> unique_points;
@@ -623,8 +620,19 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
         }
         if (ixn_vtx_ids.size() == 3)
             mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[1], ixn_vtx_ids[2]));
-        else if (ixn_vtx_ids.size() > 3)
-            std::cout << "ixn_vtx_ids.size() > 3, add more faces" << std::endl;
+        else if (ixn_vtx_ids.size() == 4)
+        {
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[1], ixn_vtx_ids[2]));
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[2], ixn_vtx_ids[3]));
+        }
+        else if (ixn_vtx_ids.size() == 5)
+        {
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[1], ixn_vtx_ids[2]));
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[2], ixn_vtx_ids[3]));
+            mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[3], ixn_vtx_ids[4]));
+        }
+        else if (ixn_vtx_ids.size() > 5)
+            std::cout << "ixn_vtx_ids.size() > 5, add more faces" << std::endl;
     }
 
     // thicken line
@@ -643,8 +651,8 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
 
         if (insec) // v0->v3, v1->v2
         {
-            // int n_sub_div = std::floor(std::min((v3 - v0).norm(), (v2-v1).norm()) / thickness);
-            int n_sub_div = sub_divide_width;
+            int n_sub_div = std::floor(std::min((v3 - v0).norm(), (v2-v1).norm()) / thickness);
+            // int n_sub_div = sub_divide_width;
             TV delta1 = (v3 - v0) / T(n_sub_div);
             TV delta2 = (v2 - v1) / T(n_sub_div);
             
@@ -670,8 +678,8 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
         }
         else // v0->v2, v1->v3
         {
-            // int n_sub_div = std::floor(std::min((v2 - v0).norm(), (v3-v1).norm()) / thickness);
-            int n_sub_div = sub_divide_width;
+            int n_sub_div = std::floor(std::min((v2 - v0).norm(), (v3-v1).norm()) / thickness);
+            // int n_sub_div = sub_divide_width;
             TV delta1 = (v2 - v0) / T(n_sub_div);
             TV delta2 = (v3 - v1) / T(n_sub_div);
             
@@ -736,49 +744,88 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
         return Face(face[1], face[0], face[2]);
     };
 
+    
+    auto addFace = [&](const TV& edge_vec, const Face& f, bool invert)
+    {
+        TV n = normal(f);
+        T sign = invert ? -1.0 : 1.0;
+        Face face = f;
+        if (sign * edge_vec.dot(n) < 0)
+        {
+            face = inverseNormal(f);
+        }
+        mesh_faces.push_back(face);
+    };
+
+    auto addVertex = [&](const TV& vtx)->int
+    {
+        auto find_iter = std::find_if(mesh_vertices.begin(), mesh_vertices.end(), 
+                            [&vtx](const TV x)->bool
+                               { return (x - vtx).norm() < 1e-6; }
+                             );
+        if (find_iter == mesh_vertices.end())
+        {
+            mesh_vertices.push_back(vtx);
+            return mesh_vertices.size() - 1;
+        }
+        else
+        {
+            return std::distance(mesh_vertices.begin(), find_iter);
+        }
+        
+    };
+
     for (int i = 0; i < boundary_edges.size() / 2; i++)
     {
         Edge ei = boundary_edges[i * 2 + 0];
         Edge ei_oppo = boundary_edges[i * 2 + 1];
         TV v0 = mesh_vertices[ei[0]], v1 = mesh_vertices[ei[1]];
         TV v2 = mesh_vertices[ei_oppo[0]], v3 = mesh_vertices[ei_oppo[1]];
-        
-        Face f0 = Face(ei[1], ei[0], ei[0] + nv);
-        Face f1 = Face(ei[1], ei[0] + nv, ei[1] + nv);
-        
-        TV n0 = normal(f0), n1 = normal(f1);
+
         TV edge_vec = (v2 - v0 + TV(1e-4, 1e-4, 1e-4)).normalized();
 
-        if (edge_vec.dot(n0) < 0)
-        {
-            f0 = inverseNormal(f0);
-            f1 = inverseNormal(f1);
-        }
-        mesh_faces.push_back(f0); mesh_faces.push_back(f1);
+        TV delta_vec = (mesh_vertices[ei[0] + nv] - mesh_vertices[ei[0]]) / T(sub_divide_height);
 
-        Face f2 = Face(ei_oppo[0], ei_oppo[1], ei_oppo[0] + nv);
-        Face f3 = Face(ei_oppo[0] + nv, ei_oppo[1], ei_oppo[1] + nv);
-        TV n2 = normal(f2), n3 = normal(f3);
-        if (-edge_vec.dot(n2) < 0)
+        int loop0 = ei[0], loop1 = ei[1], loop2 = ei_oppo[0], loop3 = ei_oppo[1];
+        for (int j = 1; j < sub_divide_height; j++)
         {
-            f2 = inverseNormal(f2);
-            f3 = inverseNormal(f3);
+            int idx0 = addVertex(v0 + j * delta_vec);
+            int idx1 = addVertex(v1 + j * delta_vec);
+            int idx2 = addVertex(v2 + j * delta_vec);
+            int idx3 = addVertex(v3 + j * delta_vec);
+
+            addFace(edge_vec, Face(loop1, loop0, idx0), false);
+            addFace(edge_vec, Face(loop1, idx0, idx1), false);
+
+            addFace(edge_vec, Face(loop2, loop3, idx2), true);
+            addFace(edge_vec, Face(idx2, loop3, idx3), true);
+
+            loop0 = idx0; loop1 = idx1; loop2 = idx2; loop3 = idx3;
         }
-        mesh_faces.push_back(f2);
-        mesh_faces.push_back(f3);
+
+        // addFace(edge_vec, Face(ei[1], ei[0], ei[0] + nv), false);
+        // addFace(edge_vec, Face(ei[1], ei[0] + nv, ei[1] + nv), false);
+
+        // addFace(edge_vec, Face(ei_oppo[0], ei_oppo[1], ei_oppo[0] + nv), true);
+        // addFace(edge_vec, Face(ei_oppo[0] + nv, ei_oppo[1], ei_oppo[1] + nv), true);
+        addFace(edge_vec, Face(loop1, loop0, ei[0] + nv), false);
+        addFace(edge_vec, Face(loop1, ei[0] + nv, ei[1] + nv), false);
+
+        addFace(edge_vec, Face(loop2, loop3, ei_oppo[0] + nv), true);
+        addFace(edge_vec, Face(ei_oppo[0] + nv, loop3, ei_oppo[1] + nv), true);
     }
     
 
-    // std::ofstream out("test_tiling.obj");
+    std::ofstream out("test_tiling.obj");
     
-    // for (const TV& vtx : mesh_vertices)
-    // {
-    //     out << "v " << vtx.transpose() << std::endl;
-    // }
-    // for (const Face& face : mesh_faces)
-    //     out << "f " << face.transpose() + IV::Ones().transpose() << std::endl;
+    for (const TV& vtx : mesh_vertices)
+    {
+        out << "v " << vtx.transpose() << std::endl;
+    }
+    for (const Face& face : mesh_faces)
+        out << "f " << face.transpose() + IV::Ones().transpose() << std::endl;
 
-    // out.close();
+    out.close();
     V.resize(mesh_vertices.size(), 3);
     F.resize(mesh_faces.size(), 3);
     C.resize(mesh_faces.size(), 3);
@@ -798,9 +845,14 @@ void Tiling3D::buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen
 
 void Tiling3D::initializeSimulationData()
 {
+    
+    std::vector<PointLoops> raw_points;
+
+    fetchTilingVtxLoop(raw_points);
+
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
-    buildSimulationMesh(V, F, C);
+    buildSimulationMesh(raw_points, V, F, C);
     
     Eigen::MatrixXd TV;
     Eigen::MatrixXi TT;
@@ -810,4 +862,14 @@ void Tiling3D::initializeSimulationData()
     
     solver.initializeElementData(TV, TF, TT);
 
+    // solver.dirichlet_vertices = { 107, 35 };
+    // std::vector<int> all_vertices;
+    // for (int i = 0; i < solver.num_nodes; i++)
+    //     all_vertices.push_back(i);
+    // solver.dirichlet_vertices = all_vertices;
+    // solver.imposeCylindricalBending();
+
+    solver.fixEndPointsX();
+    solver.dragMiddle();
+    solver.max_newton_iter = 1000;
 }

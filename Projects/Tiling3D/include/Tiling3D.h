@@ -68,7 +68,10 @@ public:
     
     void test();
 
-    void buildSimulationMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void fetchTilingVtxLoop(std::vector<PointLoops>& raw_points);
+
+    void buildSimulationMesh(const std::vector<PointLoops>& raw_points,
+        Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
     void clapBottomLayerWithSquare(
         int IH, T* params, 

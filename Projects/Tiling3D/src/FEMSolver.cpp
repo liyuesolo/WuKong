@@ -57,6 +57,17 @@ T FEMSolver::computeResidual(const VectorXT& u, VectorXT& residual)
     {
         Vector<T, 12> dedx;
         computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        // for (int i = 0; i < 12; i++)
+        // {
+        //     if (std::isnan(dedx[i]))
+        //     {
+        //         saveTetOBJ("nan_tet.obj", x_deformed);
+        //         saveTetOBJ("nan_tet_rest.obj", x_undeformed);
+        //         std::exit(0);
+        //     }
+        // }
+        
+        // std::cout << dedx.transpose() << std::endl;
         addForceEntry<12>(residual, indices, -dedx);
     });
 
