@@ -1,4 +1,6 @@
+#include <igl/triangle/triangulate.h>
 #include "../include/Tiling3D.h"
+
 
 #include <random>
 #include <cmath>
@@ -492,16 +494,14 @@ void Tiling3D::getMeshForPrinting(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen:
 
 void Tiling3D::fetchTilingVtxLoop(std::vector<PointLoops>& raw_points)
 {
-    
-    
-    int IH = 0
-    T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
+    // int IH = 0;
+    // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
 
     // int IH = 13;
     // T params[] = {0.1, 0.2}; //Isohedral 7
 
-    // int IH = 29;
-    // T params[] = {0}; //Isohedral 29
+    int IH = 29;
+    T params[] = {0}; //Isohedral 29
 
     // int IH = 6;
     // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
@@ -586,6 +586,17 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
         }
     }
 
+    std::ofstream out("tiling_2d_edges.obj");
+    
+    for (const TV2& vtx : unique_points)
+    {
+        out << "v " << vtx.transpose() << " 0" << std::endl;
+    }
+    for (const Edge& edge : edges)
+        out << "l " << edge.transpose() + Edge::Ones().transpose() << std::endl;
+
+    out.close();
+
     std::unordered_map<Edge, IdList, VectorHash<2>> edge_vtx_tracker;
     
     auto appendVtxToEdge = [&](const Vertex& vtx, const Edge& edge, int vtx_idx)
@@ -596,22 +607,65 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
             edge_vtx_tracker[edge].push_back(vtx_idx);
     };
 
+    // sort edge by angle
+    for (Vertex& vtx : vertices)
+    {
+        TV pos = vtx.x;
+        TV ref = (vertices[edges[0][1]].x - pos).normalized();
+        TV avg_normal(-0.1, -0.1, -1);
+
+        std::sort(vtx.edges.begin(), vtx.edges.end(), [&](const Edge& edge_a, const Edge& edge_b)
+        {
+            TV E0 = (vertices[edge_a[1]].x - pos).normalized();
+            TV E1 = (vertices[edge_b[1]].x - pos).normalized();
+
+            T dot_sign0 = E0.dot(ref);
+            T dot_sign1 = E1.dot(ref);
+            TV cross_sin0 = E0.cross(ref);
+            TV cross_sin1 = E1.cross(ref);
+
+            T angle_a = cross_sin0.dot(avg_normal) < 0 ? std::acos(dot_sign0) : 2.0 * M_PI - std::acos(dot_sign0);
+            T angle_b = cross_sin1.dot(avg_normal) < 0 ? std::acos(dot_sign1) : 2.0 * M_PI - std::acos(dot_sign1);
+            
+            return angle_a < angle_b;
+        });
+    }
     // insert bisecting vector vtx
+    int cnt = 0;
+    TM2 R90 = TM2::Zero();
+
+    R90.row(0) = TV2(0, -1);
+    R90.row(1) = TV2(1, 0);
     for (const Vertex& vtx : vertices)
     {
         IdList ixn_vtx_ids;
+        
         for (int i = 0; i < vtx.edges.size(); i++)
         {
             int j = (i + 1) % vtx.edges.size();
             
             TV vi = vtx.x, vj = vertices[vtx.edges[i][1]].x, vk = vertices[vtx.edges[j][1]].x;
             
-            TV bisec;
+            TV bisec = TV::Zero();
             // only two edges here and this is the larger angle
-            if (j == 0 && i == 1)
-                bisec = vi - ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
-            else
+            // if (j == 0 && i == 1)
+            //     bisec = vi - ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+            // else
+            //     bisec = vi + ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+
+            T cross_dot = (vj - vi).cross(vk - vi).dot(TV(-1e4, -1e4, -1));
+            if (cross_dot > 0)
                 bisec = vi + ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+            else
+                bisec = vi - ((vj - vi).normalized() + (vk - vi).normalized()).normalized() * 0.5 * thickness;
+
+            
+            
+
+            if ((vj-vi).cross(vk-vi).norm() < 1e-6)
+                bisec.head<2>() = vi.head<2>() - R90 * (vj - vi).head<2>() * 0.5 * thickness;
+
+
             mesh_vertices.push_back(bisec);
             int vtx_idx = mesh_vertices.size() - 1;            
             ixn_vtx_ids.push_back(vtx_idx);
@@ -632,8 +686,50 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
             mesh_faces.push_back(Face(ixn_vtx_ids[0], ixn_vtx_ids[3], ixn_vtx_ids[4]));
         }
         else if (ixn_vtx_ids.size() > 5)
+        {
+            Eigen::MatrixXd boundary_vertices;
+            Eigen::MatrixXi boundary_edges;
+            Eigen::MatrixXd points_inside_a_hole;
+
+            // Triangulated interior
+            Eigen::MatrixXd V2;
+            Eigen::MatrixXi F2;
+
+            boundary_vertices.resize(ixn_vtx_ids.size(), 2);
+            boundary_edges.resize(ixn_vtx_ids.size(), 2);
+
+            for (int k = 0; k < ixn_vtx_ids.size(); k++)
+            {
+                boundary_vertices.row(k) = mesh_vertices[ixn_vtx_ids[k]].head<2>();
+                int l = (k + 1) % ixn_vtx_ids.size();
+                boundary_edges.row(k) = Edge(k, l);
+            }
+            
+            std::string cmd = "pY";
+            igl::triangle::triangulate(boundary_vertices,
+                boundary_edges,
+                points_inside_a_hole, 
+                cmd, 
+                // "a0.005q",
+                V2, F2);
+            for (int k = 0; k < F2.rows(); k++)
+            {
+                mesh_faces.push_back(Face(ixn_vtx_ids[F2(k, 0)], ixn_vtx_ids[F2(k, 1)], ixn_vtx_ids[F2(k, 2)]));
+            }
+            
+        }
             std::cout << "ixn_vtx_ids.size() > 5, add more faces" << std::endl;
+        cnt ++;
     }
+
+    out.open("tiling_bisec_vtx.obj");
+    
+    for (const TV& vtx : mesh_vertices)
+    {
+        out << "v " << vtx.transpose() << std::endl;
+    }
+
+    out.close();
 
     // thicken line
     std::vector<Edge> boundary_edges;
@@ -704,6 +800,17 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
             boundary_edges.push_back(Edge(loop1, right_vtx[1]));
         }
     }
+
+    out.open("tiling_bottom_edges_bd.obj");
+    
+    for (const TV& vtx : mesh_vertices)
+    {
+        out << "v " << vtx.transpose() << std::endl;
+    }
+    for (const Edge& edge : boundary_edges)
+        out << "l " << edge.transpose() + Edge::Ones().transpose() << std::endl;
+
+    out.close();
 
     // unify face normal due to different edge orientation
     for (Face& face : mesh_faces)
@@ -802,12 +909,6 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
 
             loop0 = idx0; loop1 = idx1; loop2 = idx2; loop3 = idx3;
         }
-
-        // addFace(edge_vec, Face(ei[1], ei[0], ei[0] + nv), false);
-        // addFace(edge_vec, Face(ei[1], ei[0] + nv, ei[1] + nv), false);
-
-        // addFace(edge_vec, Face(ei_oppo[0], ei_oppo[1], ei_oppo[0] + nv), true);
-        // addFace(edge_vec, Face(ei_oppo[0] + nv, ei_oppo[1], ei_oppo[1] + nv), true);
         addFace(edge_vec, Face(loop1, loop0, ei[0] + nv), false);
         addFace(edge_vec, Face(loop1, ei[0] + nv, ei[1] + nv), false);
 
@@ -816,7 +917,7 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
     }
     
 
-    std::ofstream out("test_tiling.obj");
+    out.open("test_tiling.obj");
     
     for (const TV& vtx : mesh_vertices)
     {
@@ -862,14 +963,22 @@ void Tiling3D::initializeSimulationData()
     
     solver.initializeElementData(TV, TF, TT);
 
-    // solver.dirichlet_vertices = { 107, 35 };
+    // solver.dirichlet_vertices = { 
+    //     115, 85, 48, // bottom
+    //     97, 65, 10, // top
+    //     95, 102, 107, 113, 119, // left
+    //     13, 24, 35, 46, 56
+    //  };
     // std::vector<int> all_vertices;
     // for (int i = 0; i < solver.num_nodes; i++)
     //     all_vertices.push_back(i);
     // solver.dirichlet_vertices = all_vertices;
     // solver.imposeCylindricalBending();
 
-    solver.fixEndPointsX();
-    solver.dragMiddle();
+    // solver.fixEndPointsX();
+    // solver.dragMiddle();
+
+    // solver.applyForceTopBottom();
+
     solver.max_newton_iter = 1000;
 }

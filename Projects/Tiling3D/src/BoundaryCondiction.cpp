@@ -2,7 +2,7 @@
 
 void FEMSolver::imposeCylindricalBending()
 {   
-    T curvature = 0.5;
+    T curvature = 0.2;
     
     T theta = M_PI * 0.5;
 
@@ -12,6 +12,7 @@ void FEMSolver::imposeCylindricalBending()
 
     T radius = 1.0 / curvature;
 
+    TV cylinder_center = center - TV(0, 0, radius);
     
     iterateDirichletVertices([&](const TV& vtx, int idx)
     {
@@ -21,7 +22,7 @@ void FEMSolver::imposeCylindricalBending()
         // unwrap cylinder to xy plane
         T arc_central_angle = distance_along_unwrapped_plane / radius;
 
-        TV pt_projected = center + distance_along_cylinder_dir * K1_dir + 
+        TV pt_projected = cylinder_center + distance_along_cylinder_dir * K1_dir + 
             radius * (std::sin(arc_central_angle) * K2_dir + std::cos(arc_central_angle) * TV(0, 0, 1));
                 
         for (int d = 0; d < dim; d++)
@@ -53,6 +54,20 @@ void FEMSolver::dragMiddle()
             && (x[2] < min_corner[2] + 1e-6))
         {
             dirichlet_data[i * dim + 2] = -1;
+            // f[i * dim + 2] = -100.0;
         }
+    }
+}
+
+void FEMSolver::applyForceTopBottom()
+{
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV x = undeformed.segment<3>(i * dim);
+        if (x[1] > max_corner[1] - 1e-6)
+            f[i * dim + 1] = -1.0;
+        else if (x[1] < min_corner[1] + 1e-6)
+            // f[i * dim + 1] = 10.0;
+            dirichlet_data[i * dim + 1] = 0.0;
     }
 }

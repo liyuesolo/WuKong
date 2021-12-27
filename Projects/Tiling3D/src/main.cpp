@@ -16,6 +16,7 @@ Eigen::MatrixXd C;
 
 static bool enable_selection = false;
 static bool show_cylinder = false;
+static bool incremental = true;
 
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
@@ -28,7 +29,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     
     if (show_cylinder)
     {
-        tiling.solver.appendCylinder(V, F, C, tiling.solver.center, TV(0, 1, 0), 2);
+        tiling.solver.appendCylinder(V, F, C, tiling.solver.center, TV(0, 1, 0), 1/0.3);
     }
 
     viewer.data().clear();
@@ -55,8 +56,14 @@ int main()
             if (ImGui::Checkbox("ShowCylinder", &show_cylinder))
             {
                 updateScreen(viewer);
+            } 
+        }
+        if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("IncrementalLoading", &incremental))
+            {
+                
             }
-
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
@@ -84,7 +91,10 @@ int main()
         default: 
             return false;
         case ' ':
-            tiling.solver.staticSolve();
+            if (incremental)
+                tiling.solver.incrementalLoading();
+            else
+                tiling.solver.staticSolve();    
             updateScreen(viewer);
             return true;
         }

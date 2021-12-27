@@ -8,6 +8,31 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
+T FEMSolver::computeInteralEnergy(const VectorXT& u)
+{
+    VectorXT projected = u;
+    if (!run_diff_test)
+    {
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            projected[offset] = target;
+        });
+    }
+    deformed = undeformed + projected;
+
+    VectorXT energies_neoHookean = VectorXT::Zero(num_ele);
+
+    iterateTetsParallel([&](const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
+    {
+        T ei;
+        computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
+        energies_neoHookean[tet_idx] += ei;
+    });
+
+    return energies_neoHookean.sum();
+}
+
 T FEMSolver::computeTotalEnergy(const VectorXT& u)
 {
     T total_energy = 0.0;
@@ -34,6 +59,8 @@ T FEMSolver::computeTotalEnergy(const VectorXT& u)
 
     total_energy += energies_neoHookean.sum();
 
+    total_energy -= u.dot(f);
+
     return total_energy;
 }
 
@@ -51,6 +78,8 @@ T FEMSolver::computeResidual(const VectorXT& u, VectorXT& residual)
     }
 
     deformed = undeformed + projected;
+
+    residual = f;
     
     iterateTetsSerial([&](const TetNodes& x_deformed, 
         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
@@ -201,10 +230,32 @@ T FEMSolver::lineSearchNewton(VectorXT& u, VectorXT& residual)
     return norm;
 }
 
+void FEMSolver::incrementalLoading()
+{
+    std::unordered_map<int, T> dirichlet_bc_target = dirichlet_data;
+
+    int n_step = 50;
+    for (int step = 1; step <= n_step; step++)
+    {
+        for (auto& data : dirichlet_data)
+            data.second = T(1) / T(n_step) * dirichlet_bc_target[data.first];
+        staticSolve();
+        // saveToOBJ("iter_" + std::to_string(step) + ".obj");
+        undeformed = deformed;
+        u.setZero();
+    }
+    
+}
+
 bool FEMSolver::staticSolve()
 {
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
+
+    iterateDirichletDoF([&](int offset, T target)
+    {
+        f[offset] = 0;
+    });
 
     while (true)
     {

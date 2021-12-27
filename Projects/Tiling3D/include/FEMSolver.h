@@ -33,6 +33,7 @@ public:
     int dim = 3;
 
     VectorXT u;
+    VectorXT f;
     VectorXT deformed, undeformed;
     VectorXi indices;
     VectorXi surface_indices;
@@ -63,6 +64,7 @@ public:
     TV min_corner, max_corner;
     TV center;
 
+    
 
 public:
 
@@ -178,6 +180,7 @@ public:
 
     // FEMSolver.cpp
     T computeTotalEnergy(const VectorXT& u);
+    T computeInteralEnergy(const VectorXT& u);
 
     void buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K);
 
@@ -186,6 +189,8 @@ public:
     T lineSearchNewton(VectorXT& u,  VectorXT& residual);
 
     bool staticSolve();
+
+    void incrementalLoading();
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
@@ -197,11 +202,14 @@ public:
 
     //Helper.cpp
     void saveTetOBJ(const std::string& filename, const TetNodes& tet_vtx);
-
+    void saveToOBJ(const std::string& filename);
+    
 
     // BoundaryCondition.cpp
+    void computeCylindricalBendingBC();
     void imposeCylindricalBending();
     void fixEndPointsX();
+    void applyForceTopBottom();
     void dragMiddle();
 
     FEMSolver() {}

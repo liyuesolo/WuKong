@@ -12,3 +12,13 @@ void FEMSolver::saveTetOBJ(const std::string& filename, const TetNodes& tet_vtx)
     out << "f 3 1 4" << std::endl;
     out.close();
 }
+
+void FEMSolver::saveToOBJ(const std::string& filename)
+{
+    std::ofstream out(filename);
+    for (int i = 0; i < num_nodes; i++)
+        out << "v " << deformed.segment<3>(i * dim).transpose() << std::endl;
+    for (int i = 0; i < num_surface_faces; i++)
+        out << "f " << (surface_indices.segment<3>(i * 3) + IV::Ones()).transpose() << std::endl;
+    out.close();
+}

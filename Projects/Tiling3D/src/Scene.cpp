@@ -12,6 +12,7 @@ void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV,
     });
     deformed = undeformed;
     u = VectorXT::Zero(num_nodes * dim);
+    f = VectorXT::Zero(num_nodes * dim);
 
     num_ele = TT.rows();
     indices.resize(num_ele * 4);
