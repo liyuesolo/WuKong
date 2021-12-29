@@ -30,6 +30,16 @@ void FEMSolver::imposeCylindricalBending()
     });
 }
 
+void FEMSolver::addBackSurfaceToDirichletVertices()
+{
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV x = undeformed.segment<3>(i * dim);
+        if (x[2] < min_corner[2] + 1e-6)
+            dirichlet_vertices.push_back(i);
+    }
+}
+
 void FEMSolver::fixEndPointsX()
 {
     for (int i = 0; i < num_nodes; i++)
@@ -67,7 +77,22 @@ void FEMSolver::applyForceTopBottom()
         if (x[1] > max_corner[1] - 1e-6)
             f[i * dim + 1] = -1.0;
         else if (x[1] < min_corner[1] + 1e-6)
-            // f[i * dim + 1] = 10.0;
+            // f[i * dim + 1] = 1.0;
             dirichlet_data[i * dim + 1] = 0.0;
+    }
+}
+
+void FEMSolver::applyForceLeftRight()
+{
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV x = undeformed.segment<3>(i * dim);
+        if (x[0] > max_corner[0] - 1e-6)
+            f[i * dim + 0] = -50.0;
+        else if (x[0] < min_corner[0] + 1e-6)
+        {
+            for (int d = 0; d < dim; d++)
+                dirichlet_data[i * dim + d] = 0.0;
+        }
     }
 }

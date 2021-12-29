@@ -1,5 +1,26 @@
 #include "../include/FEMSolver.h"
 
+void FEMSolver::initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F)
+{
+    num_nodes = V.rows();
+    undeformed.resize(num_nodes * dim);
+    tbb::parallel_for(0, num_nodes, [&](int i)
+    {
+        undeformed.segment<3>(i * dim) = V.row(i);
+    });
+    deformed = undeformed;
+    u = VectorXT::Zero(num_nodes * dim);
+    f = VectorXT::Zero(num_nodes * dim);
+
+    num_ele = 0;
+    
+    num_surface_faces = F.rows();
+    surface_indices.resize(num_surface_faces * 3);
+    tbb::parallel_for(0, num_surface_faces,  [&](int i)
+    {
+        surface_indices.segment<3>(i * 3) = Face(F(i, 0), F(i, 1), F(i, 2));
+    });
+}
 
 void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV, 
     const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT)
@@ -30,6 +51,16 @@ void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV,
 
     computeBoundingBox();
     center = 0.5 * (max_corner + min_corner);
+
+    use_ipc = true;
+    if (use_ipc)
+    {
+        barrier_distance = 1e-3;
+        barrier_weight = 1e6;
+        computeIPCRestData();
+    }
+
+    max_newton_iter = 1000;
 }
 
 void FEMSolver::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
@@ -69,7 +100,7 @@ void FEMSolver::appendCylinder(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Ma
         const TV& _center, const TV& direction, T R)
 {
     T visual_R = R;
-    int n_div = 10;
+    int n_div = 100;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 3);
     for(int i = 0; i < n_div; i++)

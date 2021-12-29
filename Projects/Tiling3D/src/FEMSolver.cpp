@@ -8,9 +8,9 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
-T FEMSolver::computeInteralEnergy(const VectorXT& u)
+T FEMSolver::computeInteralEnergy(const VectorXT& _u)
 {
-    VectorXT projected = u;
+    VectorXT projected = _u;
     if (!run_diff_test)
     {
         iterateDirichletDoF([&](int offset, T target)
@@ -33,11 +33,11 @@ T FEMSolver::computeInteralEnergy(const VectorXT& u)
     return energies_neoHookean.sum();
 }
 
-T FEMSolver::computeTotalEnergy(const VectorXT& u)
+T FEMSolver::computeTotalEnergy(const VectorXT& _u)
 {
     T total_energy = 0.0;
 
-    VectorXT projected = u;
+    VectorXT projected = _u;
     if (!run_diff_test)
     {
         iterateDirichletDoF([&](int offset, T target)
@@ -59,7 +59,14 @@ T FEMSolver::computeTotalEnergy(const VectorXT& u)
 
     total_energy += energies_neoHookean.sum();
 
-    total_energy -= u.dot(f);
+    total_energy -= _u.dot(f);
+
+    if (use_ipc)
+    {
+        T contact_energy = 0.0;
+        addIPCEnergy(contact_energy);
+        total_energy += contact_energy;
+    }
 
     return total_energy;
 }
@@ -86,19 +93,13 @@ T FEMSolver::computeResidual(const VectorXT& u, VectorXT& residual)
     {
         Vector<T, 12> dedx;
         computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
-        // for (int i = 0; i < 12; i++)
-        // {
-        //     if (std::isnan(dedx[i]))
-        //     {
-        //         saveTetOBJ("nan_tet.obj", x_deformed);
-        //         saveTetOBJ("nan_tet_rest.obj", x_undeformed);
-        //         std::exit(0);
-        //     }
-        // }
-        
-        // std::cout << dedx.transpose() << std::endl;
         addForceEntry<12>(residual, indices, -dedx);
     });
+
+    if (use_ipc)
+    {
+        addIPCForceEntries(residual);
+    }
 
     // std::getchar();
     if (!run_diff_test)
@@ -131,6 +132,11 @@ void FEMSolver::buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K)
         computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
         addHessianEntry<12>(entries, indices, hessian);
     });
+    
+    if (use_ipc)
+    {
+        addIPCHessianEntries(entries);
+    }
 
     K.setFromTriplets(entries.begin(), entries.end());
 
@@ -195,13 +201,13 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
     return true;
 }
 
-T FEMSolver::lineSearchNewton(VectorXT& u, VectorXT& residual)
+T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
 {
     VectorXT du = residual;
     du.setZero();
 
     StiffnessMatrix K(residual.rows(), residual.rows());
-    buildSystemMatrix(u, K);
+    buildSystemMatrix(_u, K);
     
     // Timer ti(true);
     bool success = linearSolve(K, residual, du);
@@ -210,24 +216,62 @@ T FEMSolver::lineSearchNewton(VectorXT& u, VectorXT& residual)
         return 1e16;
     T norm = du.norm();
     // std::cout << du.norm() << std::endl;
-    T alpha = 1;
-    T E0 = computeTotalEnergy(u);
+    T alpha = computeInversionFreeStepsize(_u, du);
+    std::cout << "** step size **" << std::endl;
+    std::cout << "after tet inv step size: " << alpha << std::endl;
+    if (use_ipc)
+    {
+        T ipc_step_size = computeCollisionFreeStepsize(_u, du);
+        alpha = std::min(alpha, ipc_step_size);
+        std::cout << "after ipc step size: " << alpha << std::endl;
+    }
+    std::cout << "**       **" << std::endl;
+    T E0 = computeTotalEnergy(_u);
     int cnt = 0;
     while (true)
     {
-        VectorXT u_ls = u + alpha * du;
+        VectorXT u_ls = _u + alpha * du;
         T E1 = computeTotalEnergy(u_ls);
         if (E1 - E0 < 0 || cnt > 15)
         {
             // if (cnt > 15)
             //     std::cout << "cnt > 15" << std::endl;
-            u = u_ls;
+            _u = u_ls;
             break;
         }
         alpha *= 0.5;
         cnt += 1;
     }
     return norm;
+}
+
+T FEMSolver::computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    Matrix<T, 4, 3> dNdb;
+        dNdb << -1.0, -1.0, -1.0, 
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0;
+           
+    VectorXT step_sizes = VectorXT::Zero(num_ele);
+
+    iterateTetsParallel([&](const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
+    {
+        TM dXdb = x_undeformed.transpose() * dNdb;
+        TM dxdb = x_deformed.transpose() * dNdb;
+        TM A = dxdb * dXdb.inverse();
+        T a, b, c, d;
+        a = A.determinant();
+        b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
+        c = A.diagonal().sum();
+        d = 0.8;
+
+        T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
+        if (t < 0 || t > 1) t = 1;
+            step_sizes(tet_idx) = t;
+    });
+    return step_sizes.minCoeff();
 }
 
 void FEMSolver::incrementalLoading()

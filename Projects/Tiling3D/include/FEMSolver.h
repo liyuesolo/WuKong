@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 #include <unordered_map>
+#include <complex>
 
 #include "VecMatDef.h"
 
@@ -28,6 +29,7 @@ public:
     using TetIdx = Vector<int, 4>;
 
     using Face = Vector<int, 3>;
+    using Edge = Vector<int, 2>;
 
 public:
     int dim = 3;
@@ -51,9 +53,9 @@ public:
 
 
     T vol = 1.0;
-    T E = 1e6;
+    T E = 2.6 * 1e8;
     T density = 7.85e4; 
-    T nu = 0.42;
+    T nu = 0.48;
     
 
     T lambda, mu;
@@ -64,7 +66,13 @@ public:
     TV min_corner, max_corner;
     TV center;
 
-    
+    // IPC
+    bool use_ipc = false;
+    T barrier_distance = 1e-5;
+    T barrier_weight = 1e6;
+    Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXi ipc_edges;
+    Eigen::MatrixXi ipc_faces;
 
 public:
 
@@ -171,7 +179,74 @@ public:
         return tet_x;
     }
 
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    {
+        std::vector<Entry> triplets;
+
+        for (int k=0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+        return triplets;
+    }
+    inline T getSmallestPositiveRealQuadRoot(T a, T b, T c, T tol)
+    {
+        // return negative value if no positive real root is found
+        using std::abs;
+        using std::sqrt;
+        T t;
+        if (abs(a) <= tol) {
+            if (abs(b) <= tol) // f(x) = c > 0 for all x
+                t = -1;
+            else
+                t = -c / b;
+        }
+        else {
+            T desc = b * b - 4 * a * c;
+            if (desc > 0) {
+                t = (-b - sqrt(desc)) / (2 * a);
+                if (t < 0)
+                    t = (-b + sqrt(desc)) / (2 * a);
+            }
+            else // desv<0 ==> imag
+                t = -1;
+        }
+        return t;
+    }
+
+    inline T getSmallestPositiveRealCubicRoot(T a, T b, T c, T d, T tol = 1e-10)
+    {
+        // return negative value if no positive real root is found
+        using std::abs;
+        using std::complex;
+        using std::pow;
+        using std::sqrt;
+        T t = -1;
+        if (abs(a) <= tol)
+            t = getSmallestPositiveRealQuadRoot(b, c, d, tol);
+        else {
+            complex<T> i(0, 1);
+            complex<T> delta0(b * b - 3 * a * c, 0);
+            complex<T> delta1(2 * b * b * b - 9 * a * b * c + 27 * a * a * d, 0);
+            complex<T> C = pow((delta1 + sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0, 1.0 / 3.0);
+            if (abs(C) < tol)
+                C = pow((delta1 - sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0, 1.0 / 3.0);
+            complex<T> u2 = (-1.0 + sqrt(3.0) * i) / 2.0;
+            complex<T> u3 = (-1.0 - sqrt(3.0) * i) / 2.0;
+            complex<T> t1 = (b + C + delta0 / C) / (-3.0 * a);
+            complex<T> t2 = (b + u2 * C + delta0 / (u2 * C)) / (-3.0 * a);
+            complex<T> t3 = (b + u3 * C + delta0 / (u3 * C)) / (-3.0 * a);
+            if ((abs(imag(t1)) < tol) && (real(t1) > 0))
+                t = real(t1);
+            if ((abs(imag(t2)) < tol) && (real(t2) > 0) && ((real(t2) < t) || (t < 0)))
+                t = real(t2);
+            if ((abs(imag(t3)) < tol) && (real(t3) > 0) && ((real(t3) < t) || (t < 0)))
+                t = real(t3);
+        }
+        return t;
+    }
+
     // Scene.cpp
+    void initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
     void initializeElementData(const Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void computeBoundingBox();
@@ -179,14 +254,16 @@ public:
         const TV& _center, const TV& direction, T R);
 
     // FEMSolver.cpp
-    T computeTotalEnergy(const VectorXT& u);
-    T computeInteralEnergy(const VectorXT& u);
+    T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
 
-    void buildSystemMatrix(const VectorXT& u, StiffnessMatrix& K);
+    T computeTotalEnergy(const VectorXT& _u);
+    T computeInteralEnergy(const VectorXT& _u);
 
-    T computeResidual(const VectorXT& u,  VectorXT& residual);
+    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
 
-    T lineSearchNewton(VectorXT& u,  VectorXT& residual);
+    T computeResidual(const VectorXT& _u, VectorXT& residual);
+
+    T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
 
     bool staticSolve();
 
@@ -206,11 +283,21 @@ public:
     
 
     // BoundaryCondition.cpp
+    void addBackSurfaceToDirichletVertices();
     void computeCylindricalBendingBC();
     void imposeCylindricalBending();
     void fixEndPointsX();
     void applyForceTopBottom();
+    void applyForceLeftRight();
     void dragMiddle();
+
+    // IPC.cpp
+    T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+    void computeIPCRestData();
+    void updateIPCVertices(const VectorXT& _u);
+    void addIPCEnergy(T& energy);
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries);
 
     FEMSolver() {}
     ~FEMSolver() {}

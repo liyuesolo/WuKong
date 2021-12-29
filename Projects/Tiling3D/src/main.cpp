@@ -16,7 +16,8 @@ Eigen::MatrixXd C;
 
 static bool enable_selection = false;
 static bool show_cylinder = false;
-static bool incremental = true;
+static bool incremental = false;
+static bool tetgen = false;
 
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
@@ -29,7 +30,7 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     
     if (show_cylinder)
     {
-        tiling.solver.appendCylinder(V, F, C, tiling.solver.center, TV(0, 1, 0), 1/0.3);
+        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, 0, 1.0/0.2), TV(0, 1, 0), 1.0/0.2);
     }
 
     viewer.data().clear();
@@ -60,6 +61,10 @@ int main()
         }
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {
+            if (ImGui::Checkbox("TetGen", &tetgen))
+            {
+                
+            }
             if (ImGui::Checkbox("IncrementalLoading", &incremental))
             {
                 
@@ -124,7 +129,7 @@ int main()
         return false;
     };
 
-    tiling.initializeSimulationData();
+    tiling.initializeSimulationData(tetgen);
     // tiling.solver.checkTotalGradientScale(true);
     // tiling.solver.checkTotalHessianScale(true);
 

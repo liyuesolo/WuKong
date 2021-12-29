@@ -49,7 +49,10 @@ public:
     Tiling3D() {}
     ~Tiling3D() {}
 
-    void initializeSimulationData();
+    void initializeSimulationData(bool tetgen);
+
+    void buildSimulationMeshFromTilingInfo(int IH, T* params,
+        Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
 
     void fetchOneFamily(int IH, T* params, TV2& T1, TV2& T2, 
         PointLoops& raw_points, T width, T height);

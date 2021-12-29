@@ -208,25 +208,25 @@ void Tiling3D::clapBottomLayerWithSquare(int IH, T* params,
         }
     }
 
-    T width = 0.5;
+    
 
     cropTranslationalUnitByparallelogram(all_points, valid_points, 
-        TV2(-width, width),TV2(width, width), TV2(width, -width), 
-        TV2(-width, -width), edge_pairs);
-    int n_inner_vtx = valid_points.size();
+        TV2(-square_width, square_width),TV2(square_width, square_width), TV2(square_width, -square_width), 
+        TV2(-square_width, -square_width), edge_pairs);
+    // int n_inner_vtx = valid_points.size();
 
-    valid_points.push_back(TV2(-width, width));
-    valid_points.push_back(TV2(width, width));
-    valid_points.push_back(TV2(width, -width));
-    valid_points.push_back(TV2(-width, -width));
+    // valid_points.push_back(TV2(-width, width));
+    // valid_points.push_back(TV2(width, width));
+    // valid_points.push_back(TV2(width, -width));
+    // valid_points.push_back(TV2(-width, -width));
 
-    for (TV2 & pt : valid_points)
-        pt *= square_width;
+    // for (TV2 & pt : valid_points)
+    //     pt *= square_width;
 
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 0, n_inner_vtx + 1));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 1, n_inner_vtx + 2));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 2, n_inner_vtx + 3));
-    edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 3, n_inner_vtx + 0));
+    // edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 0, n_inner_vtx + 1));
+    // edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 1, n_inner_vtx + 2));
+    // edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 2, n_inner_vtx + 3));
+    // edge_pairs.push_back(Vector<int, 2>(n_inner_vtx + 3, n_inner_vtx + 0));
 }
 
 
