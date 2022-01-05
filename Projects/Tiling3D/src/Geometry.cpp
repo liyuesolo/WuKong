@@ -165,6 +165,37 @@ void Tiling3D::cropTranslationalUnitByparallelogram(const std::vector<PointLoops
     }  
 }
 
+void Tiling3D::fetchTilingCropped(int IH, T* params, 
+    std::vector<TV2>& valid_points, 
+    std::vector<Edge>& edge_pairs,
+    T square_width)
+{
+    std::vector<PointLoops> raw_points;
+    fetchOneFamilyFillRegion(IH, params, raw_points, 15, 30);
+    TV2 min_corner = TV2(1e6, 1e6), max_corner = TV2(-1e6, -1e6);
+    for (const PointLoops& points_loop : raw_points)
+    {
+        for (const TV2 & pt : points_loop)
+        {
+            for (int d = 0; d < 2; d++)
+            {
+                min_corner[d] = std::min(min_corner[d], pt[d]);
+                max_corner[d] = std::max(max_corner[d], pt[d]);
+            }
+        }
+    }
+
+    for (PointLoops& points_loop : raw_points)
+    {
+        for (TV2 & pt : points_loop)
+        {
+            pt = (pt - 0.5 * (max_corner + min_corner)) / (max_corner - min_corner).norm() * 5.0;
+        }
+    }
+    cropTranslationalUnitByparallelogram(raw_points, valid_points, 
+        TV2(-square_width, square_width),TV2(square_width, square_width), TV2(square_width, -square_width), 
+        TV2(-square_width, -square_width), edge_pairs);
+}
 
 void Tiling3D::clapBottomLayerWithSquare(int IH, T* params, 
     PointLoops& point_loop_unit,
@@ -439,4 +470,226 @@ void Tiling3D::getMeshForPrintingWithLines(Eigen::MatrixXd& V, Eigen::MatrixXi& 
     // for (Vector<int, 2> line : edge_pairs)
     //     out << "l " << line[0] + 1 << " " << line[1] + 1 << std::endl;
     // out.close();
+}
+
+void Tiling3D::getMeshForPrinting(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+{
+    std::vector<PointLoops> raw_points;
+    // int IH = 5;
+    // T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
+
+    // int IH = 0;
+    // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
+
+    // int IH = 13;
+    // T params[] = {0.1, 0.2}; //Isohedral 7
+
+    // int IH = 29;
+    // T params[] = {0}; //Isohedral 29
+
+    int IH = 6;
+    T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
+
+    // int IH = 1;
+    // T params[] = {0.207, 0.7403, 0.304, 1.2373}; //Isohedral 01
+
+    // int IH = 2;
+	// T params[] = {0.3767, 0.5949, 0, 0}; //Isohedral 02
+
+    TV2 T1, T2;
+
+    fetchOneFamilyFillRegion(IH, params, raw_points, 10, 10);
+
+    T height = 1.0;
+
+    std::vector<TV2> unique_points;
+    std::vector<IdList> polygon_ids;
+
+    for (const PointLoops& pl : raw_points)
+    {
+        TV2 center = TV2::Zero();
+        IdList id_list;
+        for (int i = 0; i < pl.size() - 1; i++)
+        {
+            TV2 pt = pl[i];
+            center += pt;
+            auto find_iter = std::find_if(unique_points.begin(), unique_points.end(), 
+                            [&pt](const TV2 x)->bool
+                               { return (x - pt).norm() < 1e-6; }
+                             );
+            if (find_iter == unique_points.end())
+            {
+                unique_points.push_back(pt);
+                id_list.push_back(unique_points.size() - 1);
+            }
+            else
+                id_list.push_back(std::distance(unique_points.begin(), find_iter));
+        }
+
+        polygon_ids.push_back(id_list);
+        center /= T(pl.size() - 1);
+        id_list.clear();
+        for (int i = 0; i < pl.size() - 1; i++)
+        {
+            TV2 inner = center + (pl[i] - center) * 0.85;
+            unique_points.push_back(inner);
+            id_list.push_back(unique_points.size() - 1);
+        }
+        polygon_ids.push_back(id_list);
+    }
+
+    std::vector<Face> faces;
+    for (int i = 0; i < polygon_ids.size() / 2; i++)
+    {
+        auto outer = polygon_ids[i * 2];
+        auto inner = polygon_ids[i * 2 + 1];
+
+        for (int j = 0; j < outer.size(); j++)
+        {
+            faces.push_back(Face(outer[j] + 1, inner[j] + 1, inner[(j + 1) % outer.size()] + 1));
+            faces.push_back(Face(outer[j] + 1, inner[(j + 1) % outer.size()] + 1, outer[(j + 1) % outer.size()] + 1));
+        }
+    }
+
+    std::vector<TV> vertices;
+    for(int i = 0; i < unique_points.size(); i++)
+        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], 0));
+
+    for(int i = 0; i < unique_points.size(); i++)
+        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], height));
+
+    int nv = unique_points.size();
+    int nf = faces.size();
+
+    for (int i = 0; i < nf; i++)
+    {
+        faces.push_back(Face(
+          faces[i][2] + nv, faces[i][1] + nv, faces[i][0] + nv
+        ));
+    }
+    
+    for (IdList id_list : polygon_ids)
+    {
+        for (int i = 0; i < id_list.size(); i++)
+        {
+            faces.push_back(Face(
+                id_list[i] + 1, id_list[(i + 1)%id_list.size()] + 1, id_list[i] + nv + 1
+            ));
+            faces.push_back(Face(
+                id_list[(i + 1)%id_list.size()] + 1, id_list[(i + 1)%id_list.size()] + nv + 1, id_list[i] + nv + 1 
+            ));
+        }
+    }
+
+    V.resize(vertices.size(), 3);
+    tbb::parallel_for(0, (int)vertices.size(), [&](int i){
+        V.row(i) = vertices[i];
+    });
+
+    F.resize(faces.size(), 3);
+    C.resize(faces.size(), 3);
+
+    tbb::parallel_for(0, (int)faces.size(), [&](int i){
+        F.row(i) = faces[i];
+        C.row(i) = Eigen::Vector3d(0, 0.3, 1.0);
+    });
+    
+    std::ofstream out("test_mesh.obj");
+    for (const TV& pt : vertices)
+        out << "v " << pt.transpose() * 10.0 << std::endl;
+    for (auto face : faces)
+        out << "f " << face.transpose() << std::endl;
+    out.close();
+
+}
+
+void Tiling3D::extrudeToMesh(const std::vector<PointLoops>& raw_points, 
+        T width, T height, std::string filename)
+{
+    std::vector<TV2> unique_points;
+    std::vector<IdList> polygon_ids;
+
+    for (const PointLoops& pl : raw_points)
+    {
+        TV2 center = TV2::Zero();
+        IdList id_list;
+        for (int i = 0; i < pl.size() - 1; i++)
+        {
+            TV2 pt = pl[i];
+            center += pt;
+            auto find_iter = std::find_if(unique_points.begin(), unique_points.end(), 
+                            [&pt](const TV2 x)->bool
+                               { return (x - pt).norm() < 1e-6; }
+                             );
+            if (find_iter == unique_points.end())
+            {
+                unique_points.push_back(pt);
+                id_list.push_back(unique_points.size() - 1);
+            }
+            else
+                id_list.push_back(std::distance(unique_points.begin(), find_iter));
+        }
+
+        polygon_ids.push_back(id_list);
+        center /= T(pl.size() - 1);
+        id_list.clear();
+        for (int i = 0; i < pl.size() - 1; i++)
+        {
+            TV2 inner = center + (pl[i] - center) * 0.9;
+            unique_points.push_back(inner);
+            id_list.push_back(unique_points.size() - 1);
+        }
+        polygon_ids.push_back(id_list);
+    }
+
+    std::vector<Face> faces;
+    for (int i = 0; i < polygon_ids.size() / 2; i++)
+    {
+        auto outer = polygon_ids[i * 2];
+        auto inner = polygon_ids[i * 2 + 1];
+
+        for (int j = 0; j < outer.size(); j++)
+        {
+            faces.push_back(Face(outer[j] + 1, inner[j] + 1, inner[(j + 1) % outer.size()] + 1));
+            faces.push_back(Face(outer[j] + 1, inner[(j + 1) % outer.size()] + 1, outer[(j + 1) % outer.size()] + 1));
+        }
+    }
+
+    std::vector<TV> vertices;
+    for(int i = 0; i < unique_points.size(); i++)
+        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], 0));
+
+    for(int i = 0; i < unique_points.size(); i++)
+        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], height));
+
+    int nv = unique_points.size();
+    int nf = faces.size();
+
+    for (int i = 0; i < nf; i++)
+    {
+        faces.push_back(Face(
+          faces[i][2] + nv, faces[i][1] + nv, faces[i][0] + nv
+        ));
+    }
+    
+    for (IdList id_list : polygon_ids)
+    {
+        for (int i = 0; i < id_list.size(); i++)
+        {
+            faces.push_back(Face(
+                id_list[i] + 1, id_list[(i + 1)%id_list.size()] + 1, id_list[i] + nv + 1
+            ));
+            faces.push_back(Face(
+                id_list[(i + 1)%id_list.size()] + 1, id_list[(i + 1)%id_list.size()] + nv + 1, id_list[i] + nv + 1 
+            ));
+        }
+    }
+    
+    
+    std::ofstream out(filename);
+    for (const TV& pt : vertices)
+        out << "v " << pt.transpose() * 10.0 << std::endl;
+    for (auto face : faces)
+        out << "f " << face.transpose() << std::endl;
+    out.close();
 }

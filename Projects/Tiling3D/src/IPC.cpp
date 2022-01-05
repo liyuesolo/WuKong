@@ -1,11 +1,16 @@
 #include <ipc/ipc.hpp>
 #include "../include/FEMSolver.h"
 
+#include <igl/writeOBJ.h>
+
+
 void FEMSolver::computeIPCRestData()
 {
+    
     ipc_vertices.resize(num_nodes, 3);
     for (int i = 0; i < num_nodes; i++)
         ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
+    num_ipc_vtx = ipc_vertices.rows();
     
     std::vector<Edge> edges;
     ipc_faces.resize(num_surface_faces, 3);
@@ -29,20 +34,56 @@ void FEMSolver::computeIPCRestData()
     for (int i = 0; i < edges.size(); i++)
         ipc_edges.row(i) = edges[i];    
     
+
+    for (int i = 0; i < ipc_edges.rows(); i++)
+    {
+        Edge edge = ipc_edges.row(i);
+        TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
+        if ((vi - vj).norm() < barrier_distance)
+            std::cout << "edge " << edge.transpose() << " has length < 1e-6 " << std::endl;
+    }
+    
 }
 
 T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
 {
-    
-    Eigen::MatrixXd current_position(num_nodes, 3), 
-        next_step_position(num_nodes, 3);
+    // T ipc_step_size = 1.0;
+    // Eigen::MatrixXd curr_step_position = ipc_vertices;
+    // for (int i = 0; i < num_nodes; i++)
+    //     curr_step_position.row(i) = undeformed.segment<3>(i * 3);
+    // if (ipc::has_intersections(curr_step_position, ipc_edges, ipc_faces))
+    //     std::cout << "!!!!!current state has intersections" << std::endl;
+
+    // // igl::writeOBJ("curr_step.obj", curr_step_position, ipc_faces);
+    // while(true)
+    // {
+    //     std::cout << ipc_step_size << std::endl;
+    //     Eigen::MatrixXd next_step_position = ipc_vertices;
+    //     for (int i = 0; i < num_nodes; i++)
+    //         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + ipc_step_size * du.segment<3>(i * 3);
+    //     // igl::writeOBJ("next_step.obj", next_step_position, ipc_faces);
+    //     if (ipc::has_intersections(next_step_position, ipc_edges, ipc_faces))
+    //         ipc_step_size *= 0.5;
+    //     else 
+    //         return ipc_step_size;
+    // }
+
+    Eigen::MatrixXd current_position = ipc_vertices, 
+        next_step_position = ipc_vertices;
         
     for (int i = 0; i < num_nodes; i++)
     {
-        // current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
-        current_position.row(i) = undeformed.segment<3>(i * 3);
+        current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+        // current_position.row(i) = undeformed.segment<3>(i * 3);
         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
     }
+
+    // igl::writeOBJ("next_step.obj", next_step_position, ipc_faces);
+    // igl::writeOBJ("curr_step.obj", current_position, ipc_faces);
+    // std::cout << "ipc has ixn current: " << ipc::has_intersections(current_position, ipc_edges, ipc_faces) << std::endl;
+    // std::cout << "ipc has ixn next step: " << ipc::has_intersections(next_step_position, ipc_edges, ipc_faces) << std::endl;
+    // std::getchar();
+
     return ipc::compute_collision_free_stepsize(current_position, 
             next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
 }
@@ -56,13 +97,13 @@ void FEMSolver::updateIPCVertices(const VectorXT& _u)
     });
     deformed = undeformed + projected;
     for (int i = 0; i < num_nodes; i++)
-        ipc_vertices.row(i) = deformed.segment<3>(i * 3);
+        ipc_vertices.row(i) = deformed.segment<3>(i * dim);
 }
 void FEMSolver::addIPCEnergy(T& energy)
 {
     T contact_energy = 0.0;
     
-    Eigen::MatrixXd ipc_vertices_deformed(num_nodes, 3);
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
     for (int i = 0; i < num_nodes; i++) 
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
@@ -76,10 +117,24 @@ void FEMSolver::addIPCEnergy(T& energy)
     ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
 
     energy += contact_energy;
+
+    if (add_friction)
+    {
+        ipc::FrictionConstraints ipc_friction_constraints;
+        ipc::construct_friction_constraint_set(
+            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
+            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
+        );
+        T friction_energy = ipc::compute_friction_potential<T>(
+            ipc_vertices, ipc_vertices_deformed, ipc_edges,
+            ipc_faces, ipc_friction_constraints, epsv_times_h
+        );
+        energy += friction_energy;
+    }
 }
 void FEMSolver::addIPCForceEntries(VectorXT& residual)
 {
-    Eigen::MatrixXd ipc_vertices_deformed(num_nodes, 3);
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
     for (int i = 0; i < num_nodes; i++) 
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
@@ -91,13 +146,26 @@ void FEMSolver::addIPCForceEntries(VectorXT& residual)
 
     VectorXT contact_gradient = barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
+    // std::cout << "contact force norm: " << contact_gradient.norm() << std::endl;
+    residual.segment(0, num_nodes * dim) += -contact_gradient.segment(0, num_nodes * dim);
 
-    residual.segment(0, num_nodes * 3) += -contact_gradient;
-
+    if (add_friction)
+    {
+        ipc::FrictionConstraints ipc_friction_constraints;
+        ipc::construct_friction_constraint_set(
+            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
+            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
+        );
+        VectorXT friction_energy_gradient = ipc::compute_friction_potential_gradient(
+            ipc_vertices, ipc_vertices_deformed, ipc_edges,
+            ipc_faces, ipc_friction_constraints, epsv_times_h
+        );
+        residual.segment(0, num_nodes * dim) += -friction_energy_gradient;
+    }
 }
-void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries)
+void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD)
 {
-    Eigen::MatrixXd ipc_vertices_deformed(num_nodes, 3);
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
     for (int i = 0; i < num_nodes; i++) 
     {
         ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
@@ -108,8 +176,24 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries)
         ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
 
     StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, ipc_constraints, barrier_distance, false);
+        ipc_edges, ipc_faces, ipc_constraints, barrier_distance, project_PD);
 
-    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
+    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
+    
     entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
+
+    if (add_friction)
+    {
+        ipc::FrictionConstraints ipc_friction_constraints;
+        ipc::construct_friction_constraint_set(
+            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
+            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
+        );
+        StiffnessMatrix friction_energy_hessian = ipc::compute_friction_potential_hessian(
+            ipc_vertices, ipc_vertices_deformed, ipc_edges,
+            ipc_faces, ipc_friction_constraints, epsv_times_h, project_PD
+        );
+        std::vector<Entry> friction_entries = entriesFromSparseMatrix(friction_energy_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
+        entries.insert(entries.end(), friction_entries.begin(), friction_entries.end());
+    }
 }

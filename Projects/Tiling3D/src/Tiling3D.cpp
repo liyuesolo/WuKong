@@ -1,4 +1,6 @@
 #include <igl/triangle/triangulate.h>
+#include <igl/copyleft/tetgen/tetrahedralize.h>
+
 #include <igl/readOBJ.h>
 #include "../include/Tiling3D.h"
 
@@ -7,7 +9,6 @@
 #include <cmath>
 #include <fstream>
 
-#include <igl/copyleft/tetgen/tetrahedralize.h>
 
 #include "../include/Util.h"
 
@@ -130,46 +131,46 @@ void Tiling3D::fetchOneFamilyFillRegion(int IH, T* params,
 
     // for( auto i : a_tiling.fillRegion(-5, -4, 2, 4) ) {
     // for( auto i : a_tiling.fillRegion(0, -1.5, 7, 5) ) {
-    for( auto i : a_tiling.fillRegion(0, -1.5, 5, 3) ) {
-    // for( auto i : a_tiling.fillRegion(0, 0, width, height) ) {
+    // for( auto i : a_tiling.fillRegion(0, -1.5, 5, 3) ) {
+    for( auto i : a_tiling.fillRegion(0, 0, width, height) ) {
 
-        std::vector<TV2> data_points;
-        dmat3 TT = i->getTransform();
+        // std::vector<TV2> data_points;
+        // dmat3 TT = i->getTransform();
         
-        dvec2 p = TT * dvec3( shape.back(), 1.0 );
+        // dvec2 p = TT * dvec3( shape.back(), 1.0 );
 
-        data_points.push_back(TV2(p[0], p[1]));
-        // std::cout << p[0] << " " << p[1] << std::endl;
+        // data_points.push_back(TV2(p[0], p[1]));
+        // // std::cout << p[0] << " " << p[1] << std::endl;
 
-        for( size_t idx = 0; idx < shape.size(); idx += 3 ) {
-            dvec2 p1 = TT * dvec3( shape[idx], 1.0 );
-            dvec2 p2 = TT * dvec3( shape[idx+1], 1.0 );
-            dvec2 p3 = TT * dvec3( shape[idx+2], 1.0 );
+        // for( size_t idx = 0; idx < shape.size(); idx += 3 ) {
+        //     dvec2 p1 = TT * dvec3( shape[idx], 1.0 );
+        //     dvec2 p2 = TT * dvec3( shape[idx+1], 1.0 );
+        //     dvec2 p3 = TT * dvec3( shape[idx+2], 1.0 );
 
-            data_points.push_back(TV2(p1[0], p1[1]));
-            data_points.push_back(TV2(p2[0], p2[1]));
-            data_points.push_back(TV2(p3[0], p3[1]));
-        }
+        //     data_points.push_back(TV2(p1[0], p1[1]));
+        //     data_points.push_back(TV2(p2[0], p2[1]));
+        //     data_points.push_back(TV2(p3[0], p3[1]));
+        // }
 
-        if (TT[0][0] != TT[1][1])
-            std::reverse(data_points.begin(), data_points.end());
-
-        raw_points.push_back(data_points);   
-
-
-        // dmat3 T = M * i->getTransform();
-
-        // std::vector<TV2> data_points = outShapeVec( shape, T );
-
-        // if(T[0][0]!=T[1][1])
+        // if (TT[0][0] != TT[1][1])
         //     std::reverse(data_points.begin(), data_points.end());
 
-        // min_y = std::min(i->getT2(), min_y);
-        // max_y = std::max(i->getT2(), max_y);
+        // raw_points.push_back(data_points);   
 
-        // min_x = std::min(i->getT1(), min_x);
-        // max_x = std::max(i->getT1(), max_x);
-        // raw_points.push_back(data_points);
+
+        dmat3 T = M * i->getTransform();
+
+        std::vector<TV2> data_points = outShapeVec( shape, T );
+
+        if(T[0][0]!=T[1][1])
+            std::reverse(data_points.begin(), data_points.end());
+
+        min_y = std::min(i->getT2(), min_y);
+        max_y = std::max(i->getT2(), max_y);
+
+        min_x = std::min(i->getT1(), min_x);
+        max_x = std::max(i->getT1(), max_x);
+        raw_points.push_back(data_points);
 
     }
 }
@@ -316,96 +317,6 @@ void Tiling3D::fetchOneFamily(int IH, T* params, TV2& T1, TV2& T2,
 
 }
 
-void Tiling3D::extrudeToMesh(const std::vector<PointLoops>& raw_points, 
-        T width, T height, std::string filename)
-{
-    std::vector<TV2> unique_points;
-    std::vector<IdList> polygon_ids;
-
-    for (const PointLoops& pl : raw_points)
-    {
-        TV2 center = TV2::Zero();
-        IdList id_list;
-        for (int i = 0; i < pl.size() - 1; i++)
-        {
-            TV2 pt = pl[i];
-            center += pt;
-            auto find_iter = std::find_if(unique_points.begin(), unique_points.end(), 
-                            [&pt](const TV2 x)->bool
-                               { return (x - pt).norm() < 1e-6; }
-                             );
-            if (find_iter == unique_points.end())
-            {
-                unique_points.push_back(pt);
-                id_list.push_back(unique_points.size() - 1);
-            }
-            else
-                id_list.push_back(std::distance(unique_points.begin(), find_iter));
-        }
-
-        polygon_ids.push_back(id_list);
-        center /= T(pl.size() - 1);
-        id_list.clear();
-        for (int i = 0; i < pl.size() - 1; i++)
-        {
-            TV2 inner = center + (pl[i] - center) * 0.9;
-            unique_points.push_back(inner);
-            id_list.push_back(unique_points.size() - 1);
-        }
-        polygon_ids.push_back(id_list);
-    }
-
-    std::vector<Face> faces;
-    for (int i = 0; i < polygon_ids.size() / 2; i++)
-    {
-        auto outer = polygon_ids[i * 2];
-        auto inner = polygon_ids[i * 2 + 1];
-
-        for (int j = 0; j < outer.size(); j++)
-        {
-            faces.push_back(Face(outer[j] + 1, inner[j] + 1, inner[(j + 1) % outer.size()] + 1));
-            faces.push_back(Face(outer[j] + 1, inner[(j + 1) % outer.size()] + 1, outer[(j + 1) % outer.size()] + 1));
-        }
-    }
-
-    std::vector<TV> vertices;
-    for(int i = 0; i < unique_points.size(); i++)
-        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], 0));
-
-    for(int i = 0; i < unique_points.size(); i++)
-        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], height));
-
-    int nv = unique_points.size();
-    int nf = faces.size();
-
-    for (int i = 0; i < nf; i++)
-    {
-        faces.push_back(Face(
-          faces[i][2] + nv, faces[i][1] + nv, faces[i][0] + nv
-        ));
-    }
-    
-    for (IdList id_list : polygon_ids)
-    {
-        for (int i = 0; i < id_list.size(); i++)
-        {
-            faces.push_back(Face(
-                id_list[i] + 1, id_list[(i + 1)%id_list.size()] + 1, id_list[i] + nv + 1
-            ));
-            faces.push_back(Face(
-                id_list[(i + 1)%id_list.size()] + 1, id_list[(i + 1)%id_list.size()] + nv + 1, id_list[i] + nv + 1 
-            ));
-        }
-    }
-    
-    
-    std::ofstream out(filename);
-    for (const TV& pt : vertices)
-        out << "v " << pt.transpose() * 10.0 << std::endl;
-    for (auto face : faces)
-        out << "f " << face.transpose() << std::endl;
-    out.close();
-}
 
 
 void Tiling3D::test()
@@ -416,137 +327,6 @@ void Tiling3D::test()
     T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
     // fetchOneFamily(IH, params, raw_points, 10, 10);
     // extrudeToMesh(raw_points, 0.1, 1.0, "IH" + std::to_string(IH) + "_10cmx10cmx10mm.obj");
-}
-
-void Tiling3D::getMeshForPrinting(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
-{
-    std::vector<PointLoops> raw_points;
-    // int IH = 5;
-    // T params[] = {0.1224, 0.4979, 0.0252, 0.4131, 0.4979}; //Isohedral 5
-
-    // int IH = 0;
-    // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
-
-    // int IH = 13;
-    // T params[] = {0.1, 0.2}; //Isohedral 7
-
-    // int IH = 29;
-    // T params[] = {0}; //Isohedral 29
-
-    int IH = 6;
-    T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
-
-    // int IH = 1;
-    // T params[] = {0.207, 0.7403, 0.304, 1.2373}; //Isohedral 01
-
-    // int IH = 2;
-	// T params[] = {0.3767, 0.5949, 0, 0}; //Isohedral 02
-
-    TV2 T1, T2;
-
-    fetchOneFamilyFillRegion(IH, params, raw_points, 10, 10);
-
-    T height = 1.0;
-
-    std::vector<TV2> unique_points;
-    std::vector<IdList> polygon_ids;
-
-    for (const PointLoops& pl : raw_points)
-    {
-        TV2 center = TV2::Zero();
-        IdList id_list;
-        for (int i = 0; i < pl.size() - 1; i++)
-        {
-            TV2 pt = pl[i];
-            center += pt;
-            auto find_iter = std::find_if(unique_points.begin(), unique_points.end(), 
-                            [&pt](const TV2 x)->bool
-                               { return (x - pt).norm() < 1e-6; }
-                             );
-            if (find_iter == unique_points.end())
-            {
-                unique_points.push_back(pt);
-                id_list.push_back(unique_points.size() - 1);
-            }
-            else
-                id_list.push_back(std::distance(unique_points.begin(), find_iter));
-        }
-
-        polygon_ids.push_back(id_list);
-        center /= T(pl.size() - 1);
-        id_list.clear();
-        for (int i = 0; i < pl.size() - 1; i++)
-        {
-            TV2 inner = center + (pl[i] - center) * 0.85;
-            unique_points.push_back(inner);
-            id_list.push_back(unique_points.size() - 1);
-        }
-        polygon_ids.push_back(id_list);
-    }
-
-    std::vector<Face> faces;
-    for (int i = 0; i < polygon_ids.size() / 2; i++)
-    {
-        auto outer = polygon_ids[i * 2];
-        auto inner = polygon_ids[i * 2 + 1];
-
-        for (int j = 0; j < outer.size(); j++)
-        {
-            faces.push_back(Face(outer[j] + 1, inner[j] + 1, inner[(j + 1) % outer.size()] + 1));
-            faces.push_back(Face(outer[j] + 1, inner[(j + 1) % outer.size()] + 1, outer[(j + 1) % outer.size()] + 1));
-        }
-    }
-
-    std::vector<TV> vertices;
-    for(int i = 0; i < unique_points.size(); i++)
-        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], 0));
-
-    for(int i = 0; i < unique_points.size(); i++)
-        vertices.push_back(TV(unique_points[i][0], unique_points[i][1], height));
-
-    int nv = unique_points.size();
-    int nf = faces.size();
-
-    for (int i = 0; i < nf; i++)
-    {
-        faces.push_back(Face(
-          faces[i][2] + nv, faces[i][1] + nv, faces[i][0] + nv
-        ));
-    }
-    
-    for (IdList id_list : polygon_ids)
-    {
-        for (int i = 0; i < id_list.size(); i++)
-        {
-            faces.push_back(Face(
-                id_list[i] + 1, id_list[(i + 1)%id_list.size()] + 1, id_list[i] + nv + 1
-            ));
-            faces.push_back(Face(
-                id_list[(i + 1)%id_list.size()] + 1, id_list[(i + 1)%id_list.size()] + nv + 1, id_list[i] + nv + 1 
-            ));
-        }
-    }
-
-    V.resize(vertices.size(), 3);
-    tbb::parallel_for(0, (int)vertices.size(), [&](int i){
-        V.row(i) = vertices[i];
-    });
-
-    F.resize(faces.size(), 3);
-    C.resize(faces.size(), 3);
-
-    tbb::parallel_for(0, (int)faces.size(), [&](int i){
-        F.row(i) = faces[i];
-        C.row(i) = Eigen::Vector3d(0, 0.3, 1.0);
-    });
-    
-    std::ofstream out("test_mesh.obj");
-    for (const TV& pt : vertices)
-        out << "v " << pt.transpose() * 10.0 << std::endl;
-    for (auto face : faces)
-        out << "f " << face.transpose() << std::endl;
-    out.close();
-
 }
 
 void Tiling3D::fetchTilingVtxLoop(std::vector<PointLoops>& raw_points)
@@ -579,15 +359,19 @@ void Tiling3D::fetchTilingVtxLoop(std::vector<PointLoops>& raw_points)
     // std::exit(0);
 }
 
+
+
 void Tiling3D::buildSimulationMeshFromTilingInfo(int IH, T* params,
         Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
     PointLoops point_loop_unit;
-    T square_width = 0.52;
+    // T square_width = 0.52;
+    T square_width = 0.4;
     std::vector<Edge> edges;
     std::vector<TV2> unique_points;
-    clapBottomLayerWithSquare(IH, params, point_loop_unit, unique_points, edges, square_width);
+    // clapBottomLayerWithSquare(IH, params, point_loop_unit, unique_points, edges, square_width);
 
+    fetchTilingCropped(IH, params, unique_points, edges, square_width);
     struct Vertex
     {
         TV x;
@@ -1422,37 +1206,76 @@ void Tiling3D::buildSimulationMesh(const std::vector<PointLoops>& raw_points,
 
 void Tiling3D::initializeSimulationData(bool tetgen)
 {
-    
-    // std::vector<PointLoops> raw_points;
-
-    // fetchTilingVtxLoop(raw_points);
-
+    bool load_mesh = true;
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
-    // buildSimulationMesh(raw_points, V, F, C);
-
-    // int IH = 0;
-    // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
     
-    
-    // int IH = 6;
-    // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
-    // int IH = 29;
-    // T params[] = {0}; //Isohedral 7
+    std::vector<int> dirichlet_vertices;
 
-    // buildSimulationMeshFromTilingInfo(IH, params, V, F, C);
-    
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling3.obj", V, F);
+    if (load_mesh)
+    {
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling1.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling6.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling8.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling1.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling0.obj", V, F);
+        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling10.obj", V, F);
+        dirichlet_vertices = {8, 9, 1, 0, 11, 10, 19, 18, 27, 26, 35, 34, 43, 42,
+            166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 1176, 177
+        };
+        // neumann_vertices = {};
 
-    if (true)
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling11.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling12.obj", V, F);
+    }
+    else
+    {
+        std::vector<PointLoops> raw_points;
+
+        // fetchTilingVtxLoop(raw_points);
+
+        // buildSimulationMesh(raw_points, V, F, C);
+
+        // int IH = 0;
+        // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
+        
+        // int IH = 6;
+        // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
+        
+        int IH = 29;
+        T params[] = {0}; //Isohedral 7
+
+        // int IH = 13;
+        // T params[] = {0.1, 0.2}; 
+
+        // int IH = 2;
+        // T params[] = {0.12239750492, 0.5, 0.225335752741, 0.625}; 
+
+        // int IH = 5;
+        // T params[] = {0.12239750492, 0.5, 0.225335752741, 0.625, 0.5};
+        // int IH = 24;
+        // T params[] = {0.5, 0.230769230769, 0.5, 0.5};
+        
+        // int IH = 9;
+        // T params[] = {0.12239750492, 0.225335752741};
+
+        buildSimulationMeshFromTilingInfo(IH, params, V, F, C);    
+    }
+    
+    if (tetgen || load_mesh)
     {
         Eigen::MatrixXd TV;
         Eigen::MatrixXi TT;
         Eigen::MatrixXi TF;
-
-        igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
         
+        Eigen::VectorXd tmp = V.col(2);
+        V.col(2) = V.col(1);
+        V.col(1) = tmp;
+        igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
+        // igl::copyleft::tetgen::tetrahedralize(V,F, "Y", TV,TT,TF);
         solver.initializeElementData(TV, TF, TT);
+
+
         // solver.dirichlet_vertices = { 
         //     115, 85, 48, // bottom
         //     97, 65, 10, // top
@@ -1463,15 +1286,18 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         // for (int i = 0; i < solver.num_nodes; i++)
         //     all_vertices.push_back(i);
         // solver.dirichlet_vertices = all_vertices;
-        // solver.addBackSurfaceToDirichletVertices();
+        // solver.addBackSurfaceBoundaryToDirichletVertices();
+        // solver.computeCylindricalBendingBCPenaltyPairs();
         // solver.imposeCylindricalBending();
 
         // solver.fixEndPointsX();
         // solver.dragMiddle();
 
-        solver.applyForceLeftRight();
+        // solver.applyForceLeftRight();
+        // solver.applyForceTopBottom();
 
-        
+        // solver.ThreePointBendingTestWithCylinder();
+        solver.ThreePointBendingTest();
     }
     else
     {

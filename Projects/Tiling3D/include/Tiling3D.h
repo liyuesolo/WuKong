@@ -56,6 +56,10 @@ public:
 
     void fetchOneFamily(int IH, T* params, TV2& T1, TV2& T2, 
         PointLoops& raw_points, T width, T height);
+
+    void fetchTilingCropped(int IH, T* params, std::vector<TV2>& valid_points, 
+        std::vector<Edge>& edge_pairs,
+        T square_width);
     
     void fetchOneFamilyFillRegion(int IH, T* params, 
         std::vector<PointLoops>& raw_points, T width, T height);

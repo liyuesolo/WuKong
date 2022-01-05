@@ -3,6 +3,7 @@
 
 #include <utility>
 #include <iostream>
+#include <fstream>
 #include <Eigen/Geometry>
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -12,6 +13,9 @@
 #include <complex>
 
 #include "VecMatDef.h"
+
+using Eigen::MatrixXd;
+using Eigen::MatrixXi;
 
 class FEMSolver
 {
@@ -23,6 +27,9 @@ public:
     using TM = Matrix<T, 3, 3>;
 
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    // typedef long StorageIndex;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+
     using Entry = Eigen::Triplet<T>;
 
     using TetNodes = Matrix<T, 4, 3>;
@@ -40,9 +47,16 @@ public:
     VectorXi indices;
     VectorXi surface_indices;
 
+    VectorXT residual_step;
+
+    MatrixXd cylinder_vertices;
+    MatrixXi cylinder_faces;
+
     std::unordered_map<int, T> dirichlet_data;
 
     std::vector<int> dirichlet_vertices;
+
+    std::vector<std::pair<int, T>> penalty_pairs;
 
     int num_nodes;   
     int num_ele;
@@ -51,12 +65,21 @@ public:
     bool verbose = false;
     bool run_diff_test = false;
 
+    bool three_point_bending_with_cylinder = false;
 
     T vol = 1.0;
     T E = 2.6 * 1e8;
+    T E_steel = 2 * 10e11;
+    T nu_steel = 0.3;
     T density = 7.85e4; 
     T nu = 0.48;
     
+
+    T penalty_weight = 1e6;
+    bool use_penalty = false;
+    
+    T curvature = 1.0;
+    T bending_direction = M_PI * 0.5;
 
     T lambda, mu;
 
@@ -65,9 +88,19 @@ public:
 
     TV min_corner, max_corner;
     TV center;
+    int cylinder_tet_start;
+    int cylinder_vtx_start;
+    int cylinder_face_start;
+
+    bool project_block_PD = false;
 
     // IPC
+    bool add_friction = false;
+    T friction_mu = 0.5;
+    T epsv_times_h = 1e-5;
+    bool self_contact = false;
     bool use_ipc = false;
+    int num_ipc_vtx = 0;
     T barrier_distance = 1e-5;
     T barrier_weight = 1e6;
     Eigen::MatrixXd ipc_vertices;
@@ -110,14 +143,61 @@ public:
     }
 
     template <class OP>
+    void iterateBCPenaltyPairs(const OP& f)
+    {
+        for (auto pair : penalty_pairs)
+        {
+            f(pair.first, pair.second);
+        }
+    }
+
+    template <class OP>
     void iterateDirichletDoF(const OP& f) {
         for (auto dirichlet: dirichlet_data){
             f(dirichlet.first, dirichlet.second);
         } 
     }
-    
 
-public:
+private:
+    template<int size>
+    bool isHessianBlockPD(const Matrix<T, size, size> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        // sorted from the smallest to the largest
+        if (eigenSolver.eigenvalues()[0] >= 0.0) 
+            return true;
+        else
+            return false;
+        
+    }
+
+    template<int size>
+    VectorXT computeHessianBlockEigenValues(const Matrix<T, size, size> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        return eigenSolver.eigenvalues();
+    }
+
+    template <int size>
+    void projectBlockPD(Eigen::Matrix<T, size, size>& symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        if (eigenSolver.eigenvalues()[0] >= 0.0) {
+            return;
+        }
+        Eigen::DiagonalMatrix<T, size> D(eigenSolver.eigenvalues());
+        int rows = ((size == Eigen::Dynamic) ? symMtr.rows() : size);
+        for (int i = 0; i < rows; i++) {
+            if (D.diagonal()[i] < 0.0) {
+                D.diagonal()[i] = 0.0;
+            }
+            else {
+                break;
+            }
+        }
+        symMtr = eigenSolver.eigenvectors() * D * eigenSolver.eigenvectors().transpose();
+    }
+
     template<int size>
     void addForceEntry(VectorXT& residual, 
         const VectorXi& vtx_idx, 
@@ -245,15 +325,21 @@ public:
         return t;
     }
 
+public:
+
     // Scene.cpp
     void initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
     void initializeElementData(const Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void computeBoundingBox();
     void appendCylinder(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
-        const TV& _center, const TV& direction, T R);
+        const TV& _center, const TV& direction, T R, T length = 1.0);
+    
+    void appendCylinderMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        const TV& _center, const TV& direction, T R, T length, int sub_div_R, int sub_div_L);
 
     // FEMSolver.cpp
+    void computeLinearModes();
     T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
 
     T computeTotalEnergy(const VectorXT& _u);
@@ -267,6 +353,8 @@ public:
 
     bool staticSolve();
 
+    bool staticSolveStep(int step);
+
     void incrementalLoading();
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
@@ -278,14 +366,30 @@ public:
     void checkTotalHessianScale(bool perturb = false);
 
     //Helper.cpp
+    void appendMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
+        const Eigen::MatrixXd& _V, const Eigen::MatrixXi& _F, const Eigen::MatrixXd& _C);
+    void appendMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
+        const Eigen::MatrixXd& _V, const Eigen::MatrixXi& _F);
+
     void saveTetOBJ(const std::string& filename, const TetNodes& tet_vtx);
     void saveToOBJ(const std::string& filename);
-    
+    void saveIPCMesh(const std::string& filename);
+    void saveThreePointBendingData(const std::string& folder, int iter);
+
+    //Penalty.cpp
+    void addBCPenaltyEnergy(T& energy);
+    void addBCPenaltyForceEntries(VectorXT& residual);
+    void addBCPenaltyHessianEntries(std::vector<Entry>& entries);
 
     // BoundaryCondition.cpp
+    void fixNodes(const std::vector<int>& node_indices);
+    void ThreePointBendingTest();
+    void ThreePointBendingTestWithCylinder();
     void addBackSurfaceToDirichletVertices();
+    void addBackSurfaceBoundaryToDirichletVertices();
     void computeCylindricalBendingBC();
     void imposeCylindricalBending();
+    void computeCylindricalBendingBCPenaltyPairs();
     void fixEndPointsX();
     void applyForceTopBottom();
     void applyForceLeftRight();
@@ -297,7 +401,7 @@ public:
     void updateIPCVertices(const VectorXT& _u);
     void addIPCEnergy(T& energy);
     void addIPCForceEntries(VectorXT& residual);
-    void addIPCHessianEntries(std::vector<Entry>& entries);
+    void addIPCHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     FEMSolver() {}
     ~FEMSolver() {}

@@ -18,11 +18,37 @@ static bool enable_selection = false;
 static bool show_cylinder = false;
 static bool incremental = false;
 static bool tetgen = false;
+static int modes = 0;
 
+bool static_solve = false;
+
+bool check_modes = false;
+double t = 0.0;
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 
 Tiling3D tiling;
+
+Eigen::MatrixXd evectors;
+Eigen::VectorXd evalues;
+
+int static_solve_step = 0;
+
+auto loadEigenVectors = [&]()
+{
+    std::ifstream in("/home/yueli/Documents/ETH/WuKong/fem_eigen_vectors.txt");
+    int row, col;
+    in >> row >> col;
+    evectors.resize(row, col);
+    evalues.resize(col);
+    double entry;
+    for (int i = 0; i < col; i++)
+        in >> evalues[i];
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < col; j++)
+            in >> evectors(i, j);
+    in.close();
+};
 
 auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 {
@@ -30,7 +56,9 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     
     if (show_cylinder)
     {
-        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, 0, 1.0/0.2), TV(0, 1, 0), 1.0/0.2);
+        T radius = 1.0 / tiling.solver.curvature;
+        TV K1_dir(std::cos(tiling.solver.bending_direction), std::sin(tiling.solver.bending_direction), 0.0);
+        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, 0, radius), K1_dir, radius);
     }
 
     viewer.data().clear();
@@ -87,6 +115,31 @@ int main()
         }
     };    
 
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && check_modes)
+        {
+            tiling.solver.deformed = tiling.solver.undeformed + tiling.solver.u + evectors.col(modes) * std::sin(t);
+            updateScreen(viewer);
+            t += 0.1;
+        }
+        return false;
+    };
+
+    viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && !check_modes)
+        {
+            bool finished = tiling.solver.staticSolveStep(static_solve_step);
+            if (finished)
+                viewer.core().is_animating = false;
+            else 
+                static_solve_step++;
+            updateScreen(viewer);
+        }
+        return false;
+    };
+
     viewer.callback_key_pressed = 
         [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
     {
@@ -99,8 +152,28 @@ int main()
             if (incremental)
                 tiling.solver.incrementalLoading();
             else
-                tiling.solver.staticSolve();    
+                viewer.core().is_animating = true;
+                // tiling.solver.staticSolve();    
             updateScreen(viewer);
+            return true;
+        case '1':
+            check_modes = true;
+            tiling.solver.computeLinearModes();
+            loadEigenVectors();
+            
+            for (int i = 0; i < evalues.rows(); i++)
+            {
+                if (evalues[i] > 1e-6)
+                {
+                    modes = i;
+                    return true;
+                }
+            }
+            return true;
+        case '2':
+            modes++;
+            modes = (modes + evectors.cols()) % evectors.cols();
+            std::cout << "modes " << modes << std::endl;
             return true;
         }
     };
@@ -142,6 +215,7 @@ int main()
     viewer.core().align_camera_center(V);
     viewer.core().animation_max_fps = 24.;
     // key_down(viewer,'0',0);
+    viewer.core().is_animating = false;
     viewer.launch();
 
     return 0;
