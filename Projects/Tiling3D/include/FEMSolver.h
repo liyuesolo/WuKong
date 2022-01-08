@@ -26,9 +26,9 @@ public:
     using IV = Vector<int, 3>;
     using TM = Matrix<T, 3, 3>;
 
-    using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    // typedef long StorageIndex;
-    // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    typedef long StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
 
     using Entry = Eigen::Triplet<T>;
 
@@ -51,6 +51,9 @@ public:
 
     MatrixXd cylinder_vertices;
     MatrixXi cylinder_faces;
+
+    MatrixXd sphere_vertices;
+    MatrixXi sphere_faces;
 
     std::unordered_map<int, T> dirichlet_data;
 
@@ -77,11 +80,6 @@ public:
 
     T penalty_weight = 1e6;
     bool use_penalty = false;
-    
-    T curvature = 1.0;
-    T bending_direction = M_PI * 0.5;
-
-    T lambda, mu;
 
     T newton_tol = 1e-6;
     int max_newton_iter = 1000;
@@ -106,6 +104,11 @@ public:
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
+
+    // bending homogenization
+    T curvature = 1.0;
+    T bending_direction = M_PI * 0.5;
+    bool compute_bending_stiffness = false;
 
 public:
 
@@ -337,8 +340,12 @@ public:
     
     void appendCylinderMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         const TV& _center, const TV& direction, T R, T length, int sub_div_R, int sub_div_L);
+    void appendSphereMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, T scale, const TV& center);
 
     // FEMSolver.cpp
+    void reset();
+    void runBendingHomogenization();
+    T computeBendingStiffness();
     void computeLinearModes();
     T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
 
@@ -366,6 +373,8 @@ public:
     void checkTotalHessianScale(bool perturb = false);
 
     //Helper.cpp
+    void computeBBox(const Eigen::MatrixXd& V, TV& bbox_min_corner, TV& bbox_max_corner);
+
     void appendMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
         const Eigen::MatrixXd& _V, const Eigen::MatrixXi& _F, const Eigen::MatrixXd& _C);
     void appendMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
@@ -387,6 +396,7 @@ public:
     void ThreePointBendingTestWithCylinder();
     void addBackSurfaceToDirichletVertices();
     void addBackSurfaceBoundaryToDirichletVertices();
+    void addCornerVtxToDirichletVertices(const Vector<bool, 4>& flag);
     void computeCylindricalBendingBC();
     void imposeCylindricalBending();
     void computeCylindricalBendingBCPenaltyPairs();
@@ -394,6 +404,9 @@ public:
     void applyForceTopBottom();
     void applyForceLeftRight();
     void dragMiddle();
+    void addForceMiddleTop();
+    void penaltyInPlaneCompression(int dir, T percent);
+    void updateSphere();
 
     // IPC.cpp
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);

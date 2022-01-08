@@ -102,7 +102,7 @@ void VertexModel::addIPCHessianEntries(std::vector<Entry>& entries,
             ipc_vertices, ipc_vertices_deformed, ipc_edges,
             ipc_faces, ipc_friction_constraints, epsv_times_h
         );
-        std::vector<Entry> friction_entries = entriesFromSparseMatrix(contact_hessian);
+        std::vector<Entry> friction_entries = entriesFromSparseMatrix(friction_energy_hessian);
         entries.insert(entries.end(), friction_entries.begin(), friction_entries.end());
     }
 }
@@ -208,8 +208,8 @@ T VertexModel::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& 
         
     for (int i = 0; i < n_ipc_vtx; i++)
     {
-        // current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
-        current_position.row(i) = undeformed.segment<3>(i * 3);
+        current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
+        // current_position.row(i) = undeformed.segment<3>(i * 3);
         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
     }
     return ipc::compute_collision_free_stepsize(current_position, 

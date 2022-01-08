@@ -171,7 +171,7 @@ void Tiling3D::fetchTilingCropped(int IH, T* params,
     T square_width)
 {
     std::vector<PointLoops> raw_points;
-    fetchOneFamilyFillRegion(IH, params, raw_points, 15, 30);
+    fetchOneFamilyFillRegion(IH, params, raw_points, 40, 40);
     TV2 min_corner = TV2(1e6, 1e6), max_corner = TV2(-1e6, -1e6);
     for (const PointLoops& points_loop : raw_points)
     {

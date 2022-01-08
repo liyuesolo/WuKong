@@ -91,3 +91,18 @@ void FEMSolver::appendMesh(Eigen::MatrixXd& V, Eigen::MatrixXi& F,
     V.block(size_v, 0, _V.rows(), 3) = _V;
     F.block(size_f, 0, _F.rows(), 3) = _F + offset;
 }
+
+void FEMSolver::computeBBox(const Eigen::MatrixXd& V, TV& bbox_min_corner, TV& bbox_max_corner)
+{
+    bbox_min_corner.setConstant(1e6);
+    bbox_max_corner.setConstant(-1e6);
+
+    for (int i = 0; i < V.rows(); i++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            bbox_max_corner[d] = std::max(bbox_max_corner[d], V(i, d));
+            bbox_min_corner[d] = std::min(bbox_min_corner[d], V(i, d));
+        }
+    }
+}

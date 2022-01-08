@@ -11,10 +11,11 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
 #include <fstream>
+#include <iomanip>
 
 void FEMSolver::computeLinearModes()
 {
-    int nmodes = 10;
+    int nmodes = 20;
 
     StiffnessMatrix K(deformed.rows(), deformed.rows());
     run_diff_test = true;
@@ -234,6 +235,63 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     return residual.norm();
 }
 
+void FEMSolver::reset()
+{
+    deformed = undeformed;
+    u.setZero();
+    
+    ipc_vertices.resize(num_nodes, 3);
+    for (int i = 0; i < num_nodes; i++)
+        ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
+    num_ipc_vtx = ipc_vertices.rows();
+}
+
+void FEMSolver::runBendingHomogenization()
+{
+    int n_angles = 50;
+    T cycle = 1. * M_PI;
+    std::vector<T> thetas;
+    std::vector<T> stiffness;
+    for (T theta = 0; theta <= cycle; theta += cycle/(T)n_angles)
+    {
+        T theta6 = std::round( theta * 1e4 ) / 1e4;
+        thetas.push_back(theta6);
+        // std::cout << theta6 << std::endl;
+
+        bending_direction = theta6;
+        computeCylindricalBendingBCPenaltyPairs();
+        staticSolve();
+        T bending_stiffness = computeBendingStiffness();
+        
+        stiffness.push_back(bending_stiffness);
+        reset();
+    }
+    int n_theta = thetas.size();
+    // std::cout << n_theta << std::endl;
+    for (int i = 1; i < n_angles; i++)
+        thetas.push_back(M_PI + thetas[i]);
+    thetas.push_back(M_PI * 2.0);
+    for (int i = 1; i < n_angles; i++)
+        stiffness.push_back(stiffness[i]);
+    stiffness.push_back(stiffness[0]);
+    for(T theta : thetas)
+        std::cout << std::setprecision(6) << theta << " ";
+    std::cout << std::endl;
+    for(T k : stiffness)
+        std::cout << std::setprecision(6) << k << " ";
+    std::cout << std::endl;
+}
+
+T FEMSolver::computeBendingStiffness()
+{
+    deformed = undeformed + u;
+    T elastic_potential = computeInteralEnergy(u);
+    T macro_volume = (max_corner - min_corner).prod();
+    T energy_density = elastic_potential / macro_volume;
+    T bending_stiffness = 2.0 * energy_density / (curvature * curvature);
+    return bending_stiffness;
+}
+
 void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 {
     VectorXT projected = _u;
@@ -303,32 +361,44 @@ void FEMSolver::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unorder
 bool FEMSolver::linearSolve(StiffnessMatrix& K, 
     VectorXT& residual, VectorXT& du)
 {
-// #define USE_CHOLMOD_SOLVER
+#define USE_CHOLMOD_SOLVER
     Timer t(true);
     // StiffnessMatrix I(K.rows(), K.cols());
     // I.setIdentity();
     T alpha = 10e-6;
     // StiffnessMatrix H = K;
+    std::unordered_map<int, int> diagonal_entry_location;
+    
 #ifdef USE_CHOLMOD_SOLVER
+    
+    
     int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> cholmod_solver;
+    cholmod_solver.set_pattern(K);
+    cholmod_solver.analyze_pattern();
+
     for (int i = 0; i < 50; i++)
     {
-        Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> cholmod_solver;
-        cholmod_solver.set_pattern(K);
-        cholmod_solver.analyze_pattern();
+        
         if (!cholmod_solver.factorize())
         {
+            // std::cout << "indefinite" << std::endl;
             indefinite_count_reg_cnt++;
-            K = H + alpha * I;        
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)
+            {
+                K.coeffRef(row, row) += alpha;
+            });    
             alpha *= 10;
+            // cholmod_solver.A->x = K.valuePtr();
             continue;
         }
         
         cholmod_solver.solve(residual.data(), du.data(), true);
         
         VectorXT linSys_error = VectorXT::Zero(du.rows());
+        VectorXT ones = VectorXT::Ones(du.rows());
         cholmod_solver.multiply(du.data(), linSys_error.data());
-        linSys_error -= du;
+        linSys_error -= residual;
         bool solve_success = linSys_error.norm() < 1e-6;
         if (!solve_success)
             invalid_residual_cnt++;
@@ -346,15 +416,24 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
         }
         else
         {
-            K = H + alpha * I;        
+            std::cout << "|Ax-b|: " << linSys_error.norm() << std::endl;
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)
+            {
+                K.coeffRef(row, row) += alpha;
+            });
+            // cholmod_solver.A->x = K.valuePtr();
+            // cholmod_solver.A->x[0] += alpha;
+            // std::cout << mat_value[0] << std::endl;
             alpha *= 10;
         }
 
     }
-
-    return false;
+    du = residual.normalized();
+    std::cout << "linear solve failed" << std::endl;
+    return true;
 #else
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::RowMajor, int>> solver;
     
     solver.analyzePattern(K);
     int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
@@ -369,6 +448,7 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
             {
                 K.coeffRef(row, row) += alpha;
             });
+            
             // K = H + alpha * I;        
             alpha *= 10;
             continue;
@@ -512,6 +592,9 @@ bool FEMSolver::staticSolveStep(int step)
         {
             f[offset] = 0;
         });
+        u.setRandom();
+        u *= 1.0 / u.norm();
+        u *= 0.001;
     }
 
     VectorXT residual(deformed.rows());
@@ -528,7 +611,10 @@ bool FEMSolver::staticSolveStep(int step)
 
     T dq_norm = lineSearchNewton(u, residual);
     // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
-    saveThreePointBendingData("/home/yueli/Documents/ETH/WuKong/output/ThickShell/", step);
+    if (three_point_bending_with_cylinder)
+        saveThreePointBendingData("/home/yueli/Documents/ETH/WuKong/output/ThickShell/", step);
+    else    
+        saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/structure_iter_" + std::to_string(step) + ".obj");
     // iterateDirichletDoF([&](int offset, T target)
     // {
     //     u[offset] = target;
@@ -554,11 +640,15 @@ bool FEMSolver::staticSolve()
 
     while (true)
     {
+        if (cnt == 0)
+        {
+            u.setRandom(); u *= 1.0 / u.norm(); u *= 0.001;
+        }
         VectorXT residual(deformed.rows());
         residual.setZero();
 
         residual_norm = computeResidual(u, residual);
-        saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
+        // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
         // if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
@@ -586,3 +676,4 @@ bool FEMSolver::staticSolve()
     return true;
     
 }
+

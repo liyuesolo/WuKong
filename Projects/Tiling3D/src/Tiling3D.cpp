@@ -647,8 +647,28 @@ void Tiling3D::buildSimulationMeshFromTilingInfo(int IH, T* params,
 
     int nv = mesh_vertices.size();
     for (const TV& vtx : mesh_vertices)
-        mesh_vertices.push_back(vtx + TV(0, 0, height));
+        mesh_vertices.push_back(vtx + TV(0.0, 0.0, height));
     
+    TV min_corner, max_corner;
+    min_corner.setConstant(1e6); max_corner.setConstant(-1e6);
+    for (int i = nv; i < mesh_vertices.size(); i++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            min_corner[d] = std::min(mesh_vertices[i][d], min_corner[d]);
+            max_corner[d] = std::max(mesh_vertices[i][d], max_corner[d]);
+        }
+    }
+
+    TV center = 0.5 * (min_corner + max_corner);
+    Matrix<T, 2, 2> rotation;
+    T r_angle = 5.0 / 180.0 * M_PI;
+    rotation << std::cos(r_angle), -std::sin(r_angle), std::sin(r_angle), std::cos(r_angle);
+    for (int i = nv; i < mesh_vertices.size(); i++)
+    {
+        mesh_vertices[i].head<2>() = center.head<2>() + rotation * (mesh_vertices[i] - center).head<2>();
+    }
+
     int nf = mesh_faces.size();
 
     for (int i = 0; i < nf; i++)
@@ -712,15 +732,18 @@ void Tiling3D::buildSimulationMeshFromTilingInfo(int IH, T* params,
 
         TV edge_vec = (v2 - v0 + TV(1e-4, 1e-4, 1e-4)).normalized();
 
-        TV delta_vec = (mesh_vertices[ei[0] + nv] - mesh_vertices[ei[0]]) / T(sub_divide_height);
+        TV delta_vec0 = (mesh_vertices[ei[0] + nv] - mesh_vertices[ei[0]]) / T(sub_divide_height);
+        TV delta_vec1 = (mesh_vertices[ei[1] + nv] - mesh_vertices[ei[1]]) / T(sub_divide_height);
+        TV delta_vec2 = (mesh_vertices[ei_oppo[0] + nv] - mesh_vertices[ei_oppo[0]]) / T(sub_divide_height);
+        TV delta_vec3 = (mesh_vertices[ei_oppo[1] + nv] - mesh_vertices[ei_oppo[1]]) / T(sub_divide_height);
 
         int loop0 = ei[0], loop1 = ei[1], loop2 = ei_oppo[0], loop3 = ei_oppo[1];
         for (int j = 1; j < sub_divide_height; j++)
         {
-            int idx0 = addVertex(v0 + j * delta_vec);
-            int idx1 = addVertex(v1 + j * delta_vec);
-            int idx2 = addVertex(v2 + j * delta_vec);
-            int idx3 = addVertex(v3 + j * delta_vec);
+            int idx0 = addVertex(v0 + j * delta_vec0);
+            int idx1 = addVertex(v1 + j * delta_vec1);
+            int idx2 = addVertex(v2 + j * delta_vec2);
+            int idx3 = addVertex(v3 + j * delta_vec3);
 
             addFace(edge_vec, Face(loop1, loop0, idx0), false);
             addFace(edge_vec, Face(loop1, idx0, idx1), false);
@@ -741,12 +764,13 @@ void Tiling3D::buildSimulationMeshFromTilingInfo(int IH, T* params,
     {
         Edge ei = dangling_edges[i];
         TV v0 = mesh_vertices[ei[0]], v1 = mesh_vertices[ei[1]];
-        TV delta_vec = (mesh_vertices[ei[0] + nv] - mesh_vertices[ei[0]]) / T(sub_divide_height);
+        TV delta_vec0 = (mesh_vertices[ei[0] + nv] - mesh_vertices[ei[0]]) / T(sub_divide_height);
+        TV delta_vec1 = (mesh_vertices[ei[1] + nv] - mesh_vertices[ei[1]]) / T(sub_divide_height);
         int loop0 = ei[0], loop1 = ei[1];
         for (int j = 1; j < sub_divide_height; j++)
         {
-            int idx0 = addVertex(v0 + j * delta_vec);
-            int idx1 = addVertex(v1 + j * delta_vec);
+            int idx0 = addVertex(v0 + j * delta_vec0);
+            int idx1 = addVertex(v1 + j * delta_vec1);
 
             addFace(dangling_edge_face_normal[i], Face(loop1, loop0, idx0), true);
             addFace(dangling_edge_face_normal[i], Face(loop1, idx0, idx1), true);
@@ -1216,17 +1240,23 @@ void Tiling3D::initializeSimulationData(bool tetgen)
     {
         // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling1.obj", V, F);
         // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling6.obj", V, F);
-        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling8.obj", V, F);
         // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling1.obj", V, F);
-        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling0.obj", V, F);
-        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling10.obj", V, F);
-        dirichlet_vertices = {8, 9, 1, 0, 11, 10, 19, 18, 27, 26, 35, 34, 43, 42,
-            166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 1176, 177
-        };
-        // neumann_vertices = {};
+
+        //used
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling8.obj", V, F);
+        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling0.obj", V, F);
+        
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling10.obj", V, F);
+        // dirichlet_vertices = {8, 9, 1, 0, 11, 10, 19, 18, 27, 26, 35, 34, 43, 42,
+        //     166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 1176, 177
+        // };
+        
 
         // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling11.obj", V, F);
-        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling12.obj", V, F);
+
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling13.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling13_rotate.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling13_shift.obj", V, F);
     }
     else
     {
@@ -1236,14 +1266,14 @@ void Tiling3D::initializeSimulationData(bool tetgen)
 
         // buildSimulationMesh(raw_points, V, F, C);
 
-        // int IH = 0;
-        // T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
+        int IH = 0;
+        T params[] = {0.1161, 0.5464, 0.4313, 0.5464}; //Isohedral 0
         
         // int IH = 6;
         // T params[] = {0.5, 0.5, 0.5, 0.5, 0.5}; //Isohedral 06
         
-        int IH = 29;
-        T params[] = {0}; //Isohedral 7
+        // int IH = 29;
+        // T params[] = {0}; //Isohedral 7
 
         // int IH = 13;
         // T params[] = {0.1, 0.2}; 
@@ -1273,21 +1303,25 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         V.col(1) = tmp;
         igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
         // igl::copyleft::tetgen::tetrahedralize(V,F, "Y", TV,TT,TF);
+        solver.use_ipc = true;
+        solver.project_block_PD = false;
+        solver.compute_bending_stiffness = true;
         solver.initializeElementData(TV, TF, TT);
 
+        Vector<bool, 4> flag;
+        flag.setConstant(false);
+        flag[0] = true; flag[2] = true;
+        flag[1] = true; flag[3] = true;
+        solver.addCornerVtxToDirichletVertices(flag);
+        // if (flag[1])
+        //     solver.bending_direction = 45.0 / 180.0 * M_PI;
+        // else
+        //     solver.bending_direction = 135.0 / 180.0 * M_PI;
+        solver.bending_direction = 45.0 / 180.0 * M_PI;
+        solver.curvature = 1;
+        solver.max_newton_iter = 1;
+        solver.computeCylindricalBendingBCPenaltyPairs();
 
-        // solver.dirichlet_vertices = { 
-        //     115, 85, 48, // bottom
-        //     97, 65, 10, // top
-        //     95, 102, 107, 113, 119, // left
-        //     13, 24, 35, 46, 56
-        //  };
-        // std::vector<int> all_vertices;
-        // for (int i = 0; i < solver.num_nodes; i++)
-        //     all_vertices.push_back(i);
-        // solver.dirichlet_vertices = all_vertices;
-        // solver.addBackSurfaceBoundaryToDirichletVertices();
-        // solver.computeCylindricalBendingBCPenaltyPairs();
         // solver.imposeCylindricalBending();
 
         // solver.fixEndPointsX();
@@ -1297,7 +1331,11 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         // solver.applyForceTopBottom();
 
         // solver.ThreePointBendingTestWithCylinder();
-        solver.ThreePointBendingTest();
+        // solver.ThreePointBendingTest();
+        // solver.addForceMiddleTop();
+        // solver.fixNodes(dirichlet_vertices);
+        // solver.penaltyInPlaneCompression(0, 0.1);
+
     }
     else
     {

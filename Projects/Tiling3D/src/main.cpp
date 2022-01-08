@@ -16,6 +16,7 @@ Eigen::MatrixXd C;
 
 static bool enable_selection = false;
 static bool show_cylinder = false;
+static bool show_bc = false;
 static bool incremental = false;
 static bool tetgen = false;
 static int modes = 0;
@@ -57,8 +58,21 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     if (show_cylinder)
     {
         T radius = 1.0 / tiling.solver.curvature;
-        TV K1_dir(std::cos(tiling.solver.bending_direction), std::sin(tiling.solver.bending_direction), 0.0);
-        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, 0, radius), K1_dir, radius);
+        TV K1_dir(std::cos(tiling.solver.bending_direction), 0.0, -std::sin(tiling.solver.bending_direction));
+        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, radius, 0), K1_dir, radius);
+    }
+
+    if (show_bc)
+    {
+        int nf_current = F.rows();
+        tiling.solver.updateSphere();
+        tiling.solver.appendMesh(V, F, tiling.solver.sphere_vertices, tiling.solver.sphere_faces);
+        int nf_sphere = tiling.solver.sphere_faces.rows();
+        MatrixXd sphere_color(nf_sphere, 3);
+        sphere_color.setZero();
+        sphere_color.col(0).setConstant(1.0);
+        C.conservativeResize(F.rows(), 3);
+        C.block(nf_current, 0, nf_sphere, 3) = sphere_color;
     }
 
     viewer.data().clear();
@@ -83,6 +97,10 @@ int main()
                 // updateScreen(viewer);
             }
             if (ImGui::Checkbox("ShowCylinder", &show_cylinder))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowBC", &show_bc))
             {
                 updateScreen(viewer);
             } 
@@ -132,7 +150,11 @@ int main()
         {
             bool finished = tiling.solver.staticSolveStep(static_solve_step);
             if (finished)
+            {
                 viewer.core().is_animating = false;
+                T bending_stiffness = tiling.solver.computeBendingStiffness();
+                std::cout << "bending stiffness " << bending_stiffness << std::endl;
+            }
             else 
                 static_solve_step++;
             updateScreen(viewer);
@@ -205,7 +227,7 @@ int main()
     tiling.initializeSimulationData(tetgen);
     // tiling.solver.checkTotalGradientScale(true);
     // tiling.solver.checkTotalHessianScale(true);
-
+    // tiling.solver.runBendingHomogenization();
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);

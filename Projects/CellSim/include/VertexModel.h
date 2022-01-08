@@ -11,6 +11,8 @@
 
 #include "VecMatDef.h"
 
+#include "Timer.h"
+
 template <int dim>
 struct VectorHash
 {
@@ -61,9 +63,9 @@ public:
     using FaceList = std::vector<int>;
 
     using Edge = Vector<int, 2>;
-    using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    // typedef int StorageIndex;
-    // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    typedef long StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
     using Entry = Eigen::Triplet<T>;
     
 public:
@@ -310,6 +312,16 @@ public:
     }
 
     template <typename OP>
+    void iterateCellParallel(const OP& f)
+    {
+        tbb::parallel_for(0, basal_face_start, [&](int i)
+        {
+            VtxList face_vtx_list = faces[i];
+            f(face_vtx_list, i);
+        });
+    }
+
+    template <typename OP>
     void iterateFaceParallel(const OP& f)
     {
         tbb::parallel_for(0, (int)faces.size(), [&](int i){
@@ -489,6 +501,9 @@ public:
     bool check_all_vtx_membrane = false;
 
     bool print_force_norm = false;
+    bool profile = false;
+
+    Timer profile_timer;
 
 
     TV mesh_centroid;
@@ -513,7 +528,7 @@ public:
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
-    T computeTotalEnergy(const VectorXT& _u, bool verbose = false);
+    T computeTotalEnergy(const VectorXT& _u, bool verbose = false, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
@@ -614,6 +629,7 @@ public:
     void checkTotalGradientScale(bool perturb = false);
 
     // scene.cpp
+    void shiftPointToEllipsoid(Eigen::MatrixXd& V);
     bool computeBoundingBox(TV& min_corner, TV& max_corner);    
     void vertexModelFromMesh(const std::string& filename);
     void addTestPrism(int edge);
@@ -625,6 +641,7 @@ public:
 
 
     //Visualization.cpp
+    void loadMeshAndSaveCentroid(const std::string& folder, int start, int end);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool rest_state = false);
     void sampleBoundingSurface(Eigen::MatrixXd& V);

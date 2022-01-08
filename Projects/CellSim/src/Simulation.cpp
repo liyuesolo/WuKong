@@ -1,6 +1,7 @@
 #include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
 #include <Eigen/CholmodSupport>
+#include "../solver/CHOLMODSolver.hpp"
 
 #include <igl/readOBJ.h>
 
@@ -30,14 +31,14 @@ void Simulation::initializeCells()
     cells.scene_type = 1;
 
     if (cells.scene_type == 1 || cells.scene_type == 2)
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
     cells.vertexModelFromMesh(sphere_file);
     // cells.addTestPrism(6);
     // cells.addTestPrismGrid(10, 10);
-    cells.computeVolumeAllCells(cells.cell_volume_init);
+    
 
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
@@ -160,20 +161,12 @@ bool Simulation::staticSolve()
         residual_norm = computeResidual(u, residual);
         if (cnt == 0)
             residual_norm_init = residual_norm;
-
+        if (cells.use_ipc_contact)
+            cells.updateIPCVertices(u);
         if (!cells.single_prism)
             cells.saveCellMesh(cnt);
         
-        // cells.saveHexTetsStep(cnt);
-        // if (cnt % 20 == 0)
-        // {
-            
-        //     if (cells.alpha > 300)
-        //         cells.alpha = 300;
-        //     else
-        //         cells.alpha *= 1.5;
-            
-        // }
+        
         // if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
             // std::getchar();
@@ -246,30 +239,26 @@ bool Simulation::staticSolve()
     return true;
 }
 
-bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
+bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
+    
     Timer t(true);
-    StiffnessMatrix I(K.rows(), K.cols());
-    I.setIdentity();
-
-    StiffnessMatrix H = K;
-
-    Eigen::CholmodSimplicialLLT<StiffnessMatrix> solver;
-
+    
+    Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> solver;
     T alpha = 10e-6;
-    solver.analyzePattern(K);
+    solver.set_pattern(K);
+    solver.analyze_pattern();    
     int i = 0;
     int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
     for (; i < 50; i++)
     {
-        // std::cout << i << std::endl;
-
-        solver.factorize(K);
-        // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
-        if (solver.info() == Eigen::NumericalIssue)
+        if (!solver.factorize())
         {
-            K = H + alpha * I;        
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            }); 
             alpha *= 10;
             indefinite_count_reg_cnt++;
             continue;
@@ -279,8 +268,10 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
         if (UV.cols() == 1)
         {
             VectorXT v = UV.col(0);
-            VectorXT A_inv_g = solver.solve(residual);
-            VectorXT A_inv_u = solver.solve(v);
+            VectorXT A_inv_g = VectorXT::Zero(du.rows());
+            VectorXT A_inv_u = VectorXT::Zero(du.rows());
+            solver.solve(residual.data(), A_inv_g.data(), true);
+            solver.solve(v.data(), A_inv_u.data(), true);
 
             T dem = 1.0 + v.dot(A_inv_u);
 
@@ -290,11 +281,14 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
         // C is assume to be Identity
         else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
         {
-            VectorXT A_inv_g = solver.solve(residual);
+            VectorXT A_inv_g = VectorXT::Zero(du.rows());
+            solver.solve(residual.data(), A_inv_g.data(), true);
+            // VectorXT A_inv_g = solver.solve(residual);
 
             MatrixXT A_inv_U(UV.rows(), UV.cols());
             for (int col = 0; col < UV.cols(); col++)
-                A_inv_U.col(col) = solver.solve(UV.col(col));
+                solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
+                // A_inv_U.col(col) = solver.solve(UV.col(col));
             
             MatrixXT C(UV.cols(), UV.cols());
             C.setIdentity();
@@ -309,10 +303,10 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
         int num_zero_eigen_value = 0;
 
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        bool search_dir_correct_sign = dot_dx_g > 1e-3;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
-        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6;
         if (!solve_success)
             invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 
@@ -334,7 +328,11 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
         }
         else
         {
-            K = H + alpha * I;        
+            // K = H + alpha * I;       
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            });  
             alpha *= 10;
         }
     }
@@ -345,14 +343,16 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
 bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
+    bool use_cholmod = true;
     Timer t(true);
-    StiffnessMatrix I(K.rows(), K.cols());
-    I.setIdentity();
+    // StiffnessMatrix I(K.rows(), K.cols());
+    // I.setIdentity();
 
-    StiffnessMatrix H = K;
+    // StiffnessMatrix H = K;
 
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
 
+    
     T alpha = 10e-6;
     solver.analyzePattern(K);
     int i = 0;
@@ -365,7 +365,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
-            K = H + alpha * I;        
+            // K = H + alpha * I;        
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            }); 
             alpha *= 10;
             indefinite_count_reg_cnt++;
             continue;
@@ -430,7 +434,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         }
         else
         {
-            K = H + alpha * I;        
+            // K = H + alpha * I;       
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            });  
             alpha *= 10;
         }
     }
@@ -439,6 +447,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 
 bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
 {
+    Timer timer(true);
 #define USE_PARDISO
 
     StiffnessMatrix I(K.rows(), K.cols());
@@ -447,7 +456,7 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
     StiffnessMatrix H = K;
 
 #ifdef USE_PARDISO
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
 #else
     Eigen::SimplicialLDLT<StiffnessMatrix> solver;
     // Eigen::CholmodSimplicialLLT<StiffnessMatrix> solver;
@@ -501,7 +510,9 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
 
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
+            timer.stop();
             std::cout << "\t===== Linear Solve ===== " << std::endl;
+            std::cout << "takes " << timer.elapsed_sec() << "s" << std::endl;
             std::cout << "\t# regularization step " << i << std::endl;
             std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
             std::cout << "\t======================== " << std::endl;
@@ -521,9 +532,9 @@ void Simulation::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     cells.buildSystemMatrix(_u, K);
 }
 
-T Simulation::computeTotalEnergy(const VectorXT& _u)
+T Simulation::computeTotalEnergy(const VectorXT& _u, bool add_to_deform)
 {
-    T energy = cells.computeTotalEnergy(_u, verbose);
+    T energy = cells.computeTotalEnergy(_u, verbose, add_to_deform);
     return energy;
 }
 
@@ -606,11 +617,13 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     StiffnessMatrix K(residual.rows(), residual.rows());
     
     bool success = false;
+    
     if (woodbury)
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(_u, K, UV);
-        success = WoodburySolve(K, UV, residual, du);    
+        // success = WoodburySolve(K, UV, residual, du);   
+        success = solveWoodburyCholmod(K, UV, residual, du); 
     }
     else
     {
@@ -741,6 +754,6 @@ void Simulation::loadDeformedState(const std::string& filename)
         deformed.segment<3>(i * 3) = V.row(i);
     }
     u = deformed - undeformed;
-    // std::cout << u.segment<3>(cells.basal_vtx_start * 3).transpose() << std::endl;
+    
     cells.computeCellInfo();
 }

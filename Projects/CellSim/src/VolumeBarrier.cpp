@@ -472,12 +472,14 @@ void VertexModel::computeTetBarrierWeightMask(const VectorXT& positions,
         TV r1 = positions.segment<3>(j * 3);
         T volume = -computeTetVolume(apical_centroid, r1, r0, cell_centroid);
         if (volume < qubic_term_active_vol) mask_qubic_term(cnt) = 1.0;
+        // std::cout << "current volume " << volume << " active value: " << qubic_term_active_vol << std::endl;
         if (volume < log_term_active_vol) mask_log_term(cnt) = 1.0;
         cnt++;
 
         TV r2 = positions.segment<3>((i + face_vtx_list.size()) * 3);
         TV r3 = positions.segment<3>((j + face_vtx_list.size()) * 3);
         volume = computeTetVolume(basal_centroid, r3, r2, cell_centroid);
+        // std::cout << "current volume " << volume << " active value: " << qubic_term_active_vol << std::endl;
         if (volume < qubic_term_active_vol) mask_qubic_term(cnt) = 1.0;
         if (volume < log_term_active_vol) mask_log_term(cnt) = 1.0;
         cnt++;
@@ -699,6 +701,11 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                 {
                     T target = qubic_active_percentage * cell_volume_init[face_idx];
                     computeVolQubicUnilateralPenalty5PointsGradient(tet_vol_qubic_w, target, positions, qubic_mask, dedx);
+                    if (qubic_mask.sum() > 1e-8)
+                    {
+                        std::cout << "qubic term" << std::endl;
+                        std::cout <<dedx.norm() << " weights " << qubic_mask.transpose() << std::endl;
+                    }
                     addForceEntry<30>(residual, cell_vtx_list, -dedx);
                 }
             }

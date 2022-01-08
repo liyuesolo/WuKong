@@ -25,16 +25,48 @@ void VertexModel::computeLinearModes()
 
     // buildSystemMatrix(u, K);
 
+    // bool fix_dirichlet = true;
+    // iterateDirichletDoF([&](int offset, T target)
+    // {
+    //     std::cout << offset << " " << target << std::endl;
+    //     K.coeffRef(offset, offset) = 1e10;
+    // });
+
     std::vector<Entry> entries;
     deformed = undeformed + u;
     MatrixXT dummy;
-    addFaceAreaHessianEntries(Basal, gamma, entries);
-    addFaceAreaHessianEntries(Lateral, alpha, entries);
-    // addYolkVolumePreservationHessianEntries(entries, dummy);
-    // addCellVolumePreservationHessianEntries(entries);
+
+    iterateContractingEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Matrix<T, 6, 6> hessian;
+        computeEdgeSquaredNormHessian(vi, vj, hessian);
+        hessian *= Gamma;
+        addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+    });
+    
+    addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+    
+    addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
+    addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
+    addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
+    
+    addCellVolumePreservationHessianEntries(entries);
+
+    if (add_yolk_volume)
+        addYolkVolumePreservationHessianEntries(entries, dummy);
+    if (add_tet_vol_barrier)
+        addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+    if (add_perivitelline_liquid_volume)
+        addPerivitellineVolumePreservationHessianEntries(entries, dummy);
+    if (use_sphere_radius_bound)
+        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
+    if (use_ipc_contact)
+        addIPCHessianEntries(entries, project_block_hessian_PD);
     
     K.setFromTriplets(entries.begin(), entries.end());
-    std::cout << "build K" << std::endl;
+    // std::cout << "build K" << std::endl;
+
     bool use_Spectra = true;
 
     if (use_Spectra)
@@ -125,8 +157,8 @@ bool VertexModel::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& 
 
     StiffnessMatrix H = K;
 
-    Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
-    
+    // Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     T alpha = 10e-6;
     solver.analyzePattern(K);
     for (int i = 0; i < 50; i++)
@@ -221,9 +253,13 @@ void VertexModel::computeCellInfo()
 
     T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
     std::cout << "\tperivitelline vol sum: " << perivitelline_vol_curr << std::endl;
+    VectorXT residual(num_nodes * 3);
+    residual.setZero();
+    computeResidual(u, residual);
+    std::cout << "\t |g_norm|: " << residual.norm() << std::endl;
 }
 
-T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
+T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_deform)
 {
     if (verbose)
         std::cout << std::endl;
@@ -237,7 +273,8 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose)
             projected[offset] = target;
         });
     }
-    deformed = undeformed + projected;
+    if (add_to_deform)
+        deformed = undeformed + projected;
 
     T edge_length_term = 0.0, area_term = 0.0, 
         volume_term = 0.0, yolk_volume_term = 0.0,
@@ -734,14 +771,10 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     
 
     if (use_sphere_radius_bound)
-    {
         addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
-    }
 
     if (use_ipc_contact)
-    {
         addIPCHessianEntries(entries, project_block_hessian_PD);
-    }
 
         
     K.resize(num_nodes * 3, num_nodes * 3);

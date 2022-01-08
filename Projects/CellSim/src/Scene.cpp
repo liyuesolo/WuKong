@@ -18,7 +18,7 @@ void VertexModel::approximateMembraneThickness()
     else
         Rc = 1.01 * radii_max;
     
-    Rc = 1.005 * radii_max;
+    Rc = 1.001 * radii_max;
     total_volume = 4.0 / 3.0 * M_PI * std::pow(Rc, 3);
 }
 
@@ -463,12 +463,26 @@ void VertexModel::saveCellMesh(int iter)
 }
 
 
+void VertexModel::shiftPointToEllipsoid(Eigen::MatrixXd& V)
+{
+    TV centroid = TV::Zero();
+    for (int i = 0; i < V.rows(); i++)
+    {
+        centroid += V.row(i);
+    }
+    centroid /= T(V.rows());
+
+
+}
+
 
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
+
+    shiftPointToEllipsoid(V);
 
     // face centroids corresponds to the vertices of the dual mesh 
     std::vector<TV> face_centroids(F.rows());
@@ -651,11 +665,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     use_face_centroid = use_cell_centroid;
 
 
-    for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
+    // for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
+    // {
+    //     dirichlet_data[d] = 0.0;
+    // }
+
+    for (int d = 0; d < 3; d++)
     {
-        dirichlet_data[d] = 0.0;
+        dirichlet_data[1532 * 3 + d] = 0.0;
+        dirichlet_data[1480 * 3 + d] = 0.0;
+        dirichlet_data[1482 * 3 + d] = 0.0;
     }
     
+    computeVolumeAllCells(cell_volume_init);
+
 
     add_yolk_volume = true;
 
@@ -678,7 +701,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     add_contraction_term = true;
     
     // Gamma = 0.5;
-    Gamma = 5.0;
+    Gamma = 1.0;
     if (woodbury)
     {
         if (contract_apical_face)
@@ -686,7 +709,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             if (use_cell_centroid)
-                Gamma = 1.0; //worked for the centroid formulation
+                // Gamma = 0.05; // for continuation
+                Gamma = 1.0;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -719,10 +743,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else
         {
             bound_coeff = 10e-15;
+            
         }
     }
 
     std::cout << "# system DoF: " << deformed.rows() << std::endl;
+    std::cout << "# cells: " << basal_face_start << std::endl;
 
     use_yolk_pressure = false;
     // pressure_constant = 1e-6; //low res worked
@@ -746,8 +772,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         barrier_distance = 1e-3;
         if (add_friction)
         {
-            friction_mu = 0.2;
-            
+            friction_mu = 0.4;
         }
     }
 
@@ -788,17 +813,18 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     weights_all_edges = 500.0;
     if (use_cell_centroid)
         weights_all_edges = 0.1;
+    // weights_all_edges = 0.0;
 
     add_tet_vol_barrier = true;
 
     add_log_tet_barrier = false;
     tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid && !add_log_tet_barrier)
-        tet_vol_barrier_w = 10e-22;
+        tet_vol_barrier_w = 10e-26;
     else
         tet_vol_barrier_w = 1e10;
-    
-    add_qubic_unilateral_term = true;
+    // std::cout << cell_volume_init[0] << std::endl;
+    add_qubic_unilateral_term = false;
     qubic_active_percentage = 0.1;
     tet_vol_qubic_w = 1e3;
 

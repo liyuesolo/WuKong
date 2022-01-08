@@ -20,9 +20,9 @@ public:
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
     using CellModel = VertexModel;
-    using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    // typedef int StorageIndex;
-    // using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    typedef long StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
 
     T newton_tol = 1e-6;
     int max_newton_iter = 500;
@@ -73,11 +73,11 @@ public:
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
     
-    bool solveWoodburyCholmod(StiffnessMatrix& K, const MatrixXT& UV,
+    bool solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
-    T computeTotalEnergy(const VectorXT& _u);
+    T computeTotalEnergy(const VectorXT& _u, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
     T lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max = 15, bool wolfe_condition = false);
 

@@ -33,14 +33,14 @@ void FEMSolver::imposeCylindricalBending()
 
 void FEMSolver::computeCylindricalBendingBCPenaltyPairs()
 {
-    
-    TV K1_dir(std::cos(bending_direction), std::sin(bending_direction), 0.0);
+    penalty_pairs.clear();
+    TV K1_dir(std::cos(bending_direction), 0.0, -std::sin(bending_direction));
 
-    TV K2_dir = K1_dir.cross(TV(0, 0, 1)).normalized();
+    TV K2_dir = K1_dir.cross(TV(0, 1, 0)).normalized();
 
     T radius = 1.0 / curvature;
 
-    TV cylinder_center = center - TV(0, 0, radius);
+    TV cylinder_center = center - TV(0, radius, 0);
 
     iterateDirichletVertices([&](const TV& vtx, int idx)
     {
@@ -51,12 +51,54 @@ void FEMSolver::computeCylindricalBendingBCPenaltyPairs()
         T arc_central_angle = distance_along_unwrapped_plane / radius;
 
         TV pt_projected = cylinder_center + distance_along_cylinder_dir * K1_dir + 
-            radius * (std::sin(arc_central_angle) * K2_dir + std::cos(arc_central_angle) * TV(0, 0, 1));
+            radius * (std::sin(arc_central_angle) * K2_dir + std::cos(arc_central_angle) * TV(0, 1, 0));
                 
         for (int d = 0; d < dim; d++)
             penalty_pairs.push_back(std::make_pair(idx * dim + d, pt_projected[d]));
     });
     use_penalty = true;
+}
+
+void FEMSolver::penaltyInPlaneCompression(int dir, T percent)
+{
+    use_penalty = true;
+    T region = 0.2;
+    for (int i = 0; i < num_nodes; i++)
+    {
+        T dx = max_corner[0] - min_corner[0];
+        TV x = undeformed.segment<3>(i * dim);
+        if (dir == 0)
+        {
+            if (x[0] < min_corner[0] + region * dx)
+            {
+                TV target = x + TV(percent * dx, 0, 0);
+                for (int d = 0; d < dim; d++)
+                    penalty_pairs.push_back(std::make_pair(i * dim + d, target[d]));
+            }
+            if (x[0] > max_corner[0] - region * dx)
+            {
+                TV target = x + TV(-percent * dx, 1e-3, 1e-3);
+                for (int d = 0; d < dim; d++)
+                    penalty_pairs.push_back(std::make_pair(i * dim + d, target[d]));
+            }
+        }
+        else if (dir == 1)
+        {
+            T dz = max_corner[2] - min_corner[2];
+            if (x[2] < min_corner[2] + region * dz)
+            {
+                TV target = x + TV(0, 0, percent * dz);
+                for (int d = 0; d < dim; d++)
+                    penalty_pairs.push_back(std::make_pair(i * dim + d, target[d]));
+            }
+            if (x[2] > max_corner[2] - region * dz)
+            {
+                TV target = x + TV(1e-3, 1e-3, -percent * dz);
+                for (int d = 0; d < dim; d++)
+                    penalty_pairs.push_back(std::make_pair(i * dim + d, target[d]));
+            }
+        }
+    }
 }
 
 void FEMSolver::addBackSurfaceToDirichletVertices()
@@ -69,18 +111,59 @@ void FEMSolver::addBackSurfaceToDirichletVertices()
     }
 }
 
+void FEMSolver::addCornerVtxToDirichletVertices(const Vector<bool, 4>& flag)
+{
+    T region = 1e-1;
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV x = undeformed.segment<3>(i * dim);
+        bool back_face = x[1] < min_corner[1] + 1e-6;
+        if (!back_face)
+            continue;
+        if (flag[0]) // bottom left
+            if (x[0] < min_corner[0] + region && x[2] < min_corner[2] + region)
+                dirichlet_vertices.push_back(i);
+        if (flag[1]) // bottom right
+            if (x[0] > max_corner[0] - region && x[2] < min_corner[2] + region)
+                dirichlet_vertices.push_back(i);
+        if (flag[2]) // top right
+            if (x[0] > max_corner[0] - region && x[2] > max_corner[2] - region)
+                dirichlet_vertices.push_back(i);
+        if (flag[3]) // top left
+            if (x[0] < min_corner[0] + region && x[2] > max_corner[2] - region)
+                dirichlet_vertices.push_back(i);
+    }
+    T dx = max_corner[0] - min_corner[0];
+    for (int idx : dirichlet_vertices)
+    {
+        appendSphereMesh(sphere_vertices, sphere_faces, 0.005 * dx, undeformed.segment<3>(idx * dim));
+    }
+}
+
+void FEMSolver::updateSphere()
+{
+    sphere_faces.resize(0, 0);
+    sphere_vertices.resize(0, 0);
+    T dx = max_corner[0] - min_corner[0];
+    for (int idx : dirichlet_vertices)
+    {
+        appendSphereMesh(sphere_vertices, sphere_faces, 0.005 * dx, deformed.segment<3>(idx * dim));
+    }
+}
+
 void FEMSolver::addBackSurfaceBoundaryToDirichletVertices()
 {
     for (int i = 0; i < num_nodes; i++)
     {
         TV x = undeformed.segment<3>(i * dim);
-        bool back_face = x[2] < min_corner[2] + 1e-6;
+        bool back_face = x[1] < min_corner[1] + 1e-6;
         bool h_border = x[0] < min_corner[0] + 1e-6 || x[0] > max_corner[0] - 1e-6;
         bool v_border = x[1] < min_corner[1] + 1e-6 || x[1] > max_corner[1] - 1e-6;
         if (back_face && (h_border || v_border))
         // if (back_face)
             dirichlet_vertices.push_back(i);
     }
+    std::cout << "#dirichlet vertices " << dirichlet_vertices.size() << std::endl;
 }
 
 void FEMSolver::fixEndPointsX()
@@ -132,14 +215,25 @@ void FEMSolver::applyForceLeftRight()
     for (int i = 0; i < num_nodes; i++)
     {
         TV x = undeformed.segment<3>(i * dim);
-        if (x[0] > max_corner[0] - 1e-6)
-            f[i * dim + 0] = -0.5;
-        else if (x[0] < min_corner[0] + 1e-6)
+        if (x[0] > max_corner[0] - 1e-2)
+            f[i * dim + 0] = -10;
+        else if (x[0] < min_corner[0] + 1e-2)
         {
             for (int d = 0; d < dim; d++)
                 dirichlet_data[i * dim + d] = 0.0;
         }
     }
+}
+
+void FEMSolver::addForceMiddleTop()
+{
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV x = undeformed.segment<3>(i * dim);
+        if (x[0] > center[0] - 1e-2 && x[0] < center[0] + 1e-2 && x[1] > max_corner[1] - 1e-3)
+            f[i * dim + 1] = -100;
+    }
+    std::cout << "force norm: " << f.norm() << std::endl;
 }
 
 void FEMSolver::ThreePointBendingTest()
@@ -176,6 +270,11 @@ void FEMSolver::ThreePointBendingTest()
 
 void FEMSolver::fixNodes(const std::vector<int>& node_indices)
 {
+    for (int idx : node_indices)
+    {
+        for (int d = 0; d < dim; d++)
+            dirichlet_data[idx * dim + d] = 0;
+    }
     
 }
 
@@ -269,15 +368,20 @@ void FEMSolver::ThreePointBendingTestWithCylinder()
     // std::cout << ipc_faces.row(num_surface_faces) << std::endl;
     // std::cout << num_nodes << std::endl;
     num_ipc_vtx = ipc_vertices.rows();
-    
+
+    TV sc_min, sc_max;
+    computeBBox(solid_cylinder_v, sc_min, sc_max);
+    TV sc_center = 0.5 * (sc_min + sc_max);
+
     for (int i = cylinder_vtx_start; i < num_nodes; i++)
     {
         TV x = undeformed.segment<3>(i * dim);
-        // if (x[0] > center[0] - 1e-1 && x[0] < center[0] + 1e-1 && x[1] > max_corner[1] - 1e-2)
-            f[i * dim + 1] = -10;
+        if (x[0] > sc_center[0] - 1e-2 && x[0] < sc_center[0] + 1e-2 && x[1] > sc_max[1] - 1e-2)
+            f[i * dim + 1] = -1;
     }
     
     std::cout << (max_corner - min_corner).transpose() << std::endl;
     std::cout << "total external force: " << f.norm() << std::endl;
     std::cout << "#ele in the structure " << cylinder_tet_start << " #ele in the cylinder " << num_ele - cylinder_tet_start << std::endl;
 }
+

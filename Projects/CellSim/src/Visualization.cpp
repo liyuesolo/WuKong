@@ -910,3 +910,29 @@ void VertexModel::saveLowVolumeTets(const std::string& filename)
     out.close();
     
 }
+
+void VertexModel::loadMeshAndSaveCentroid(const std::string& folder, int start, int end)
+{
+    Eigen::MatrixXi F;
+    Eigen::MatrixXd V;
+    for (int i = start; i < end; i++)
+    {
+        igl::readOBJ(folder + "/cell_mesh_iter_" + std::to_string(i) + ".obj", V, F);
+        for (int i = 0; i < num_nodes; i++)
+        {
+            deformed.segment<3>(i * 3) = V.row(i);
+        }
+        u = deformed - undeformed;
+        VectorXT cell_centroids = VectorXT::Zero(basal_face_start * 3);
+        iterateCellParallel([&](VtxList& face_vtx_list, int cell_idx){
+            TV centroid;
+            computeCellCentroid(face_vtx_list, centroid);
+            cell_centroids.segment<3>(cell_idx * 3) = centroid;
+        });
+        std::ofstream out(folder + "/cell_centroids_iter_" + std::to_string(i) + ".obj");
+        for (int i = 0; i < basal_face_start; i++)
+            out << "v " << cell_centroids.segment<3>(i * 3).transpose() << std::endl;
+        out.close();
+    }
+    
+}

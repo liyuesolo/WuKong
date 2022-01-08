@@ -30,12 +30,17 @@ static bool show_basal_polygon = false;
 static bool show_contracting_edges = true;
 static int modes = 0;
 static bool enable_selection = false;
+static bool compute_energy = false;
 double t = 0.0;
+int compute_energy_cnt = 0;
 
-int load_obj_iter_cnt = 1;
+int load_obj_iter_cnt = 0;
 
 Eigen::MatrixXd evectors;
 Eigen::VectorXd evalues;
+
+Eigen::MatrixXd bounding_surface_samples;
+Eigen::MatrixXd bounding_surface_samples_color;
 
 auto loadEigenVectors = [&]()
 {
@@ -67,12 +72,12 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
 
     if (show_membrane)
     {
-        Eigen::MatrixXd bounding_surface_samples;
-        Eigen::MatrixXd bounding_surface_samples_color;
-        simulation.sampleBoundingSurface(bounding_surface_samples);
-        bounding_surface_samples_color = bounding_surface_samples;
-        for (int i = 0; i < bounding_surface_samples.rows(); i++)
-            bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
+        // Eigen::MatrixXd bounding_surface_samples;
+        // Eigen::MatrixXd bounding_surface_samples_color;
+        // simulation.sampleBoundingSurface(bounding_surface_samples);
+        // bounding_surface_samples_color = bounding_surface_samples;
+        // for (int i = 0; i < bounding_surface_samples.rows(); i++)
+        //     bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
         viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
     }
     if (show_contracting_edges)
@@ -132,6 +137,11 @@ int main()
             {
                 updateScreen(viewer);
             }
+            if (ImGui::Checkbox("ComputeEnergy", &compute_energy))
+            {
+                updateScreen(viewer);
+            }
+            
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
@@ -179,12 +189,25 @@ int main()
         if(viewer.core().is_animating)
         {
             simulation.deformed = simulation.undeformed + simulation.u + evectors.col(modes) * std::sin(t);
-
+            if (compute_energy)
+            {
+                simulation.verbose = false;
+                T energy = simulation.computeTotalEnergy(simulation.u, false);
+                simulation.verbose = false;
+                std::cout << std::setprecision(8) << "E: " << energy << std::endl;
+            }
             t += 0.1;
+            compute_energy_cnt++;
+            
             viewer.data().clear();
             simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
             viewer.data().set_mesh(V, F);     
             viewer.data().set_colors(C);
+            if (show_membrane)
+            {
+                
+                viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+            }
         }
         return false;
     };
@@ -230,6 +253,7 @@ int main()
             std::cout << "modes " << modes << std::endl;
             return true;
         case '3': //check modes at equilirium after static solve
+            std::cout << "state: " << load_obj_iter_cnt << std::endl;
             simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
             std::cout << simulation.computeResidual(simulation.u, residual) << std::endl;
             updateScreen(viewer);
@@ -239,12 +263,14 @@ int main()
             return true;
         case 'n':
             load_obj_iter_cnt++;
+            std::cout << "state: " << load_obj_iter_cnt << std::endl;
             simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
         case 'l':
             load_obj_iter_cnt--;
             load_obj_iter_cnt = std::max(0, load_obj_iter_cnt);
+            std::cout << "state: " << load_obj_iter_cnt << std::endl;
             simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
@@ -252,8 +278,14 @@ int main()
     };
 
     simulation.initializeCells();
+
+    simulation.sampleBoundingSurface(bounding_surface_samples);
+    bounding_surface_samples_color = bounding_surface_samples;
+    for (int i = 0; i < bounding_surface_samples.rows(); i++)
+        bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
     updateScreen(viewer);
 
+    // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_IPC_fix3points_1536", 0, 1536);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;
