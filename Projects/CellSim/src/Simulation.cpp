@@ -31,14 +31,19 @@ void Simulation::initializeCells()
     cells.scene_type = 1;
 
     if (cells.scene_type == 1 || cells.scene_type == 2)
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
     cells.vertexModelFromMesh(sphere_file);
     // cells.addTestPrism(6);
     // cells.addTestPrismGrid(10, 10);
     
+    // cells.dynamics = true;
+    // vtx_vel = VectorXT::Zero(undeformed.rows());
+    // cells.computeNodalMass();
+    // cells.vtx_vel.setRandom();
+    // cells.vtx_vel/=cells.vtx_vel.norm();
 
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
@@ -120,9 +125,112 @@ void Simulation::generateMeshForRendering(Eigen::MatrixXd& V,
     }
 }
 
-void Simulation::advanceOneStep()
+bool Simulation::impliciteUpdate(VectorXT& _u)
 {
+    cells.iterateDirichletDoF([&](int offset, T target)
+    {
+        f[offset] = 0;
+    });
 
+    T residual_norm = 1e10, dq_norm = 1e10;
+    int cnt = 0;
+    while (true)
+    {
+        VectorXT residual(deformed.rows());
+        residual.setZero();
+        
+        if (cells.use_ipc_contact)
+            cells.updateIPCVertices(_u);
+
+        residual_norm = computeResidual(_u, residual);
+        
+        std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+        
+        if (residual_norm < newton_tol)
+            break;
+
+        dq_norm = lineSearchNewton(_u, residual, 20, true);
+        
+        if(cnt == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-6)
+            return true;
+
+        cnt ++;
+    }
+    
+    return false;
+}
+
+bool Simulation::advanceOneStep(int step)
+{
+    if (dynamic)
+    {
+        std::cout << "###########################TIME STEP " << 
+            current_time << "s/" << simulation_time 
+            << "s ###########################" << std::endl;
+
+        impliciteUpdate(u);
+        cells.saveCellMesh(step);
+        // vtx_vel = u / dt;
+        std::cout << "\t\t" << u.norm() / dt / cells.eta << std::endl;
+        if (u.norm() < 1e-6)
+            return true;
+        reset();
+        current_time += dt;
+        std::cout << "###############################################################" << std::endl;
+        std::cout << std::endl;
+        if (current_time < simulation_time)
+            return false;
+        return true;
+    }
+    else
+    {
+        cells.iterateDirichletDoF([&](int offset, T target)
+        {
+            f[offset] = 0;
+        });
+
+        VectorXT residual(deformed.rows());
+        residual.setZero();
+        
+        if (cells.use_ipc_contact)
+            cells.updateIPCVertices(u);
+
+        T residual_norm = computeResidual(u, residual);
+        cells.saveCellMesh(step);
+
+        std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+
+        if (residual_norm < newton_tol)
+            return true;
+
+        T dq_norm = lineSearchNewton(u, residual);
+        if(step == max_newton_iter || dq_norm > 1e10)
+            return true;
+        
+        return false;    
+    }
+    
+
+
+    
+}
+
+void Simulation::reset()
+{
+    undeformed = deformed;
+    u.setZero();
+    if (cells.use_ipc_contact)
+    {
+        cells.computeIPCRestData();
+    }
+}
+
+void Simulation::initializeDynamicsData(T _dt, T total_time)
+{
+    vtx_vel = VectorXT::Zero(undeformed.rows());
+    dt = _dt;
+    simulation_time = total_time;
+    cells.computeNodalMass();
 }
 
 bool Simulation::staticSolve()
@@ -552,8 +660,11 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
     T E0 = computeTotalEnergy(_u);
     
     std::cout << std::setprecision(12) << "E0 " << E0 << std::endl;
-    T step_size = 5e-5;
-    int step = 400;
+    // T step_size = 5e-5;
+    // int step = 200;
+
+    T step_size = 1e-2;
+    int step = 100; 
 
     // T step_size = 1e0;
     // int step = 50;
@@ -568,12 +679,17 @@ void Simulation::sampleEnergyWithSearchAndGradientDirection(
     {
         // cells.use_sphere_radius_bound = false;
         // cells.add_contraction_term = false;
-        
-        // cells.sigma = 0;
-        // cells.gamma = 0;
-        // cells.alpha = 0.0;
-        // cells.B = 0;
-        // cells.By = 0;
+        cells.use_ipc_contact = false;
+        // cells.weights_all_edges = 0.0;
+        cells.sigma = 0;
+        cells.gamma = 0;
+        cells.alpha = 0.0;
+        cells.B = 0;
+        cells.By = 0;
+        cells.Bp = 0;
+        cells.add_tet_vol_barrier = false;
+        cells.use_sphere_radius_bound = false;
+        dynamic = false;
         T Ei = computeTotalEnergy(_u + xi * search_direction);
         
         // T Ei = cells.computeAreaEnergy(_u + xi * search_direction);
@@ -622,8 +738,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(_u, K, UV);
-        // success = WoodburySolve(K, UV, residual, du);   
-        success = solveWoodburyCholmod(K, UV, residual, du); 
+        success = WoodburySolve(K, UV, residual, du);   
+        // success = solveWoodburyCholmod(K, UV, residual, du); 
     }
     else
     {
@@ -645,10 +761,12 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     // std::cout << "E0 " << E0 << std::endl;
     // std::getchar();
     int cnt = 1;
+    std::vector<T> ls_energies;
     while (true)
     {
         VectorXT u_ls = _u + alpha * du;
         T E1 = computeTotalEnergy(u_ls);
+        ls_energies.push_back(E1);
         // std::cout << "ls# " << cnt << " E1 " << E1 << " alpha " << alpha << std::endl;
         // std::getchar();
         // cells.computeTotalEnergy(u_ls, true);
@@ -687,9 +805,16 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                 {
                     std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
-                    // sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
+                    // sampleEnergyWithSearchAndGradientDirection(_u, residual, residual);
                     // cells.checkTotalGradientScale();
+                    // cells.print_force_norm = false;
                     // cells.checkTotalHessianScale();
+                    // cells.print_force_norm = true;
+                    // std::cout << "|du|: " << du.norm() << std::endl;
+                    // std::cout << "E0: " << E0 << " E1 " << E1 << std::endl;
+                    // for (T ei : ls_energies)
+                    //     std::cout << std::setprecision(6) << ei << std::endl;
+                    // std::getchar();
                     // cells.saveLowVolumeTets("low_vol_tet.obj");
                     // cells.saveBasalSurfaceMesh("low_vol_tet_basal_surface.obj");
                     // return 1e16;

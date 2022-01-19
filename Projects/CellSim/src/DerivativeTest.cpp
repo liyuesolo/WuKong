@@ -136,7 +136,7 @@ void VertexModel::checkTotalGradientScale(bool perturb)
     // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0; Gamma = 0.0;
     // pressure_constant = 0.0; 
     // bound_coeff = 0.0;
-
+    // dynamics = false;
     std::cout << "======================== CHECK GRADIENT 2nd Scale ========================" << std::endl;
     T epsilon = 1e-7;
     VectorXT du(num_nodes * 3);
@@ -175,6 +175,7 @@ void VertexModel::checkTotalGradientScale(bool perturb)
     }
     run_diff_test = false;
     bound_coeff = _bound_coeff;
+    // dynamics = false;
 }
 
 void VertexModel::checkTotalHessianScale(bool perturb)

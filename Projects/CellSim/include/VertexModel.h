@@ -322,12 +322,24 @@ public:
     }
 
     template <typename OP>
+    void iterateCellSerial(const OP& f)
+    {
+        for (int i = 0; i < basal_face_start; i++)
+        {
+            VtxList face_vtx_list = faces[i];
+            f(face_vtx_list, i);
+        }
+    }
+
+    template <typename OP>
     void iterateFaceParallel(const OP& f)
     {
         tbb::parallel_for(0, (int)faces.size(), [&](int i){
             f(faces[i], i);
         });
     }
+
+
 
     template <typename OP>
     void iterateEdgeSerial(const OP& f)
@@ -397,6 +409,17 @@ public:
     };
 
     int scene_type = 0;
+
+    //dynamics
+    bool dynamics = false;
+    bool add_mass = false;
+    T eta = 1.0;
+    T dt = 1.0;
+    VectorXT vtx_vel;
+
+    VectorXT vtx_mass;
+    T density = 1.0;
+
 
     // deformed and undeformed location of all vertices, u are the displacements
     VectorXT undeformed, deformed, u;
@@ -614,6 +637,12 @@ public:
     void addSingleTetVolBarrierForceEntries(VectorXT& residual);
     void addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entries, 
         bool projectPD = false);
+
+    // Dynamics.cpp
+    void computeNodalMass();
+    void addInertialEnergy(T& energy);
+    void addInertialForceEntries(VectorXT& residual);
+    void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
     void positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state = false);

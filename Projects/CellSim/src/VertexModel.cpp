@@ -65,7 +65,7 @@ void VertexModel::computeLinearModes()
         addIPCHessianEntries(entries, project_block_hessian_PD);
     
     K.setFromTriplets(entries.begin(), entries.end());
-    // std::cout << "build K" << std::endl;
+    std::cout << "build K" << std::endl;
 
     bool use_Spectra = true;
 
@@ -274,7 +274,9 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
         });
     }
     if (add_to_deform)
+    {
         deformed = undeformed + projected;
+    }
 
     T edge_length_term = 0.0, area_term = 0.0, 
         volume_term = 0.0, yolk_volume_term = 0.0,
@@ -296,6 +298,15 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
                 contraction_term += Gamma * edge_length;
             });
         }
+    }
+
+    if (dynamics)
+    {
+        T kinetic_term = 0.0;
+        addInertialEnergy(kinetic_term);
+        energy += kinetic_term;
+        if (verbose)
+            std::cout << "\tE_inertial " << kinetic_term << std::endl;    
     }
     
     energy += contraction_term;
@@ -342,6 +353,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
         // ===================================== Face Area =====================================
         addFaceAreaEnergy(Basal, gamma, area_term);
         addFaceAreaEnergy(Lateral, alpha, area_term);
+        
 
         if (verbose)
         {
@@ -415,8 +427,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
 
 T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose)
 {
-    // if (use_ipc_contact)
-    //     updateIPCVertices(_u);
+    
     VectorXT residual_temp = residual;
     VectorXT projected = _u;
     if (!run_diff_test)
@@ -426,6 +437,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             projected[offset] = target;
         });
     }
+        
     deformed = undeformed + projected;
 
     // ===================================== Edge constriction =====================================
@@ -447,6 +459,14 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     if (print_force_norm)
         std::cout << "\tcontracting force norm: " << (residual - residual_temp).norm() << std::endl;
     residual_temp = residual;
+
+    if (dynamics)
+    {
+        addInertialForceEntries(residual);
+        if (print_force_norm)
+            std::cout << "\tkinetic force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
 
 
     if (use_elastic_potential)
@@ -597,6 +617,7 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
             projected[offset] = target;
         });
     }
+
     deformed = undeformed + projected;
 
     std::vector<Entry> entries;
@@ -615,6 +636,9 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
             });
     }
+
+    if (dynamics)
+        addInertialHessianEntries(entries);
     
     if (use_elastic_potential)
     {
@@ -803,12 +827,12 @@ void VertexModel::projectDirichletDoFMatrix(StiffnessMatrix& A,
 
 T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du)
 {
-    std::cout << "** step size **" << std::endl;
+    // std::cout << "** step size **" << std::endl;
     T step_size = 1.0;
     if (use_ipc_contact)
     {
         T ipc_step_size = computeCollisionFreeStepsize(_u, du);
-        std::cout << "after ipc step size: " << ipc_step_size << std::endl;
+        // std::cout << "after ipc step size: " << ipc_step_size << std::endl;
         step_size = std::min(step_size, ipc_step_size);
     }
 
@@ -816,7 +840,7 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
     {
         T inside_membrane_step_size = computeInsideMembraneStepSize(_u, du);
         step_size = std::min(step_size, inside_membrane_step_size);
-        std::cout << "after inside membrane step size: " << step_size << std::endl;
+        // std::cout << "after inside membrane step size: " << step_size << std::endl;
     }
 
     if (add_tet_vol_barrier)
@@ -824,7 +848,7 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
         T inversion_free_step_size = computeInversionFreeStepSize(_u, du);
         // std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
         step_size = std::min(step_size, inversion_free_step_size);
-        std::cout << "after tet inverison step size: " << step_size << std::endl;
+        // std::cout << "after tet inverison step size: " << step_size << std::endl;
     }
 
     if (add_yolk_tet_barrier)
@@ -834,6 +858,6 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
         step_size = std::min(step_size, inversion_free_step_size);
     }
 
-    std::cout << "**       **" << std::endl;
+    // std::cout << "**       **" << std::endl;
     return step_size;
 }

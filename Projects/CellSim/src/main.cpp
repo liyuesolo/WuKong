@@ -34,6 +34,9 @@ static bool compute_energy = false;
 double t = 0.0;
 int compute_energy_cnt = 0;
 
+int static_solve_step = 0;
+bool check_modes = false;
+
 int load_obj_iter_cnt = 0;
 
 Eigen::MatrixXd evectors;
@@ -141,7 +144,14 @@ int main()
             {
                 updateScreen(viewer);
             }
-            
+        }
+        if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("Dynamics", &simulation.dynamic))
+            {
+                if (simulation.dynamic)
+                    simulation.initializeDynamicsData(1e-2, 5e-2);
+            }
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
@@ -186,7 +196,7 @@ int main()
 
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
     {
-        if(viewer.core().is_animating)
+        if(viewer.core().is_animating && check_modes)
         {
             simulation.deformed = simulation.undeformed + simulation.u + evectors.col(modes) * std::sin(t);
             if (compute_energy)
@@ -205,9 +215,24 @@ int main()
             viewer.data().set_colors(C);
             if (show_membrane)
             {
-                
                 viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
             }
+        }
+        return false;
+    };
+
+    viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && !check_modes)
+        {
+            bool finished = simulation.advanceOneStep(static_solve_step);
+            if (finished)
+            {
+                viewer.core().is_animating = false;
+            }
+            else 
+                static_solve_step++;
+            updateScreen(viewer);
         }
         return false;
     };
@@ -222,19 +247,36 @@ int main()
         default: 
             return false;
         case ' ':
-            // simulation.cells.Gamma = 2.0;
+            simulation.cells.Gamma = 4.0;
+            simulation.cells.gamma = 10;
+            simulation.cells.alpha = 200;
+            simulation.cells.print_force_norm = false;
             // simulation.staticSolve();
-            // simulation.undeformed = simulation.deformed;
-            // simulation.u.setZero();
-            // simulation.cells.Gamma = 6.0;
+            // updateScreen(viewer);
+            // simulation.reset();
+            // simulation.cells.gamma = 20;
             // simulation.staticSolve();
-            // simulation.undeformed = simulation.deformed;
-            // simulation.u.setZero();
-            // simulation.cells.Gamma = 10.0;
-            simulation.staticSolve();
-            updateScreen(viewer);
+            // updateScreen(viewer);
+            // simulation.reset();
+            // simulation.cells.gamma = 10;
+            // simulation.staticSolve();
+            // updateScreen(viewer);
+            // simulation.reset();
+            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_18.obj");
+            // simulation.reset();
+            // updateScreen(viewer);
+            // simulation.cells.gamma = 1;
+            // simulation.staticSolve();
+            // updateScreen(viewer);
+            // simulation.reset();
+            // simulation.cells.gamma = 0.1;
+            // simulation.staticSolve();
+            // updateScreen(viewer);
+            // simulation.reset();
+            viewer.core().is_animating = true;
             return true;
         case '1':
+            check_modes = true;
             simulation.computeLinearModes();
             loadEigenVectors();
             
@@ -278,6 +320,9 @@ int main()
     };
 
     simulation.initializeCells();
+    simulation.dynamic = true;
+    if (simulation.dynamic)
+        simulation.initializeDynamicsData(1e0, 10000);
 
     simulation.sampleBoundingSurface(bounding_surface_samples);
     bounding_surface_samples_color = bounding_surface_samples;

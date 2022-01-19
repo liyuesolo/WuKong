@@ -34,12 +34,21 @@ public:
 
     VectorXT& undeformed = cells.undeformed;
     VectorXT& deformed = cells.deformed;
+    
+    // dynamics
+    VectorXT& vtx_vel = cells.vtx_vel;
+    T& dt = cells.dt;
+    T current_time = 0.0;
+    T simulation_time;
+
     VectorXT& u = cells.u;
     VectorXT& f = cells.f;
     bool& woodbury = cells.woodbury;
     int& num_nodes = cells.num_nodes;
 
     Timer t;
+    
+    bool& dynamic = cells.dynamics;
     
 public:
     void initializeCells();
@@ -59,9 +68,15 @@ public:
     
     void sampleBoundingSurface(Eigen::MatrixXd& V);
 
-    void advanceOneStep();
-
     bool staticSolve();
+
+    void initializeDynamicsData(T _dt, T total_time);
+
+    void reset();
+
+    bool advanceOneStep(int step);
+
+    bool impliciteUpdate(VectorXT& _u);
 
     void computeLinearModes();
 

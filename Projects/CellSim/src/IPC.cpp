@@ -195,6 +195,7 @@ void VertexModel::updateIPCVertices(const VectorXT& _u)
         projected[offset] = target;
     });
     deformed = undeformed + projected;
+
     int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
     for (int i = 0; i < n_ipc_vtx; i++)
         ipc_vertices.row(i) = deformed.segment<3>(i * 3);

@@ -87,8 +87,8 @@ void VertexModel::initializeContractionData()
                 TV centroid;
                 computeFaceCentroid(face_vtx_list, centroid);
                 if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.92
-                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.35 
-                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.35)
+                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.2 
+                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.2)
                     contract = false;
                 if (contract)
                     contracting_faces.push_back(face_idx);
@@ -99,6 +99,15 @@ void VertexModel::initializeContractionData()
     {
         auto validEdge = [&](const Edge& e)
         {
+            // VtxList selected_vertices = {574, 781, 780, 825, 426, 
+            //     824, 826, 783, 827, 62, 60, 61, 63,
+            //     50, 48, 51, 49, 59, 56, 58, 57,
+            //     947, 723, 942, 722, 728, 686, 679, 940, 941};
+            // if (std::find(selected_vertices.begin(), selected_vertices.end(), e[0]) != selected_vertices.end()
+            //     && std::find(selected_vertices.begin(), selected_vertices.end(), e[1]) != selected_vertices.end())
+            //     return true;
+            // return false;
+
             TV x0 = deformed.segment<3>(e[0] * 3);
             TV x1 = deformed.segment<3>(e[1] * 3);
 
@@ -132,6 +141,14 @@ void VertexModel::initializeContractionData()
                     }
                 }
                 
+                // for (int i = 0; i < face_vtx_list.size(); i++)
+                // {
+                //     int j = (i + 1) % face_vtx_list.size();
+                //     if (validEdge(Edge(face_vtx_list[i], face_vtx_list[j])))
+                //     {
+                //         contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));        
+                //     }
+                // }
             }
         });
         // for (auto e : edges)
@@ -621,9 +638,13 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
             if (contract_apical_face)
             {
-                alpha = 0.4; // lateral
-                gamma = 1.0; // basal
-                sigma = 0.6; // apical
+                // alpha = 0.4; // lateral
+                // gamma = 1.0; // basal
+                // sigma = 0.6; // apical
+
+                alpha = 100.0; //lateral tet
+                gamma = 30.0; // basal
+                sigma = 0.5; // apical
             }
             else
             {
@@ -635,9 +656,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 // this weights lead to invagination when height = 1.0
                 if (use_cell_centroid)
                 {
-                    alpha = 100.0; //without tet
-                    // alpha = 200.0;
-                    gamma = 10.0;
+                    alpha = 100.0; // WORKED
+                    // alpha = 20.0;
+                    // alpha = 20.0;
+                    gamma = 30.0;
                     sigma = 0.5;
                 }
                 else
@@ -705,7 +727,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (woodbury)
     {
         if (contract_apical_face)
-            Gamma = 2000.0;
+            Gamma = 1e6;
         else 
         {
             if (use_cell_centroid)
@@ -814,6 +836,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_cell_centroid)
         weights_all_edges = 0.1;
     // weights_all_edges = 0.0;
+    weights_all_edges = 0.01;
 
     add_tet_vol_barrier = true;
 
@@ -834,5 +857,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     yolk_tet_vol_barrier_w = 1e6;
 
     check_all_vtx_membrane = true;
+
+    if (dynamics)
+    {
+        eta = 1e0;
+        computeNodalMass();
+    }
 }
 
