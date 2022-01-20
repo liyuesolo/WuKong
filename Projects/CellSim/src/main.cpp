@@ -247,10 +247,10 @@ int main()
         default: 
             return false;
         case ' ':
-            simulation.cells.Gamma = 4.0;
-            simulation.cells.gamma = 10;
-            simulation.cells.alpha = 200;
-            simulation.cells.print_force_norm = false;
+            // simulation.cells.Gamma = 4.0;
+            // simulation.cells.gamma = 10;
+            // simulation.cells.alpha = 200;
+            // simulation.cells.print_force_norm = false;
             // simulation.staticSolve();
             // updateScreen(viewer);
             // simulation.reset();

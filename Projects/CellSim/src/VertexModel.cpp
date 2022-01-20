@@ -23,7 +23,7 @@ void VertexModel::computeLinearModes()
     StiffnessMatrix K(deformed.rows(), deformed.rows());
     run_diff_test = true;
 
-    // buildSystemMatrix(u, K);
+    buildSystemMatrix(u, K);
 
     // bool fix_dirichlet = true;
     // iterateDirichletDoF([&](int offset, T target)
@@ -32,39 +32,39 @@ void VertexModel::computeLinearModes()
     //     K.coeffRef(offset, offset) = 1e10;
     // });
 
-    std::vector<Entry> entries;
-    deformed = undeformed + u;
-    MatrixXT dummy;
+    // std::vector<Entry> entries;
+    // deformed = undeformed + u;
+    // MatrixXT dummy;
 
-    iterateContractingEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Matrix<T, 6, 6> hessian;
-        computeEdgeSquaredNormHessian(vi, vj, hessian);
-        hessian *= Gamma;
-        addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-    });
+    // iterateContractingEdgeSerial([&](Edge& e){
+    //     TV vi = deformed.segment<3>(e[0] * 3);
+    //     TV vj = deformed.segment<3>(e[1] * 3);
+    //     Matrix<T, 6, 6> hessian;
+    //     computeEdgeSquaredNormHessian(vi, vj, hessian);
+    //     hessian *= Gamma;
+    //     addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+    // });
     
-    addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+    // addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
     
-    addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
-    addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
-    addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
+    // addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
+    // addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
+    // addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
     
-    addCellVolumePreservationHessianEntries(entries);
+    // addCellVolumePreservationHessianEntries(entries);
 
-    if (add_yolk_volume)
-        addYolkVolumePreservationHessianEntries(entries, dummy);
-    if (add_tet_vol_barrier)
-        addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
-    if (add_perivitelline_liquid_volume)
-        addPerivitellineVolumePreservationHessianEntries(entries, dummy);
-    if (use_sphere_radius_bound)
-        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
-    if (use_ipc_contact)
-        addIPCHessianEntries(entries, project_block_hessian_PD);
+    // if (add_yolk_volume)
+    //     addYolkVolumePreservationHessianEntries(entries, dummy);
+    // if (add_tet_vol_barrier)
+    //     addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+    // if (add_perivitelline_liquid_volume)
+    //     addPerivitellineVolumePreservationHessianEntries(entries, dummy);
+    // if (use_sphere_radius_bound)
+    //     addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
+    // if (use_ipc_contact)
+    //     addIPCHessianEntries(entries, project_block_hessian_PD);
     
-    K.setFromTriplets(entries.begin(), entries.end());
+    // K.setFromTriplets(entries.begin(), entries.end());
     std::cout << "build K" << std::endl;
 
     bool use_Spectra = true;
@@ -287,7 +287,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
     {
         if (contract_apical_face)
         {
-            addFaceAreaEnergy(Apical, Gamma, contraction_term);
+            addFaceContractionEnergy(Gamma, contraction_term);
         }
         else
         {
@@ -322,12 +322,14 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
     else
     {
         // ===================================== Edge length =====================================
-        if (contract_apical_face)
-        {
-            addFaceAreaEnergy(Apical, sigma, contraction_term);
-        }
-        else
-            addEdgeEnergy(Apical, sigma, edge_length_term);
+        // if (contract_apical_face)
+        // {
+        //     addFaceAreaEnergy(Apical, sigma, area_term);
+        // }
+        // else
+        //     addEdgeEnergy(Apical, sigma, edge_length_term);
+
+        
 
         addEdgeEnergy(ALL, weights_all_edges, edge_length_term);
 
@@ -351,6 +353,8 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
         }
 
         // ===================================== Face Area =====================================
+
+        addFaceAreaEnergy(Apical, sigma, area_term);
         addFaceAreaEnergy(Basal, gamma, area_term);
         addFaceAreaEnergy(Lateral, alpha, area_term);
         
@@ -444,7 +448,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     if (add_contraction_term)
     {
         if (contract_apical_face)
-            addFaceAreaForceEntries(Apical, Gamma, residual);
+            addFaceContractionForceEntries(Gamma, residual);
         else
             iterateContractingEdgeSerial([&](Edge& e){
                 TV vi = deformed.segment<3>(e[0] * 3);
@@ -478,18 +482,18 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     }
     else
     {
-        if (contract_apical_face)
-        {
-            addFaceAreaForceEntries(Apical, sigma, residual);
-            if (print_force_norm)
-                std::cout << "\tapical area force norm: " << (residual - residual_temp).norm() << std::endl;
-        }
-        else
-        {
-            addEdgeForceEntries(Apical, sigma, residual);
-            if (print_force_norm)
-                std::cout << "\tapical edge force norm: " << (residual - residual_temp).norm() << std::endl;
-        }
+        // if (contract_apical_face)
+        // {
+        //     addFaceAreaForceEntries(Apical, sigma, residual);
+        //     if (print_force_norm)
+        //         std::cout << "\tapical area force norm: " << (residual - residual_temp).norm() << std::endl;
+        // }
+        // else
+        // {
+        //     addEdgeForceEntries(Apical, sigma, residual);
+        //     if (print_force_norm)
+        //         std::cout << "\tapical edge force norm: " << (residual - residual_temp).norm() << std::endl;
+        // }
         
         addEdgeForceEntries(ALL, weights_all_edges, residual);
         if (print_force_norm)
@@ -510,6 +514,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             std::cout << "\tcell volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
         
+        addFaceAreaForceEntries(Apical, sigma, residual);
         addFaceAreaForceEntries(Basal, gamma, residual);
         addFaceAreaForceEntries(Lateral, alpha, residual);
 
@@ -625,7 +630,7 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     if (add_contraction_term)
     {
         if (contract_apical_face)
-            addFaceAreaHessianEntries(Apical, Gamma, entries, project_block_hessian_PD);
+            addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
             iterateContractingEdgeSerial([&](Edge& e){
                 TV vi = deformed.segment<3>(e[0] * 3);
@@ -646,14 +651,14 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     }
     else
     {
-        if (contract_apical_face)
-        {
-            addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        }
-        else
-        {
-            addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        }
+        // if (contract_apical_face)
+        // {
+        //     addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        // }
+        // else
+        // {
+        //     addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        // }
         
         addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
 
@@ -668,6 +673,7 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         }
         // ===================================== Face Area =====================================
 
+        addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
         addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
         addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
 
@@ -733,7 +739,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     if (add_contraction_term)
     {
         if (contract_apical_face)
-            addFaceAreaHessianEntries(Apical, Gamma, entries, project_block_hessian_PD);
+            addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
         {
             iterateContractingEdgeSerial([&](Edge& e){
@@ -753,12 +759,12 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     }
     else
     {
-        if (contract_apical_face)
-        {
-            addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        }
-        else
-            addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        // if (contract_apical_face)
+        // {
+        //     addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
+        // }
+        // else
+        //     addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
         
         addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
         if (preserve_tet_vol)
@@ -771,6 +777,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
         }
 
+        addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
         addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
         addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
         

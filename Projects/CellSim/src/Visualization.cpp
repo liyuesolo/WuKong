@@ -553,7 +553,7 @@ void VertexModel::saveIndividualCellsWithOffset()
 void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V, 
     Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest_state)
 {
-    bool triangulate_with_centroid = false;
+    bool triangulate_with_centroid = true;
     // compute polygon face centroid
     std::vector<TV> face_centroid(faces.size());
     tbb::parallel_for(0, (int)faces.size(), [&](int i){

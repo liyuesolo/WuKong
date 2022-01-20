@@ -89,6 +89,18 @@ public:
     }
 
     template <typename OP>
+    void iterateContractingFaceSerial(const OP& f)
+    {
+        for (int idx : contracting_faces)
+        {
+            VtxList cell_face = faces[idx];
+            f(cell_face, idx);
+        }
+    }
+
+    
+
+    template <typename OP>
     void iterateCellCentroidDoFSerial(const OP& f)
     {
         int cnt = 0;
@@ -564,6 +576,10 @@ public:
         std::vector<Entry>& entries, bool projectPD = false);
 
     // AreaTerms.cpp
+    void addFaceContractionEnergy(T w, T& energy);
+    void addFaceContractionForceEntries(T w, VectorXT& residual);
+    void addFaceContractionHessianEntries(T w, std::vector<Entry>& entries, bool projectPD = false);
+
     T computeAreaEnergy(const VectorXT& _u);
     void addFaceAreaEnergy(Region region, T w, T& energy);
     void addFaceAreaForceEntries(Region region, T w, VectorXT& residual);
@@ -645,6 +661,7 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
+    void removeAllTerms();
     void positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state = false);
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);

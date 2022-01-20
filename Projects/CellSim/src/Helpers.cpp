@@ -1,7 +1,30 @@
 
 #include "../include/VertexModel.h"
 
+void VertexModel::removeAllTerms()
+{
+    alpha = 0.0;
+    sigma = 0.0;
+    gamma = 0.0;
+    weights_all_edges = 0.0;
 
+    B = 0.0;
+
+    add_contraction_term = false;
+    Gamma = 0.0;
+
+    add_yolk_volume = false;
+    By = 0.0;
+
+    add_perivitelline_liquid_volume = false;
+    Bp = 0.0;
+
+    add_tet_vol_barrier = false;
+    dynamics = false;
+
+    use_sphere_radius_bound = false;
+    use_ipc_contact = false;
+}
 
 
 void VertexModel::updateFixedCentroids()

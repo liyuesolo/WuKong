@@ -2,6 +2,126 @@
 #include "../include/autodiff/AreaEnergy.h"
 
 
+void VertexModel::addFaceContractionEnergy(T w, T& energy)
+{
+    iterateContractingFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
+        T area_energy = 0.0;
+        if (face_vtx_list.size() == 4)
+        {
+            if (use_face_centroid)
+                computeArea4PointsSquaredSum(w, positions, area_energy);
+            else
+                computeQuadFaceAreaSquaredSum(w, positions, area_energy);
+        }
+        else if (face_vtx_list.size() == 5)
+        {
+            if (use_face_centroid)
+                computeArea5PointsSquaredSum(w, positions, area_energy);
+            else
+                computePentFaceAreaSquaredSum(w, positions, area_energy);
+        }
+        else if (face_vtx_list.size() == 6)
+        {
+            if (use_face_centroid)
+                computeArea6PointsSquaredSum(w, positions, area_energy);
+            else
+                computeHexFaceAreaSquaredSum(w, positions, area_energy);
+        }
+        else
+            std::cout << "unknown polygon edge case" << std::endl;
+        energy += area_energy;
+    });
+}
+
+void VertexModel::addFaceContractionForceEntries(T w, VectorXT& residual)
+{
+    iterateContractingFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
+        if (face_vtx_list.size() == 4)
+        {
+            Vector<T, 12> dedx;
+            if (use_face_centroid)
+                computeArea4PointsSquaredSumGradient(w, positions, dedx);
+            else
+                computeQuadFaceAreaSquaredSumGradient(w, positions, dedx);
+            addForceEntry<12>(residual, face_vtx_list, -dedx);
+        }
+        else if (face_vtx_list.size() == 5)
+        {
+            Vector<T, 15> dedx;
+            if (use_face_centroid)
+                computeArea5PointsSquaredSumGradient(w, positions, dedx);
+            else
+                computePentFaceAreaSquaredSumGradient(w, positions, dedx);
+            addForceEntry<15>(residual, face_vtx_list, -dedx);
+        }
+        else if (face_vtx_list.size() == 6)
+        {
+            Vector<T, 18> dedx;
+            if (use_face_centroid)
+                computeArea6PointsSquaredSumGradient(w, positions, dedx);
+            else
+                computeHexFaceAreaSquaredSumGradient(w, positions, dedx);
+            addForceEntry<18>(residual, face_vtx_list, -dedx);
+        }
+        else
+        {
+            std::cout << "error " << __FILE__ << std::endl;
+        }
+    });
+}
+
+void VertexModel::addFaceContractionHessianEntries(T w, std::vector<Entry>& entries, bool projectPD)
+{
+    iterateContractingFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, face_vtx_list);
+        if (face_vtx_list.size() == 4)
+        {
+            Matrix<T, 12, 12> hessian;
+            if (use_face_centroid)
+                computeArea4PointsSquaredSumHessian(w, positions, hessian);
+            else
+                computeQuadFaceAreaSquaredSumHessian(w, positions, hessian);
+            if (projectPD) 
+                projectBlockPD<12>(hessian);
+            addHessianEntry<12>(entries, face_vtx_list, hessian);
+        }
+        else if (face_vtx_list.size() == 5)
+        {
+            Matrix<T, 15, 15> hessian;
+            if (use_face_centroid)
+                computeArea5PointsSquaredSumHessian(w, positions, hessian);
+            else
+                computePentFaceAreaSquaredSumHessian(w, positions, hessian);
+            if (projectPD) 
+                projectBlockPD<15>(hessian);
+            addHessianEntry<15>(entries, face_vtx_list, hessian);
+        }
+        else if (face_vtx_list.size() == 6)
+        {
+            Matrix<T, 18, 18> hessian;
+            if (use_face_centroid)
+                computeArea6PointsSquaredSumHessian(w, positions, hessian);
+            else
+                computeHexFaceAreaSquaredSumHessian(w, positions, hessian);
+            if (projectPD) 
+                projectBlockPD<18>(hessian);
+            addHessianEntry<18>(entries, face_vtx_list, hessian);
+        }
+        else
+        {
+            std::cout << "unknown " << std::endl;
+        }
+    });
+}
+
 void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
 {
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)

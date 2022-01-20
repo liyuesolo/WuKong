@@ -86,9 +86,9 @@ void VertexModel::initializeContractionData()
                 bool contract = true;
                 TV centroid;
                 computeFaceCentroid(face_vtx_list, centroid);
-                if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.92
-                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.2 
-                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.2)
+                if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.97
+                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.1
+                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.1)
                     contract = false;
                 if (contract)
                     contracting_faces.push_back(face_idx);
@@ -622,7 +622,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     B = 1e6;
     By = 1e5;
 
-    contract_apical_face = false;
+    contract_apical_face = true;
     use_cell_centroid = true;
     
     use_elastic_potential = false;
@@ -642,9 +642,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 // gamma = 1.0; // basal
                 // sigma = 0.6; // apical
 
-                alpha = 100.0; //lateral tet
-                gamma = 30.0; // basal
-                sigma = 0.5; // apical
+                alpha = 10.0; // WORKED
+                // alpha = 20.0;
+                // alpha = 20.0;
+                gamma = 3.0;
+                // sigma = 0.5; // apical
+                sigma = 2.0;
             }
             else
             {
@@ -656,11 +659,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 // this weights lead to invagination when height = 1.0
                 if (use_cell_centroid)
                 {
-                    alpha = 100.0; // WORKED
+                    alpha = 10.0; // WORKED
                     // alpha = 20.0;
                     // alpha = 20.0;
-                    gamma = 30.0;
-                    sigma = 0.5;
+                    gamma = 3.0;
+                    // sigma = 0.5; // apical
+                    sigma = 2.0;
                 }
                 else
                 {
@@ -727,12 +731,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (woodbury)
     {
         if (contract_apical_face)
-            Gamma = 1e6;
+            Gamma = 1.0;
         else 
         {
             if (use_cell_centroid)
                 // Gamma = 0.05; // for continuation
-                Gamma = 1.0;//worked for the centroid formulation
+                Gamma = 0.5;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -836,7 +840,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_cell_centroid)
         weights_all_edges = 0.1;
     // weights_all_edges = 0.0;
-    weights_all_edges = 0.01;
+    weights_all_edges = 0.01 * Gamma;
 
     add_tet_vol_barrier = true;
 
@@ -863,5 +867,14 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         eta = 1e0;
         computeNodalMass();
     }
+
+    // removeAllTerms();
+    // Gamma = 100.0;
+    // add_contraction_term = true;
+    // woodbury = false;
+    // alpha = 10.0; // WORKED
+    // gamma = 3.0;
+    // // sigma = 2.0;
+    // B = 1e6;
 }
 
