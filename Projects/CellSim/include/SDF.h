@@ -9,12 +9,14 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 
-// #include <openvdb/openvdb.h>
+#include <openvdb/openvdb.h>
+#include <openvdb/tools/GridOperators.h>
 
 #include "VecMatDef.h"
 
 using T = double;
 
+using namespace openvdb;
 class SDF
 {
 public:
@@ -22,6 +24,35 @@ public:
     using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
+    
+public:
+    
+    virtual T value(const TV& test_point) = 0;
+    virtual void gradient(const TV& test_point, TV& dphidx) = 0;
+    virtual void hessian(const TV& test_point, TM& d2phidx2) = 0;
+
+    bool inside(const TV& test_point) { return value(test_point) <= 0.0; }
+
+    virtual void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
+        const VectorXT& normals, T epsilon) = 0;
+public:
+    SDF() 
+    {
+        
+    }
+    ~SDF() {}
+};
+
+class IMLS : public SDF
+{
+
+public:
+    using TV = Vector<double, 3>;
+    using TM = Matrix<double, 3, 3>;
+    using IV = Vector<int, 3>;
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
 
     int n_points = 0;
 
@@ -30,22 +61,56 @@ public:
     T radius;
     T search_radius;
 
+private:
+    T weightFunction(T d, T r) { return std::exp(-d*d / r*r); }
+
 public:
-    void initialize(const VectorXT& _data_points, 
-        const VectorXT& _data_point_normals, T _radius, T _search_radius);
-    void valueIMLS(const TV& test_point, T& value);
-    void gradientIMLS(const TV& test_point, TV& dphidx);
-    void hessianIMLS(const TV& test_point, TM& d2phidx2);
+    T value(const TV& test_point);
+    void gradient(const TV& test_point, TV& dphidx);
+    void hessian(const TV& test_point, TM& d2phidx2);
+
+
+    void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
+        const VectorXT& normals, T epsilon);
+public:
+    IMLS() {}
+    ~IMLS() {}
+};
+
+class VdbLevelSetSDF : public SDF
+{
+
+public:
+    using TV = Vector<double, 3>;
+    using TM = Matrix<double, 3, 3>;
+    using IV = Vector<int, 3>;
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
+
+    openvdb::DoubleGrid::Ptr grid;
+    openvdb::Vec3dGrid::Ptr grid_grad;
+    openvdb::Vec3dGrid::Ptr ddx;
+    openvdb::Vec3dGrid::Ptr ddy;
+    openvdb::Vec3dGrid::Ptr ddz;
+
+public:
+    T value(const TV& test_point);
+    void gradient(const TV& test_point, TV& dphidx);
+    void hessian(const TV& test_point, TM& d2phidx2);
+
+    void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
+        const VectorXT& normals, T epsilon);
 
 private:
-    T weightFunction(T d, T r) { return std::exp(-d*d, r*r); }
-
+    void levelsetFromMesh(const std::vector<Vec3s>& points,
+        const std::vector<Vec3I>& triangles,
+        const std::vector<Vec4I>& quads);
 public:
-    SDF() 
+    VdbLevelSetSDF() 
     {
-        // openvdb::initialize();
+        openvdb::initialize();
     }
-    ~SDF() {}
+    ~VdbLevelSetSDF() {}
 };
 
 #endif 

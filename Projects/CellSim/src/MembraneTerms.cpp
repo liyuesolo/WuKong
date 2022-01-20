@@ -1,14 +1,72 @@
 #include "../include/VertexModel.h"
 #include "../include/autodiff/MembraneEnergy.h"
 
+#include "../include/SDF.h"
+
+void VertexModel::addMembraneSDFBoundEnergy(T& energy)
+{
+    T sdf_energy = 0.0;
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+    for (int i = 0; i < n_vtx; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+        if (sdf.inside(xi))
+            continue;
+        sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
+        
+    }
+    energy += sdf_energy;
+}
+
+void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
+{
+    
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+    for (int i = 0; i < n_vtx; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+
+        if (sdf.inside(xi))
+            continue;
+        Vector<T, 3> dedx;
+        sdf.gradient(xi, dedx);
+        
+        T value = sdf.value(xi);
+        addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
+        
+    }
+}
+
+void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries, bool projectPD)
+{
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+
+    for (int i = 0; i < n_vtx; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+        if (sdf.inside(xi))
+            continue;
+        Matrix<T, 3, 3> d2phidx2;
+        sdf.hessian(xi, d2phidx2);
+        Vector<T, 3> dphidx;
+        sdf.gradient(xi, dphidx);
+        T value = sdf.value(xi);
+        Matrix<T, 3, 3> hessian = bound_coeff * (dphidx * dphidx.transpose() + value * d2phidx2);
+        if (projectPD) 
+            projectBlockPD<3>(hessian);
+        addHessianEntry<3>(entries, {i}, hessian);    
+    }
+}
+
 void VertexModel::addMembraneBoundEnergy(T& energy)
 {
     int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
 
     T sphere_bound_term = 0.0;
     for (int i = 0; i < n_vtx; i++)
-    {
-        T e = 0.0;;
+    {    
+        TV xi = deformed.segment<3>(i * 3);
+        T e = 0.0;
         T Rk = (deformed.segment<3>(i * 3) - mesh_centroid).norm();
         if (sphere_bound_penalty)
         {

@@ -3,6 +3,7 @@
 
 #include <utility>
 #include <iostream>
+#include <fstream>
 #include <Eigen/Geometry>
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -10,7 +11,7 @@
 #include <tbb/tbb.h>
 
 #include "VecMatDef.h"
-
+#include "SDF.h"
 #include "Timer.h"
 
 template <int dim>
@@ -51,6 +52,7 @@ public:
     using TV2 = Vector<double, 2>;
     using TM2 = Matrix<double, 2, 2>;
     using TM3 = Matrix<double, 3, 3>;
+    using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
     using IV2 = Vector<int, 2>;
     using TetVtx = Matrix<T, 3, 4>;
@@ -324,6 +326,20 @@ public:
     }
 
     template <typename OP>
+    void iterateApicalFaceSerial(const OP& f)
+    {
+        int cnt = -1;
+        for (VtxList& cell_face : faces)
+        {
+            cnt++;
+            if (cnt < basal_face_start)
+                f(cell_face, cnt);
+            else
+                break;
+        }
+    }
+
+    template <typename OP>
     void iterateCellParallel(const OP& f)
     {
         tbb::parallel_for(0, basal_face_start, [&](int i)
@@ -548,6 +564,9 @@ public:
     T perivitelline_pressure = 0.1;
     T weights_all_edges = 0.1;
 
+    VdbLevelSetSDF sdf;
+    bool use_sdf_boundary = false;
+
     std::unordered_map<int, T> dirichlet_data;
 
     // VertexModel.cpp
@@ -635,6 +654,10 @@ public:
     void addMembraneBoundForceEntries(VectorXT& residual);
     void addMembraneBoundHessianEntries(std::vector<Entry>& entries, bool projectPD = false);
 
+    void addMembraneSDFBoundEnergy(T& energy);
+    void addMembraneSDFBoundForceEntries(VectorXT& residual);
+    void addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries, bool projectPD = false);
+
     // ElasticityTerms.cpp
     void addElasticityEnergy(T& energy);
     void addElasticityForceEntries(VectorXT& residual);
@@ -661,6 +684,9 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
+    void saveMeshVector(const std::string& filename,
+        const VectorXT& positions, const VectorXi& indices) const;
+    void getInitialApicalSurface(VectorXT& positions, VectorXi& indices);
     void removeAllTerms();
     void positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state = false);
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);

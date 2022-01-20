@@ -280,7 +280,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
 
     T edge_length_term = 0.0, area_term = 0.0, 
         volume_term = 0.0, yolk_volume_term = 0.0,
-        contraction_term = 0.0, sphere_bound_term = 0.0;
+        contraction_term = 0.0, membrane_bound_term = 0.0;
     
     // ===================================== Edge constriction =====================================
     if (add_contraction_term)
@@ -399,11 +399,14 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
 
     if (use_sphere_radius_bound)
     {
-        addMembraneBoundEnergy(sphere_bound_term);
+        if(use_sdf_boundary)
+            addMembraneSDFBoundEnergy(membrane_bound_term);
+        else
+            addMembraneBoundEnergy(membrane_bound_term);
         if (verbose)
-            std::cout << "\tE_inside_sphere " << sphere_bound_term << std::endl;
+            std::cout << "\tE_inside_sphere " << membrane_bound_term << std::endl;
     }
-    energy += sphere_bound_term;
+    energy += membrane_bound_term;
     
     T contact_energy = 0.0;
 
@@ -575,7 +578,10 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
-        addMembraneBoundForceEntries(residual);
+        if(use_sdf_boundary)
+            addMembraneSDFBoundForceEntries(residual);
+        else
+            addMembraneBoundForceEntries(residual);
         if(print_force_norm)
             std::cout << "\tsphere bound norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
@@ -699,7 +705,10 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
-        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
+        if(use_sdf_boundary)
+            addMembraneSDFBoundHessianEntries(entries, project_block_hessian_PD);
+        else
+            addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
     }
 
     // ===================================== IPC =====================================
@@ -802,7 +811,12 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     
 
     if (use_sphere_radius_bound)
-        addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
+    {
+        if(use_sdf_boundary)
+            addMembraneSDFBoundHessianEntries(entries, project_block_hessian_PD);
+        else
+            addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
+    }
 
     if (use_ipc_contact)
         addIPCHessianEntries(entries, project_block_hessian_PD);

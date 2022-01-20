@@ -70,7 +70,6 @@ void VertexModel::initializeContractionData()
     //     std::cout << contracting_edges.size() << std::endl;
     // }
     
-    
 
 
     TV min_corner, max_corner;
@@ -86,9 +85,13 @@ void VertexModel::initializeContractionData()
                 bool contract = true;
                 TV centroid;
                 computeFaceCentroid(face_vtx_list, centroid);
-                if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.97
-                    || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.1
-                    || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.1)
+                // if (centroid[0] < min_corner[0] + (max_corner[0] - min_corner[0]) * 0.97
+                //     || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.1
+                //     || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.1)
+                //     contract = false;
+                if (centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.05
+                    || centroid[2] < mid_point[2] - 0.5 * delta[2] * 0.1
+                    || centroid[2] > mid_point[2] + 0.5 * delta[2] * 0.1)
                     contract = false;
                 if (contract)
                     contracting_faces.push_back(face_idx);
@@ -505,18 +508,22 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     std::vector<TV> face_centroids(F.rows());
     deformed.resize(F.rows() * 3);
 
+    VectorXT vtx_normals(F.rows() * 3);
+
     tbb::parallel_for(0, (int)F.rows(), [&](int i)
     {
         TV centroid = 1.0/3.0*(V.row(F.row(i)[0]) + V.row(F.row(i)[1]) + V.row(F.row(i)[2]));
         face_centroids[i] = centroid;
         deformed.segment<3>(i * 3) = centroid;
+        TV ej = (V.row(F.row(i)[2]) - V.row(F.row(i)[1])).normalized();
+        TV ei = (V.row(F.row(i)[0]) - V.row(F.row(i)[1])).normalized();
+        vtx_normals.segment<3>(i * 3) = ej.cross(ei).normalized();
     });
 
     std::vector<std::vector<int>> dummy;
 
     igl::vertex_triangle_adjacency(V.rows(), F, faces, dummy);
     igl::per_face_normals(V, F, N);
-
     // re-order so that the faces around one vertex is clockwise
     tbb::parallel_for(0, (int)faces.size(), [&](int vi)
     {
@@ -527,7 +534,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             avg_normal += N.row(one_ring_face[i]);
         }
         avg_normal /= one_ring_face.size();
-
+        
         TV vtx = V.row(vi);
         TV centroid0 = face_centroids[one_ring_face[0]];
         std::sort(one_ring_face.begin(), one_ring_face.end(), [&](int a, int b){
@@ -560,8 +567,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);
-        deformed.segment<3>(basal_vtx_start * 3 + i * 3) = mesh_center + 
-            (apex - mesh_center) * ((apex - mesh_center).norm() - cell_height);
+        // deformed.segment<3>(basal_vtx_start * 3 + i * 3) = mesh_center + 
+        //     (apex - mesh_center) * ((apex - mesh_center).norm() - cell_height);
+        deformed.segment<3>(basal_vtx_start * 3 + i * 3) =
+            deformed.segment<3>(i * 3) - 
+            vtx_normals.segment<3>(i * 3) * cell_height;
     });
 
     // add apical edges
@@ -580,17 +590,22 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             }
         }
     }
-    
+    std::set<int> face_edge_numbers;
+
     basal_face_start = faces.size();
     for (int i = 0; i < basal_face_start; i++)
     {
         VtxList new_face = faces[i];
+        face_edge_numbers.insert(new_face.size());
         for (int& idx : new_face)
             idx += basal_vtx_start;
         std::reverse(new_face.begin(), new_face.end());
         faces.push_back(new_face);
     }
-    
+
+    for (int idx : face_edge_numbers)
+        std::cout << idx << std::endl;
+    std::getchar();
     lateral_face_start = faces.size();
 
     cell_face_indices.resize(basal_face_start, VtxList());
@@ -868,10 +883,52 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         computeNodalMass();
     }
 
+    use_sdf_boundary = true;
+
+    if (use_sdf_boundary)
+    {
+        VectorXT vertices; VectorXi indices;
+        getInitialApicalSurface(vertices, indices);
+        vtx_normals.conservativeResize(vertices.rows());
+        int offset = basal_vtx_start * 3;
+        for (int i = 0; i < basal_face_start; i++)
+        {
+            TV xi = undeformed.segment<3>(faces[i][0] * 3);
+            TV xj = undeformed.segment<3>(faces[i][1] * 3);
+            TV xk = undeformed.segment<3>(faces[i][2] * 3);
+            TV normal = (xk - xj).normalized().cross((xi - xj).normalized()).normalized();
+            vtx_normals.segment<3>(offset + i * 3) = -normal;
+        }
+        sdf.initializedMeshData(vertices, indices, vtx_normals, 1e-3);
+        // int nv = vertices.rows() / 3;
+
+        // tbb::parallel_for(0, nv, [&](int i){
+        //     vertices.segment<3>(i * 3) += vtx_normals.segment<3>(i * 3) * 1e-3;    
+        // });
+        
+        // saveMeshVector("mesh_offset.obj", vertices, indices);
+
+        bool all_inside = true;
+        for (int i = 0; i < num_nodes; i++)
+        {
+            TV xi = deformed.segment<3>(i * 3);
+            if (sdf.inside(xi))
+                continue;
+            std::cout << sdf.value(xi) << std::endl;
+            all_inside = false;
+            break;
+        }
+        if (!all_inside)
+            std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
+    }
+
     // removeAllTerms();
+    
     // Gamma = 100.0;
     // add_contraction_term = true;
     // woodbury = false;
+    // use_sphere_radius_bound = true;
+    
     // alpha = 10.0; // WORKED
     // gamma = 3.0;
     // // sigma = 2.0;

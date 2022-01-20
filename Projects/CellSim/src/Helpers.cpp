@@ -26,6 +26,54 @@ void VertexModel::removeAllTerms()
     use_ipc_contact = false;
 }
 
+void VertexModel::getInitialApicalSurface(VectorXT& positions, VectorXi& indices)
+{
+    int offset = basal_vtx_start * 3;
+    positions = undeformed.segment(0, basal_vtx_start * 3);
+    
+    std::vector<TV> face_centroid(basal_face_start);
+    tbb::parallel_for(0, basal_face_start, [&](int i){
+        TV centroid = undeformed.segment<3>(faces[i][0] * 3);
+        for (int j = 1; j < faces[i].size(); j++)
+            centroid += undeformed.segment<3>(faces[i][j] * 3);
+        face_centroid[i] = centroid / T(faces[i].size());
+    });
+
+    positions.conservativeResize(offset + face_centroid.size() * 3);
+
+    for (int i = 0; i < face_centroid.size(); i++)
+        positions.segment<3>(offset + i * 3) = face_centroid[i];
+
+    int face_cnt = 0;
+    for (int i = 0; i < basal_face_start; i++)
+        face_cnt += faces[i].size();
+    indices.resize(face_cnt * 3);
+    
+    face_cnt = 0;
+    for (int i = 0; i < basal_face_start; i++)
+    {
+        for (int j = 0; j < faces[i].size(); j++)
+        {
+            int next = (j + 1) % faces[i].size();
+
+            indices.segment<3>(face_cnt * 3) = Eigen::Vector3i(basal_vtx_start + i, faces[i][next], faces[i][j]);
+            face_cnt++;
+        }   
+    }
+    // saveMeshVector("apical_surface.obj", positions, indices);
+    
+}
+
+void VertexModel::saveMeshVector(const std::string& filename,
+    const VectorXT& positions, const VectorXi& indices) const
+{
+    std::ofstream out(filename);
+    for (int i = 0; i < (positions.rows() / 3); i ++)
+        out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
+    for (int i = 0; i < indices.rows() / 3; i++)
+        out << "f " << (indices.segment<3>(i * 3) + IV::Ones()).transpose() << std::endl;
+    out.close();
+}
 
 void VertexModel::updateFixedCentroids()
 {
