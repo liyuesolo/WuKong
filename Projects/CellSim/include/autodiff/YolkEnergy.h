@@ -17,6 +17,13 @@ void computeConeVolume6Points(const Matrix<double,18,1> & face_vertices, const M
 void computeConeVolume6PointsGradient(const Matrix<double,18,1> & face_vertices, const Matrix<double,3,1> & centroid, Matrix<double, 18, 1>& energygradient);
 void computeConeVolume6PointsHessian(const Matrix<double,18,1> & face_vertices, const Matrix<double,3,1> & centroid, Matrix<double, 18, 18>& energyhessian);
 
+void computeConeVolume7Points(const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, double& energy);
+void computeConeVolume7PointsGradient(const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 21, 1>& energygradient);
+void computeConeVolume7PointsHessian(const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 21, 21>& energyhessian);
+
+void computeConeVolume8Points(const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, double& energy);
+void computeConeVolume8PointsGradient(const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 24, 1>& energygradient);
+void computeConeVolume8PointsHessian(const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 24, 24>& energyhessian);
 
 void computeQuadConeVolume(const Eigen::Matrix<double,12,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, double& energy);
 void computeQuadConeVolumeGradient(const Eigen::Matrix<double,12,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 12, 1>& energygradient);

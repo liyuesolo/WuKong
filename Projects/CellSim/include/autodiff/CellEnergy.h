@@ -45,4 +45,12 @@ void computeVolume6PointsFixedCentroid(const Eigen::Matrix<double,36,1> & cell_v
 void computeVolume6PointsFixedCentroidGradient(const Eigen::Matrix<double,36,1> & cell_vertices, const Eigen::Matrix<double,27,1> & centroids, Eigen::Matrix<double, 36, 1>& energygradient);
 void computeVolume6PointsFixedCentroidHessian(const Eigen::Matrix<double,36,1> & cell_vertices, const Eigen::Matrix<double,27,1> & centroids, Eigen::Matrix<double, 36, 36>& energyhessian);
 
+
+void computeVolume7Points(const Eigen::Matrix<double,42,1> & cell_vertices, double& energy);
+void computeVolume7PointsGradient(const Eigen::Matrix<double,42,1> & cell_vertices, Eigen::Matrix<double, 42, 1>& energygradient);
+void computeVolume7PointsHessian(const Eigen::Matrix<double,42,1> & cell_vertices, Eigen::Matrix<double, 42, 42>& energyhessian);
+
+void computeVolume8Points(const Eigen::Matrix<double,48,1> & cell_vertices, double& energy);
+void computeVolume8PointsGradient(const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 1>& energygradient);
+void computeVolume8PointsHessian(const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 48>& energyhessian);
 #endif

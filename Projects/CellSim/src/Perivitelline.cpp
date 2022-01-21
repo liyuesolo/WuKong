@@ -3,6 +3,11 @@
 #include "../include/autodiff/YolkEnergy.h"
 
 // bool use_cell_centroid = false;
+T VertexModel::computeInitialApicalVolumeWithOffset(const VectorXT& normals, T epsilon)
+{
+    deformed = undeformed + normals * epsilon;
+    return computeTotalVolumeFromApicalSurface();
+}
 
 T VertexModel::computeTotalVolumeFromApicalSurface()
 {
@@ -35,6 +40,16 @@ T VertexModel::computeTotalVolumeFromApicalSurface()
                     computeConeVolume6Points(positions, mesh_centroid, cone_volume);
                 else
                     computeHexConeVolume(positions, mesh_centroid, cone_volume);
+            }
+            else if (face_vtx_list.size() == 7) 
+            {
+                if (use_cell_centroid)
+                    computeConeVolume7Points(positions, mesh_centroid, cone_volume);
+            }
+            else if (face_vtx_list.size() == 8) 
+            {
+                if (use_cell_centroid)
+                    computeConeVolume8Points(positions, mesh_centroid, cone_volume);
             }
             else
                 std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
@@ -100,9 +115,25 @@ void VertexModel::addPerivitellineVolumePreservationForceEntries(VectorXT& resid
                 dedx *= coeff;
                 addForceEntry<18>(residual, face_vtx_list, dedx);
             }
+            else if (face_vtx_list.size() == 7)
+            {
+                Vector<T, 21> dedx;
+                if (use_cell_centroid)
+                    computeConeVolume7PointsGradient(positions, mesh_centroid, dedx);
+                dedx *= coeff;
+                addForceEntry<21>(residual, face_vtx_list, dedx);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                Vector<T, 24> dedx;
+                if (use_cell_centroid)
+                    computeConeVolume8PointsGradient(positions, mesh_centroid, dedx);
+                dedx *= coeff;
+                addForceEntry<24>(residual, face_vtx_list, dedx);
+            }
             else
             {
-                std::cout << "unknown polygon edge number" << std::endl;
+                // std::cout << "unknown polygon edge number" << std::endl;
             }
         }
         
@@ -151,9 +182,23 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                         computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
                     addForceEntry<18>(dVdx_full, face_vtx_list, -dedx);
                 }
+                else if (face_vtx_list.size() == 7)
+                {
+                    Vector<T, 21> dedx;
+                    if (use_cell_centroid)
+                        computeConeVolume7PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<21>(dVdx_full, face_vtx_list, -dedx);
+                }
+                else if (face_vtx_list.size() == 8)
+                {
+                    Vector<T, 24> dedx;
+                    if (use_cell_centroid)
+                        computeConeVolume8PointsGradient(positions, mesh_centroid, dedx);
+                    addForceEntry<24>(dVdx_full, face_vtx_list, -dedx);
+                }
                 else
                 {
-                    std::cout << "unknown polygon edge number" << std::endl;
+                    // std::cout << "unknown polygon edge number" << std::endl;
                 }
             }
         });
@@ -205,7 +250,6 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 T coeff = use_perivitelline_liquid_pressure ? -pressure_constant : Bp * ci;
                 if (face_vtx_list.size() == 4)
                 {
-                    
                     Matrix<T, 12, 12> d2Vdx2;
                     if (use_cell_centroid)
                         computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
@@ -241,9 +285,29 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                         projectBlockPD<18>(hessian);
                     addHessianEntry<18>(entries, face_vtx_list, hessian);
                 }
+                else if (face_vtx_list.size() == 7)
+                {
+                    Matrix<T, 21, 21> d2Vdx2;
+                    if (use_cell_centroid)
+                        computeConeVolume7PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 21, 21> hessian = coeff * d2Vdx2;
+                    if(projectPD)
+                        projectBlockPD<21>(hessian);
+                    addHessianEntry<21>(entries, face_vtx_list, hessian);
+                }
+                else if (face_vtx_list.size() == 8)
+                {
+                    Matrix<T, 24, 24> d2Vdx2;
+                    if (use_cell_centroid)
+                        computeConeVolume8PointsHessian(positions, mesh_centroid, d2Vdx2);
+                    Matrix<T, 24, 24> hessian = coeff * d2Vdx2;
+                    if(projectPD)
+                        projectBlockPD<24>(hessian);
+                    addHessianEntry<24>(entries, face_vtx_list, hessian);
+                }
                 else
                 {
-                    std::cout << "unknown polygon edge case" << std::endl;
+                    // std::cout << "unknown polygon edge case" << std::endl;
                 }
             }
         }); 

@@ -35,6 +35,13 @@ void computeVolLogBarrier6Points(double stiffness, double dhat, const Eigen::Mat
 void computeVolLogBarrier6PointsGradient(double stiffness, double dhat, const Eigen::Matrix<double,36,1> & cell_vertices, const Eigen::Matrix<double,36,1> & mask, Eigen::Matrix<double, 36, 1>& energygradient);
 void computeVolLogBarrier6PointsHessian(double stiffness, double dhat, const Eigen::Matrix<double,36,1> & cell_vertices, const Eigen::Matrix<double,36,1> & mask, Eigen::Matrix<double, 36, 36>& energyhessian);
 
+void computeVolumeBarrier7Points(double stiffness, const Eigen::Matrix<double,42,1> & cell_vertices, double& energy);
+void computeVolumeBarrier7PointsGradient(double stiffness, const Eigen::Matrix<double,42,1> & cell_vertices, Eigen::Matrix<double, 42, 1>& energygradient);
+void computeVolumeBarrier7PointsHessian(double stiffness, const Eigen::Matrix<double,42,1> & cell_vertices, Eigen::Matrix<double, 42, 42>& energyhessian);
+
+void computeVolumeBarrier8Points(double stiffness, const Eigen::Matrix<double,48,1> & cell_vertices, double& energy);
+void computeVolumeBarrier8PointsGradient(double stiffness, const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 1>& energygradient);
+void computeVolumeBarrier8PointsHessian(double stiffness, const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 48>& energyhessian);
 
 void computeTetInvBarrier2Points(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, double& energy);
 void computeTetInvBarrier2PointsGradient(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, Eigen::Matrix<double, 6, 1>& energygradient);

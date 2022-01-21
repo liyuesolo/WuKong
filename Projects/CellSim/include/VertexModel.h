@@ -644,6 +644,7 @@ public:
     void addYolkTetLogBarrierHessianEneries(std::vector<Entry>& entries, bool projectPD = false);
 
     // Perivitelline.cpp
+    T computeInitialApicalVolumeWithOffset(const VectorXT& normals, T epsilon);
     void addPerivitellineVolumePreservationEnergy(T& energy);
     void addPerivitellineVolumePreservationForceEntries(VectorXT& residual);
     void addPerivitellineVolumePreservationHessianEntries(std::vector<Entry>& entries,
@@ -702,7 +703,7 @@ public:
 
     // scene.cpp
     void shiftPointToEllipsoid(Eigen::MatrixXd& V);
-    bool computeBoundingBox(TV& min_corner, TV& max_corner);    
+    void computeBoundingBox(TV& min_corner, TV& max_corner);    
     void vertexModelFromMesh(const std::string& filename);
     void addTestPrism(int edge);
     void addTestPrismGrid(int n_row, int n_col);

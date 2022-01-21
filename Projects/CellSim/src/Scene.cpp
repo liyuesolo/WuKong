@@ -89,9 +89,12 @@ void VertexModel::initializeContractionData()
                 //     || centroid[1] < mid_point[1] - 0.5 * delta[1] * 0.1
                 //     || centroid[1] > mid_point[1] + 0.5 * delta[1] * 0.1)
                 //     contract = false;
-                if (centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.05
-                    || centroid[2] < mid_point[2] - 0.5 * delta[2] * 0.1
-                    || centroid[2] > mid_point[2] + 0.5 * delta[2] * 0.1)
+                bool bottom_y = centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2;
+                bool middle_z = centroid[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
+                    centroid[2] < mid_point[2] + 0.5 * delta[2] * 0.1;
+                bool middle_x = centroid[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
+                    centroid[0] < mid_point[0] + 0.5 * delta[0] * 0.5;
+                if (!bottom_y || !middle_z || !middle_x)
                     contract = false;
                 if (contract)
                     contracting_faces.push_back(face_idx);
@@ -171,7 +174,7 @@ void VertexModel::initializeContractionData()
 
 }
 
-bool VertexModel::computeBoundingBox(TV& min_corner, TV& max_corner)
+void VertexModel::computeBoundingBox(TV& min_corner, TV& max_corner)
 {
     min_corner.setConstant(1e6);
     max_corner.setConstant(-1e6);
@@ -605,7 +608,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     for (int idx : face_edge_numbers)
         std::cout << idx << std::endl;
-    std::getchar();
+    // std::getchar();
     lateral_face_start = faces.size();
 
     cell_face_indices.resize(basal_face_start, VtxList());
@@ -887,6 +890,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary)
     {
+        T normal_offset = 1e-3;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);
         vtx_normals.conservativeResize(vertices.rows());
@@ -899,15 +903,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             TV normal = (xk - xj).normalized().cross((xi - xj).normalized()).normalized();
             vtx_normals.segment<3>(offset + i * 3) = -normal;
         }
-        sdf.initializedMeshData(vertices, indices, vtx_normals, 1e-3);
-        // int nv = vertices.rows() / 3;
-
-        // tbb::parallel_for(0, nv, [&](int i){
-        //     vertices.segment<3>(i * 3) += vtx_normals.segment<3>(i * 3) * 1e-3;    
-        // });
-        
-        // saveMeshVector("mesh_offset.obj", vertices, indices);
-
+        sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
+        total_volume = computeInitialApicalVolumeWithOffset(vtx_normals.segment(0, num_nodes * 3), normal_offset);
+        perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
+        deformed = undeformed;
+        std::cout << "Total volume: " << total_volume << std::endl;
         bool all_inside = true;
         for (int i = 0; i < num_nodes; i++)
         {
@@ -921,7 +921,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         if (!all_inside)
             std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
     }
-
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    std::cout << "BBOX: " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    
     // removeAllTerms();
     
     // Gamma = 100.0;

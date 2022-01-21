@@ -42,8 +42,8 @@ void VertexModel::checkTotalGradient(bool perturb)
         gradient_FD(dof_i) = (E1 - E0) / (2.0 *epsilon);
         if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
             continue;
-        // if (std::abs( gradient_FD(d, n_node) - gradient(d, n_node)) < 1e-4)
-        //     continue;
+        if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
+            continue;
         std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;
         std::getchar();
         cnt++;   
@@ -133,7 +133,29 @@ void VertexModel::checkTotalGradientScale(bool perturb)
     T _bound_coeff = bound_coeff;
     if (sphere_bound_penalty)
         bound_coeff = 0.0;
-    // sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0; Gamma = 0.0;
+    // removeAllTerms();
+    // sigma = 0; alpha = 0; gamma = 0; 
+    // add_tet_vol_barrier = false;
+    // dynamics = false;
+
+    // use_sphere_radius_bound = false;
+    // use_ipc_contact = false;
+
+    // woodbury = false;
+    // weights_all_edges = 0.0;
+    // add_contraction_term = false;
+    // Gamma = 0.0;
+
+    // sigma = 10; 
+    // alpha = 10; gamma = 10; 
+    // woodbury = false;
+    // B = 1e6; 
+    // By = 1e6; 
+    // Bp = 1e6;
+
+    // B = 0; 
+    // By = 0; 
+    // Bp = 0;
     // pressure_constant = 0.0; 
     // bound_coeff = 0.0;
     // dynamics = false;

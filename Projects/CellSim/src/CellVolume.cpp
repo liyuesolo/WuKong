@@ -279,6 +279,16 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
                         }
                         
                     }
+                    else if (face_vtx_list.size() == 7)
+                    {
+                        if (use_cell_centroid)
+                            computeVolume7Points(positions, cell_volume_list[face_idx]);
+                    }
+                    else if (face_vtx_list.size() == 8)
+                    {
+                        if (use_cell_centroid)
+                            computeVolume8Points(positions, cell_volume_list[face_idx]);
+                    }
                 }
             });
         }
@@ -397,9 +407,25 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                         addForceEntry<36>(residual, cell_vtx_list, dedx);
                     }
                 }
+                else if (face_vtx_list.size() == 7)
+                {
+                    Vector<T, 42> dedx;
+                    if (use_cell_centroid)
+                        computeVolume7PointsGradient(positions, dedx);
+                    dedx *= -B * ci;
+                    addForceEntry<42>(residual, cell_vtx_list, dedx);
+                }
+                else if (face_vtx_list.size() == 8)
+                {
+                    Vector<T, 48> dedx;
+                    if (use_cell_centroid)
+                        computeVolume8PointsGradient(positions, dedx);
+                    dedx *= -B * ci;
+                    addForceEntry<48>(residual, cell_vtx_list, dedx);
+                }
                 else
                 {
-                    std::cout << "unknown polygon edge case" << std::endl;
+                    // std::cout << "unknown polygon edge case" << std::endl;
                 }
             }
         }
@@ -531,9 +557,53 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                     projectBlockPD<36>(hessian);
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
             }
+            else if (face_vtx_list.size() == 7)
+            {
+                Matrix<T, 42, 42> d2Vdx2;
+                if (use_cell_centroid)
+                    computeVolume7PointsHessian(positions, d2Vdx2);
+                
+                Vector<T, 42> dVdx;
+                if (use_cell_centroid)
+                    computeVolume7PointsGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 42, 42> hessian;
+
+                hessian.setZero();
+                hessian += B * dVdx * dVdx.transpose();
+                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                
+                if(projectPD)
+                    projectBlockPD<42>(hessian);
+                
+                addHessianEntry<42>(entries, cell_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                Matrix<T, 48, 48> d2Vdx2;
+                if (use_cell_centroid)
+                    computeVolume8PointsHessian(positions, d2Vdx2);
+                
+                Vector<T, 48> dVdx;
+                if (use_cell_centroid)
+                    computeVolume8PointsGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 48, 48> hessian;
+                hessian.setZero();
+                
+                hessian += B * dVdx * dVdx.transpose();
+                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                
+                if(projectPD)
+                    projectBlockPD<48>(hessian);
+
+                addHessianEntry<48>(entries, cell_vtx_list, hessian);
+            }
             else
             {
-                std::cout << "unknown polygon edge case" << std::endl;
+                // std::cout << "unknown polygon edge case" << std::endl;
             }
             // std::cout << "Cell " << face_idx << std::endl;
         }

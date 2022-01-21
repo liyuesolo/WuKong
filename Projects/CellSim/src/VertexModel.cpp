@@ -578,7 +578,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     // ===================================== Membrane =====================================
     if (use_sphere_radius_bound)
     {
-        if(use_sdf_boundary)
+        if (use_sdf_boundary)
             addMembraneSDFBoundForceEntries(residual);
         else
             addMembraneBoundForceEntries(residual);

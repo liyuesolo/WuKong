@@ -33,7 +33,8 @@ void Simulation::initializeCells()
     if (cells.scene_type == 1 || cells.scene_type == 2)
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
         
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
@@ -46,7 +47,7 @@ void Simulation::initializeCells()
     // cells.computeNodalMass();
     // cells.vtx_vel.setRandom();
     // cells.vtx_vel/=cells.vtx_vel.norm();
-
+    // cells.checkTotalGradient(true);
     // cells.checkTotalGradientScale(true);
     // cells.checkTotalHessianScale(true);
     // cells.checkTotalHessian(true);
