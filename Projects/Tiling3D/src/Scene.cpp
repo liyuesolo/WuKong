@@ -24,16 +24,17 @@ void FEMSolver::initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::Mat
     });
 }
 
-void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV, 
+void FEMSolver::initializeElementData(Eigen::MatrixXd& TV, 
     const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT)
 {
     num_nodes = TV.rows();
+    
     undeformed.resize(num_nodes * dim);
     tbb::parallel_for(0, num_nodes, [&](int i)
     {
         undeformed.segment<3>(i * dim) = TV.row(i);
     });
-    deformed = undeformed;
+    deformed = undeformed;    
     u = VectorXT::Zero(num_nodes * dim);
     f = VectorXT::Zero(num_nodes * dim);
 
@@ -57,8 +58,10 @@ void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV,
 
     computeBoundingBox();
     center = 0.5 * (max_corner + min_corner);
+    // std::cout << max_corner.transpose() << " " << min_corner.transpose() << std::endl;
+    // std::getchar();
 
-    use_ipc = true;
+    // use_ipc = true;
     if (use_ipc)
     {
         add_friction = false;
@@ -68,7 +71,7 @@ void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV,
     }
 
     // E = 1e4;
-    E = 9.5 * 1e7;
+    E = 2.6 * 1e5;
     E_steel = 2 * 10e11;
     nu = 0.48;
     
@@ -76,8 +79,8 @@ void FEMSolver::initializeElementData(const Eigen::MatrixXd& TV,
     use_penalty = false;
     bending_direction = 90.0 / 180.0 * M_PI;
     curvature = 1;
-    max_newton_iter = 10000;
-    project_block_PD = false;
+    // max_newton_iter = 10000;
+    // project_block_PD = false;
 
     cylinder_tet_start = num_ele;
     cylinder_face_start = num_surface_faces;

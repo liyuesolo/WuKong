@@ -62,7 +62,9 @@ void FEMSolver::computeCylindricalBendingBCPenaltyPairs()
 void FEMSolver::penaltyInPlaneCompression(int dir, T percent)
 {
     use_penalty = true;
-    T region = 0.2;
+    penalty_pairs.clear();
+    
+    T region = 0.05;
     for (int i = 0; i < num_nodes; i++)
     {
         T dx = max_corner[0] - min_corner[0];

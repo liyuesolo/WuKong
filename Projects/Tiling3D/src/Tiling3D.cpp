@@ -1244,9 +1244,9 @@ void Tiling3D::initializeSimulationData(bool tetgen)
 
         //used
         // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling8.obj", V, F);
-        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling0.obj", V, F);
+        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling0.obj", V, F);
         
-        // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling10.obj", V, F);
+        igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling3D/data/tiling10.obj", V, F);
         // dirichlet_vertices = {8, 9, 1, 0, 11, 10, 19, 18, 27, 26, 35, 34, 43, 42,
         //     166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 1176, 177
         // };
@@ -1317,10 +1317,11 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         //     solver.bending_direction = 45.0 / 180.0 * M_PI;
         // else
         //     solver.bending_direction = 135.0 / 180.0 * M_PI;
-        solver.bending_direction = 45.0 / 180.0 * M_PI;
-        solver.curvature = 1;
-        solver.max_newton_iter = 1;
-        solver.computeCylindricalBendingBCPenaltyPairs();
+
+        // solver.bending_direction = 45.0 / 180.0 * M_PI;
+        // solver.curvature = 1;
+        // solver.max_newton_iter = 1000;
+        // solver.computeCylindricalBendingBCPenaltyPairs();
 
         // solver.imposeCylindricalBending();
 
@@ -1334,7 +1335,7 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         // solver.ThreePointBendingTest();
         // solver.addForceMiddleTop();
         // solver.fixNodes(dirichlet_vertices);
-        // solver.penaltyInPlaneCompression(0, 0.1);
+        solver.penaltyInPlaneCompression(0, 0.1);
 
     }
     else

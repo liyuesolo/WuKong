@@ -47,26 +47,6 @@ void FEMSolver::computeIPCRestData()
 
 T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
 {
-    // T ipc_step_size = 1.0;
-    // Eigen::MatrixXd curr_step_position = ipc_vertices;
-    // for (int i = 0; i < num_nodes; i++)
-    //     curr_step_position.row(i) = undeformed.segment<3>(i * 3);
-    // if (ipc::has_intersections(curr_step_position, ipc_edges, ipc_faces))
-    //     std::cout << "!!!!!current state has intersections" << std::endl;
-
-    // // igl::writeOBJ("curr_step.obj", curr_step_position, ipc_faces);
-    // while(true)
-    // {
-    //     std::cout << ipc_step_size << std::endl;
-    //     Eigen::MatrixXd next_step_position = ipc_vertices;
-    //     for (int i = 0; i < num_nodes; i++)
-    //         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + ipc_step_size * du.segment<3>(i * 3);
-    //     // igl::writeOBJ("next_step.obj", next_step_position, ipc_faces);
-    //     if (ipc::has_intersections(next_step_position, ipc_edges, ipc_faces))
-    //         ipc_step_size *= 0.5;
-    //     else 
-    //         return ipc_step_size;
-    // }
 
     Eigen::MatrixXd current_position = ipc_vertices, 
         next_step_position = ipc_vertices;
@@ -77,13 +57,6 @@ T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du
         // current_position.row(i) = undeformed.segment<3>(i * 3);
         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
     }
-
-    // igl::writeOBJ("next_step.obj", next_step_position, ipc_faces);
-    // igl::writeOBJ("curr_step.obj", current_position, ipc_faces);
-    // std::cout << "ipc has ixn current: " << ipc::has_intersections(current_position, ipc_edges, ipc_faces) << std::endl;
-    // std::cout << "ipc has ixn next step: " << ipc::has_intersections(next_step_position, ipc_edges, ipc_faces) << std::endl;
-    // std::getchar();
-
     return ipc::compute_collision_free_stepsize(current_position, 
             next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
 }
@@ -197,3 +170,4 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
         entries.insert(entries.end(), friction_entries.begin(), friction_entries.end());
     }
 }
+

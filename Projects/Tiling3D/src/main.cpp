@@ -225,6 +225,8 @@ int main()
     };
 
     tiling.initializeSimulationData(tetgen);
+    // tiling.solver.runForceCurvatureExperiment();
+    tiling.solver.runForceDisplacementExperiment();
     // tiling.solver.checkTotalGradientScale(true);
     // tiling.solver.checkTotalHessianScale(true);
     // tiling.solver.runBendingHomogenization();

@@ -143,20 +143,9 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
     }
     deformed = undeformed + projected;
 
-    VectorXT energies_neoHookean = VectorXT::Zero(num_ele);
-
-    iterateTetsParallel([&](const TetNodes& x_deformed, 
-        const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
-    {
-        T ei;
-        if (tet_idx < cylinder_tet_start)
-            computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
-        else
-            computeLinearTet3DNeoHookeanEnergy(E_steel, nu_steel, x_deformed, x_undeformed, ei);
-        energies_neoHookean[tet_idx] += ei;
-    });
-
-    total_energy += energies_neoHookean.sum();
+    T e_NH = 0.0;
+    addElastsicPotential(e_NH);
+    total_energy += e_NH;
 
     if (use_penalty)
     {
@@ -199,18 +188,7 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     
     VectorXT residual_backup = residual;
 
-    iterateTetsSerial([&](const TetNodes& x_deformed, 
-        const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
-    {
-        // std::cout << indices.transpose() << std::endl;
-        Vector<T, 12> dedx;
-        if (tet_idx < cylinder_tet_start)
-            computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);  
-        else
-            computeLinearTet3DNeoHookeanEnergyGradient(E_steel, nu_steel, x_deformed, x_undeformed, dedx);  
-        
-        addForceEntry<12>(residual, indices, -dedx);
-    });
+    addElasticForceEntries(residual);
 
     std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
     residual_backup = residual;
@@ -221,7 +199,7 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     if (use_ipc)
     {
         addIPCForceEntries(residual);
-        std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
+        std::cout << "contact + penalty force " << (residual - residual_backup).norm() << std::endl;
         residual_backup = residual;
     }
 
@@ -244,6 +222,63 @@ void FEMSolver::reset()
     for (int i = 0; i < num_nodes; i++)
         ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
     num_ipc_vtx = ipc_vertices.rows();
+}
+
+void FEMSolver::runForceCurvatureExperiment()
+{
+    T dkappa = 0.1;
+    std::vector<T> curvature_values;
+    std::vector<T> force_norms;
+    for (T kappa = 1.0; kappa < 4; kappa += dkappa)
+    {
+        curvature = kappa;
+        bending_direction = 45.0 / 180.0 * M_PI;
+        computeCylindricalBendingBCPenaltyPairs();
+        staticSolve();
+        VectorXT elastic_force(num_nodes * dim);
+        elastic_force.setZero();
+        addElasticForceEntries(elastic_force);
+        // std::cout << elastic_force.norm() << std::endl;
+        // std::getchar();
+        curvature_values.push_back(kappa);
+        force_norms.push_back(elastic_force.norm() * 0.1);
+    }
+    for (T v : curvature_values)
+        std::cout << v << " ";
+    std::cout << std::endl;
+    for (T v : force_norms)
+        std::cout << v << " ";
+    std::cout << std::endl;
+}
+
+void FEMSolver::runForceDisplacementExperiment()
+{
+    T dp = 0.005;
+    std::vector<T> displacements;
+    std::vector<T> force_norms;
+    for (T percent = 0.01; percent < 0.2; percent += dp)
+    {
+        T displacement_sum = 0.0;
+        penaltyInPlaneCompression(0, percent);
+        for (auto pair : penalty_pairs)
+        {
+            displacement_sum += std::abs(undeformed[pair.first] - pair.second);
+        }
+        displacement_sum /= T(penalty_pairs.size());
+        staticSolve();
+        VectorXT elastic_force(num_nodes * dim);
+        elastic_force.setZero();
+        addElasticForceEntries(elastic_force);
+        displacements.push_back(displacement_sum);
+        force_norms.push_back(elastic_force.norm() * 0.1);
+    }
+    for (T v : displacements)
+        std::cout << v << " ";
+    std::cout << std::endl;
+    for (T v : force_norms)
+        std::cout << v << " ";
+    std::cout << std::endl;
+
 }
 
 void FEMSolver::runBendingHomogenization()
@@ -305,30 +340,9 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     deformed = undeformed + projected;
     
     std::vector<Entry> entries;
-    
-    iterateTetsSerial([&](const TetNodes& x_deformed, 
-        const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
-    {
-        Matrix<T, 12, 12> hessian;
-        if (tet_idx < cylinder_tet_start)
-        {
-            computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
-            // std::cout << "structure hessian PD " << isHessianBlockPD<12>(hessian) << std::endl;
-            // std::cout << hessian << std::endl;
-            // saveTetOBJ("test_tet.obj", x_deformed);
-            // saveTetOBJ("test_tet_rest.obj", x_undeformed);
-            // std::getchar();
-        }
-        else
-        {
-            computeLinearTet3DNeoHookeanEnergyHessian(E_steel, nu_steel, x_deformed, x_undeformed, hessian);
-            // std::cout << "cylinder hessian PD " << isHessianBlockPD<12>(hessian) << std::endl;
-        }
-        if (project_block_PD)
-            projectBlockPD<12>(hessian);
-        
-        addHessianEntry<12>(entries, indices, hessian);
-    });
+
+
+    addElasticHessianEntries(entries);
 
     if (use_penalty)
         addBCPenaltyHessianEntries(entries);
@@ -361,7 +375,7 @@ void FEMSolver::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unorder
 bool FEMSolver::linearSolve(StiffnessMatrix& K, 
     VectorXT& residual, VectorXT& du)
 {
-#define USE_CHOLMOD_SOLVER
+// #define USE_CHOLMOD_SOLVER
     Timer t(true);
     // StiffnessMatrix I(K.rows(), K.cols());
     // I.setIdentity();
@@ -508,6 +522,7 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
         return 1e16;
     T norm = du.norm();
     std::cout << du.norm() << std::endl;
+    
     T alpha = computeInversionFreeStepsize(_u, du);
     std::cout << "** step size **" << std::endl;
     std::cout << "after tet inv step size: " << alpha << std::endl;
@@ -518,6 +533,7 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
         std::cout << "after ipc step size: " << alpha << std::endl;
     }
     std::cout << "**       **" << std::endl;
+
     T E0 = computeTotalEnergy(_u);
     int cnt = 0;
     while (true)
@@ -640,18 +656,16 @@ bool FEMSolver::staticSolve()
 
     while (true)
     {
-        if (cnt == 0)
-        {
-            u.setRandom(); u *= 1.0 / u.norm(); u *= 0.001;
-        }
+        
         VectorXT residual(deformed.rows());
         residual.setZero();
 
         residual_norm = computeResidual(u, residual);
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
-        // if (verbose)
-            std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+        if (verbose)
+            std::cout << "iter " << cnt << "/" << max_newton_iter 
+            << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
         
         if (residual_norm < newton_tol)
             break;
@@ -669,7 +683,8 @@ bool FEMSolver::staticSolve()
     });
     deformed = undeformed + u;
 
-    std::cout << "# of newton solve: " << cnt << " exited with |g|: " << residual_norm << "|ddu|: " << dq_norm  << std::endl;
+    std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
+        << residual_norm << "|ddu|: " << dq_norm  << std::endl;
     // std::cout << u.norm() << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;

@@ -332,7 +332,7 @@ public:
 
     // Scene.cpp
     void initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
-    void initializeElementData(const Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
+    void initializeElementData(Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void computeBoundingBox();
     void appendCylinder(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
@@ -344,6 +344,10 @@ public:
 
     // FEMSolver.cpp
     void reset();
+    
+    void runForceCurvatureExperiment();
+    void runForceDisplacementExperiment();
+
     void runBendingHomogenization();
     T computeBendingStiffness();
     void computeLinearModes();
@@ -407,6 +411,22 @@ public:
     void addForceMiddleTop();
     void penaltyInPlaneCompression(int dir, T percent);
     void updateSphere();
+
+    // Elasticity.cpp
+    T computeNeoHookeanStrainEnergy(const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed);
+    void computeNeoHookeanStrainEnergyGradient(const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed, Vector<T, 12>& gradient);
+    T computeVolume(const TetNodes& x_undeformed);
+    void computeDeformationGradient(const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed, TM& F);
+    void computeNeoHookeanStrainEnergyHessian(const TetNodes& x_deformed, 
+        const TetNodes& x_undeformed, Matrix<T, 12, 12>& hessian);
+    void polarSVD(TM& F, TM& U, TV& Sigma, TM& VT);
+
+    void addElastsicPotential(T& energy);
+    void addElasticForceEntries(VectorXT& residual);
+    void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     // IPC.cpp
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
