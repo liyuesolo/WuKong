@@ -131,9 +131,7 @@ void VertexModel::checkTotalGradientScale(bool perturb)
     if (use_alm_on_cell_volume)
         lambda_cell_vol.setOnes();
     T _bound_coeff = bound_coeff;
-    if (sphere_bound_penalty)
-        bound_coeff = 0.0;
-    // removeAllTerms();
+    
     // sigma = 0; alpha = 0; gamma = 0; 
     // add_tet_vol_barrier = false;
     // dynamics = false;
@@ -223,10 +221,7 @@ void VertexModel::checkTotalHessianScale(bool perturb)
     run_diff_test = true;
     T _Gamma = Gamma;
     T _bound_coeff = bound_coeff;
-    if (add_contraction_term)
-        Gamma = 0.0; 
-    if (sphere_bound_penalty)
-        bound_coeff = 0.0;
+    
     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
 
     VectorXT du(num_nodes * 3);

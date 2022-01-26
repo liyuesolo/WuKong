@@ -1,7 +1,7 @@
 #include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
 #include <Eigen/CholmodSupport>
-#include "../solver/CHOLMODSolver.hpp"
+#include "../../../Solver/CHOLMODSolver.hpp"
 
 #include <igl/readOBJ.h>
 

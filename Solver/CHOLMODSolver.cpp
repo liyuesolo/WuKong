@@ -199,5 +199,5 @@ void CHOLMODSolver<StorageIndex>::multiply(const double* x,
 }
 
 template class CHOLMODSolver<long>;
-
+template class CHOLMODSolver<int>;
 } // namespace Noether

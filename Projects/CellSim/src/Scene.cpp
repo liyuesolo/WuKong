@@ -117,9 +117,25 @@ void VertexModel::initializeContractionData()
             TV x0 = deformed.segment<3>(e[0] * 3);
             TV x1 = deformed.segment<3>(e[1] * 3);
 
-            if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-                x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-                e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+            // if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+            //     x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
+            //     e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+            //     return true;
+            // return false;
+
+            bool bottom_y = x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2
+                && x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2;
+            bool apical_edge = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            bool middle_z = x0[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
+                    x0[2] < mid_point[2] + 0.5 * delta[2] * 0.1 &&
+                    x1[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
+                    x1[2] < mid_point[2] + 0.5 * delta[2] * 0.1;
+            bool middle_x = x0[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
+                x0[0] < mid_point[0] + 0.5 * delta[0] * 0.5 &&
+                x1[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
+                x1[0] < mid_point[0] + 0.5 * delta[0] * 0.5;
+
+            if (bottom_y && apical_edge && middle_z && middle_x)
                 return true;
             return false;
         };
@@ -146,29 +162,8 @@ void VertexModel::initializeContractionData()
                         contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));
                     }
                 }
-                
-                // for (int i = 0; i < face_vtx_list.size(); i++)
-                // {
-                //     int j = (i + 1) % face_vtx_list.size();
-                //     if (validEdge(Edge(face_vtx_list[i], face_vtx_list[j])))
-                //     {
-                //         contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));        
-                //     }
-                // }
             }
         });
-        // for (auto e : edges)
-        // {
-        //     TV x0 = deformed.segment<3>(e[0] * 3);
-        //     TV x1 = deformed.segment<3>(e[1] * 3);
-
-        //     if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-        //         x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-        //         e[0] < basal_vtx_start && e[1] < basal_vtx_start)
-        //     {
-        //         contracting_edges.push_back(e);
-        //     }
-        // }
     }
     
 
@@ -485,27 +480,12 @@ void VertexModel::saveCellMesh(int iter)
     out.close();
 }
 
-
-void VertexModel::shiftPointToEllipsoid(Eigen::MatrixXd& V)
-{
-    TV centroid = TV::Zero();
-    for (int i = 0; i < V.rows(); i++)
-    {
-        centroid += V.row(i);
-    }
-    centroid /= T(V.rows());
-
-
-}
-
-
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
-
-    shiftPointToEllipsoid(V);
+    normalizeToUnit(V);
 
     // face centroids corresponds to the vertices of the dual mesh 
     std::vector<TV> face_centroids(F.rows());
@@ -640,7 +620,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     B = 1e6;
     By = 1e5;
 
-    contract_apical_face = true;
+    contract_apical_face = false;
     use_cell_centroid = true;
     
     use_elastic_potential = false;
@@ -891,6 +871,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_sdf_boundary)
     {
         T normal_offset = 1e-3;
+        // T normal_offset = -1e-1;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);
         vtx_normals.conservativeResize(vertices.rows());
@@ -904,9 +885,12 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             vtx_normals.segment<3>(offset + i * 3) = -normal;
         }
         sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
+        // std::cout << "total volume " << total_volume << std::endl;
         total_volume = computeInitialApicalVolumeWithOffset(vtx_normals.segment(0, num_nodes * 3), normal_offset);
-        perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
         deformed = undeformed;
+        // std::cout << "perivitelline_vol_init " << perivitelline_vol_init << std::endl;
+        perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();
+        std::cout << "perivitelline_vol_init " << perivitelline_vol_init << std::endl;
         std::cout << "Total volume: " << total_volume << std::endl;
         bool all_inside = true;
         for (int i = 0; i < num_nodes; i++)

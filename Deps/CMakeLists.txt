@@ -37,7 +37,7 @@ if(OPENVDB_FOUND AND TBB_FOUND AND HALF_FOUND)
           INTERFACE_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
           INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
           IMPORTED_LOCATION ${OPENVDB_LIBRARIES}
-          INTERFACE_COMPILE_DEFINITIONS "OPENVDB_USE_BLOSC;ZIRAN_WITH_VDB"
+          INTERFACE_COMPILE_DEFINITIONS "OPENVDB_USE_BLOSC"
           )
 endif()
 
@@ -87,14 +87,6 @@ if(CUDA_FOUND)
   )
   add_subdirectory(${VexCL_SOURCE_DIR} ${VexCL_BINARY_DIR})
 endif()
-
-download_project(
-        PROJ pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v2.5.0
-        UPDATE_DISCONNECTED 1
-)
-add_subdirectory(${pybind11_SOURCE_DIR} ${pybind11_BINARY_DIR})
 
 download_project(
         PROJ partio

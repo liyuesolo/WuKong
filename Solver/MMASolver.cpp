@@ -26,7 +26,7 @@
 #include <cstdio>
 #include <iostream>
 #include <tbb/tbb.h>
-#include <Ziran/CS/Util/Timer.h>
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // PUBLIC

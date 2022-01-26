@@ -26,6 +26,7 @@ public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
     
+    
 public:
     
     virtual T value(const TV& test_point) = 0;
@@ -33,7 +34,7 @@ public:
     virtual void hessian(const TV& test_point, TM& d2phidx2) = 0;
 
     bool inside(const TV& test_point) { return value(test_point) <= 0.0; }
-
+    virtual std::string getName() const = 0;
     virtual void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon) = 0;
 public:
@@ -58,17 +59,22 @@ public:
 
     VectorXT data_points;
     VectorXT data_point_normals;
-    T radius;
+    VectorXT radii;
     T search_radius;
 
 private:
-    T weightFunction(T d, T r) { return std::exp(-d*d / r*r); }
+    T weightFunction(T d, T r) { return std::exp(-d*d / r/r); }
+
+    void thetaValue(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, double& energy);
+    void thetaValueGradient(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, Eigen::Matrix<double, 3, 1>& energygradient);
+    void thetaValueHessian(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, Eigen::Matrix<double, 3, 3>& energyhessian);
 
 public:
     T value(const TV& test_point);
     void gradient(const TV& test_point, TV& dphidx);
     void hessian(const TV& test_point, TM& d2phidx2);
 
+    std::string getName() const { return "IMLS"; }
 
     void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon);
@@ -100,6 +106,8 @@ public:
 
     void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon);
+    
+    std::string getName() const { return "VDBLevelset"; }
 
 private:
     void levelsetFromMesh(const std::vector<Vec3s>& points,

@@ -19,7 +19,7 @@ namespace Noether {
 template <typename StorageIndex>
 class CHOLMODSolver {
 
-protected:
+public:
     int numRows;
     cholmod_common cm;
     cholmod_sparse* A;

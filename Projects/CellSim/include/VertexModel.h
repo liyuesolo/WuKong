@@ -564,7 +564,9 @@ public:
     T perivitelline_pressure = 0.1;
     T weights_all_edges = 0.1;
 
-    VdbLevelSetSDF sdf;
+    // VdbLevelSetSDF sdf;
+    IMLS sdf;
+
     bool use_sdf_boundary = false;
 
     std::unordered_map<int, T> dirichlet_data;
@@ -685,6 +687,7 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
+    void normalizeToUnit(MatrixXT& V);
     void saveMeshVector(const std::string& filename,
         const VectorXT& positions, const VectorXi& indices) const;
     void getInitialApicalSurface(VectorXT& positions, VectorXi& indices);
@@ -702,7 +705,7 @@ public:
     void checkTotalGradientScale(bool perturb = false);
 
     // scene.cpp
-    void shiftPointToEllipsoid(Eigen::MatrixXd& V);
+    
     void computeBoundingBox(TV& min_corner, TV& max_corner);    
     void vertexModelFromMesh(const std::string& filename);
     void addTestPrism(int edge);

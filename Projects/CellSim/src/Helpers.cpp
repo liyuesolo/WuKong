@@ -26,6 +26,40 @@ void VertexModel::removeAllTerms()
     use_ipc_contact = false;
 }
 
+void VertexModel::normalizeToUnit(MatrixXT& V)
+{
+    TV min_corner, max_corner;
+
+    min_corner.setConstant(1e6);
+    max_corner.setConstant(-1e6);
+    TV center = TV::Zero();
+    for (int i = 0; i < V.rows(); i++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            max_corner[d] = std::max(max_corner[d], V(i, d));
+            min_corner[d] = std::min(min_corner[d], V(i, d));
+            center[d] += V(i, d);
+        }
+    }
+    center /= T(V.rows());
+
+    tbb::parallel_for(0, int(V.rows()), [&](int i){
+        V.row(i) = V.row(i) - center.transpose();
+    });
+
+    T max_length = std::max(max_corner[2] - min_corner[2], 
+        std::max(max_corner[1] - min_corner[1], max_corner[0] - min_corner[0]));
+    
+    for (int i = 0; i < V.rows(); i++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            V(i, d) = 2.0 * V(i, d) / max_length;
+        }
+    }
+}
+
 void VertexModel::getInitialApicalSurface(VectorXT& positions, VectorXi& indices)
 {
     int offset = basal_vtx_start * 3;

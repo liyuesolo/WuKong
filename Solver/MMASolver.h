@@ -54,7 +54,7 @@
 #pragma once
 
 #include <vector>
-#include <Ziran/CS/Util/Forward.h>
+#include <Eigen/Core>
 
 class MMASolver {
 

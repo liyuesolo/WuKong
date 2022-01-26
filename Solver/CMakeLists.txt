@@ -6,18 +6,12 @@ endif()
 
 set(SuiteSparse_ROOT "/home/yueli/Documents/SuiteSparse-5.9.0")
 include_directories(${SuiteSparse_ROOT})
-if (NOT ${SuiteSparse_ROOT})
-  message("Use Cholmod Direct Solver")
-  add_definitions(-DUSE_CHOLMOD)
-  include_directories(${SuiteSparse_ROOT}/include)
-  link_directories(${SuiteSparse_ROOT}/lib)
-  add_library(cholmod_solver STATIC CHOLMODSolver.hpp CHOLMODSolver.cpp)
-  target_include_directories(cholmod_solver SYSTEM PUBLIC ${EIGEN3_INCLUDE_DIR})
-  target_link_libraries(cholmod_solver suitesparseconfig metis cholmod amd camd ccolamd colamd spqr)
-  set(DEPS ${DEPS} cholmod_solver)
-else()
-  message("Use Eigen Direct Solver")
-endif()
 
-
-
+  
+add_definitions(-DUSE_CHOLMOD)
+include_directories(${SuiteSparse_ROOT}/include)
+link_directories(${SuiteSparse_ROOT}/lib)
+add_library(cholmod_solver STATIC CHOLMODSolver.hpp CHOLMODSolver.cpp)
+target_include_directories(cholmod_solver SYSTEM PUBLIC ${EIGEN3_INCLUDE_DIR})
+target_link_libraries(cholmod_solver suitesparseconfig metis cholmod amd camd ccolamd colamd spqr)
+set(DEPS ${DEPS} cholmod_solver)

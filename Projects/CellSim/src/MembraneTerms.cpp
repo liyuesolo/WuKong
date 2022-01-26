@@ -12,6 +12,7 @@ void VertexModel::addMembraneSDFBoundEnergy(T& energy)
         TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi))
             continue;
+        
         sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
         
     }
@@ -33,7 +34,6 @@ void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
         
         T value = sdf.value(xi);
         addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
-        
     }
 }
 
