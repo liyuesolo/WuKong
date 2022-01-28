@@ -4,8 +4,7 @@
 void VertexModel::checkTotalGradient(bool perturb)
 {
     // sigma = 0; alpha = 0; gamma = 0; B = 0; 
-    sigma = 0; alpha = 0; gamma = 0; B = 0; By = 0.0; Gamma = 0.0;
-    pressure_constant = 0.0; 
+    
 
     run_diff_test = true;
     VectorXT du(num_nodes * 3);
@@ -40,10 +39,10 @@ void VertexModel::checkTotalGradient(bool perturb)
         u(dof_i) += epsilon;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         gradient_FD(dof_i) = (E1 - E0) / (2.0 *epsilon);
-        if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
-            continue;
-        if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
-            continue;
+        // if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+            // continue;
+        // if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
+        //     continue;
         std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << gradient(dof_i) << std::endl;
         std::getchar();
         cnt++;   
@@ -112,8 +111,8 @@ void VertexModel::checkTotalHessian(bool perturb)
         {
             if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
                 continue;
-            // if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-4)
-            //     continue;
+            if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
             // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
             //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
@@ -121,6 +120,7 @@ void VertexModel::checkTotalHessian(bool perturb)
             std::getchar();
         }
     }
+    std::cout << "Hessian Diff Test Passed" << std::endl;
     run_diff_test = false;
 }
 

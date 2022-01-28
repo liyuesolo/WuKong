@@ -37,6 +37,8 @@ public:
     virtual std::string getName() const = 0;
     virtual void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon) = 0;
+
+    virtual void sampleZeroLevelset(VectorXT& points) const = 0; 
 public:
     SDF() 
     {
@@ -78,6 +80,8 @@ public:
 
     void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon);
+    
+    void sampleZeroLevelset(VectorXT& points) const { points = data_points; }
 public:
     IMLS() {}
     ~IMLS() {}
@@ -108,6 +112,8 @@ public:
         const VectorXT& normals, T epsilon);
     
     std::string getName() const { return "VDBLevelset"; }
+
+    void sampleZeroLevelset(VectorXT& points) const {  }
 
 private:
     void levelsetFromMesh(const std::vector<Vec3s>& points,

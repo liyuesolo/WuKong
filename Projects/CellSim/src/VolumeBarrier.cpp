@@ -47,6 +47,56 @@ void VertexModel::addFixedTetLogBarrierHessianEneries(std::vector<Entry>& entrie
     });
 }
 
+void VertexModel::computeCentroidTetVolume(const VectorXT& positions, 
+        const VtxList& face_vtx_list, VectorXT& tets_volume,
+        std::vector<TetVtx>& tets)
+{
+    tets_volume = VectorXT::Zero(face_vtx_list.size() * 6);
+
+    TV cell_centroid = TV::Zero();
+    TV apical_centroid = TV::Zero();
+    TV basal_centroid = TV::Zero();
+    
+    for (int i = 0; i < face_vtx_list.size(); i++)
+    {
+        apical_centroid += positions.segment<3>(i * 3);
+        basal_centroid += positions.segment<3>((i + face_vtx_list.size()) * 3);
+    }		
+
+    cell_centroid = (apical_centroid + basal_centroid) / T(face_vtx_list.size() * 2);
+
+    apical_centroid /= T(face_vtx_list.size());
+    basal_centroid /= T(face_vtx_list.size());
+
+    int cnt = 0;
+    for (int i = 0; i < face_vtx_list.size(); i++)
+    {
+        int j = (i + 1) % face_vtx_list.size();
+        TV r0 = positions.segment<3>(i * 3);
+        TV r1 = positions.segment<3>(j * 3);
+        T volume = -computeTetVolume(apical_centroid, r1, r0, cell_centroid);
+        tets_volume[cnt++] = volume;
+
+        TV r2 = positions.segment<3>((i + face_vtx_list.size()) * 3);
+        TV r3 = positions.segment<3>((j + face_vtx_list.size()) * 3);
+        volume = computeTetVolume(basal_centroid, r3, r2, cell_centroid);
+        tets_volume[cnt++] = volume;
+
+        TV lateral_centroid = T(0.25) * (r0 + r1 + r2 + r3);
+        volume = computeTetVolume(lateral_centroid, r1, r0, cell_centroid);
+        tets_volume[cnt++] = volume;
+
+        volume = computeTetVolume(lateral_centroid, r3, r1, cell_centroid);
+        tets_volume[cnt++] = volume;
+
+        volume = computeTetVolume(lateral_centroid, r2, r3, cell_centroid);
+        tets_volume[cnt++] = volume;
+
+        volume = computeTetVolume(lateral_centroid, r0, r2, cell_centroid);
+        tets_volume[cnt++] = volume;
+    }
+}
+
 void VertexModel::computeTetBarrierWeightMask(const VectorXT& positions, 
     const VtxList& face_vtx_list, VectorXT& mask_log_term, 
     VectorXT& mask_qubic_term, T cell_volume)
@@ -319,6 +369,12 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                 else
                     computeVolumeBarrier4PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<24>(residual, cell_vtx_list, -dedx);
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }   
             }
             else if (face_vtx_list.size() == 5)
             {
@@ -339,6 +395,29 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                     }
                     addForceEntry<30>(residual, cell_vtx_list, -dedx);
                 }
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     VectorXT cell_vol_curr;
+                //     computeVolumeAllCells(cell_vol_curr);
+                //     VectorXT tet_volumes;
+                //     std::vector<TetVtx> tets;
+                //     computeCentroidTetVolume(positions, face_vtx_list, tet_volumes, tets);
+                //     std::cout << "tets volume " << tet_volumes.transpose() << std::endl;
+                //     std::cout << "cell volume " << cell_vol_curr[face_idx] << std::endl;
+                //     std::cout << "cell volume init " << cell_volume_init[face_idx] << std::endl;
+                //     std::cout << tet_vol_barrier_w / std::pow(cell_vol_curr[face_idx], 4) << std::endl;
+                //     T ei_ = 0.0;
+                //     for (int i = 0; i < tet_volumes.rows(); i++)
+                //     {
+                //         ei_ += tet_vol_barrier_w / std::pow(tet_volumes[i], 4);
+                //     }
+                //     T ei = 0.0;
+                //     computeVolumeBarrier5Points(tet_vol_barrier_w, positions, ei);
+                //     std::cout << "barrier energy: " << ei << " " << ei_ << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }
             }
             else if (face_vtx_list.size() == 6)
             {
@@ -354,6 +433,12 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                     computeVolQubicUnilateralPenalty6PointsGradient(tet_vol_qubic_w, target, positions, qubic_mask, dedx);
                     addForceEntry<36>(residual, cell_vtx_list, -dedx);
                 }
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }
             }
             else if (face_vtx_list.size() == 7)
             {
@@ -363,6 +448,12 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                 else
                     computeVolumeBarrier7PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<42>(residual, cell_vtx_list, -dedx);
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }   
             }
             else if (face_vtx_list.size() == 8)
             {
@@ -372,6 +463,12 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                 else
                     computeVolumeBarrier8PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<48>(residual, cell_vtx_list, -dedx);
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }
             }
         }
     });

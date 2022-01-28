@@ -201,7 +201,7 @@ bool Simulation::advanceOneStep(int step)
         T residual_norm = computeResidual(u, residual);
         cells.saveCellMesh(step);
 
-        std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+        std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
 
         if (residual_norm < newton_tol)
             return true;
@@ -561,10 +561,6 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
     Timer timer(true);
 #define USE_PARDISO
 
-    StiffnessMatrix I(K.rows(), K.cols());
-    I.setIdentity();
-
-    StiffnessMatrix H = K;
 
 #ifdef USE_PARDISO
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
@@ -578,12 +574,15 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
     int i = 0;
     for (; i < 50; i++)
     {
-        // std::cout << i << std::endl;
+        
         solver.factorize(K);
         if (solver.info() == Eigen::NumericalIssue)
         {
             // std::cout << "indefinite" << std::endl;
-            K = H + alpha * I;        
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            });  
             alpha *= 10;
             continue;
         }
@@ -623,7 +622,7 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
         {
             timer.stop();
             std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "takes " << timer.elapsed_sec() << "s" << std::endl;
+            std::cout << "\ttakes " << timer.elapsed_sec() << "s" << std::endl;
             std::cout << "\t# regularization step " << i << std::endl;
             std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
             std::cout << "\t======================== " << std::endl;
@@ -631,7 +630,10 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
         }
         else
         {
-            K = H + alpha * I;        
+            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            {
+                K.coeffRef(row, row) += alpha;
+            });        
             alpha *= 10;
         }
     }
@@ -747,6 +749,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     else
     {
         buildSystemMatrix(_u, K);
+        // std::cout << "built system" << std::endl;
         success = linearSolve(K, residual, du);    
     }
     

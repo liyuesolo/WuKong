@@ -126,6 +126,14 @@ void VertexModel::computeIPCRestData()
                 face_cnt += 3;
             else if (face_vtx_list.size() == 6)
                 face_cnt += 4;
+            else if (face_vtx_list.size() == 7)
+                face_cnt += 5;
+            else if (face_vtx_list.size() == 8)
+                face_cnt += 6;
+            else
+            {
+                std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+            }
         }
     });
     
@@ -133,6 +141,43 @@ void VertexModel::computeIPCRestData()
     std::vector<Edge> edges_vec;
     ipc_faces.resize(face_cnt, 3);
     face_cnt = 0;
+    auto appendEdges = [&](VtxList& face_vtx_list)
+    {
+        for (int ne = 0; ne < face_vtx_list.size(); ne++)
+        {
+            int ne_plus1 = (ne + 1) % face_vtx_list.size();
+            edges_vec.push_back(Edge(face_vtx_list[ne], face_vtx_list[ne_plus1]));
+        }
+        if (face_vtx_list.size() == 4)
+            edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[0]));
+        else if (face_vtx_list.size() == 5)
+        {
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
+        }
+        else if (face_vtx_list.size() == 6)
+        {
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
+            edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
+        }
+        else if (face_vtx_list.size() == 7)
+        {
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+            edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[6]));
+            edges_vec.push_back(Edge(face_vtx_list[6], face_vtx_list[3]));
+            edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
+        }
+        else if (face_vtx_list.size() == 8)
+        {
+            edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+            edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[7]));
+            edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[4]));
+            edges_vec.push_back(Edge(face_vtx_list[7], face_vtx_list[4]));
+            edges_vec.push_back(Edge(face_vtx_list[7], face_vtx_list[5]));
+        }
+    };
+
     iterateFaceSerial([&](VtxList& face_vtx_list, int i)
     {
         if (i < n_ipc_face)
@@ -141,24 +186,14 @@ void VertexModel::computeIPCRestData()
             {
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[0]));
+                appendEdges(face_vtx_list);
             }
             else if (face_vtx_list.size() == 5)
             {
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[0]);
-
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[4]));
-                edges_vec.push_back(Edge(face_vtx_list[4], face_vtx_list[0]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
+                appendEdges(face_vtx_list);
 
             }
             else if (face_vtx_list.size() == 6)
@@ -167,16 +202,30 @@ void VertexModel::computeIPCRestData()
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[5]);
-
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[1]));
-                edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[4]));
-                edges_vec.push_back(Edge(face_vtx_list[4], face_vtx_list[5]));
-                edges_vec.push_back(Edge(face_vtx_list[5], face_vtx_list[0]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
-                edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
-                edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
+                appendEdges(face_vtx_list);
+            }
+            else if (face_vtx_list.size() == 7)
+            {
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[2], face_vtx_list[0]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[6]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[6]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[5]);
+                appendEdges(face_vtx_list);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[0], face_vtx_list[2], face_vtx_list[1]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[4], face_vtx_list[3]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[7], face_vtx_list[2], face_vtx_list[0]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[2], face_vtx_list[7]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[4], face_vtx_list[7]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[5], face_vtx_list[7]);
+                appendEdges(face_vtx_list);
+            }
+            else
+            {
+                std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
             }
         }
     });
@@ -185,6 +234,11 @@ void VertexModel::computeIPCRestData()
     ipc_edges.resize(edges_vec.size(), 2);
     for (int i = 0; i < edges_vec.size(); i++)
         ipc_edges.row(i) = edges_vec[i];    
+    
+    bool has_ixn_in_rest_shape = ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces);
+    
+    if (has_ixn_in_rest_shape)
+        std::cout << "[ALERT] ipc mesh has self-intersection in its rest shape" << std::endl;
 }
 
 void VertexModel::updateIPCVertices(const VectorXT& _u)

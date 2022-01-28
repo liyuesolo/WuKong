@@ -137,7 +137,7 @@ void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices
     n_points = vertices.rows() / 3;
     data_points = vertices;
     data_point_normals = normals;
-    radii = VectorXT::Ones(n_points) * 0.1;
+    radii = VectorXT::Ones(n_points) * 0.05;
     data_points += normals * epsilon;
 }        
 

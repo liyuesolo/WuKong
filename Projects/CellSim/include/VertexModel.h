@@ -670,7 +670,9 @@ public:
     void computeTetBarrierWeightMask(const VectorXT& positions, 
         const VtxList& face_vtx_list, VectorXT& mask_log_term, 
         VectorXT& mask_qubic_term, T cell_volume);
-
+    void computeCentroidTetVolume(const VectorXT& positions, 
+        const VtxList& face_vtx_list, VectorXT& tets_volume,
+        std::vector<TetVtx>& tets);
     T computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& du);
     void addFixedTetLogBarrierEnergy(T& energy);
     void addFixedTetLogBarrierForceEneries(VectorXT& residual);
@@ -687,6 +689,9 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
+    void saveSingleCellEdges(const std::string& filename, 
+        const VtxList& indices, const VectorXT& positions, bool save_tets = false) const;
+
     void normalizeToUnit(MatrixXT& V);
     void saveMeshVector(const std::string& filename,
         const VectorXT& positions, const VectorXi& indices) const;
@@ -717,6 +722,7 @@ public:
 
 
     //Visualization.cpp
+    void getOutsideVtx(Eigen::MatrixXd& points, Eigen::MatrixXd& color, int sdf_test_sample_idx_offset);
     void loadMeshAndSaveCentroid(const std::string& folder, int start, int end);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool rest_state = false);

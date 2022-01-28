@@ -24,6 +24,35 @@ void VertexModel::removeAllTerms()
 
     use_sphere_radius_bound = false;
     use_ipc_contact = false;
+
+    woodbury = false;
+}
+
+void VertexModel::saveSingleCellEdges(const std::string& filename, 
+        const VtxList& indices, const VectorXT& positions, bool save_tets) const
+{
+    std::ofstream out(filename);
+    for (int i = 0; i < indices.size(); i++)
+    {
+        out << "v " << positions.segment<3>(i * 3).transpose() << std::endl;
+    }
+    int half = indices.size() / 2;
+    
+    for (int i = 0; i < half; i++)
+    {
+        int j = (i + 1) % half;
+        out << "l " << i + 1 << " " << j + 1 << std::endl;
+    }
+    for (int i = 0; i < half; i++)
+    {
+        out << "l " << i + 1 << " " << i + 1 + half << std::endl;
+    }
+    for (int i = 0; i < half; i++)
+    {
+        int j = (i + 1) % half;
+        out << "l " << i + 1 + half << " " << j + 1 + half << std::endl;
+    }
+    out.close();
 }
 
 void VertexModel::normalizeToUnit(MatrixXT& V)

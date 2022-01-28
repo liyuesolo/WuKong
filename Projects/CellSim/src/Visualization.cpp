@@ -9,28 +9,65 @@
 
 #include "../include/VertexModel.h"
 
+void VertexModel::getOutsideVtx(Eigen::MatrixXd& points, Eigen::MatrixXd& color, 
+    int sdf_test_sample_idx_offset)
+{
+    std::vector<TV> outside_sdf_points;
+    int outside_cnt = 0;
+    int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
+    for (int i = 0; i < n_vtx; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+        if (sdf.inside(xi))
+            continue;
+        outside_sdf_points.push_back(xi);
+        outside_cnt++;
+    }
+    int np = sdf_test_sample_idx_offset;
+    points.conservativeResize(np + outside_sdf_points.size(), 3);
+    color.conservativeResize(points.rows(), 3);
+    tbb::parallel_for(0, int(outside_sdf_points.size()), [&](int i){
+        points.row(np + i) = outside_sdf_points[i];
+        color.row(np + i) = TV(0, 1, 1);
+    });
+    std::cout << "[SDF]" << outside_cnt << "/" << n_vtx << " are outside the sdf" << std::endl;
+}
 
 void VertexModel::sampleBoundingSurface(Eigen::MatrixXd& V)
 {
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-    std::mt19937 generator (seed);
-    std::uniform_real_distribution<T> uniform01(0.0, 1.0);
-    int N = 10000;
-    V.resize(N, 3);
-    int type = 0;
-    if (type == 0) //sphere
+    if (use_sdf_boundary)
     {
-        for (int i = 0; i < N; i++) 
-        {
-            T theta = 2 * M_PI * uniform01(generator);
-            T phi = std::acos(1 - 2 * uniform01(generator));
-            T x = Rc * std::sin(phi) * std::cos(theta);
-            T y = Rc * std::sin(phi) * std::sin(theta);
-            T z = Rc * std::cos(phi);
-            V.row(i) = TV(x, y, z);
-        }
-
+        VectorXT boundary_points;
+        sdf.sampleZeroLevelset(boundary_points);
+        int n_pt = boundary_points.rows() / 3;
+        V.resize(n_pt, 3);
+        tbb::parallel_for(0, n_pt, [&](int i){
+            V.row(i) = boundary_points.segment<3>(i * 3);
+        });
     }
+    else
+    {
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        std::mt19937 generator (seed);
+        std::uniform_real_distribution<T> uniform01(0.0, 1.0);
+        int N = 10000;
+        V.resize(N, 3);
+        int type = 0;
+        if (type == 0) //sphere
+        {
+            for (int i = 0; i < N; i++) 
+            {
+                T theta = 2 * M_PI * uniform01(generator);
+                T phi = std::acos(1 - 2 * uniform01(generator));
+                T x = Rc * std::sin(phi) * std::cos(theta);
+                T y = Rc * std::sin(phi) * std::sin(theta);
+                T z = Rc * std::cos(phi);
+                V.row(i) = TV(x, y, z);
+            }
+
+        }
+    }
+    
 }
 
 void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool a_bit)
@@ -553,7 +590,7 @@ void VertexModel::saveIndividualCellsWithOffset()
 void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V, 
     Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest_state)
 {
-    bool triangulate_with_centroid = true;
+    bool triangulate_with_centroid = false;
     // compute polygon face centroid
     std::vector<TV> face_centroid(faces.size());
     tbb::parallel_for(0, (int)faces.size(), [&](int i){
@@ -588,6 +625,14 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 face_cnt += 3;
             else if (faces[i].size() == 6)
                 face_cnt += 4;
+            else if (faces[i].size() == 7)
+                face_cnt += 5;
+            else if (faces[i].size() == 8)
+                face_cnt += 6;
+            else
+            {
+                std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+            }
         }
     }
     F.resize(face_cnt, 3);
@@ -623,6 +668,27 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][0], faces[i][5]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][5], faces[i][4]);
             }
+            else if (faces[i].size() == 7)
+            {
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][1], faces[i][0], faces[i][2]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][0], faces[i][6]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][6], faces[i][3]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][6], faces[i][4]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][6], faces[i][5]);
+            }
+            else if (faces[i].size() == 8)
+            {
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][1], faces[i][0]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][3], faces[i][2]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][0], faces[i][7]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][7], faces[i][4]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][7], faces[i][5]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][5], faces[i][7], faces[i][6]);
+            }
+            else
+            {
+                std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+            }
         }
     }
 
@@ -642,7 +708,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                     C.row(face_cnt) = Eigen::Vector3d(0.0, 1.0, 0.0);
                 else
                     C.row(face_cnt) = Eigen::Vector3d(0, 0.3, 1.0);
-                if (contract_apical_face)
+                if (contract_apical_face && add_contraction_term)
                 {
                     if (std::find(contracting_faces.begin(), contracting_faces.end(), i) != contracting_faces.end())
                         C.row(face_cnt) = Eigen::Vector3d(1.0, 0.5, 0.5);
@@ -660,7 +726,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
             else
                 color = Eigen::Vector3d(0, 0.3, 1.0);
 
-            if (contract_apical_face)
+            if (contract_apical_face && add_contraction_term)
             {
                 if (std::find(contracting_faces.begin(), contracting_faces.end(), i) != contracting_faces.end())
                     color = Eigen::Vector3d(1.0, 0.0, 0.0);
@@ -684,6 +750,17 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 C.row(face_cnt++) = color;
                 C.row(face_cnt++) = color;
             }
+            else if (faces[i].size() == 7)
+                for (int k = 0; k < 5; k++)
+                    C.row(face_cnt++) = color;
+            else if (faces[i].size() == 8)
+                for (int k = 0; k < 6; k++)
+                    C.row(face_cnt++) = color;
+            else
+            {
+                std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+            }
+            
         }
     }
 
@@ -702,6 +779,8 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
 void VertexModel::appendCylinderOnContractingEdges(
     Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
+    if (!add_contraction_term)
+        return;
     T visual_R = 0.01;
     int n_div = 10;
     T theta = 2.0 * EIGEN_PI / T(n_div);

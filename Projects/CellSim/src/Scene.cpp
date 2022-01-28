@@ -92,8 +92,8 @@ void VertexModel::initializeContractionData()
                 bool bottom_y = centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2;
                 bool middle_z = centroid[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
                     centroid[2] < mid_point[2] + 0.5 * delta[2] * 0.1;
-                bool middle_x = centroid[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
-                    centroid[0] < mid_point[0] + 0.5 * delta[0] * 0.5;
+                bool middle_x = centroid[0] > mid_point[0] - 0.5 * delta[0] * 0.2 &&
+                    centroid[0] < mid_point[0] + 0.5 * delta[0] * 0.4;
                 if (!bottom_y || !middle_z || !middle_x)
                     contract = false;
                 if (contract)
@@ -122,18 +122,19 @@ void VertexModel::initializeContractionData()
             //     e[0] < basal_vtx_start && e[1] < basal_vtx_start)
             //     return true;
             // return false;
-
-            bool bottom_y = x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2
-                && x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * 0.2;
+            T percent_y = 0.05;
+            bool bottom_y = x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y
+                && x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y;
             bool apical_edge = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
-            bool middle_z = x0[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
-                    x0[2] < mid_point[2] + 0.5 * delta[2] * 0.1 &&
-                    x1[2] > mid_point[2] - 0.5 * delta[2] * 0.1 && 
-                    x1[2] < mid_point[2] + 0.5 * delta[2] * 0.1;
-            bool middle_x = x0[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
-                x0[0] < mid_point[0] + 0.5 * delta[0] * 0.5 &&
-                x1[0] > mid_point[0] - 0.5 * delta[0] * 0.5 &&
-                x1[0] < mid_point[0] + 0.5 * delta[0] * 0.5;
+            T percent_x = 0.2, percent_z = 0.1;
+            bool middle_z = x0[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                    x0[2] < mid_point[2] + 0.5 * delta[2] * percent_z &&
+                    x1[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                    x1[2] < mid_point[2] + 0.5 * delta[2] * percent_z;
+            bool middle_x = x0[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+                x0[0] < mid_point[0] + 0.5 * delta[0] * percent_x &&
+                x1[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+                x1[0] < mid_point[0] + 0.5 * delta[0] * percent_x;
 
             if (bottom_y && apical_edge && middle_z && middle_x)
                 return true;
@@ -586,9 +587,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         faces.push_back(new_face);
     }
 
+    std::cout << "this mesh contains polygon of the following edge numbers: " << std::endl;
     for (int idx : face_edge_numbers)
-        std::cout << idx << std::endl;
-    // std::getchar();
+        std::cout << idx << " ";
+    std::cout << std::endl;
+
     lateral_face_start = faces.size();
 
     cell_face_indices.resize(basal_face_start, VtxList());
@@ -657,12 +660,15 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 // this weights lead to invagination when height = 1.0
                 if (use_cell_centroid)
                 {
+                    // for sphere
+                    // alpha = 10.0; // lateral
+                    // gamma = 3.0; // basal
+                    // sigma = 2.0;// apical
+
+                    // for drosophila
                     alpha = 10.0; // WORKED
-                    // alpha = 20.0;
-                    // alpha = 20.0;
-                    gamma = 3.0;
-                    // sigma = 0.5; // apical
-                    sigma = 2.0;
+                    gamma = 2.0;
+                    sigma = 2.0;// apical
                 }
                 else
                 {
@@ -689,17 +695,26 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     use_face_centroid = use_cell_centroid;
 
 
-    // for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 3; d++)
+    for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 9; d++)
+    {
+        dirichlet_data[d] = 0.0;
+    }
+
+    // sphere
+    // for (int d = 0; d < 3; d++)
     // {
-    //     dirichlet_data[d] = 0.0;
+    //     dirichlet_data[1532 * 3 + d] = 0.0;
+    //     dirichlet_data[1480 * 3 + d] = 0.0;
+    //     dirichlet_data[1482 * 3 + d] = 0.0;
     // }
 
-    for (int d = 0; d < 3; d++)
-    {
-        dirichlet_data[1532 * 3 + d] = 0.0;
-        dirichlet_data[1480 * 3 + d] = 0.0;
-        dirichlet_data[1482 * 3 + d] = 0.0;
-    }
+    // drosophila egg
+    // for (int d = 0; d < 3; d++)
+    // {
+    //     dirichlet_data[1042 * 3 + d] = 0.0;
+    //     dirichlet_data[1065 * 3 + d] = 0.0;
+    //     dirichlet_data[1040 * 3 + d] = 0.0;
+    // }
     
     computeVolumeAllCells(cell_volume_init);
 
@@ -733,8 +748,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             if (use_cell_centroid)
-                // Gamma = 0.05; // for continuation
-                Gamma = 0.5;//worked for the centroid formulation
+                // Gamma = 0.5;//worked for sphere
+                Gamma = 1.0;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -755,7 +770,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_sphere_radius_bound)
     {
         approximateMembraneThickness();
-        std::cout << "Rc " << Rc << std::endl;
+        // std::cout << "Rc " << Rc << std::endl;
         
         if (sphere_bound_penalty)
             bound_coeff = 1e1;
@@ -838,14 +853,14 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_cell_centroid)
         weights_all_edges = 0.1;
     // weights_all_edges = 0.0;
-    weights_all_edges = 0.01 * Gamma;
+    weights_all_edges = 0.05 * Gamma;
 
     add_tet_vol_barrier = true;
 
     add_log_tet_barrier = false;
     tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid && !add_log_tet_barrier)
-        tet_vol_barrier_w = 10e-26;
+        tet_vol_barrier_w = 10e-30;
     else
         tet_vol_barrier_w = 1e10;
     // std::cout << cell_volume_init[0] << std::endl;
@@ -868,10 +883,11 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     use_sdf_boundary = true;
 
-    if (use_sdf_boundary)
+    if (use_sdf_boundary && use_sphere_radius_bound)
     {
+        bound_coeff = 1e6;
         T normal_offset = 1e-3;
-        // T normal_offset = -1e-1;
+        // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);
         vtx_normals.conservativeResize(vertices.rows());
@@ -893,17 +909,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         std::cout << "perivitelline_vol_init " << perivitelline_vol_init << std::endl;
         std::cout << "Total volume: " << total_volume << std::endl;
         bool all_inside = true;
+        int inside_cnt = 0;
         for (int i = 0; i < num_nodes; i++)
         {
             TV xi = deformed.segment<3>(i * 3);
             if (sdf.inside(xi))
-                continue;
-            std::cout << sdf.value(xi) << std::endl;
-            all_inside = false;
-            break;
+                inside_cnt++;
+                // continue;
+            // std::cout << sdf.value(xi) << std::endl;
+            // all_inside = false;
+            // break;
         }
-        if (!all_inside)
-            std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
+        std::cout << num_nodes - inside_cnt << "/" << num_nodes << " points are outside the sdf" << std::endl;
+        // if (!all_inside)
+        //     std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
     }
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
@@ -915,7 +934,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // add_contraction_term = true;
     // woodbury = false;
     // use_sphere_radius_bound = true;
-    
+    // alpha = 1.0; gamma = 1.0; sigma = 1.0;
+    // B = 1e6;    
     // alpha = 10.0; // WORKED
     // gamma = 3.0;
     // // sigma = 2.0;

@@ -245,18 +245,41 @@ void VertexModel::computeCellInfo()
     {
         VectorXT current_cell_volume;
         computeVolumeAllCells(current_cell_volume);
-        std::cout << "\ttet vol sum: " << current_cell_volume.sum() << std::endl;
+        std::cout << "\tcell vol sum: " << current_cell_volume.sum() << 
+        " initial: " << cell_volume_init.sum() << std::endl;
     }
 
     T yolk_vol_curr = computeYolkVolume();
-    std::cout << "\tyolk vol sum: " << yolk_vol_curr << std::endl;
+    std::cout << "\tyolk vol sum: " << yolk_vol_curr << 
+        " initial " << yolk_vol_init << std::endl;
 
     T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-    std::cout << "\tperivitelline vol sum: " << perivitelline_vol_curr << std::endl;
+    std::cout << "\tperivitelline vol sum: " << perivitelline_vol_curr <<
+        " initial " << perivitelline_vol_init << std::endl;
     VectorXT residual(num_nodes * 3);
     residual.setZero();
+    bool _print = print_force_norm;
+    print_force_norm = false;
     computeResidual(u, residual);
+    print_force_norm = _print;
     std::cout << "\t |g_norm|: " << residual.norm() << std::endl;
+
+    bool all_inside = true;
+    int inside_cnt = 0;
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV xi = deformed.segment<3>(i * 3);
+        if (sdf.inside(xi))
+            inside_cnt++;
+            // continue;
+        // std::cout << sdf.value(xi) << std::endl;
+        // all_inside = false;
+        // break;
+    }
+    // if (!all_inside)
+        // std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
+    std::cout << num_nodes - inside_cnt << "/" << num_nodes << " are not inside the SDF" << std::endl;
+
 }
 
 T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_deform)
@@ -583,7 +606,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         else
             addMembraneBoundForceEntries(residual);
         if(print_force_norm)
-            std::cout << "\tsphere bound norm: " << (residual - residual_temp).norm() << std::endl;
+            std::cout << "\tmembrane bound norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
     }
 

@@ -28,6 +28,7 @@ static bool yolk_only = false;
 static bool show_apical_polygon = false;
 static bool show_basal_polygon = false;
 static bool show_contracting_edges = true;
+static bool show_outside_vtx = false;
 static int modes = 0;
 static bool enable_selection = false;
 static bool compute_energy = false;
@@ -37,13 +38,14 @@ int compute_energy_cnt = 0;
 int static_solve_step = 0;
 bool check_modes = false;
 
-int load_obj_iter_cnt = 0;
+int load_obj_iter_cnt = 950;
 
 Eigen::MatrixXd evectors;
 Eigen::VectorXd evalues;
 
 Eigen::MatrixXd bounding_surface_samples;
 Eigen::MatrixXd bounding_surface_samples_color;
+int sdf_test_sample_idx_offset = 0;
 
 auto loadEigenVectors = [&]()
 {
@@ -70,26 +72,27 @@ auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     // viewer.data_list[0].set_colors(C);
 
     viewer.data().clear();
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_colors(C);
+    // viewer.data().set_mesh(V, F);
+    // viewer.data().set_colors(C);
 
-    if (show_membrane)
-    {
-        // Eigen::MatrixXd bounding_surface_samples;
-        // Eigen::MatrixXd bounding_surface_samples_color;
-        // simulation.sampleBoundingSurface(bounding_surface_samples);
-        // bounding_surface_samples_color = bounding_surface_samples;
-        // for (int i = 0; i < bounding_surface_samples.rows(); i++)
-        //     bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
-        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
-    }
     if (show_contracting_edges)
     {
-        viewer.data().clear();
+        // viewer.data().clear();
         simulation.cells.appendCylinderOnContractingEdges(V, F, C);
-        viewer.data().set_mesh(V, F);
-        viewer.data().set_colors(C);
     }
+        
+    if (show_membrane)
+    {
+        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+    }
+    if (show_outside_vtx)
+    {
+        simulation.cells.getOutsideVtx(bounding_surface_samples, 
+            bounding_surface_samples_color, sdf_test_sample_idx_offset);
+        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+    }
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);
     
 };
 
@@ -137,6 +140,10 @@ int main()
                 updateScreen(viewer);
             }
             if (ImGui::Checkbox("ContractingEdges", &show_contracting_edges))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowOutsideVtx", &show_outside_vtx))
             {
                 updateScreen(viewer);
             }
@@ -320,11 +327,12 @@ int main()
     };
 
     simulation.initializeCells();
-    simulation.dynamic = true;
+    simulation.dynamic = false;
     if (simulation.dynamic)
         simulation.initializeDynamicsData(1e0, 10000);
 
     simulation.sampleBoundingSurface(bounding_surface_samples);
+    sdf_test_sample_idx_offset = bounding_surface_samples.rows();
     bounding_surface_samples_color = bounding_surface_samples;
     for (int i = 0; i < bounding_surface_samples.rows(); i++)
         bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
