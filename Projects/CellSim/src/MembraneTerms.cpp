@@ -10,8 +10,8 @@ void VertexModel::addMembraneSDFBoundEnergy(T& energy)
     for (int i = 0; i < n_vtx; i++)
     {
         TV xi = deformed.segment<3>(i * 3);
-        // if (sdf.inside(xi) && !run_diff_test)
-        if (sdf.inside(xi))
+        if (sdf.inside(xi) && !run_diff_test)
+        // if (sdf.inside(xi))
             continue;
         
         sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
@@ -29,8 +29,8 @@ void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
     {
         TV xi = deformed.segment<3>(i * 3);
 
-        // if (sdf.inside(xi) && !run_diff_test)
-        if (sdf.inside(xi))
+        if (sdf.inside(xi) && !run_diff_test)
+        // if (sdf.inside(xi))
             continue;
         outside_cnt++;
         Vector<T, 3> dedx;
@@ -51,8 +51,8 @@ void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries,
     for (int i = 0; i < n_vtx; i++)
     {
         TV xi = deformed.segment<3>(i * 3);
-        // if (sdf.inside(xi) && !run_diff_test)
-        if (sdf.inside(xi))
+        if (sdf.inside(xi) && !run_diff_test)
+        // if (sdf.inside(xi))
             continue;
         Matrix<T, 3, 3> d2phidx2;
         sdf.hessian(xi, d2phidx2);

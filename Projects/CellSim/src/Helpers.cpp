@@ -84,7 +84,7 @@ void VertexModel::normalizeToUnit(MatrixXT& V)
     {
         for (int d = 0; d < 3; d++)
         {
-            V(i, d) = 2.0 * V(i, d) / max_length;
+            V(i, d) = 2.0 * V(i, d) / max_length + 2.0;
         }
     }
 }

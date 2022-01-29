@@ -14,6 +14,8 @@
 
 #include "VecMatDef.h"
 
+#include "SpatialHash.h"
+
 using T = double;
 
 using namespace openvdb;
@@ -28,6 +30,8 @@ public:
     
     
 public:
+
+    TV min_corner, max_corner;
     
     virtual T value(const TV& test_point) = 0;
     virtual void gradient(const TV& test_point, TV& dphidx) = 0;
@@ -39,6 +43,8 @@ public:
         const VectorXT& normals, T epsilon) = 0;
 
     virtual void sampleZeroLevelset(VectorXT& points) const = 0; 
+
+    
 public:
     SDF() 
     {
@@ -64,6 +70,8 @@ public:
     VectorXT radii;
     T search_radius;
 
+    SpatialHash hash;
+
 private:
     T weightFunction(T d, T r) { return std::exp(-d*d / r/r); }
 
@@ -71,6 +79,7 @@ private:
     void thetaValueGradient(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, Eigen::Matrix<double, 3, 1>& energygradient);
     void thetaValueHessian(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, Eigen::Matrix<double, 3, 3>& energyhessian);
 
+    void computeBBox();
 public:
     T value(const TV& test_point);
     void gradient(const TV& test_point, TV& dphidx);

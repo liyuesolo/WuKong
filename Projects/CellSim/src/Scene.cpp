@@ -448,9 +448,9 @@ void VertexModel::addTestPrism(int edge)
 
 }
 
-void VertexModel::saveIPCData(int iter)
+void VertexModel::saveIPCData(const std::string& folder, int iter, bool save_edges)
 {
-    std::ofstream out("output/cells/surface/ipc_mesh_iter_" + std::to_string(iter) +".obj");
+    std::ofstream out(folder + "/ipc_faces_iter" + std::to_string(iter) + ".obj");
     for (int i = 0; i < ipc_vertices.rows(); i++)
     {
         out << "v " << ipc_vertices.row(i) << std::endl;
@@ -461,6 +461,15 @@ void VertexModel::saveIPCData(int iter)
         out << "f " << obj_face.transpose() << std::endl;
     }
     out.close();
+    if (save_edges)
+    {
+        out.open(folder + "/ipc_edges_iter" + std::to_string(iter) + ".obj");
+        for (int i = 0; i < ipc_vertices.rows(); i++)
+            out << "v " << ipc_vertices.row(i) << std::endl;
+        for (int i = 0; i < ipc_edges.rows(); i++)
+            out << "l " << ipc_edges.row(i) + Edge::Ones().transpose() << std::endl;
+        out.close();
+    }
 }
 
 void VertexModel::saveCellMesh(int iter)
@@ -886,8 +895,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
         bound_coeff = 1e6;
-        T normal_offset = 1e-3;
-        // T normal_offset = -1e-2;
+        // T normal_offset = 1e-3;
+        T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);
         vtx_normals.conservativeResize(vertices.rows());

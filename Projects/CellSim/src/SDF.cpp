@@ -8,53 +8,53 @@
 #include <openvdb/points/PointConversion.h>
 #include <openvdb/points/PointCount.h>
 
+bool use_spacial_hash = true;
 
-void VdbLevelSetSDF::initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
-    const VectorXT& normals, T epsilon)
+void IMLS::computeBBox()
 {
-    int nv = vertices.rows() / 3;
-    int nf = indices.rows() / 3;
-    std::vector<Vec3s> points(nv);
-    std::vector<Vec3I> triangles(nf);
-    std::vector<Vec4I> quads;
-    tbb::parallel_for(0, nv, [&](int i){
-        points[i] = Vec3s(vertices[i * 3 + 0] + normals[i * 3 + 0] * epsilon, 
-                        vertices[i * 3 + 1] + normals[i * 3 + 1] * epsilon,  
-                        vertices[i * 3 + 2] + normals[i * 3 + 2] * epsilon);
-    });
-    tbb::parallel_for(0, nf, [&](int i){
-        triangles[i] = Vec3I(indices[i * 3 + 0], indices[i * 3 + 1], indices[i * 3 + 2]);
-    });
-    levelsetFromMesh(points, triangles, quads);
+    min_corner.setConstant(1e6);
+    max_corner.setConstant(-1e6);
+
+    for (int i = 0; i < n_points; i++)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            max_corner[d] = std::max(max_corner[d], data_points[i * 3 + d]);
+            min_corner[d] = std::min(min_corner[d], data_points[i * 3 + d]);
+        }
+    }
 }
 
-void VdbLevelSetSDF::levelsetFromMesh(
-    const std::vector<Vec3s>& points,
-    const std::vector<Vec3I>& triangles,
-    const std::vector<Vec4I>& quads)
+void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
+        const VectorXT& normals, T epsilon)
 {
-    // int pointsPerVoxel = 8;
-    // openvdb::points::PointAttributeVector<openvdb::Vec3s> positionsWrapper(points);
-    // float voxelSize = openvdb::points::computeVoxelSize(positionsWrapper, pointsPerVoxel);   
-    // std::cout << "voxel size " << voxelSize << std::endl;
-    float voxelSize = 5e-3;
-    openvdb::math::Transform::Ptr xForm = openvdb::math::Transform::createLinearTransform(voxelSize);
-    grid = openvdb::tools::meshToSignedDistanceField<openvdb::DoubleGrid>(
-                *xForm, points, triangles, quads,
-                10, 100);
-    grid_grad = openvdb::tools::gradient(*grid);
-    
-}
+    n_points = vertices.rows() / 3;
+    data_points = vertices;
+    data_point_normals = normals;
+    T h = 0.05;
+    radii = VectorXT::Ones(n_points) * h;
+    data_points += normals * epsilon;
+    hash.build(h * 4.0, data_points); 
+    computeBBox();
+}   
 
 T IMLS::value(const TV& test_point)
 {
     T value = 0.0;
     T weights_sum = 0.0;
-    for (int i = 0; i < n_points; i++)
+    std::vector<int> neighbors;
+    if (use_spacial_hash)
+        hash.getOneRingNeighbors(test_point, neighbors);
+    else 
+        for (int i = 0; i < n_points; i++) 
+            neighbors.push_back(i);
+
+    for (int i : neighbors)
     {
         TV pi = data_points.segment<3>(i * 3);
         TV ni = data_point_normals.segment<3>(i * 3);
         T wi = weightFunction((test_point - pi).norm(), radii[i]);
+        
         weights_sum += wi;
         T dot_term = (test_point - pi).dot(ni);
         value += wi * dot_term;
@@ -73,8 +73,14 @@ void IMLS::gradient(const TV& test_point, TV& dphidx)
     TV sum_df = TV::Zero();
     T sum_dg = 0;
     TV sum_dtheta = TV::Zero();
+    std::vector<int> neighbors;
+    if (use_spacial_hash)
+        hash.getOneRingNeighbors(test_point, neighbors);
+    else 
+        for (int i = 0; i < n_points; i++) 
+            neighbors.push_back(i);
 
-    for (int i = 0; i < n_points; i++)
+    for (int i : neighbors)
     {
         TV pi = data_points.segment<3>(i * 3);
         TV ni = data_point_normals.segment<3>(i * 3);
@@ -104,7 +110,15 @@ void IMLS::hessian(const TV& test_point, TM& d2phidx2)
     TV sum_c = TV::Zero();
     T sum_d = 0.0;
 
-    for (int i = 0; i < n_points; i++)
+    // for (int i = 0; i < n_points; i++)
+    std::vector<int> neighbors;
+    if (use_spacial_hash)
+        hash.getOneRingNeighbors(test_point, neighbors);
+    else 
+        for (int i = 0; i < n_points; i++) 
+            neighbors.push_back(i);
+
+    for (int i : neighbors)
     {
         TV pi = data_points.segment<3>(i * 3);
         TV ni = data_point_normals.segment<3>(i * 3);
@@ -131,15 +145,7 @@ void IMLS::hessian(const TV& test_point, TM& d2phidx2)
         2.0 * sum_d * sum_theta * sum_dtheta_dx * sum_dtheta_dx.transpose()) / std::pow(sum_theta, 4);
 }
 
-void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
-        const VectorXT& normals, T epsilon)
-{
-    n_points = vertices.rows() / 3;
-    data_points = vertices;
-    data_point_normals = normals;
-    radii = VectorXT::Ones(n_points) * 0.05;
-    data_points += normals * epsilon;
-}        
+     
 
 T VdbLevelSetSDF::value(const TV& test_point) 
 {
@@ -182,6 +188,43 @@ void VdbLevelSetSDF::hessian(const TV& test_point, TM& d2phidx2)
     // d2phidx2 << ddx[0], ddy[0], ddz[0],
     //         ddx[1], ddy[1], ddz[1],
     //         ddx[2], ddy[2], ddz[2];
+}
+
+void VdbLevelSetSDF::initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
+    const VectorXT& normals, T epsilon)
+{
+    int nv = vertices.rows() / 3;
+    int nf = indices.rows() / 3;
+    std::vector<Vec3s> points(nv);
+    std::vector<Vec3I> triangles(nf);
+    std::vector<Vec4I> quads;
+    tbb::parallel_for(0, nv, [&](int i){
+        points[i] = Vec3s(vertices[i * 3 + 0] + normals[i * 3 + 0] * epsilon, 
+                        vertices[i * 3 + 1] + normals[i * 3 + 1] * epsilon,  
+                        vertices[i * 3 + 2] + normals[i * 3 + 2] * epsilon);
+    });
+    tbb::parallel_for(0, nf, [&](int i){
+        triangles[i] = Vec3I(indices[i * 3 + 0], indices[i * 3 + 1], indices[i * 3 + 2]);
+    });
+    levelsetFromMesh(points, triangles, quads);
+}
+
+void VdbLevelSetSDF::levelsetFromMesh(
+    const std::vector<Vec3s>& points,
+    const std::vector<Vec3I>& triangles,
+    const std::vector<Vec4I>& quads)
+{
+    // int pointsPerVoxel = 8;
+    // openvdb::points::PointAttributeVector<openvdb::Vec3s> positionsWrapper(points);
+    // float voxelSize = openvdb::points::computeVoxelSize(positionsWrapper, pointsPerVoxel);   
+    // std::cout << "voxel size " << voxelSize << std::endl;
+    float voxelSize = 5e-3;
+    openvdb::math::Transform::Ptr xForm = openvdb::math::Transform::createLinearTransform(voxelSize);
+    grid = openvdb::tools::meshToSignedDistanceField<openvdb::DoubleGrid>(
+                *xForm, points, triangles, quads,
+                10, 100);
+    grid_grad = openvdb::tools::gradient(*grid);
+    
 }
 
 void IMLS::thetaValue(const Eigen::Matrix<double,3,1> & x, const Eigen::Matrix<double,3,1> & pi, double ri, double& energy){

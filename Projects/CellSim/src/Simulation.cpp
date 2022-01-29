@@ -187,6 +187,7 @@ bool Simulation::advanceOneStep(int step)
     }
     else
     {
+        Timer step_timer(true);
         cells.iterateDirichletDoF([&](int offset, T target)
         {
             f[offset] = 0;
@@ -200,13 +201,15 @@ bool Simulation::advanceOneStep(int step)
 
         T residual_norm = computeResidual(u, residual);
         cells.saveCellMesh(step);
-
         std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
 
         if (residual_norm < newton_tol)
             return true;
 
         T dq_norm = lineSearchNewton(u, residual);
+        step_timer.stop();
+        std::cout << "[Newton] step takes " << step_timer.elapsed_sec() << "s" << std::endl;
+
         if(step == max_newton_iter || dq_norm > 1e10)
             return true;
         

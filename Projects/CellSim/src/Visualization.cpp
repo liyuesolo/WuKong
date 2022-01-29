@@ -673,8 +673,8 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][1], faces[i][0], faces[i][2]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][0], faces[i][6]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][6], faces[i][3]);
-                F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][6], faces[i][4]);
-                F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][6], faces[i][5]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][6], faces[i][5]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][5], faces[i][4]);
             }
             else if (faces[i].size() == 8)
             {
