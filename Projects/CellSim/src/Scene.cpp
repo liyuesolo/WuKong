@@ -676,7 +676,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
                     // for drosophila
                     alpha = 10.0; // WORKED
-                    gamma = 2.0;
+                    gamma = 3.0;
                     sigma = 2.0;// apical
                 }
                 else
@@ -758,7 +758,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
                 // Gamma = 0.5;//worked for sphere
-                Gamma = 1.0;//worked for the centroid formulation
+                Gamma = 0.5;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -862,7 +862,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_cell_centroid)
         weights_all_edges = 0.1;
     // weights_all_edges = 0.0;
-    weights_all_edges = 0.05 * Gamma;
+    weights_all_edges = 0.1 * Gamma;
 
     add_tet_vol_barrier = true;
 
@@ -894,9 +894,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e6;
-        // T normal_offset = 1e-3;
-        T normal_offset = -1e-2;
+        bound_coeff = 1e1;
+        T normal_offset = 1e-3;
+        // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);
         vtx_normals.conservativeResize(vertices.rows());

@@ -11,53 +11,75 @@ T VertexModel::computeInitialApicalVolumeWithOffset(const VectorXT& normals, T e
 
 T VertexModel::computeTotalVolumeFromApicalSurface()
 {
-    T volume = 0.0;
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    VectorXT volumes = VectorXT::Zero(basal_face_start);
+    iterateFaceParallel([&](VtxList& face_vtx_list, int face_idx)
     {
+        if (face_idx >= basal_face_start)
+            return;
         VectorXT positions;
         positionsFromIndices(positions, face_vtx_list);
-        
-        if (face_idx < basal_face_start)
+        if (use_cell_centroid)
         {
-            T cone_volume;
             if (face_vtx_list.size() == 4) 
-            {
-                if (use_cell_centroid)
-                    computeConeVolume4Points(positions, mesh_centroid, cone_volume);
-                else
-                    computeQuadConeVolume(positions, mesh_centroid, cone_volume);
-            }
+                computeConeVolume4Points(positions, mesh_centroid, volumes[face_idx]);
             else if (face_vtx_list.size() == 5) 
-            {
-                if (use_cell_centroid)
-                    computeConeVolume5Points(positions, mesh_centroid, cone_volume);
-                else
-                    computePentaConeVolume(positions, mesh_centroid, cone_volume);
-            }
+                computeConeVolume5Points(positions, mesh_centroid, volumes[face_idx]);
             else if (face_vtx_list.size() == 6) 
-            {
-                if (use_cell_centroid)
-                    computeConeVolume6Points(positions, mesh_centroid, cone_volume);
-                else
-                    computeHexConeVolume(positions, mesh_centroid, cone_volume);
-            }
+                computeConeVolume6Points(positions, mesh_centroid, volumes[face_idx]);
             else if (face_vtx_list.size() == 7) 
-            {
-                if (use_cell_centroid)
-                    computeConeVolume7Points(positions, mesh_centroid, cone_volume);
-            }
+                computeConeVolume7Points(positions, mesh_centroid, volumes[face_idx]);
             else if (face_vtx_list.size() == 8) 
-            {
-                if (use_cell_centroid)
-                    computeConeVolume8Points(positions, mesh_centroid, cone_volume);
-            }
-            else
-                std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
-            volume += cone_volume;
+                computeConeVolume8Points(positions, mesh_centroid, volumes[face_idx]);
         }
-        
     });
-    return -volume;
+    return -volumes.sum();
+    // T volume = 0.0;
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     VectorXT positions;
+    //     positionsFromIndices(positions, face_vtx_list);
+        
+    //     if (face_idx < basal_face_start)
+    //     {
+    //         T cone_volume;
+    //         if (face_vtx_list.size() == 4) 
+    //         {
+    //             if (use_cell_centroid)
+    //                 computeConeVolume4Points(positions, mesh_centroid, cone_volume);
+    //             else
+    //                 computeQuadConeVolume(positions, mesh_centroid, cone_volume);
+    //         }
+    //         else if (face_vtx_list.size() == 5) 
+    //         {
+    //             if (use_cell_centroid)
+    //                 computeConeVolume5Points(positions, mesh_centroid, cone_volume);
+    //             else
+    //                 computePentaConeVolume(positions, mesh_centroid, cone_volume);
+    //         }
+    //         else if (face_vtx_list.size() == 6) 
+    //         {
+    //             if (use_cell_centroid)
+    //                 computeConeVolume6Points(positions, mesh_centroid, cone_volume);
+    //             else
+    //                 computeHexConeVolume(positions, mesh_centroid, cone_volume);
+    //         }
+    //         else if (face_vtx_list.size() == 7) 
+    //         {
+    //             if (use_cell_centroid)
+    //                 computeConeVolume7Points(positions, mesh_centroid, cone_volume);
+    //         }
+    //         else if (face_vtx_list.size() == 8) 
+    //         {
+    //             if (use_cell_centroid)
+    //                 computeConeVolume8Points(positions, mesh_centroid, cone_volume);
+    //         }
+    //         else
+    //             std::cout << "unknown polygon edge number" << __FILE__ << std::endl;
+    //         volume += cone_volume;
+    //     }
+        
+    // });
+    // return -volume;
 }
 
 void VertexModel::addPerivitellineVolumePreservationEnergy(T& energy)
@@ -147,7 +169,7 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
     if (add_perivitelline_liquid_volume && !use_perivitelline_liquid_pressure)
     {
         VectorXT dVdx_full = VectorXT::Zero(deformed.rows());
-
+        T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
         iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
         {
             // negative sign is correct here
@@ -200,52 +222,6 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                 {
                     // std::cout << "unknown polygon edge number" << std::endl;
                 }
-            }
-        });
-
-        if (woodbury)
-        {
-            dVdx_full *= std::sqrt(Bp);
-            if (!run_diff_test)
-            {
-                iterateDirichletDoF([&](int offset, T target)
-                {
-                    dVdx_full[offset] = 0.0;
-                });
-            }
-            int n_row = num_nodes * 3, n_col = WoodBuryMatrix.cols();
-            WoodBuryMatrix.conservativeResize(n_row, n_col + 1);
-            WoodBuryMatrix.col(n_col) = dVdx_full;
-        }
-        else
-        {
-            for (int dof_i = 0; dof_i < num_nodes; dof_i++)
-            {
-                for (int dof_j = 0; dof_j < num_nodes; dof_j++)
-                {
-                    Vector<T, 6> dVdx;
-                    getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
-                    TV dVdxi = dVdx.segment<3>(0);
-                    TV dVdxj = dVdx.segment<3>(3);
-                    Matrix<T, 3, 3> hessian_partial = Bp * dVdxi * dVdxj.transpose();
-                    addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
-                }
-            }
-        }
-        
-    }
-
-
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    {
-        VectorXT positions;
-        positionsFromIndices(positions, face_vtx_list);
-        T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
-
-            if (face_idx < basal_face_start)
-            {
-                VectorXT positions;
-                positionsFromIndices(positions, face_vtx_list);
                 T ci = perivitelline_vol_curr - perivitelline_vol_init;
                 T coeff = use_perivitelline_liquid_pressure ? -pressure_constant : Bp * ci;
                 if (face_vtx_list.size() == 4)
@@ -310,5 +286,114 @@ void VertexModel::addPerivitellineVolumePreservationHessianEntries(std::vector<E
                     // std::cout << "unknown polygon edge case" << std::endl;
                 }
             }
-        }); 
+        });
+
+        if (woodbury)
+        {
+            dVdx_full *= std::sqrt(Bp);
+            if (!run_diff_test)
+            {
+                iterateDirichletDoF([&](int offset, T target)
+                {
+                    dVdx_full[offset] = 0.0;
+                });
+            }
+            int n_row = num_nodes * 3, n_col = WoodBuryMatrix.cols();
+            WoodBuryMatrix.conservativeResize(n_row, n_col + 1);
+            WoodBuryMatrix.col(n_col) = dVdx_full;
+        }
+        else
+        {
+            for (int dof_i = 0; dof_i < num_nodes; dof_i++)
+            {
+                for (int dof_j = 0; dof_j < num_nodes; dof_j++)
+                {
+                    Vector<T, 6> dVdx;
+                    getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);
+                    TV dVdxi = dVdx.segment<3>(0);
+                    TV dVdxj = dVdx.segment<3>(3);
+                    Matrix<T, 3, 3> hessian_partial = Bp * dVdxi * dVdxj.transpose();
+                    addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+                }
+            }
+        }
+        
+    }
+
+
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     VectorXT positions;
+    //     positionsFromIndices(positions, face_vtx_list);
+    //     T perivitelline_vol_curr = total_volume - computeTotalVolumeFromApicalSurface();
+
+    //         if (face_idx < basal_face_start)
+    //         {
+    //             VectorXT positions;
+    //             positionsFromIndices(positions, face_vtx_list);
+    //             T ci = perivitelline_vol_curr - perivitelline_vol_init;
+    //             T coeff = use_perivitelline_liquid_pressure ? -pressure_constant : Bp * ci;
+    //             if (face_vtx_list.size() == 4)
+    //             {
+    //                 Matrix<T, 12, 12> d2Vdx2;
+    //                 if (use_cell_centroid)
+    //                     computeConeVolume4PointsHessian(positions, mesh_centroid, d2Vdx2);
+    //                 else
+    //                     computeQuadConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
+    //                 Matrix<T, 12, 12> hessian = coeff * d2Vdx2;
+    //                 if(projectPD)
+    //                     projectBlockPD<12>(hessian);
+    //                 addHessianEntry<12>(entries, face_vtx_list, hessian);
+    //             }
+    //             else if (face_vtx_list.size() == 5)
+    //             {
+    //                 Matrix<T, 15, 15> d2Vdx2;
+    //                 if (use_cell_centroid)
+    //                     computeConeVolume5PointsHessian(positions, mesh_centroid, d2Vdx2);
+    //                 else
+    //                     computePentaConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
+    //                 Matrix<T, 15, 15> hessian = coeff * d2Vdx2;
+    //                 if(projectPD)
+    //                     projectBlockPD<15>(hessian);
+    //                 addHessianEntry<15>(entries, face_vtx_list, hessian);
+
+    //             }
+    //             else if (face_vtx_list.size() == 6)
+    //             {
+    //                 Matrix<T, 18, 18> d2Vdx2;
+    //                 if (use_cell_centroid)
+    //                     computeConeVolume6PointsHessian(positions, mesh_centroid, d2Vdx2);
+    //                 else
+    //                     computeHexConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
+    //                 Matrix<T, 18, 18> hessian = coeff * d2Vdx2;
+    //                 if(projectPD)
+    //                     projectBlockPD<18>(hessian);
+    //                 addHessianEntry<18>(entries, face_vtx_list, hessian);
+    //             }
+    //             else if (face_vtx_list.size() == 7)
+    //             {
+    //                 Matrix<T, 21, 21> d2Vdx2;
+    //                 if (use_cell_centroid)
+    //                     computeConeVolume7PointsHessian(positions, mesh_centroid, d2Vdx2);
+    //                 Matrix<T, 21, 21> hessian = coeff * d2Vdx2;
+    //                 if(projectPD)
+    //                     projectBlockPD<21>(hessian);
+    //                 addHessianEntry<21>(entries, face_vtx_list, hessian);
+    //             }
+    //             else if (face_vtx_list.size() == 8)
+    //             {
+    //                 Matrix<T, 24, 24> d2Vdx2;
+    //                 if (use_cell_centroid)
+    //                     computeConeVolume8PointsHessian(positions, mesh_centroid, d2Vdx2);
+    //                 Matrix<T, 24, 24> hessian = coeff * d2Vdx2;
+    //                 if(projectPD)
+    //                     projectBlockPD<24>(hessian);
+    //                 addHessianEntry<24>(entries, face_vtx_list, hessian);
+    //             }
+    //             else
+    //             {
+    //                 // std::cout << "unknown polygon edge case" << std::endl;
+    //             }
+    //         }
+    //     }); 
 }

@@ -170,49 +170,74 @@ void VertexModel::addFaceContractionHessianEntries(T w, std::vector<Entry>& entr
 
 void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
 {
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    VectorXT energies = VectorXT::Zero(faces.size());
+    iterateFaceParallel([&](VtxList& face_vtx_list, int face_idx)
     {
         if (validFaceIdx(face_region, face_idx))
         {
             VectorXT positions;
             positionsFromIndices(positions, face_vtx_list);
-            T area_energy = 0.0;
-            if (face_vtx_list.size() == 4)
+            if (use_face_centroid)
             {
-                if (use_face_centroid)
-                    computeArea4PointsSquaredSum(w, positions, area_energy);
+                if (face_vtx_list.size() == 4)
+                    computeArea4PointsSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 5)
+                    computeArea5PointsSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 6)
+                    computeArea6PointsSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 7)
+                    computeArea7PointsSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 8)
+                    computeArea8PointsSquaredSum(w, positions, energies[face_idx]);
                 else
-                    computeQuadFaceAreaSquaredSum(w, positions, area_energy);
+                    std::cout << "unknown polygon edge case" << std::endl;
             }
-            else if (face_vtx_list.size() == 5)
-            {
-                if (use_face_centroid)
-                    computeArea5PointsSquaredSum(w, positions, area_energy);
-                else
-                    computePentFaceAreaSquaredSum(w, positions, area_energy);
-            }
-            else if (face_vtx_list.size() == 6)
-            {
-                if (use_face_centroid)
-                    computeArea6PointsSquaredSum(w, positions, area_energy);
-                else
-                    computeHexFaceAreaSquaredSum(w, positions, area_energy);
-            }
-            else if (face_vtx_list.size() == 7)
-            {
-                if (use_face_centroid)
-                    computeArea7PointsSquaredSum(w, positions, area_energy);
-            }
-            else if (face_vtx_list.size() == 8)
-            {
-                if (use_face_centroid)
-                    computeArea8PointsSquaredSum(w, positions, area_energy);
-            }
-            else
-                std::cout << "unknown polygon edge case" << std::endl;
-            energy += area_energy;
         }
     });
+    energy += energies.sum();
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     if (validFaceIdx(face_region, face_idx))
+    //     {
+    //         VectorXT positions;
+    //         positionsFromIndices(positions, face_vtx_list);
+    //         T area_energy = 0.0;
+    //         if (face_vtx_list.size() == 4)
+    //         {
+    //             if (use_face_centroid)
+    //                 computeArea4PointsSquaredSum(w, positions, area_energy);
+    //             else
+    //                 computeQuadFaceAreaSquaredSum(w, positions, area_energy);
+    //         }
+    //         else if (face_vtx_list.size() == 5)
+    //         {
+    //             if (use_face_centroid)
+    //                 computeArea5PointsSquaredSum(w, positions, area_energy);
+    //             else
+    //                 computePentFaceAreaSquaredSum(w, positions, area_energy);
+    //         }
+    //         else if (face_vtx_list.size() == 6)
+    //         {
+    //             if (use_face_centroid)
+    //                 computeArea6PointsSquaredSum(w, positions, area_energy);
+    //             else
+    //                 computeHexFaceAreaSquaredSum(w, positions, area_energy);
+    //         }
+    //         else if (face_vtx_list.size() == 7)
+    //         {
+    //             if (use_face_centroid)
+    //                 computeArea7PointsSquaredSum(w, positions, area_energy);
+    //         }
+    //         else if (face_vtx_list.size() == 8)
+    //         {
+    //             if (use_face_centroid)
+    //                 computeArea8PointsSquaredSum(w, positions, area_energy);
+    //         }
+    //         else
+    //             std::cout << "unknown polygon edge case" << std::endl;
+    //         energy += area_energy;
+    //     }
+    // });
 }
 
 void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& residual)

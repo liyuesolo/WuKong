@@ -33,8 +33,9 @@ void Simulation::initializeCells()
     if (cells.scene_type == 1 || cells.scene_type == 2)
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_3k.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
         
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
@@ -200,7 +201,9 @@ bool Simulation::advanceOneStep(int step)
             cells.updateIPCVertices(u);
 
         T residual_norm = computeResidual(u, residual);
+        // std::cout << "[Newton] computeResidual takes " << step_timer.elapsed_sec() << "s" << std::endl;
         cells.saveCellMesh(step);
+        // std::cout << "[Newton] saveCellMesh takes " << step_timer.elapsed_sec() << "s" << std::endl;
         std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
 
         if (residual_norm < newton_tol)
@@ -214,6 +217,7 @@ bool Simulation::advanceOneStep(int step)
             return true;
         
         return false;    
+        
     }
     
 
@@ -741,13 +745,17 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     StiffnessMatrix K(residual.rows(), residual.rows());
     
     bool success = false;
-    
+    Timer ti(true);
     if (woodbury)
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(_u, K, UV);
+        // std::cout << "build system: " << ti.elapsed_sec() << std::endl;
+        // ti.restart();
         success = WoodburySolve(K, UV, residual, du);   
         // success = solveWoodburyCholmod(K, UV, residual, du); 
+        // std::cout << "solve: " << ti.elapsed_sec() << std::endl;
+        // ti.restart();
     }
     else
     {
@@ -755,7 +763,6 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
         // std::cout << "built system" << std::endl;
         success = linearSolve(K, residual, du);    
     }
-    
     if (!success)
     {
         std::cout << "linear solve failed" << std::endl;
@@ -765,7 +772,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     T norm = du.norm();
     
     T alpha = cells.computeLineSearchInitStepsize(_u, du);
-
+    // std::cout << "computeLineSearchInitStepsize: " << ti.elapsed_sec() << std::endl;
+    ti.restart();
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
     // std::getchar();
@@ -835,6 +843,9 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
         alpha *= 0.5;
         cnt += 1;
     }
+    // std::cout << "line search: " << ti.elapsed_sec() << std::endl;
+    ti.restart();
+    // std::exit(0);
     return norm;
     if (cnt > ls_max)
     {

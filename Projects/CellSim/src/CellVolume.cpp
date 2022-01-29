@@ -215,82 +215,104 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
         }
         else
         {
-            int cnt = 0;
-            iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
-                if (face_idx < basal_face_start)
-                {
+            iterateCellParallel([&](VtxList& face_vtx_list, int cell_idx)
+            {
+                 if (use_cell_centroid)
+                 {
                     VectorXT positions;
                     VtxList cell_vtx_list = face_vtx_list;
                     for (int idx : face_vtx_list)
                         cell_vtx_list.push_back(idx + basal_vtx_start);
                     
-
                     positionsFromIndices(positions, cell_vtx_list);
                     
                     if (face_vtx_list.size() == 4)
-                    {
-                        if (preserve_tet_vol)
-                        {
-
-                        }
-                        else
-                        {
-                            if (use_cell_centroid)
-                                computeVolume4Points(positions, cell_volume_list[face_idx]);
-                            else
-                                computeQuadBasePrismVolume(positions, cell_volume_list[face_idx]);
-                        }
-                    }
+                        computeVolume4Points(positions, cell_volume_list[cell_idx]);
                     else if (face_vtx_list.size() == 5)
-                    {
-                        if (preserve_tet_vol)
-                        {
-                            Vector<T, 9> tet_vol;
-                            computePentaPrismTetVol(positions, tet_vol);
-                            cell_volume_list[face_idx] += tet_vol.sum();
-                        }
-                        else
-                        {
-                            if (use_cell_centroid)
-                            {
-                                computeVolume5Points(positions, cell_volume_list[face_idx]);
-                            }
-                            else
-                                computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
-                        }
-                        
-                    }
+                        computeVolume5Points(positions, cell_volume_list[cell_idx]);
                     else if (face_vtx_list.size() == 6)
-                    {
-                        if (preserve_tet_vol)
-                        {
-                            Vector<T, 12> tet_vol;
-                            computeHexPrismTetVol(positions, tet_vol);
-                            cell_volume_list[face_idx] += tet_vol.sum();
-                        }
-                        else
-                        {
-                            if (use_cell_centroid)
-                            {
-                                computeVolume6Points(positions, cell_volume_list[face_idx]);
-                            }
-                            else
-                                computeHexBasePrismVolume(positions, cell_volume_list[face_idx]);
-                        }
-                        
-                    }
+                        computeVolume6Points(positions, cell_volume_list[cell_idx]);
                     else if (face_vtx_list.size() == 7)
-                    {
-                        if (use_cell_centroid)
-                            computeVolume7Points(positions, cell_volume_list[face_idx]);
-                    }
+                        computeVolume7Points(positions, cell_volume_list[cell_idx]);
                     else if (face_vtx_list.size() == 8)
-                    {
-                        if (use_cell_centroid)
-                            computeVolume8Points(positions, cell_volume_list[face_idx]);
-                    }
-                }
+                        computeVolume8Points(positions, cell_volume_list[cell_idx]);
+                 }
             });
+            // int cnt = 0;
+            // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
+            //     if (face_idx < basal_face_start)
+            //     {
+            //         VectorXT positions;
+            //         VtxList cell_vtx_list = face_vtx_list;
+            //         for (int idx : face_vtx_list)
+            //             cell_vtx_list.push_back(idx + basal_vtx_start);
+                    
+            //         positionsFromIndices(positions, cell_vtx_list);
+                    
+            //         if (face_vtx_list.size() == 4)
+            //         {
+            //             if (preserve_tet_vol)
+            //             {
+
+            //             }
+            //             else
+            //             {
+            //                 if (use_cell_centroid)
+            //                     computeVolume4Points(positions, cell_volume_list[face_idx]);
+            //                 else
+            //                     computeQuadBasePrismVolume(positions, cell_volume_list[face_idx]);
+            //             }
+            //         }
+            //         else if (face_vtx_list.size() == 5)
+            //         {
+            //             if (preserve_tet_vol)
+            //             {
+            //                 Vector<T, 9> tet_vol;
+            //                 computePentaPrismTetVol(positions, tet_vol);
+            //                 cell_volume_list[face_idx] += tet_vol.sum();
+            //             }
+            //             else
+            //             {
+            //                 if (use_cell_centroid)
+            //                 {
+            //                     computeVolume5Points(positions, cell_volume_list[face_idx]);
+            //                 }
+            //                 else
+            //                     computePentaBasePrismVolume(positions, cell_volume_list[face_idx]);
+            //             }
+                        
+            //         }
+            //         else if (face_vtx_list.size() == 6)
+            //         {
+            //             if (preserve_tet_vol)
+            //             {
+            //                 Vector<T, 12> tet_vol;
+            //                 computeHexPrismTetVol(positions, tet_vol);
+            //                 cell_volume_list[face_idx] += tet_vol.sum();
+            //             }
+            //             else
+            //             {
+            //                 if (use_cell_centroid)
+            //                 {
+            //                     computeVolume6Points(positions, cell_volume_list[face_idx]);
+            //                 }
+            //                 else
+            //                     computeHexBasePrismVolume(positions, cell_volume_list[face_idx]);
+            //             }
+                        
+            //         }
+            //         else if (face_vtx_list.size() == 7)
+            //         {
+            //             if (use_cell_centroid)
+            //                 computeVolume7Points(positions, cell_volume_list[face_idx]);
+            //         }
+            //         else if (face_vtx_list.size() == 8)
+            //         {
+            //             if (use_cell_centroid)
+            //                 computeVolume8Points(positions, cell_volume_list[face_idx]);
+            //         }
+            //     }
+            // });
         }
         
     }

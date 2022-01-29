@@ -253,8 +253,11 @@ void VertexModel::updateIPCVertices(const VectorXT& _u)
     deformed = undeformed + projected;
 
     int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
-    for (int i = 0; i < n_ipc_vtx; i++)
+    // for (int i = 0; i < n_ipc_vtx; i++)
+    tbb::parallel_for(0, n_ipc_vtx, [&](int i)
+    {
         ipc_vertices.row(i) = deformed.segment<3>(i * 3);
+    });
 }
 
 T VertexModel::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
@@ -263,12 +266,14 @@ T VertexModel::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& 
     Eigen::MatrixXd current_position(n_ipc_vtx, 3), 
         next_step_position(n_ipc_vtx, 3);
         
-    for (int i = 0; i < n_ipc_vtx; i++)
+    // for (int i = 0; i < n_ipc_vtx; i++)
+    tbb::parallel_for(0, n_ipc_vtx, [&](int i)
     {
         current_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3);
         // current_position.row(i) = undeformed.segment<3>(i * 3);
         next_step_position.row(i) = undeformed.segment<3>(i * 3) + _u.segment<3>(i * 3) + du.segment<3>(i * 3);
     }
+    );
     return ipc::compute_collision_free_stepsize(current_position, 
             next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
 }

@@ -630,6 +630,7 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         residual_temp = residual;
     }
 
+
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -708,13 +709,13 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
 
     }
 
-    if (add_tet_vol_barrier)
-    {
-        if (use_cell_centroid)
-            addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
-        else
-            addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
-    }
+        if (add_tet_vol_barrier)
+        {
+            if (use_cell_centroid)
+                addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+            else
+                addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
+        }
 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
@@ -880,7 +881,7 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
         step_size = std::min(step_size, ipc_step_size);
     }
 
-    if (use_sphere_radius_bound && !sphere_bound_penalty)
+    if (use_sphere_radius_bound && !sphere_bound_penalty && !use_sdf_boundary)
     {
         T inside_membrane_step_size = computeInsideMembraneStepSize(_u, du);
         step_size = std::min(step_size, inside_membrane_step_size);
