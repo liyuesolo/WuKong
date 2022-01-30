@@ -82,4 +82,8 @@ void computeArea8PointsSquaredSum(double stiffness, const Eigen::Matrix<double,2
 void computeArea8PointsSquaredSumGradient(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, Eigen::Matrix<double, 24, 1>& energygradient);
 void computeArea8PointsSquaredSumHessian(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, Eigen::Matrix<double, 24, 24>& energyhessian);
 
+void computeArea9PointsSquaredSum(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, double& energy);
+void computeArea9PointsSquaredSumGradient(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, Eigen::Matrix<double, 27, 1>& energygradient);
+void computeArea9PointsSquaredSumHessian(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, Eigen::Matrix<double, 27, 27>& energyhessian);
+
 #endif

@@ -138,6 +138,8 @@ T VertexModel::computeYolkVolume(bool verbose)
                 computeConeVolume7Points(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
             else if (face_vtx_list.size() == 8) 
                 computeConeVolume8Points(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            else if (face_vtx_list.size() == 9) 
+                computeConeVolume9Points(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
         }
     });
     return volumes.sum();
@@ -406,6 +408,14 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                     dedx *= -coeff;
                     addForceEntry<24>(residual, face_vtx_list, dedx);
                 }
+                else if (face_vtx_list.size() == 9)
+                {
+                    Vector<T, 27> dedx;
+                    if (use_cell_centroid)
+                        computeConeVolume9PointsGradient(positions, mesh_centroid, dedx);
+                    dedx *= -coeff;
+                    addForceEntry<27>(residual, face_vtx_list, dedx);
+                }
                 else
                 {
                     std::cout << "unknown polygon edge number" << std::endl;
@@ -474,6 +484,13 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         if (use_cell_centroid)
                             computeConeVolume8PointsGradient(positions, mesh_centroid, dedx);
                         addForceEntry<24>(dVdx_full, face_vtx_list, dedx);
+                    }
+                    else if (face_vtx_list.size() == 9)
+                    {
+                        Vector<T, 27> dedx;
+                        if (use_cell_centroid)
+                            computeConeVolume9PointsGradient(positions, mesh_centroid, dedx);
+                        addForceEntry<27>(dVdx_full, face_vtx_list, dedx);
                     }
                     else
                     {
@@ -550,6 +567,17 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         if(projectPD)
                             projectBlockPD<24>(hessian);
                         addHessianEntry<24>(entries, face_vtx_list, hessian);
+                    }
+                    else if (face_vtx_list.size() == 9)
+                    {
+                        Matrix<T, 27, 27> d2Vdx2;
+                        if (use_cell_centroid)
+                            computeConeVolume9PointsHessian(positions, mesh_centroid, d2Vdx2);
+                        Matrix<T, 27, 27> hessian;
+                        hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
+                        if(projectPD)
+                            projectBlockPD<27>(hessian);
+                        addHessianEntry<27>(entries, face_vtx_list, hessian);
                     }
                     else
                     {

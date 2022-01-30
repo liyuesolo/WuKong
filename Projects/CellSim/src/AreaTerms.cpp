@@ -189,6 +189,8 @@ void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
                     computeArea7PointsSquaredSum(w, positions, energies[face_idx]);
                 else if (face_vtx_list.size() == 8)
                     computeArea8PointsSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 9)
+                    computeArea9PointsSquaredSum(w, positions, energies[face_idx]);
                 else
                     std::cout << "unknown polygon edge case" << std::endl;
             }
@@ -293,6 +295,15 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
                     addForceEntry<24>(residual, face_vtx_list, -dedx);
                 }
             }
+            else if (face_vtx_list.size() == 9)
+            {
+                Vector<T, 27> dedx;
+                if (use_face_centroid)
+                {
+                    computeArea9PointsSquaredSumGradient(w, positions, dedx);
+                    addForceEntry<27>(residual, face_vtx_list, -dedx);
+                }
+            }
             else
             {
                 std::cout << "error " << __FILE__ << std::endl;
@@ -359,6 +370,15 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
                 if (projectPD) 
                     projectBlockPD<24>(hessian);
                 addHessianEntry<24>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 9)
+            {
+                Matrix<T, 27, 27> hessian;
+                if (use_face_centroid)
+                    computeArea9PointsSquaredSumHessian(w, positions, hessian);
+                if (projectPD) 
+                    projectBlockPD<27>(hessian);
+                addHessianEntry<27>(entries, face_vtx_list, hessian);
             }
             else
             {

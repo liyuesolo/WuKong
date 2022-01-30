@@ -265,9 +265,12 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
 
 void VertexModel::addSingleTetVolBarrierEnergy(T& energy)
 {
-    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    VectorXT energies = VectorXT::Zero(basal_face_start);
+    iterateFaceParallel([&](VtxList& face_vtx_list, int face_idx)
     {
-        if (face_idx < basal_face_start)
+        if (face_idx >= basal_face_start)
+            return;
+        if (!add_log_tet_barrier)
         {
             VectorXT positions;
             VtxList cell_vtx_list = face_vtx_list;
@@ -279,63 +282,100 @@ void VertexModel::addSingleTetVolBarrierEnergy(T& energy)
             computeTetBarrierWeightMask(positions, face_vtx_list, log_mask, qubic_mask, cell_volume_init[face_idx]);
 
             T log_term_active_vol = log_active_percentage * cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
-
             if(face_vtx_list.size() == 4)
-            {
-                if (add_log_tet_barrier)
-                    return;
-                else
-                    computeVolumeBarrier4Points(tet_vol_barrier_w, positions, volume_barrier_energy);
-                energy += volume_barrier_energy;
-            }
+                computeVolumeBarrier4Points(tet_vol_barrier_w, positions, energies[face_idx]);
             else if(face_vtx_list.size() == 5)
-            {
-                if (add_log_tet_barrier)
-                    computeVolLogBarrier5Points(tet_vol_barrier_w, log_term_active_vol, positions, log_mask, volume_barrier_energy);
-                else
-                    computeVolumeBarrier5Points(tet_vol_barrier_w, positions, volume_barrier_energy);
-                energy += volume_barrier_energy;
-                if (add_qubic_unilateral_term)
-                {
-                    T qubic_term = 0.0;
-                    T target = qubic_active_percentage * cell_volume_init[face_idx];
-                    computeVolQubicUnilateralPenalty5Points(tet_vol_qubic_w, target, positions, qubic_mask, qubic_term);
-                    energy += qubic_term;
-                }
-            }
+                computeVolumeBarrier5Points(tet_vol_barrier_w, positions, energies[face_idx]);
             else if(face_vtx_list.size() == 6)
-            {
-                if (add_log_tet_barrier)
-                    computeVolLogBarrier6Points(tet_vol_barrier_w, log_term_active_vol, positions, log_mask, volume_barrier_energy);
-                else
-                    computeVolumeBarrier6Points(tet_vol_barrier_w, positions, volume_barrier_energy);
-                energy += volume_barrier_energy;
-                if (add_qubic_unilateral_term)
-                {
-                    T qubic_term = 0.0;
-                    T target = qubic_active_percentage * cell_volume_init[face_idx];
-                    computeVolQubicUnilateralPenalty6Points(tet_vol_qubic_w, target, positions, qubic_mask, qubic_term);
-                    energy += qubic_term;
-                }
-            }
+                computeVolumeBarrier6Points(tet_vol_barrier_w, positions, energies[face_idx]);
             else if(face_vtx_list.size() == 7)
-            {
-                if (add_log_tet_barrier)
-                    return;
-                else
-                    computeVolumeBarrier7Points(tet_vol_barrier_w, positions, volume_barrier_energy);
-                energy += volume_barrier_energy;
-            }
+                computeVolumeBarrier7Points(tet_vol_barrier_w, positions, energies[face_idx]);
             else if(face_vtx_list.size() == 8)
-            {
-                if (add_log_tet_barrier)
-                    return;
-                else
-                    computeVolumeBarrier8Points(tet_vol_barrier_w, positions, volume_barrier_energy);
-                energy += volume_barrier_energy;
-            }
+                computeVolumeBarrier8Points(tet_vol_barrier_w, positions, energies[face_idx]);
+            else if(face_vtx_list.size() == 9)
+                computeVolumeBarrier9Points(tet_vol_barrier_w, positions, energies[face_idx]);
         }
     });
+    energy += energies.sum();
+    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    // {
+    //     if (face_idx < basal_face_start)
+    //     {
+    //         VectorXT positions;
+    //         VtxList cell_vtx_list = face_vtx_list;
+    //         for (int idx : face_vtx_list)
+    //             cell_vtx_list.push_back(idx + basal_vtx_start);
+    //         T volume_barrier_energy = 0.0;
+    //         positionsFromIndices(positions, cell_vtx_list);
+    //         VectorXT qubic_mask, log_mask;
+    //         computeTetBarrierWeightMask(positions, face_vtx_list, log_mask, qubic_mask, cell_volume_init[face_idx]);
+
+    //         T log_term_active_vol = log_active_percentage * cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
+
+    //         if(face_vtx_list.size() == 4)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 return;
+    //             else
+    //                 computeVolumeBarrier4Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //         }
+    //         else if(face_vtx_list.size() == 5)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 computeVolLogBarrier5Points(tet_vol_barrier_w, log_term_active_vol, positions, log_mask, volume_barrier_energy);
+    //             else
+    //                 computeVolumeBarrier5Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //             if (add_qubic_unilateral_term)
+    //             {
+    //                 T qubic_term = 0.0;
+    //                 T target = qubic_active_percentage * cell_volume_init[face_idx];
+    //                 computeVolQubicUnilateralPenalty5Points(tet_vol_qubic_w, target, positions, qubic_mask, qubic_term);
+    //                 energy += qubic_term;
+    //             }
+    //         }
+    //         else if(face_vtx_list.size() == 6)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 computeVolLogBarrier6Points(tet_vol_barrier_w, log_term_active_vol, positions, log_mask, volume_barrier_energy);
+    //             else
+    //                 computeVolumeBarrier6Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //             if (add_qubic_unilateral_term)
+    //             {
+    //                 T qubic_term = 0.0;
+    //                 T target = qubic_active_percentage * cell_volume_init[face_idx];
+    //                 computeVolQubicUnilateralPenalty6Points(tet_vol_qubic_w, target, positions, qubic_mask, qubic_term);
+    //                 energy += qubic_term;
+    //             }
+    //         }
+    //         else if(face_vtx_list.size() == 7)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 return;
+    //             else
+    //                 computeVolumeBarrier7Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //         }
+    //         else if(face_vtx_list.size() == 8)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 return;
+    //             else
+    //                 computeVolumeBarrier8Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //         }
+    //         else if(face_vtx_list.size() == 9)
+    //         {
+    //             if (add_log_tet_barrier)
+    //                 return;
+    //             else
+    //                 computeVolumeBarrier9Points(tet_vol_barrier_w, positions, volume_barrier_energy);
+    //             energy += volume_barrier_energy;
+    //         }
+    //     }
+    // });
 }
 
 void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
@@ -470,6 +510,21 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
                 //     std::getchar();
                 // }
             }
+            else if (face_vtx_list.size() == 9)
+            {
+                Vector<T, 54> dedx;
+                if (add_log_tet_barrier)
+                    return;
+                else
+                    computeVolumeBarrier9PointsGradient(tet_vol_barrier_w, positions, dedx);
+                addForceEntry<54>(residual, cell_vtx_list, -dedx);
+                // if (dedx.norm() > 1)
+                // {
+                //     std::cout << "force " << dedx.norm() << std::endl;
+                //     saveSingleCellEdges("troubled_cell.obj", cell_vtx_list, positions);
+                //     std::getchar();
+                // }
+            }
         }
     });
 }
@@ -565,6 +620,17 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
                 if (projectPD)
                     projectBlockPD<48>(hessian);
                 addHessianEntry<48>(entries, cell_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 9)
+            {
+                Matrix<T, 54, 54> hessian;
+                if (add_log_tet_barrier)
+                    return;
+                else
+                    computeVolumeBarrier9PointsHessian(tet_vol_barrier_w, positions, hessian);
+                if (projectPD)
+                    projectBlockPD<54>(hessian);
+                addHessianEntry<54>(entries, cell_vtx_list, hessian);
             }
         }
         

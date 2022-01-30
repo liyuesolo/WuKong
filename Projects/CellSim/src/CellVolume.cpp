@@ -236,6 +236,8 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
                         computeVolume7Points(positions, cell_volume_list[cell_idx]);
                     else if (face_vtx_list.size() == 8)
                         computeVolume8Points(positions, cell_volume_list[cell_idx]);
+                    else if (face_vtx_list.size() == 9)
+                        computeVolume9Points(positions, cell_volume_list[cell_idx]);
                  }
             });
             // int cnt = 0;
@@ -445,6 +447,14 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                     dedx *= -B * ci;
                     addForceEntry<48>(residual, cell_vtx_list, dedx);
                 }
+                else if (face_vtx_list.size() == 9)
+                {
+                    Vector<T, 54> dedx;
+                    if (use_cell_centroid)
+                        computeVolume9PointsGradient(positions, dedx);
+                    dedx *= -B * ci;
+                    addForceEntry<54>(residual, cell_vtx_list, dedx);
+                }
                 else
                 {
                     // std::cout << "unknown polygon edge case" << std::endl;
@@ -622,6 +632,28 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                     projectBlockPD<48>(hessian);
 
                 addHessianEntry<48>(entries, cell_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                Matrix<T, 54, 54> d2Vdx2;
+                if (use_cell_centroid)
+                    computeVolume9PointsHessian(positions, d2Vdx2);
+                
+                Vector<T, 54> dVdx;
+                if (use_cell_centroid)
+                    computeVolume9PointsGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 54, 54> hessian;
+                hessian.setZero();
+                
+                hessian += B * dVdx * dVdx.transpose();
+                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                
+                if(projectPD)
+                    projectBlockPD<54>(hessian);
+
+                addHessianEntry<54>(entries, cell_vtx_list, hessian);
             }
             else
             {

@@ -33,8 +33,8 @@ void Simulation::initializeCells()
     if (cells.scene_type == 1 || cells.scene_type == 2)
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_3k.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
         
     else if(cells.scene_type == 0)
@@ -463,14 +463,9 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 {
     bool use_cholmod = true;
     Timer t(true);
-    // StiffnessMatrix I(K.rows(), K.cols());
-    // I.setIdentity();
-
-    // StiffnessMatrix H = K;
 
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
 
-    
     T alpha = 10e-6;
     solver.analyzePattern(K);
     int i = 0;
@@ -530,7 +525,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         bool search_dir_correct_sign = dot_dx_g > 1e-3;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
-        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        bool solve_success = (K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
         if (!solve_success)
             invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 

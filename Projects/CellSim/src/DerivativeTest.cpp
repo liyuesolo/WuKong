@@ -244,7 +244,7 @@ void VertexModel::checkTotalHessianScale(bool perturb)
     }
     else
         buildSystemMatrix(u, A);
-
+    std::cout << "build matrix" << std::endl;
     VectorXT f0(n_dof);
     f0.setZero();
     computeResidual(u, f0);

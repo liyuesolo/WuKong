@@ -556,7 +556,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     deformed.conservativeResize(deformed.rows() * 2);
 
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
-    T cell_height = 1.0 * e0_norm;
+    T cell_height = 0.5 * e0_norm;
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);

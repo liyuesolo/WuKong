@@ -590,7 +590,7 @@ void VertexModel::saveIndividualCellsWithOffset()
 void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V, 
     Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest_state)
 {
-    bool triangulate_with_centroid = false;
+    bool triangulate_with_centroid = true;
     // compute polygon face centroid
     std::vector<TV> face_centroid(faces.size());
     tbb::parallel_for(0, (int)faces.size(), [&](int i){
@@ -629,6 +629,8 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 face_cnt += 5;
             else if (faces[i].size() == 8)
                 face_cnt += 6;
+            else if (faces[i].size() == 9)
+                face_cnt += 7;
             else
             {
                 std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
@@ -684,6 +686,16 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][7], faces[i][4]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][7], faces[i][5]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][5], faces[i][7], faces[i][6]);
+            }
+            else if (faces[i].size() == 9)
+            {
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][1], faces[i][0]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][1], faces[i][8]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][8], faces[i][7]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][7], faces[i][6]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][6], faces[i][3]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][3], faces[i][6], faces[i][4]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][4], faces[i][6], faces[i][5]);
             }
             else
             {

@@ -31,7 +31,7 @@ void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices
     n_points = vertices.rows() / 3;
     data_points = vertices;
     data_point_normals = normals;
-    T h = 0.05;
+    T h = 0.01;
     radii = VectorXT::Ones(n_points) * h;
     data_points += normals * epsilon;
     hash.build(h * 4.0, data_points); 

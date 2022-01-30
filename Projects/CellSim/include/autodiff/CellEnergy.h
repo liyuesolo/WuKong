@@ -53,4 +53,9 @@ void computeVolume7PointsHessian(const Eigen::Matrix<double,42,1> & cell_vertice
 void computeVolume8Points(const Eigen::Matrix<double,48,1> & cell_vertices, double& energy);
 void computeVolume8PointsGradient(const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 1>& energygradient);
 void computeVolume8PointsHessian(const Eigen::Matrix<double,48,1> & cell_vertices, Eigen::Matrix<double, 48, 48>& energyhessian);
+
+void computeVolume9Points(const Eigen::Matrix<double,54,1> & cell_vertices, double& energy);
+void computeVolume9PointsGradient(const Eigen::Matrix<double,54,1> & cell_vertices, Eigen::Matrix<double, 54, 1>& energygradient);
+void computeVolume9PointsHessian(const Eigen::Matrix<double,54,1> & cell_vertices, Eigen::Matrix<double, 54, 54>& energyhessian);
+
 #endif

@@ -38,7 +38,7 @@ int compute_energy_cnt = 0;
 int static_solve_step = 0;
 bool check_modes = false;
 
-int load_obj_iter_cnt = 950;
+int load_obj_iter_cnt = 0;
 
 Eigen::MatrixXd evectors;
 Eigen::VectorXd evalues;
