@@ -236,7 +236,7 @@ void VertexModel::computeIPCRestData()
             }
             else if (face_vtx_list.size() == 9)
             {
-                ipc_faces.row(face_cnt++) = IV(face_vtx_list[0], face_vtx_list[2], face_vtx_list[1]);
+                ipc_faces.row(face_cnt++) = IV(face_vtx_list[8], face_vtx_list[1], face_vtx_list[0]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[8], face_vtx_list[2], face_vtx_list[1]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[7], face_vtx_list[2], face_vtx_list[8]);
                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[2], face_vtx_list[7]);

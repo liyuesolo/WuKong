@@ -496,6 +496,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
     normalizeToUnit(V);
+    
+    T scale = 5.0;
+
+    V *= scale;
 
     // face centroids corresponds to the vertices of the dual mesh 
     std::vector<TV> face_centroids(F.rows());
@@ -629,7 +633,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     f = VectorXT::Zero(deformed.rows());
     undeformed = deformed;
 
-    B = 1e6;
+    B = 1e6 * scale;
     By = 1e5;
 
     contract_apical_face = false;
@@ -675,9 +679,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                     // sigma = 2.0;// apical
 
                     // for drosophila
-                    alpha = 10.0; // WORKED
-                    gamma = 3.0;
-                    sigma = 2.0;// apical
+                    alpha = 10.0 * scale; // WORKED
+                    gamma = 3.0 * scale;
+                    sigma = 2.0 * scale;// apical
                 }
                 else
                 {
@@ -758,7 +762,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
                 // Gamma = 0.5;//worked for sphere
-                Gamma = 0.5;//worked for the centroid formulation
+                Gamma = 0.5 * scale;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -869,7 +873,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     add_log_tet_barrier = false;
     tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid && !add_log_tet_barrier)
-        tet_vol_barrier_w = 10e-30;
+        tet_vol_barrier_w = 1e-31;
     else
         tet_vol_barrier_w = 1e10;
     // std::cout << cell_volume_init[0] << std::endl;
@@ -894,8 +898,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e1;
-        T normal_offset = 1e-3;
+        bound_coeff = 1e1 * scale;
+        T normal_offset = 1e-3;// * scale;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);

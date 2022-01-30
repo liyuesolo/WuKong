@@ -633,7 +633,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
 
                 addHessianEntry<48>(entries, cell_vtx_list, hessian);
             }
-            else if (face_vtx_list.size() == 8)
+            else if (face_vtx_list.size() == 9)
             {
                 Matrix<T, 54, 54> d2Vdx2;
                 if (use_cell_centroid)

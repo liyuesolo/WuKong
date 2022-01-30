@@ -689,7 +689,7 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
             }
             else if (faces[i].size() == 9)
             {
-                F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][1], faces[i][0]);
+                F.row(face_cnt++) = Eigen::Vector3i(faces[i][1], faces[i][0], faces[i][8]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][1], faces[i][8]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][8], faces[i][7]);
                 F.row(face_cnt++) = Eigen::Vector3i(faces[i][2], faces[i][7], faces[i][6]);
@@ -767,6 +767,9 @@ void VertexModel::generateMeshForRendering(Eigen::MatrixXd& V,
                     C.row(face_cnt++) = color;
             else if (faces[i].size() == 8)
                 for (int k = 0; k < 6; k++)
+                    C.row(face_cnt++) = color;
+            else if (faces[i].size() == 9)
+                for (int k = 0; k < 7; k++)
                     C.row(face_cnt++) = color;
             else
             {
