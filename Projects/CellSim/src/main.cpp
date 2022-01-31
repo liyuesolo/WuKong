@@ -338,7 +338,7 @@ int main()
         bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
     updateScreen(viewer);
 
-    // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_IPC_fix3points_1536", 0, 1536);
+    // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_drosophila_4k", 0, 364);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;

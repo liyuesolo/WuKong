@@ -497,7 +497,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     igl::readOBJ(filename, V, F);
     normalizeToUnit(V);
     
-    T scale = 5.0;
+    T scale = 2.0;
 
     V *= scale;
 
@@ -560,7 +560,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     deformed.conservativeResize(deformed.rows() * 2);
 
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
-    T cell_height = 0.5 * e0_norm;
+    // T cell_height = 0.5 * e0_norm; //drosophila 1k
+    T cell_height = 0.8 * e0_norm;
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);
@@ -762,7 +763,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
                 // Gamma = 0.5;//worked for sphere
-                Gamma = 0.5 * scale;//worked for the centroid formulation
+                Gamma = 0.5 * scale * 10.0;//worked for the centroid formulation
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -873,7 +874,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     add_log_tet_barrier = false;
     tet_vol_barrier_dhat = 1e-6;
     if (use_cell_centroid && !add_log_tet_barrier)
-        tet_vol_barrier_w = 1e-31;
+        tet_vol_barrier_w = 1e-34;
     else
         tet_vol_barrier_w = 1e10;
     // std::cout << cell_volume_init[0] << std::endl;
