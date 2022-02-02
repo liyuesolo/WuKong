@@ -8,6 +8,7 @@
 
 #include "../include/VertexModel.h"
 #include "../include/Simulation.h"
+#include "../include/SensitivityAnalysis.h"
 #include "../include/Misc.h"
 
 Eigen::MatrixXd V;
@@ -18,6 +19,8 @@ using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 
 Simulation simulation;
+
+SensitivityAnalysis sa(simulation);
 
 static bool show_rest = false;
 static bool show_current = true;
@@ -47,9 +50,11 @@ Eigen::MatrixXd bounding_surface_samples;
 Eigen::MatrixXd bounding_surface_samples_color;
 int sdf_test_sample_idx_offset = 0;
 
-auto loadEigenVectors = [&]()
+
+
+auto loadEigenVectors = [&](const std::string& filename)
 {
-    std::ifstream in("/home/yueli/Documents/ETH/WuKong/cell_eigen_vectors.txt");
+    std::ifstream in(filename);
     int row, col;
     in >> row >> col;
     evectors.resize(row, col);
@@ -282,10 +287,15 @@ int main()
             // simulation.reset();
             viewer.core().is_animating = true;
             return true;
+        case '0':
+            check_modes = true;
+            loadEigenVectors("/home/yueli/Documents/ETH/WuKong/cell_svd_vectors.txt");
+            modes = 0;
+            return true;
         case '1':
             check_modes = true;
             simulation.computeLinearModes();
-            loadEigenVectors();
+            loadEigenVectors("/home/yueli/Documents/ETH/WuKong/cell_eigen_vectors.txt");
             
             for (int i = 0; i < evalues.rows(); i++)
             {
@@ -336,9 +346,14 @@ int main()
     bounding_surface_samples_color = bounding_surface_samples;
     for (int i = 0; i < bounding_surface_samples.rows(); i++)
         bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
+
+    // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_drosophila_4k_with_cephalic", 0, 1117);
+
+    sa.initialize();
+    sa.svdOnSensitivityMatrix();
+
     updateScreen(viewer);
 
-    // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_drosophila_4k", 0, 364);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;

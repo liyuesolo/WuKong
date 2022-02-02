@@ -150,52 +150,6 @@ void VertexModel::computeLinearModes()
     }
 }
 
-bool VertexModel::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
-{
-    StiffnessMatrix I(K.rows(), K.cols());
-    I.setIdentity();
-
-    StiffnessMatrix H = K;
-
-    // Eigen::PardisoLDLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
-    T alpha = 10e-6;
-    solver.analyzePattern(K);
-    for (int i = 0; i < 50; i++)
-    {
-        // std::cout << i << std::endl;
-        solver.factorize(K);
-        if (solver.info() == Eigen::NumericalIssue)
-        {
-            // std::cout << "indefinite" << std::endl;
-            K = H + alpha * I;        
-            alpha *= 10;
-            continue;
-        }
-        du = solver.solve(residual);
-
-        T dot_dx_g = du.normalized().dot(residual.normalized());
-
-        // VectorXT d_vector = solver.vectorD();
-        int num_negative_eigen_values = 0;
-
-
-        bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-6;
-        bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
-
-        if (positive_definte && search_dir_correct_sign && solve_success)
-            return true;
-        else
-        {
-            K = H + alpha * I;        
-            alpha *= 10;
-        }
-    }
-    return false;
-}
-
-
 
 void VertexModel::updateALMData(const VectorXT& _u)
 {
@@ -314,12 +268,13 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
         }
         else
         {
-            iterateContractingEdgeSerial([&](Edge& e){    
-                TV vi = deformed.segment<3>(e[0] * 3);
-                TV vj = deformed.segment<3>(e[1] * 3);
-                T edge_length = computeEdgeSquaredNorm(vi, vj);
-                contraction_term += Gamma * edge_length;
-            });
+            addEdgeContractionEnergy(Gamma, contraction_term);
+            // iterateContractingEdgeSerial([&](Edge& e){    
+            //     TV vi = deformed.segment<3>(e[0] * 3);
+            //     TV vj = deformed.segment<3>(e[1] * 3);
+            //     T edge_length = computeEdgeSquaredNorm(vi, vj);
+            //     contraction_term += Gamma * edge_length;
+            // });
         }
     }
 
@@ -476,14 +431,15 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         if (contract_apical_face)
             addFaceContractionForceEntries(Gamma, residual);
         else
-            iterateContractingEdgeSerial([&](Edge& e){
-                TV vi = deformed.segment<3>(e[0] * 3);
-                TV vj = deformed.segment<3>(e[1] * 3);
-                Vector<T, 6> dedx;
-                computeEdgeSquaredNormGradient(vi, vj, dedx);
-                dedx *= -Gamma;
-                addForceEntry<6>(residual, {e[0], e[1]}, dedx);
-            }); 
+            addEdgeContractionForceEntries(Gamma, residual);
+            // iterateContractingEdgeSerial([&](Edge& e){
+            //     TV vi = deformed.segment<3>(e[0] * 3);
+            //     TV vj = deformed.segment<3>(e[1] * 3);
+            //     Vector<T, 6> dedx;
+            //     computeEdgeSquaredNormGradient(vi, vj, dedx);
+            //     dedx *= -Gamma;
+            //     addForceEntry<6>(residual, {e[0], e[1]}, dedx);
+            // }); 
     }
 
     if (print_force_norm)
@@ -662,14 +618,15 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         if (contract_apical_face)
             addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
-            iterateContractingEdgeSerial([&](Edge& e){
-                TV vi = deformed.segment<3>(e[0] * 3);
-                TV vj = deformed.segment<3>(e[1] * 3);
-                Matrix<T, 6, 6> hessian;
-                computeEdgeSquaredNormHessian(vi, vj, hessian);
-                hessian *= Gamma;
-                addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-            });
+            addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
+            // iterateContractingEdgeSerial([&](Edge& e){
+            //     TV vi = deformed.segment<3>(e[0] * 3);
+            //     TV vj = deformed.segment<3>(e[1] * 3);
+            //     Matrix<T, 6, 6> hessian;
+            //     computeEdgeSquaredNormHessian(vi, vj, hessian);
+            //     hessian *= Gamma;
+            //     addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+            // });
     }
 
     if (dynamics)
@@ -681,15 +638,6 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     }
     else
     {
-        // if (contract_apical_face)
-        // {
-        //     addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        // }
-        // else
-        // {
-        //     addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        // }
-        
         addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
 
         if (preserve_tet_vol)
@@ -775,14 +723,15 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
         {
-            iterateContractingEdgeSerial([&](Edge& e){
-                TV vi = deformed.segment<3>(e[0] * 3);
-                TV vj = deformed.segment<3>(e[1] * 3);
-                Matrix<T, 6, 6> hessian;
-                computeEdgeSquaredNormHessian(vi, vj, hessian);
-                hessian *= Gamma;
-                addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-            });
+            addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
+            // iterateContractingEdgeSerial([&](Edge& e){
+            //     TV vi = deformed.segment<3>(e[0] * 3);
+            //     TV vj = deformed.segment<3>(e[1] * 3);
+            //     Matrix<T, 6, 6> hessian;
+            //     computeEdgeSquaredNormHessian(vi, vj, hessian);
+            //     hessian *= Gamma;
+            //     addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+            // });
         }
     }
 
@@ -792,13 +741,6 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     }
     else
     {
-        // if (contract_apical_face)
-        // {
-        //     addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        // }
-        // else
-        //     addEdgeHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
-        
         addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
         if (preserve_tet_vol)
             addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);

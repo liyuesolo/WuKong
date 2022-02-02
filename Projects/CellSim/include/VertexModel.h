@@ -586,7 +586,7 @@ public:
         StiffnessMatrix& K, MatrixXT& UV);
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
-    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    
 
     T computeInsideMembraneStepSize(const VectorXT& _u, const VectorXT& du);
 
@@ -595,6 +595,9 @@ public:
     void addEdgeForceEntries(Region region, T w, VectorXT& residual);
     void addEdgeHessianEntries(Region region, T w, 
         std::vector<Entry>& entries, bool projectPD = false);
+    void addEdgeContractionEnergy(T w, T& energy);
+    void addEdgeContractionForceEntries(T w, VectorXT& residual);
+    void addEdgeContractionHessianEntries(T w, std::vector<Entry>& entries, bool projectPD = false);
 
     // AreaTerms.cpp
     void addFaceContractionEnergy(T w, T& energy);
@@ -753,6 +756,11 @@ public:
     // void computePentaPrismTetVol(const Vector<T, 30>& prism_vertices, Vector<T, > tet_vol);
     void computePentaPrismTetVol(const Vector<T, 30>& prism_vertices, Vector<T, 9>& tet_vol);
     void computeHexPrismTetVol(const Vector<T, 36>& prism_vertices, Vector<T, 12>& tet_vol);
+
+
+    // SensitivityDerivatives.cpp
+    void dfdpWeights(MatrixXT& dfdp);
+    void dfdpWeightsFD(MatrixXT& dfdp);
 private:
 
     inline T computeTetVolume(const TV& a, const TV& b, const TV& c, const TV& d)

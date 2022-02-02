@@ -24,54 +24,6 @@ void VertexModel::approximateMembraneThickness()
 
 void VertexModel::initializeContractionData()
 {
-    // VtxList contracting_vertices;
-    // if (scene_type == 0)
-    // {
-    //     // on low res sphere
-    //     contracting_vertices = {37, 36, 39, 49, 48, 50, 23, 67, 33, 32, 34};
-    //     for (int i = 0; i < contracting_vertices.size(); i++)
-    //     {
-    //         int j = (i + 1) % contracting_vertices.size();
-    //         Edge e(contracting_vertices[i], contracting_vertices[j]);
-    //         contracting_edges.push_back(e);
-    //     }
-    // }
-    // else if (scene_type == 1)
-    // {
-    //     // on high res sphere
-    //     contracting_vertices = {576, 577, 587, 618, 610, 608, 611, 615, 534,
-    //         529, 528, 530, 543, 526, 515, 512, 513, 523, 554, 
-    //         546, 544, 
-    //         547, 551, 598, 
-    //         593, 592, 594, 
-    //         607, 590, 579};
-        
-    //     for (int i = 0; i < contracting_vertices.size(); i++)
-    //     {
-    //         int j = (i + 1) % contracting_vertices.size();
-    //         Edge e(contracting_vertices[i], contracting_vertices[j]);
-    //         contracting_edges.push_back(e);
-    //     }    
-    // }
-    // else if (scene_type == 2)
-    // {
-    //     contracting_vertices = {238, 281, 324, 329, 331, 333, 334, 339, 
-    //     341, 343, 347, 349, 351, 366, 370, 372, 374, 375, 379, 380, 381, 385, 386, 387};
-
-    //     iterateEdgeSerial([&](Edge& e){
-    //         auto find_v0 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[0]);
-    //         auto find_v1 = std::find(contracting_vertices.begin(), contracting_vertices.end(), e[1]);
-
-    //         if (find_v0 != contracting_vertices.end() && find_v1 != contracting_vertices.end())
-    //         {
-    //             contracting_edges.push_back(e);
-    //         }
-    //     });
-    //     std::cout << contracting_edges.size() << std::endl;
-    // }
-    
-
-
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
     TV mid_point = 0.5 * (min_corner + max_corner);
@@ -141,6 +93,106 @@ void VertexModel::initializeContractionData()
             return false;
         };
 
+        auto isContractingEdgeCephalic = [&](const Edge& e)
+        {
+            TV x0 = deformed.segment<3>(e[0] * 3);
+            TV x1 = deformed.segment<3>(e[1] * 3);
+            T one_third = min_corner[0] + 1.0 / 3.0 * (max_corner[0] - min_corner[0]);
+            T width = 0.005 * (max_corner[0] - min_corner[0]);
+            bool region = std::abs(one_third - x0[0]) < width || std::abs(one_third - x1[0]) < width;
+            bool apical_edge = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            if (region && apical_edge)
+                return true;
+            return false;
+        };
+
+        auto isContractingEdgeVentral = [&](const Edge& e)
+        {
+            
+            TV x0 = deformed.segment<3>(e[0] * 3);
+            TV x1 = deformed.segment<3>(e[1] * 3);
+
+            T percent_y = 0.05;
+            bool bottom_y = x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y
+                && x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y;
+            bool apical_edge = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            T percent_x = 0.2, percent_z = 0.1;
+            bool middle_z = x0[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                    x0[2] < mid_point[2] + 0.5 * delta[2] * percent_z &&
+                    x1[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                    x1[2] < mid_point[2] + 0.5 * delta[2] * percent_z;
+            bool middle_x = x0[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+                x0[0] < mid_point[0] + 0.5 * delta[0] * percent_x &&
+                x1[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+                x1[0] < mid_point[0] + 0.5 * delta[0] * percent_x;
+
+            if (bottom_y && apical_edge && middle_z && middle_x)
+                return true;
+            return false;
+        };
+
+        auto isCFFace = [&](VtxList& face_vtx_list, int face_idx)
+        {
+            TV centroid;
+            computeFaceCentroid(face_vtx_list, centroid);
+            T one_third = min_corner[0] + 1.0 / 3.0 * (max_corner[0] - min_corner[0]);
+            T width = 0.02 * (max_corner[0] - min_corner[0]);
+            bool cephalic_region = std::abs(one_third - centroid[0]) < width;
+            bool apical = face_idx < basal_face_start;
+            T percent_y = 0.8;
+            bool top_y = true;//centroid[1] > max_corner[1] - (max_corner[1] - min_corner[1]) * percent_y;
+
+            if (cephalic_region && apical & top_y)
+                return true;
+            return false;
+        };
+
+        auto isVFFace = [&](VtxList& face_vtx_list, int face_idx)
+        {
+            TV centroid;
+            computeFaceCentroid(face_vtx_list, centroid);
+            bool apical = face_idx < basal_face_start;
+            T percent_y = 0.1;
+            bool bottom_y = centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y;
+            T percent_x = 0.4, percent_z = 0.1;
+            bool middle_z = centroid[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                    centroid[2] < mid_point[2] + 0.5 * delta[2] * percent_z;
+            bool middle_x = centroid[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+                centroid[0] < mid_point[0] + 0.5 * delta[0] * percent_x;
+            if (bottom_y && apical && middle_z && middle_x)
+                return true;
+            return false;
+        };
+
+        auto isDTFFace = [&](VtxList& face_vtx_list, int face_idx)
+        {
+            TV centroid;
+            computeFaceCentroid(face_vtx_list, centroid);
+            bool apical = face_idx < basal_face_start;
+            T percent_y = 0.1;
+            bool top_y = centroid[1] > max_corner[1] - (max_corner[1] - min_corner[1]) * percent_y;
+            T width = 0.1 * (max_corner[0] - min_corner[0]);
+            T three_fifth = min_corner[0] + 3.0 / 5.0 * (max_corner[0] - min_corner[0]);
+            bool dtf_region = std::abs(centroid[0] - three_fifth) < width;
+            if (apical && top_y && dtf_region)
+                return true;
+            return false;
+        };
+
+        auto isPMFace = [&](VtxList& face_vtx_list, int face_idx)
+        {   
+            TV centroid;
+            computeFaceCentroid(face_vtx_list, centroid);
+            bool apical = face_idx < basal_face_start;
+            T percent_y = 0.4;
+            bool top_y = centroid[1] > max_corner[1] - (max_corner[1] - min_corner[1]) * percent_y;
+            T width = 0.1 * (max_corner[0] - min_corner[0]);
+            bool pm_region = centroid[0] > max_corner[0] - width;
+            if (apical && pm_region && top_y)
+                return true;
+            return false;
+        };
+
         iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
         {
             if (face_idx < basal_face_start)
@@ -149,13 +201,22 @@ void VertexModel::initializeContractionData()
                 for (int i = 0; i < face_vtx_list.size(); i++)
                 {
                     int j = (i + 1) % face_vtx_list.size();
-                    if (validEdge(Edge(face_vtx_list[i], face_vtx_list[j])))
+                    Edge e = Edge(face_vtx_list[i], face_vtx_list[j]);
+                    bool is_ventral_edge = isContractingEdgeVentral(e);
+                    if (is_ventral_edge)
                     {
                         add_all_edges_in_this_face = true;
                         break;
                     }
                 }
-                if (add_all_edges_in_this_face)
+                add_all_edges_in_this_face = false;
+                bool is_CF_face = isCFFace(face_vtx_list, face_idx);
+                bool is_VF_face = isVFFace(face_vtx_list, face_idx);
+                bool is_DTF_face = isDTFFace(face_vtx_list, face_idx);
+                bool is_PM_face = isPMFace(face_vtx_list, face_idx);
+
+                // if (is_CF_face || is_VF_face)// || is_DTF_face || is_PM_face)
+                if (is_VF_face)
                 {
                     for (int i = 0; i < face_vtx_list.size(); i++)
                     {
@@ -763,7 +824,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
                 // Gamma = 0.5;//worked for sphere
-                Gamma = 0.5 * scale * 10.0;//worked for the centroid formulation
+                // Gamma = 0.5 * scale * 10.0;//drosophila 4k
+                Gamma = 0.5 * scale * 10.0;
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
