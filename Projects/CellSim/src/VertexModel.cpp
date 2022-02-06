@@ -268,13 +268,10 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
         }
         else
         {
-            addEdgeContractionEnergy(Gamma, contraction_term);
-            // iterateContractingEdgeSerial([&](Edge& e){    
-            //     TV vi = deformed.segment<3>(e[0] * 3);
-            //     TV vj = deformed.segment<3>(e[1] * 3);
-            //     T edge_length = computeEdgeSquaredNorm(vi, vj);
-            //     contraction_term += Gamma * edge_length;
-            // });
+            if (assign_per_edge_weight)
+                addPerEdgeEnergy(contraction_term);
+            else
+                addEdgeContractionEnergy(Gamma, contraction_term);
         }
     }
 
@@ -300,15 +297,7 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
     else
     {
         // ===================================== Edge length =====================================
-        // if (contract_apical_face)
-        // {
-        //     addFaceAreaEnergy(Apical, sigma, area_term);
-        // }
-        // else
-        //     addEdgeEnergy(Apical, sigma, edge_length_term);
-
         
-
         addEdgeEnergy(ALL, weights_all_edges, edge_length_term);
 
         if (verbose)
@@ -431,15 +420,12 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
         if (contract_apical_face)
             addFaceContractionForceEntries(Gamma, residual);
         else
-            addEdgeContractionForceEntries(Gamma, residual);
-            // iterateContractingEdgeSerial([&](Edge& e){
-            //     TV vi = deformed.segment<3>(e[0] * 3);
-            //     TV vj = deformed.segment<3>(e[1] * 3);
-            //     Vector<T, 6> dedx;
-            //     computeEdgeSquaredNormGradient(vi, vj, dedx);
-            //     dedx *= -Gamma;
-            //     addForceEntry<6>(residual, {e[0], e[1]}, dedx);
-            // }); 
+        {
+            if (assign_per_edge_weight)
+                addPerEdgeForceEntries(residual);
+            else
+                addEdgeContractionForceEntries(Gamma, residual);
+        }
     }
 
     if (print_force_norm)
@@ -464,19 +450,6 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     }
     else
     {
-        // if (contract_apical_face)
-        // {
-        //     addFaceAreaForceEntries(Apical, sigma, residual);
-        //     if (print_force_norm)
-        //         std::cout << "\tapical area force norm: " << (residual - residual_temp).norm() << std::endl;
-        // }
-        // else
-        // {
-        //     addEdgeForceEntries(Apical, sigma, residual);
-        //     if (print_force_norm)
-        //         std::cout << "\tapical edge force norm: " << (residual - residual_temp).norm() << std::endl;
-        // }
-        
         addEdgeForceEntries(ALL, weights_all_edges, residual);
         if (print_force_norm)
             std::cout << "\tall edges contraction force norm: " << (residual - residual_temp).norm() << std::endl;
@@ -618,15 +591,12 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         if (contract_apical_face)
             addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
-            addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
-            // iterateContractingEdgeSerial([&](Edge& e){
-            //     TV vi = deformed.segment<3>(e[0] * 3);
-            //     TV vj = deformed.segment<3>(e[1] * 3);
-            //     Matrix<T, 6, 6> hessian;
-            //     computeEdgeSquaredNormHessian(vi, vj, hessian);
-            //     hessian *= Gamma;
-            //     addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-            // });
+        {
+            if (assign_per_edge_weight)
+                addPerEdgeHessianEntries(entries, project_block_hessian_PD);
+            else
+                addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
+        }
     }
 
     if (dynamics)
@@ -723,15 +693,10 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             addFaceContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         else
         {
-            addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
-            // iterateContractingEdgeSerial([&](Edge& e){
-            //     TV vi = deformed.segment<3>(e[0] * 3);
-            //     TV vj = deformed.segment<3>(e[1] * 3);
-            //     Matrix<T, 6, 6> hessian;
-            //     computeEdgeSquaredNormHessian(vi, vj, hessian);
-            //     hessian *= Gamma;
-            //     addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
-            // });
+            if (assign_per_edge_weight)
+                addPerEdgeHessianEntries(entries, project_block_hessian_PD);
+            else
+                addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         }
     }
 

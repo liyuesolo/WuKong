@@ -259,38 +259,14 @@ int main()
         default: 
             return false;
         case ' ':
-            // simulation.cells.Gamma = 4.0;
-            // simulation.cells.gamma = 10;
-            // simulation.cells.alpha = 200;
-            // simulation.cells.print_force_norm = false;
-            // simulation.staticSolve();
-            // updateScreen(viewer);
-            // simulation.reset();
-            // simulation.cells.gamma = 20;
-            // simulation.staticSolve();
-            // updateScreen(viewer);
-            // simulation.reset();
-            // simulation.cells.gamma = 10;
-            // simulation.staticSolve();
-            // updateScreen(viewer);
-            // simulation.reset();
-            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_18.obj");
-            // simulation.reset();
-            // updateScreen(viewer);
-            // simulation.cells.gamma = 1;
-            // simulation.staticSolve();
-            // updateScreen(viewer);
-            // simulation.reset();
-            // simulation.cells.gamma = 0.1;
-            // simulation.staticSolve();
-            // updateScreen(viewer);
-            // simulation.reset();
             viewer.core().is_animating = true;
             return true;
         case '0':
             check_modes = true;
             loadEigenVectors("/home/yueli/Documents/ETH/WuKong/cell_svd_vectors.txt");
+            // loadEigenVectors("/home/yueli/Documents/ETH/WuKong/dxdp.txt");
             modes = 0;
+            std::cout << "modes " << modes << std::endl;
             return true;
         case '1':
             check_modes = true;
@@ -348,9 +324,12 @@ int main()
         bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
 
     // simulation.cells.loadMeshAndSaveCentroid("output/cells/cell_drosophila_4k_with_cephalic", 0, 1117);
-
+    // simulation.verbose = true;
+    simulation.cells.print_force_norm = false;
     sa.initialize();
-    sa.svdOnSensitivityMatrix();
+    // sa.svdOnSensitivityMatrix();
+    sa.optimizePerEdgeWeigths();
+    
 
     updateScreen(viewer);
 

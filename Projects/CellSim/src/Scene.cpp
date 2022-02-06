@@ -551,6 +551,35 @@ void VertexModel::saveCellMesh(int iter)
     out.close();
 }
 
+void VertexModel::sdfFromHighResDualMesh(const std::string& filename)
+{
+    Eigen::MatrixXd V, N;
+    Eigen::MatrixXi F;
+    igl::readOBJ(filename, V, F);
+    normalizeToUnit(V);
+    
+    T scale = 2.0;
+
+    V *= scale;
+    std::vector<TV> face_centroids(F.rows());
+    VectorXT vtx_normals(F.rows() * 3);
+
+    VectorXT vertices(F.rows() * 3);
+
+    tbb::parallel_for(0, (int)F.rows(), [&](int i)
+    {
+        TV centroid = 1.0/3.0*(V.row(F.row(i)[0]) + V.row(F.row(i)[1]) + V.row(F.row(i)[2]));
+        vertices.segment<3>(i * 3) = centroid;
+        face_centroids[i] = centroid;
+        TV ej = (V.row(F.row(i)[2]) - V.row(F.row(i)[1])).normalized();
+        TV ei = (V.row(F.row(i)[0]) - V.row(F.row(i)[1])).normalized();
+        vtx_normals.segment<3>(i * 3) = ej.cross(ei).normalized();
+    });
+    
+    VectorXi indices;
+    sdf.initializedMeshData(vertices, indices, vtx_normals, 1e-3);
+}
+
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
     Eigen::MatrixXd V, N;
@@ -622,7 +651,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
     // T cell_height = 0.5 * e0_norm; //drosophila 1k
-    T cell_height = 0.8 * e0_norm;
+    // T cell_height = 0.8 * e0_norm;
+    T cell_height = 0.5 * e0_norm;
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);
@@ -928,8 +958,21 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     weights_all_edges = 500.0;
     if (use_cell_centroid)
         weights_all_edges = 0.1;
-    // weights_all_edges = 0.0;
+    weights_all_edges = 0.0;
     weights_all_edges = 0.1 * Gamma;
+
+    assign_per_edge_weight = true;
+    if (assign_per_edge_weight)
+    {
+        int apical_edge_cnt = 0;
+        for (Edge& e : edges)
+            if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+                apical_edge_cnt++;
+        edge_weights.resize(apical_edge_cnt);
+        edge_weights.setConstant(5);
+    }
+
+    // edge_weights[0] -= 1e-6;
 
     add_tet_vol_barrier = true;
 
@@ -964,19 +1007,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         bound_coeff = 1e1 * scale;
         T normal_offset = 1e-3;// * scale;
         // T normal_offset = -1e-2;
-        VectorXT vertices; VectorXi indices;
-        getInitialApicalSurface(vertices, indices);
-        vtx_normals.conservativeResize(vertices.rows());
-        int offset = basal_vtx_start * 3;
-        for (int i = 0; i < basal_face_start; i++)
-        {
-            TV xi = undeformed.segment<3>(faces[i][0] * 3);
-            TV xj = undeformed.segment<3>(faces[i][1] * 3);
-            TV xk = undeformed.segment<3>(faces[i][2] * 3);
-            TV normal = (xk - xj).normalized().cross((xi - xj).normalized()).normalized();
-            vtx_normals.segment<3>(offset + i * 3) = -normal;
-        }
-        sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
+        // VectorXT vertices; VectorXi indices;
+        // getInitialApicalSurface(vertices, indices);
+        // vtx_normals.conservativeResize(vertices.rows());
+        // int offset = basal_vtx_start * 3;
+        // for (int i = 0; i < basal_face_start; i++)
+        // {
+        //     TV xi = undeformed.segment<3>(faces[i][0] * 3);
+        //     TV xj = undeformed.segment<3>(faces[i][1] * 3);
+        //     TV xk = undeformed.segment<3>(faces[i][2] * 3);
+        //     TV normal = (xk - xj).normalized().cross((xi - xj).normalized()).normalized();
+        //     vtx_normals.segment<3>(offset + i * 3) = -normal;
+        // }
+        // sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
+        sdfFromHighResDualMesh("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj");
         // std::cout << "total volume " << total_volume << std::endl;
         total_volume = computeInitialApicalVolumeWithOffset(vtx_normals.segment(0, num_nodes * 3), normal_offset);
         deformed = undeformed;
@@ -1016,5 +1060,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // gamma = 3.0;
     // // sigma = 2.0;
     // B = 1e6;
+    // sigma = 0; alpha = 0.0; gamma = 0.0;
+    // weights_all_edges = 0;
 }
 

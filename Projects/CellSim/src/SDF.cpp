@@ -1,3 +1,5 @@
+#include <igl/readOBJ.h>
+
 #include "../include/SDF.h"
 
 #include <openvdb/tools/MeshToVolume.h>
@@ -37,6 +39,11 @@ void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices
     hash.build(h * 4.0, data_points); 
     computeBBox();
 }   
+
+void IMLS::initializeFromMeshFile(const std::string& filename)
+{
+
+}
 
 T IMLS::value(const TV& test_point)
 {

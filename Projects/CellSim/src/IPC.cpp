@@ -257,7 +257,7 @@ void VertexModel::computeIPCRestData()
     for (int i = 0; i < edges_vec.size(); i++)
         ipc_edges.row(i) = edges_vec[i];    
     
-    saveIPCData("./", 0, true);
+    // saveIPCData("./", 0, true);
 
     bool has_ixn_in_rest_shape = ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces);
     

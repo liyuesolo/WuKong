@@ -1,6 +1,42 @@
 #include "../include/VertexModel.h"
 
 #include "../include/autodiff/EdgeEnergy.h"
+void VertexModel::addPerEdgeEnergy(T& energy)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){    
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        T edge_length = computeEdgeSquaredNorm(vi, vj);
+        energy += edge_weights[cnt++] * edge_length;
+    });
+}
+
+void VertexModel::addPerEdgeForceEntries(VectorXT& residual)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Vector<T, 6> dedx;
+        computeEdgeSquaredNormGradient(vi, vj, dedx);
+        dedx *= -edge_weights[cnt++];
+        addForceEntry<6>(residual, {e[0], e[1]}, dedx);
+    });
+}
+
+void VertexModel::addPerEdgeHessianEntries(std::vector<Entry>& entries, bool projectPD)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Matrix<T, 6, 6> hessian;
+        computeEdgeSquaredNormHessian(vi, vj, hessian);
+        hessian *= edge_weights[cnt++];
+        addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+    });
+}
 
 void VertexModel::addEdgeContractionEnergy(T w, T& energy)
 {

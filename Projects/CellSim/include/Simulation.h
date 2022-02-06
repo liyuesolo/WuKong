@@ -49,6 +49,8 @@ public:
     Timer t;
     
     bool& dynamic = cells.dynamics;
+
+    bool save_mesh = true;
     
 public:
     void initializeCells();
@@ -73,6 +75,7 @@ public:
     void initializeDynamicsData(T _dt, T total_time);
 
     void reset();
+    void update();
 
     bool advanceOneStep(int step);
 

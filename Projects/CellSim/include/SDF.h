@@ -44,6 +44,7 @@ public:
 
     virtual void sampleZeroLevelset(VectorXT& points) const = 0; 
 
+    virtual void initializeFromMeshFile(const std::string& filename) = 0;
     
 public:
     SDF() 
@@ -90,6 +91,8 @@ public:
     void initializedMeshData(const VectorXT& vertices, const VectorXi& indices,
         const VectorXT& normals, T epsilon);
     
+    void initializeFromMeshFile(const std::string& filename);
+
     void sampleZeroLevelset(VectorXT& points) const { points = data_points; }
 public:
     IMLS() {}
@@ -123,6 +126,7 @@ public:
     std::string getName() const { return "VDBLevelset"; }
 
     void sampleZeroLevelset(VectorXT& points) const {  }
+    void initializeFromMeshFile(const std::string& filename) {}
 
 private:
     void levelsetFromMesh(const std::vector<Vec3s>& points,

@@ -35,7 +35,8 @@ void Simulation::initializeCells()
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
         
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
@@ -56,7 +57,8 @@ void Simulation::initializeCells()
     max_newton_iter = FOREVER;
     // verbose = true;
     cells.print_force_norm = true;
-
+    // save_mesh = true;
+    
 }
 
 void Simulation::reinitializeCells()
@@ -178,7 +180,7 @@ bool Simulation::advanceOneStep(int step)
         std::cout << "\t\t" << u.norm() / dt / cells.eta << std::endl;
         if (u.norm() < 1e-6)
             return true;
-        reset();
+        update();
         current_time += dt;
         std::cout << "###############################################################" << std::endl;
         std::cout << std::endl;
@@ -202,16 +204,19 @@ bool Simulation::advanceOneStep(int step)
 
         T residual_norm = computeResidual(u, residual);
         // std::cout << "[Newton] computeResidual takes " << step_timer.elapsed_sec() << "s" << std::endl;
-        cells.saveCellMesh(step);
+        if (save_mesh)
+            cells.saveCellMesh(step);
         // std::cout << "[Newton] saveCellMesh takes " << step_timer.elapsed_sec() << "s" << std::endl;
-        std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+        if (verbose)
+            std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
 
         if (residual_norm < newton_tol)
             return true;
 
         T dq_norm = lineSearchNewton(u, residual);
         step_timer.stop();
-        std::cout << "[Newton] step takes " << step_timer.elapsed_sec() << "s" << std::endl;
+        if (verbose)
+            std::cout << "[Newton] step takes " << step_timer.elapsed_sec() << "s" << std::endl;
 
         if(step == max_newton_iter || dq_norm > 1e10)
             return true;
@@ -226,6 +231,16 @@ bool Simulation::advanceOneStep(int step)
 }
 
 void Simulation::reset()
+{
+    deformed = undeformed;
+    u.setZero();
+    if (cells.use_ipc_contact)
+    {
+        cells.computeIPCRestData();
+    }
+}
+
+void Simulation::update()
 {
     undeformed = deformed;
     u.setZero();
@@ -259,7 +274,7 @@ bool Simulation::staticSolve()
     T total_volume_apical_surface = cells.computeTotalVolumeFromApicalSurface();
 
     
-    std::cout << cells.computeTotalEnergy(u, true) << std::endl;
+    // std::cout << cells.computeTotalEnergy(u, true) << std::endl;
     int cnt = 0;
     T residual_norm = 1e10, dq_norm = 1e10;
 
@@ -281,20 +296,13 @@ bool Simulation::staticSolve()
             residual_norm_init = residual_norm;
         if (cells.use_ipc_contact)
             cells.updateIPCVertices(u);
-        if (!cells.single_prism)
+        if (!cells.single_prism && save_mesh)
             cells.saveCellMesh(cnt);
         
         
-        // if (verbose)
+        if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
-            // std::getchar();
-        // if (cnt % 50 == 0)
-        // {
-        //     cells.checkTotalGradientScale();
-        //     cells.print_force_norm = false;
-        //     cells.checkTotalHessianScale();
-        //     cells.print_force_norm = true;
-        // }
+            
         if (residual_norm < newton_tol)
             break;
         
@@ -318,40 +326,38 @@ bool Simulation::staticSolve()
 
     deformed = undeformed + u;
     // cells.saveIPCData();
-
-    VectorXT cell_volume_final;
-    cells.computeVolumeAllCells(cell_volume_final);
-
-    std::cout << "============================================================================" << std::endl;
-    std::cout << std::endl;
-    std::cout << "========================= Solver Info ================================="<< std::endl;
-    std::cout << "# of system DoF " << deformed.rows() << std::endl;
-    std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
-        << residual_norm << " |ddu|: " << dq_norm  
-        << " |g_init|: " << residual_norm_init << std::endl;
-    // std::cout << "Smallest 15 eigenvalues " << std::endl;
-    // cells.computeLinearModes();
-    std::cout << std::endl;
-    std::cout << "========================= Cell Info =================================" << std::endl;
-    std::cout << "\tcell volume sum initial " << cell_volume_initial.sum() << std::endl;
-    std::cout << "\tcell volume sum final " << cell_volume_final.sum() << std::endl;
-    if (cells.add_yolk_volume)
+    if (verbose)
     {
-        T yolk_volume = cells.computeYolkVolume(false);
-        std::cout << "\tyolk volume initial: " << yolk_volume_init << std::endl;
-        std::cout << "\tyolk volume final: " << yolk_volume << std::endl;
+        VectorXT cell_volume_final;
+        cells.computeVolumeAllCells(cell_volume_final);
+
+        std::cout << "============================================================================" << std::endl;
+        std::cout << std::endl;
+        std::cout << "========================= Solver Info ================================="<< std::endl;
+        std::cout << "# of system DoF " << deformed.rows() << std::endl;
+        std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
+            << residual_norm << " |ddu|: " << dq_norm  
+            << " |g_init|: " << residual_norm_init << std::endl;
+        // std::cout << "Smallest 15 eigenvalues " << std::endl;
+        // cells.computeLinearModes();
+        std::cout << std::endl;
+        std::cout << "========================= Cell Info =================================" << std::endl;
+        std::cout << "\tcell volume sum initial " << cell_volume_initial.sum() << std::endl;
+        std::cout << "\tcell volume sum final " << cell_volume_final.sum() << std::endl;
+        if (cells.add_yolk_volume)
+        {
+            T yolk_volume = cells.computeYolkVolume(false);
+            std::cout << "\tyolk volume initial: " << yolk_volume_init << std::endl;
+            std::cout << "\tyolk volume final: " << yolk_volume << std::endl;
+        }
+        
+        std::cout << "\ttotal volume initial from apical surface: " << total_volume_apical_surface << std::endl;
+        std::cout << "\ttotal volume final from apical surface: " << cells.computeTotalVolumeFromApicalSurface() << std::endl;
+        T total_energy_final = cells.computeTotalEnergy(u, true);
+        std::cout << "\ttotal energy final: " << total_energy_final << std::endl;
+        std::cout << "============================================================================" << std::endl;
+
     }
-    
-    std::cout << "\ttotal volume initial from apical surface: " << total_volume_apical_surface << std::endl;
-    std::cout << "\ttotal volume final from apical surface: " << cells.computeTotalVolumeFromApicalSurface() << std::endl;
-    T total_energy_final = cells.computeTotalEnergy(u, true);
-    std::cout << "\ttotal energy final: " << total_energy_final << std::endl;
-    std::cout << "============================================================================" << std::endl;
-    // std::cout << "total energy " << cells.computeTotalEnergy(u, true) << std::endl;
-    // T vol;
-    // cells.saveBasalSurfaceMesh("stuck_basal_surface.obj");
-    // cells.computeHexPrismVolumeFromTet(deformed, vol);
-    // std::cout << "tet vol last print " << vol << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
@@ -534,15 +540,18 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
             t.stop();
-            std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-            std::cout << "\t# regularization step " << i 
-                << " indefinite " << indefinite_count_reg_cnt 
-                << " invalid search dir " << invalid_search_dir_cnt
-                << " invalid solve " << invalid_residual_cnt << std::endl;
-            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            std::cout << "\t======================== " << std::endl;
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                std::cout << "\t======================== " << std::endl;
+            }
             return true;
         }
         else
@@ -649,7 +658,7 @@ void Simulation::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
 T Simulation::computeTotalEnergy(const VectorXT& _u, bool add_to_deform)
 {
-    T energy = cells.computeTotalEnergy(_u, verbose, add_to_deform);
+    T energy = cells.computeTotalEnergy(_u, false, add_to_deform);
     return energy;
 }
 
@@ -796,7 +805,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                 _u = u_ls;
                 if (cnt > ls_max)
                 {
-                    std::cout << "---ls max---" << std::endl;
+                    if (verbose)
+                        std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
                     // sampleEnergyWithSearchAndGradientDirection(_u, du, residual);
                     // cells.computeTotalEnergy(u_ls, true);
@@ -815,7 +825,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                 _u = u_ls;
                 if (cnt > ls_max)
                 {
-                    std::cout << "---ls max---" << std::endl;
+                    if (verbose)
+                        std::cout << "---ls max---" << std::endl;
                     // std::cout << "step size: " << alpha << std::endl;
                     // sampleEnergyWithSearchAndGradientDirection(_u, residual, residual);
                     // cells.checkTotalGradientScale();
@@ -831,7 +842,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
                     // cells.saveBasalSurfaceMesh("low_vol_tet_basal_surface.obj");
                     // return 1e16;
                 }
-                std::cout << "# ls " << cnt << " |du| " << alpha * du.norm() << std::endl;
+                if (verbose)
+                    std::cout << "# ls " << cnt << " |du| " << alpha * du.norm() << std::endl;
                 break;
             }
         }
@@ -894,6 +906,6 @@ void Simulation::loadDeformedState(const std::string& filename)
         deformed.segment<3>(i * 3) = V.row(i);
     }
     u = deformed - undeformed;
-    
-    cells.computeCellInfo();
+    if (verbose)
+        cells.computeCellInfo();
 }

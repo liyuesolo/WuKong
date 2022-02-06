@@ -569,6 +569,11 @@ public:
 
     bool use_sdf_boundary = false;
 
+    //for inverse problems
+    bool assign_per_edge_weight = false;
+    VectorXT edge_weights;
+
+
     std::unordered_map<int, T> dirichlet_data;
 
     // VertexModel.cpp
@@ -586,7 +591,7 @@ public:
         StiffnessMatrix& K, MatrixXT& UV);
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
-    
+    void sdfFromHighResDualMesh(const std::string& filename);
 
     T computeInsideMembraneStepSize(const VectorXT& _u, const VectorXT& du);
 
@@ -595,6 +600,11 @@ public:
     void addEdgeForceEntries(Region region, T w, VectorXT& residual);
     void addEdgeHessianEntries(Region region, T w, 
         std::vector<Entry>& entries, bool projectPD = false);
+    
+    void addPerEdgeEnergy(T& energy);
+    void addPerEdgeForceEntries(VectorXT& residual);
+    void addPerEdgeHessianEntries(std::vector<Entry>& entries, bool projectPD = false);
+
     void addEdgeContractionEnergy(T w, T& energy);
     void addEdgeContractionForceEntries(T w, VectorXT& residual);
     void addEdgeContractionHessianEntries(T w, std::vector<Entry>& entries, bool projectPD = false);
@@ -760,6 +770,10 @@ public:
 
     // SensitivityDerivatives.cpp
     void dfdpWeights(MatrixXT& dfdp);
+    void dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dOdp);
+    void dOdpFromdxdpEdgeWeights(const VectorXT& dOdu, VectorXT& dOdp);
+    void dxdpFromdxdpEdgeWeights(MatrixXT& dxdp);
+    void multiplyDpWithDfdp(VectorXT& result, const VectorXT& dp);
     void dfdpWeightsFD(MatrixXT& dfdp);
 private:
 

@@ -13,8 +13,10 @@
 
 #include "VecMatDef.h"
 #include "Simulation.h"
+#include "Objectives.h"
 
 class Simulation;
+class Objectives;
 
 class SensitivityAnalysis
 {
@@ -37,18 +39,30 @@ public:
     bool fd_dfdp;
 
     Simulation& simulation;
+
+    VectorXT design_parameters;
     
     void initialize();
     
     void buildSensitivityMatrix(MatrixXT& dxdp);
 
-    void updateDesignParameters(const VectorXT& p_curr);
     void computeEquilibriumState();
+
     void loadEquilibriumState();
 
     void svdOnSensitivityMatrix();
 
+    void optimizePerEdgeWeigths();
+
+    void dxFromdpAdjoint(VectorXT& dx, const VectorXT& dp);
+
     void diffTestdfdp();
+    void diffTestdxdp();
+
+private:
+    void optimizeGradientDescent(Objectives& objective);
+    void optimizeMMA(Objectives& objective);
+
 public:
     SensitivityAnalysis(Simulation& _simulation) : simulation(_simulation) {}
     ~SensitivityAnalysis() {}
