@@ -4,39 +4,124 @@
 
 void SensitivityAnalysis::initialize()
 {
-    n_dof_sim = simulation.num_nodes * 3;
-    n_dof_design = simulation.cells.edge_weights.rows();
+    simulation.initializeCells();
+    simulation.save_mesh = false;
+    simulation.cells.print_force_norm = false;
+    simulation.verbose = false;
 }
 
 void SensitivityAnalysis::optimizePerEdgeWeigths()
 {
-    ObjUTU obj(simulation);
-    simulation.save_mesh = false;
-    simulation.cells.print_force_norm = false;
-    simulation.verbose = false;
+    // ObjUTU obj(simulation);
+    ObjUMatching obj(simulation);
+    obj.setTargetFromMesh("output/cells/opt/target_simple.obj");
+
+    
+    simulation.cells.tet_vol_barrier_w = 1e-22;
 
     obj.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
     // optimizeGradientDescent(obj);
-    optimizeMMA(obj);
+    
+    // optimizeMMA(obj);    
+    optimizeGaussNewton(obj);
 }
+
+
+
 
 void SensitivityAnalysis::optimizeMMA(Objectives& objective)
 {
     std::cout << "########### MMA ###########" << std::endl;
     objective.getDesignParameters(design_parameters);
+    T tol_g = 1e-6;
     MMASolver mma(n_dof_design, 0);
     mma.SetAsymptotes(0.2, 0.65, 1.05);
-    VectorXT min_p = VectorXT::Ones(n_dof_design) * -1e10;
-    VectorXT max_p = VectorXT::Ones(n_dof_design) * 1e10;
-    for (int iter = 0; iter < 10; iter++)
+    T mma_step_size = 1;
+    int max_mma_iter = 100;
+
+    VectorXT min_p = VectorXT::Zero(n_dof_design);
+    VectorXT max_p = VectorXT::Ones(n_dof_design) * 100.0;
+
+    for (int iter = 0; iter < max_mma_iter; iter++)
     {
         VectorXT dOdp(n_dof_design); dOdp.setZero();
         T O;
         T g_norm = objective.gradient(design_parameters, dOdp, O);
         std::cout << "[MMA] iter " << iter << " |g|: " << g_norm << " obj: " << O << std::endl;
+        objective.saveState("output/cells/opt/MMA_iter_" + std::to_string(iter) + ".obj");
+        if (g_norm < tol_g)
+            break;
+        min_p = (design_parameters.array() - mma_step_size).cwiseMax(0.0);
+        max_p = (design_parameters.array() + mma_step_size);
         mma.UpdateEigen(design_parameters, dOdp, VectorXT(), VectorXT(), min_p, max_p);
         objective.updateDesignParameters(design_parameters);
+        std::string filename = "output/cells/opt/MMA_iter_" + std::to_string(iter) + ".txt";
+        std::ofstream out(filename);
+        out << design_parameters << std::endl;
+        out.close();
     }
+}
+
+void SensitivityAnalysis::optimizeGaussNewton(Objectives& objective)
+{
+    std::cout << "########### GAUSS NEWTON ###########" << std::endl;
+    int num_iter_max = 100;
+    T tol_g = 1e-6;
+    int iter = 0;
+    int max_GN_iter = 100;
+    objective.getDesignParameters(design_parameters);
+
+    while (true)
+    {
+        VectorXT dOdp; T E0;
+        T g_norm;
+        if (iter == 0)
+            g_norm = objective.gradient(design_parameters, dOdp, E0);
+        else 
+            g_norm = objective.evaluteGradientAndEnergy(design_parameters, dOdp, E0);
+    
+        std::cout << "[GN] iter " << iter << " |g| " << g_norm 
+            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+            << " obj: " << E0 << std::endl;
+        objective.saveState("output/cells/opt/GN_iter_" + std::to_string(iter) + ".obj");
+
+        if (g_norm < tol_g)
+            break;
+            
+        StiffnessMatrix H_GH;
+        objective.hessianGN(design_parameters, H_GH, false);
+        VectorXT dp;
+        simulation.linearSolve(H_GH, dOdp, dp);
+
+        T alpha = 1.0;
+        
+        for (int ls_cnt = 0; ls_cnt < 15; ls_cnt++)
+        {
+            VectorXT p_ls = design_parameters - alpha * dp;
+            p_ls = p_ls.cwiseMax(0.0);
+            T E1 = objective.value(p_ls, true);
+            std::cout << "[GN]\tE1: " << E1 << std::endl;
+            // std::getchar();
+            if (E1 < E0 || ls_cnt > 10)
+            {
+                design_parameters = p_ls;
+                break;
+            }
+            else
+            {
+                alpha *= 0.5;
+            }
+        }
+        std::string filename = "output/cells/opt/GN_iter_" + std::to_string(iter) + ".txt";
+        std::ofstream out(filename);
+        out << design_parameters << std::endl;
+        out.close();
+
+        if (iter > max_GN_iter)
+            break;
+        iter++;
+    }
+    
 }
 
 void SensitivityAnalysis::optimizeGradientDescent(Objectives& objective)
@@ -47,21 +132,27 @@ void SensitivityAnalysis::optimizeGradientDescent(Objectives& objective)
     objective.getDesignParameters(design_parameters);
     for (int iter = 0; iter < num_iter_max; iter++)
     {
-        VectorXT dOdp;
-        T g_norm = objective.gradient(design_parameters, dOdp);
-        std::cout << "[GD] iter " << iter << " |g| " << g_norm << std::endl;
-        // std::getchar();
+        VectorXT dOdp; T E0;
+        T g_norm;
+        if (iter == 0)
+            g_norm = objective.gradient(design_parameters, dOdp, E0);
+        else 
+            g_norm = objective.evaluteGradientAndEnergy(design_parameters, dOdp, E0);
+        std::cout << "[GD] iter " << iter << " |g| " << g_norm 
+            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+            << " obj: " << E0 << std::endl;
+        objective.saveState("output/cells/opt/GD_iter_" + std::to_string(iter) + ".obj");
         if (g_norm < tol_g)
             break;
-        T E0 = objective.value(design_parameters);
-        std::cout << "\tobj: " << E0 << std::endl;
         T alpha = 1.0;
         int ls_cnt = 0;
         while (true)
         {
             VectorXT p_ls = design_parameters - alpha * dOdp;
-            T E1 = objective.value(p_ls);
-            std::cout << "\tE1: " << E1 << std::endl;
+            p_ls = p_ls.cwiseMax(0.0);
+            T E1 = objective.value(p_ls, false);
+            std::cout << "[GD]\tE1: " << E1 << std::endl;
+            // std::getchar();
             if (E1 < E0 || ls_cnt > 10)
             {
                 design_parameters = p_ls;
@@ -73,15 +164,37 @@ void SensitivityAnalysis::optimizeGradientDescent(Objectives& objective)
                 alpha *= 0.5;
             }
         }
-        std::cout <<  "\t #ls: " << ls_cnt << std::endl;
+        std::cout <<  "[GD]\t #ls: " << ls_cnt << " |dp| " << alpha * g_norm << std::endl;
+        // std::getchar();
+        std::string filename = "output/cells/opt/GD_iter_" + std::to_string(iter) + ".txt";
+        std::ofstream out(filename);
+        out << design_parameters << std::endl;
+        out.close();
     }
     simulation.save_mesh = true;
     objective.value(design_parameters);
     
 }
 
-void SensitivityAnalysis::dxFromdpAdjoint(VectorXT& dx, const VectorXT& dp)
+void SensitivityAnalysis::dxFromdpAdjoint()
 {
+    std::cout << n_dof_design << std::endl;
+    VectorXT dp(n_dof_design);
+    std::ifstream in("/home/yueli/Documents/ETH/WuKong/output/cells/opt/MMA_iter_15.txt");
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        in >> dp[i];
+    }
+    in.close();
+
+    // std::cout << dp << std::endl;
+    
+    dp -= simulation.cells.edge_weights;
+    simulation.cells.edge_weights += dp;
+
+    simulation.verbose = true;
+    simulation.staticSolve();
+
     // x(p + dp) = x(p) + dx/dp dp
     // df/dp = df/dx dx/dp + df/dp = 0 => dx/dp = -(df/dx)^-1 df/dp
     // x(p + dp) = x(p) + -(df/dx)^-1 df/dp dp
@@ -105,7 +218,10 @@ void SensitivityAnalysis::dxFromdpAdjoint(VectorXT& dx, const VectorXT& dp)
     if (solver.info() == Eigen::NumericalIssue)
         std::cout << "Forward simulation hessian indefinite" << std::endl;
 
-    dx = -solver.solve(dfdpdp);
+    VectorXT dx = solver.solve(dfdpdp);
+    dx.normalize();
+
+    savedxdp(dx, dp, "dxdp.txt");
 }
 
 void SensitivityAnalysis::diffTestdxdp()
@@ -260,3 +376,13 @@ void SensitivityAnalysis::svdOnSensitivityMatrix()
     out.close();
 }
 
+
+void SensitivityAnalysis::savedxdp(const VectorXT& dx, 
+        const VectorXT& dp, const std::string& filename)
+{
+    std::ofstream out(filename);
+    out << dx.transpose() << std::endl;
+    out << dp.transpose() << std::endl;
+    out.close();
+}
+    

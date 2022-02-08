@@ -1,10 +1,54 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
+// #include <igl/opengl/glfw/Viewer.h>
+// #include <igl/project.h>
+// #include <igl/unproject_on_plane.h>
+// #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
+// #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+// #include <imgui/imgui.h>
+
 #include "VertexModel.h"
 #include "Timer.h"
 
 using T = double;
+
+// struct ViewerData
+// {
+//     bool show_rest = false;
+//     bool show_current = true;
+//     bool show_membrane = false;
+//     bool split = false;
+//     bool split_a_bit = false;
+//     bool yolk_only = false;
+//     bool show_apical_polygon = false;
+//     bool show_basal_polygon = false;
+//     bool show_contracting_edges = true;
+//     bool show_outside_vtx = false;
+//     int modes = 0;
+//     bool enable_selection = false;
+//     bool compute_energy = false;
+//     double t = 0.0;
+//     int compute_energy_cnt = 0;
+
+//     int static_solve_step = 0;
+
+//     int opt_step = 0;
+//     bool check_modes = false;
+
+//     int load_obj_iter_cnt = 0;
+
+//     Eigen::MatrixXd evectors;
+//     Eigen::VectorXd evalues;
+
+//     Eigen::MatrixXd bounding_surface_samples;
+//     Eigen::MatrixXd bounding_surface_samples_color;
+//     int sdf_test_sample_idx_offset = 0;
+
+//     Eigen::MatrixXd V;
+//     Eigen::MatrixXi F;
+//     Eigen::MatrixXd C;
+// };
 
 class Simulation
 {
@@ -52,6 +96,7 @@ public:
 
     bool save_mesh = true;
     
+    // ViewerData viewer_data;
 public:
     void initializeCells();
     void reinitializeCells();
@@ -99,6 +144,8 @@ public:
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
     T lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max = 15, bool wolfe_condition = false);
 
+    // void setViewer(igl::opengl::glfw::Viewer& viewer);
+    // void updateScreen(igl::opengl::glfw::Viewer& viewer);
 
     void sampleEnergyWithSearchAndGradientDirection(
         const VectorXT& _u,  
@@ -107,6 +154,8 @@ public:
     );
 
     void loadDeformedState(const std::string& filename);
+
+    void saveState(const std::string& filename);
 
 public:
     Simulation() {}

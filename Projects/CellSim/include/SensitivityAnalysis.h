@@ -1,6 +1,13 @@
 #ifndef SENSITIVITY_ANALYSIS_H
 #define SENSITIVITY_ANALYSIS_H
 
+// #include <igl/opengl/glfw/Viewer.h>
+// #include <igl/project.h>
+// #include <igl/unproject_on_plane.h>
+// #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
+// #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+// #include <imgui/imgui.h>
+
 
 #include <utility>
 #include <iostream>
@@ -11,10 +18,10 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 
-#include "VecMatDef.h"
 #include "Simulation.h"
 #include "Objectives.h"
 
+#include "VecMatDef.h"
 class Simulation;
 class Objectives;
 
@@ -39,6 +46,7 @@ public:
     bool fd_dfdp;
 
     Simulation& simulation;
+    // Objectives* objective;
 
     VectorXT design_parameters;
     
@@ -53,19 +61,27 @@ public:
     void svdOnSensitivityMatrix();
 
     void optimizePerEdgeWeigths();
+    // bool optimizeGDOneStep(int step);
 
-    void dxFromdpAdjoint(VectorXT& dx, const VectorXT& dp);
+    void dxFromdpAdjoint();
 
+    // void updateViewer(igl::opengl::glfw::Viewer& viewer);
+    // bool gradientDescentWithViewerUpdate(igl::opengl::glfw::Viewer& viewer, int step);
+    
     void diffTestdfdp();
     void diffTestdxdp();
 
 private:
+    void savedxdp(const VectorXT& dx, 
+        const VectorXT& dp, const std::string& filename);
+
+    void optimizeGaussNewton(Objectives& objective);
     void optimizeGradientDescent(Objectives& objective);
     void optimizeMMA(Objectives& objective);
 
 public:
     SensitivityAnalysis(Simulation& _simulation) : simulation(_simulation) {}
-    ~SensitivityAnalysis() {}
+    ~SensitivityAnalysis() { }
 };
 
 #endif

@@ -777,22 +777,25 @@ void VertexModel::projectDirichletDoFMatrix(StiffnessMatrix& A,
 
 }
 
-T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du)
+T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du, bool verbose)
 {
-    // std::cout << "** step size **" << std::endl;
+    if (verbose)
+        std::cout << "** step size **" << std::endl;
     T step_size = 1.0;
     if (use_ipc_contact)
     {
         T ipc_step_size = computeCollisionFreeStepsize(_u, du);
-        // std::cout << "after ipc step size: " << ipc_step_size << std::endl;
         step_size = std::min(step_size, ipc_step_size);
+        if (verbose)
+            std::cout << "after ipc step size: " << step_size << std::endl;
     }
 
     if (use_sphere_radius_bound && !sphere_bound_penalty && !use_sdf_boundary)
     {
         T inside_membrane_step_size = computeInsideMembraneStepSize(_u, du);
         step_size = std::min(step_size, inside_membrane_step_size);
-        // std::cout << "after inside membrane step size: " << step_size << std::endl;
+        if (verbose)
+            std::cout << "after inside membrane step size: " << step_size << std::endl;
     }
 
     if (add_tet_vol_barrier)
@@ -800,7 +803,8 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
         T inversion_free_step_size = computeInversionFreeStepSize(_u, du);
         // std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
         step_size = std::min(step_size, inversion_free_step_size);
-        // std::cout << "after tet inverison step size: " << step_size << std::endl;
+        if (verbose)
+            std::cout << "after tet inverison step size: " << step_size << std::endl;
     }
 
     if (add_yolk_tet_barrier)
@@ -809,7 +813,7 @@ T VertexModel::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT&
         // std::cout << "yolk inversion free step size: " << inversion_free_step_size << std::endl;
         step_size = std::min(step_size, inversion_free_step_size);
     }
-
-    // std::cout << "**       **" << std::endl;
+    if (verbose)
+        std::cout << "**       **" << std::endl;
     return step_size;
 }

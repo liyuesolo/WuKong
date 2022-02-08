@@ -577,7 +577,7 @@ public:
     std::unordered_map<int, T> dirichlet_data;
 
     // VertexModel.cpp
-    T computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du);
+    T computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du, bool verbose = false);
     void computeCellInfo();
 
     void updateALMData(const VectorXT& _u);

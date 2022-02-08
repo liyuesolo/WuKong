@@ -104,7 +104,7 @@ void MMASolver::SetAsymptotes(double init, double decrease, double increase)
 void MMASolver::Update(double* xval, const double* dfdx, const double* gx, const double* dgdx,
     const double* xmin, const double* xmax)
 {
-    ZIRAN::ZIRAN_TIMER();
+    
     // Generate the subproblem
     GenSub(xval, dfdx, gx, dgdx, xmin, xmax);
 

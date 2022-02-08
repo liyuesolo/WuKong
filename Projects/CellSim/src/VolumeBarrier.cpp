@@ -162,8 +162,15 @@ void VertexModel::computeTetBarrierWeightMask(const VectorXT& positions,
 T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& du)
 {
     T step_size = 1.0;
+    int cnt = 0;
     while (true)
     {
+        if (cnt > 100)
+        {
+            std::cout << "unable to find inversion free state " << std::endl;
+            saveCellMesh(-1);
+            std::exit(0);
+        }
         deformed = undeformed + _u + step_size * du;
         bool constraint_violated = false;
         if (use_cell_centroid)
@@ -257,7 +264,10 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
         }
         
         if (constraint_violated)
+        {
             step_size *= 0.8;
+            cnt++;
+        }
         else
             return step_size;
     }

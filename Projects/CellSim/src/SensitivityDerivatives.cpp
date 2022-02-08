@@ -38,7 +38,7 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     dxdp.setZero();
     for (int i = 0; i < cnt; i++)
     {
-        dxdp.col(i) = -solver.solve(dfdp.col(i));
+        dxdp.col(i) = solver.solve(dfdp.col(i));
     }
 }
 
