@@ -55,44 +55,6 @@ void VertexModel::initializeContractionData()
     }
     else
     {
-        auto validEdge = [&](const Edge& e)
-        {
-            // VtxList selected_vertices = {574, 781, 780, 825, 426, 
-            //     824, 826, 783, 827, 62, 60, 61, 63,
-            //     50, 48, 51, 49, 59, 56, 58, 57,
-            //     947, 723, 942, 722, 728, 686, 679, 940, 941};
-            // if (std::find(selected_vertices.begin(), selected_vertices.end(), e[0]) != selected_vertices.end()
-            //     && std::find(selected_vertices.begin(), selected_vertices.end(), e[1]) != selected_vertices.end())
-            //     return true;
-            // return false;
-
-            TV x0 = deformed.segment<3>(e[0] * 3);
-            TV x1 = deformed.segment<3>(e[1] * 3);
-
-            // if (x0[0] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-            //     x0[1] > min_corner[0] + (max_corner[0] - min_corner[0]) * 0.8 &&
-            //     e[0] < basal_vtx_start && e[1] < basal_vtx_start)
-            //     return true;
-            // return false;
-            T percent_y = 0.05;
-            bool bottom_y = x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y
-                && x0[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y;
-            bool apical_edge = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
-            T percent_x = 0.2, percent_z = 0.1;
-            bool middle_z = x0[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
-                    x0[2] < mid_point[2] + 0.5 * delta[2] * percent_z &&
-                    x1[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
-                    x1[2] < mid_point[2] + 0.5 * delta[2] * percent_z;
-            bool middle_x = x0[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
-                x0[0] < mid_point[0] + 0.5 * delta[0] * percent_x &&
-                x1[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
-                x1[0] < mid_point[0] + 0.5 * delta[0] * percent_x;
-
-            if (bottom_y && apical_edge && middle_z && middle_x)
-                return true;
-            return false;
-        };
-
         auto isContractingEdgeCephalic = [&](const Edge& e)
         {
             TV x0 = deformed.segment<3>(e[0] * 3);
@@ -221,7 +183,20 @@ void VertexModel::initializeContractionData()
                     for (int i = 0; i < face_vtx_list.size(); i++)
                     {
                         int j = (i + 1) % face_vtx_list.size();
-                        contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));
+                        // contracting_edges.push_back(Edge(face_vtx_list[i], face_vtx_list[j]));
+                        Edge edge = Edge(face_vtx_list[i], face_vtx_list[j]);
+                        auto find_iter = std::find_if(edges.begin(), edges.end(), 
+                            [&edge](const Edge& ei) 
+                            {
+                                bool case1 = edge[0] == ei[0] && edge[1] == ei[1];
+                                bool case2 = edge[0] == ei[1] && edge[1] == ei[0];
+                                if (case1 || case2)
+                                    return true;
+                                return false;
+                            });
+                        int edge_id = std::distance(edges.begin(), find_iter);
+                        if (find_iter != edges.end())
+                            edge_weights[edge_id] = Gamma;
                     }
                 }
             }
@@ -651,8 +626,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
     // T cell_height = 0.5 * e0_norm; //drosophila 1k
-    // T cell_height = 0.8 * e0_norm; //drosophia 476
-    T cell_height = 0.7 * e0_norm;
+    // T cell_height = 0.8 * e0_norm; //drosophila 476
+    T cell_height = 0.7 * e0_norm; // drosophila 120
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);
@@ -740,61 +715,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         nu = 0.48;
     }
 
-    if (scene_type == 1 || scene_type == 2)
-    {
-            if (contract_apical_face)
-            {
-                // alpha = 0.4; // lateral
-                // gamma = 1.0; // basal
-                // sigma = 0.6; // apical
-
-                alpha = 10.0; // WORKED
-                // alpha = 20.0;
-                // alpha = 20.0;
-                gamma = 3.0;
-                // sigma = 0.5; // apical
-                sigma = 2.0;
-            }
-            else
-            {
-                // this weights converge at rest state when height = 0.5
-                // alpha = 50.0;
-                // gamma = 20.0;
-                // sigma = 0.5;
-
-                // this weights lead to invagination when height = 1.0
-                if (use_cell_centroid)
-                {
-                    // for sphere
-                    // alpha = 10.0; // lateral
-                    // gamma = 3.0; // basal
-                    // sigma = 2.0;// apical
-
-                    // for drosophila
-                    alpha = 10.0 * scale; // WORKED
-                    gamma = 3.0 * scale;
-                    sigma = 2.0 * scale;// apical
-                }
-                else
-                {
-                    // fixed tet sub div
-                    // alpha = 300.0; //tet barrier
-                    // gamma = 40.0;
-
-                    alpha = 40.0; //tet barrier
-                    gamma = 20.0;
-                    sigma = 80.0;
-                }
-                
-
-            }
-    }
-    else
-    {
-        alpha = 1.0; 
-        gamma = 1.0;
-        sigma = 0.1;
-    }
+    alpha = 10.0 * scale; // WORKED
+    gamma = 3.0 * scale;
+    sigma = 2.0 * scale;// apical
 
 
     use_face_centroid = use_cell_centroid;
@@ -805,21 +728,6 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         dirichlet_data[d] = 0.0;
     }
 
-    // sphere
-    // for (int d = 0; d < 3; d++)
-    // {
-    //     dirichlet_data[1532 * 3 + d] = 0.0;
-    //     dirichlet_data[1480 * 3 + d] = 0.0;
-    //     dirichlet_data[1482 * 3 + d] = 0.0;
-    // }
-
-    // drosophila egg
-    // for (int d = 0; d < 3; d++)
-    // {
-    //     dirichlet_data[1042 * 3 + d] = 0.0;
-    //     dirichlet_data[1065 * 3 + d] = 0.0;
-    //     dirichlet_data[1040 * 3 + d] = 0.0;
-    // }
     
     computeVolumeAllCells(cell_volume_init);
 
@@ -859,6 +767,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
+    }
+
+    assign_per_edge_weight = true;
+    if (assign_per_edge_weight)
+    {
+        int apical_edge_cnt = 0;
+        for (Edge& e : edges)
+            if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+                apical_edge_cnt++;
+        edge_weights.resize(apical_edge_cnt);
+        // edge_weights.setConstant(1.5);
+        // edge_weights.setConstant(0.3);
+        // edge_weights.setConstant(0.05); // optimize nuclei
+        edge_weights.setConstant(0.1);
     }
 
     if (add_contraction_term)
@@ -961,18 +883,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     weights_all_edges = 0.0;
     weights_all_edges = 0.1 * Gamma;
 
-    assign_per_edge_weight = true;
-    if (assign_per_edge_weight)
-    {
-        int apical_edge_cnt = 0;
-        for (Edge& e : edges)
-            if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
-                apical_edge_cnt++;
-        edge_weights.resize(apical_edge_cnt);
-        edge_weights.setConstant(0.3);
-        // edge_weights.setRandom();
-        // edge_weights /= edge_weights.norm();
-    }
+    
 
     // edge_weights[0] -= 1e-6;
 

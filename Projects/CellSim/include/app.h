@@ -19,7 +19,7 @@ class SimulationApp
 public:
     using TV = Vector<double, 3>;
     using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
-
+    using IV = Vector<int, 3>;
 protected:
     Simulation& simulation;
 
@@ -73,17 +73,35 @@ public:
 
 class DiffSimApp : public SimulationApp
 {
+public:
+    using Edge = Vector<int, 2>;
 private:
     SensitivityAnalysis& sa;
     int opt_step = 0;
+    bool show_edge_weights = false;
+    bool show_target = true;
+    bool show_target_current = true;
+    Eigen::MatrixXd svd_V;
 public:
+
     void runOptimization();
 
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
+
+    void setMenu(igl::opengl::glfw::Viewer& viewer,
+        igl::opengl::glfw::imgui::ImGuiMenu& menu);
+
+    void appendSphereToPosition(const TV& position, T radius, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
 private:
     void loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& dp);
+    void loaddpAndAppendCylinder(const std::string& filename, 
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    void appendCylinderToEdges(const VectorXT weights_vector, 
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    void loadSVDMatrixV(const std::string& filename);
 public:
     DiffSimApp(Simulation& _simulation, SensitivityAnalysis& _sa) : 
         sa(_sa), SimulationApp(_simulation) {}

@@ -30,9 +30,18 @@ public:
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
 public:
+    template <class OP>
+    void iterateTargets(const OP& f) {
+        for (auto dirichlet: target_positions){
+            f(dirichlet.first, dirichlet.second);
+        } 
+    }
+public:
     Simulation& simulation;
     int n_dof_sim, n_dof_design;
     VectorXT equilibrium_prev;
+
+    std::unordered_map<int, TV> target_positions;
 
     virtual T value(const VectorXT& p_curr, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil = false) {}
@@ -44,6 +53,7 @@ public:
     virtual void updateDesignParameters(const VectorXT& design_parameters) {}
     virtual void getDesignParameters(VectorXT& design_parameters) {}
     virtual void getSimulationAndDesignDoF(int& sim_dof, int& design_dof) {}
+    virtual void setSimulationAndDesignDoF(int _sim_dof, int _design_dof) {}
 
     void saveState(const std::string& filename) { simulation.saveState(filename); }
     
@@ -68,6 +78,7 @@ public:
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
+    void setSimulationAndDesignDoF(int _sim_dof, int _design_dof);
 
     T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
@@ -95,6 +106,7 @@ public:
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
+    void setSimulationAndDesignDoF(int _sim_dof, int _design_dof);
 
     T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
@@ -105,6 +117,35 @@ public:
         
     }
     ~ObjUMatching() {}
+};
+
+
+class ObjNucleiTracking : public Objectives
+{
+public:
+    using VtxList = std::vector<int>;
+    
+public:
+    T value(const VectorXT& p_curr, bool use_prev_equil = false);
+    T gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil = false);
+    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool use_prev_equil = false);
+    T evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, T& energy);
+    void updateDesignParameters(const VectorXT& design_parameters);
+    void getDesignParameters(VectorXT& design_parameters);
+    void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
+    void setSimulationAndDesignDoF(int _sim_dof, int _design_dof);
+
+    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
+    T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
+
+    void initializeTarget();
+    void loadTarget(const std::string& filename);
+public: 
+    ObjNucleiTracking(Simulation& _simulation) : Objectives(_simulation) 
+    {
+        
+    }
+    ~ObjNucleiTracking() {}
 };
 
 #endif

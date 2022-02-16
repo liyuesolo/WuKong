@@ -1,35 +1,131 @@
 #include "../include/SensitivityAnalysis.h"
 #include <Eigen/PardisoSupport>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/DenseSymMatProd.h>
 #include "../../../Solver/MMASolver.h"
 
 void SensitivityAnalysis::initialize()
 {
-    simulation.initializeCells();
+    // simulation.initializeCells();
     simulation.save_mesh = false;
     simulation.cells.print_force_norm = false;
     simulation.verbose = false;
+    n_dof_design = simulation.cells.edge_weights.rows();
+    n_dof_sim = simulation.num_nodes * 3;
+    objective.setSimulationAndDesignDoF(n_dof_sim, n_dof_design);
+
+    simulation.cells.edge_weights.setRandom();
+    simulation.cells.edge_weights /= simulation.cells.edge_weights.norm();
+    objective.getDesignParameters(design_parameters);
 }
 
 void SensitivityAnalysis::optimizePerEdgeWeigths()
 {
     // ObjUTU obj(simulation);
-    ObjUMatching obj(simulation);
-    obj.setTargetFromMesh("output/cells/opt/target_simple.obj");
+    // ObjUMatching obj(simulation);
+    // obj.setTargetFromMesh("output/cells/opt/target_simple.obj");
 
     
     simulation.cells.tet_vol_barrier_w = 1e-22;
 
-    obj.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
-    // optimizeGradientDescent(obj);
+    objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
+    // optimizeGradientDescent();
     
-    // optimizeMMA(obj);    
-    optimizeGaussNewton(obj);
+    // optimizeMMA(); 
+    optimizeGaussNewton();
 }
 
 
+void SensitivityAnalysis::generateNucleiDataSingleFrame(const std::string& filename)
+{
+    
+
+    simulation.staticSolve();
+    std::ofstream out(filename);
+    objective.iterateTargets([&](int idx, TV& target){
+        TV current;
+        simulation.cells.computeCellCentroid(simulation.cells.faces[idx], current);
+        out << idx << " " << current[0] << " " << current[1] << " " << current[2] << std::endl;
+    });
+    out.close();
+}
 
 
-void SensitivityAnalysis::optimizeMMA(Objectives& objective)
+bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
+{
+    std::string method;
+    if (optimizer == GaussNewton)
+        method = "GN";
+    else if (optimizer == GradientDescent)
+        method = "GD";
+    else if (optimizer == MMA)
+        method = "MMA";
+    
+    T tol_g = 1e-6;
+    T g_norm = 0;
+    T E0;
+    VectorXT dOdp, dp;
+
+    if (optimizer == GradientDescent || optimizer == GaussNewton)
+    {
+        if (step == 0)
+        {
+            std::cout << "########### " << method << " ###########" << std::endl;
+            objective.getDesignParameters(design_parameters);
+            g_norm = objective.gradient(design_parameters, dOdp, E0);   
+        }
+        else
+        {
+            g_norm = objective.evaluteGradientAndEnergy(design_parameters, dOdp, E0);
+        }
+        dp = dOdp;
+        if (optimizer == GaussNewton)
+        {
+            StiffnessMatrix H_GH;
+            objective.hessianGN(design_parameters, H_GH, false);
+            simulation.linearSolve(H_GH, dOdp, dp);
+        }
+
+        T alpha = 1.0;    
+        for (int ls_cnt = 0; ls_cnt < 15; ls_cnt++)
+        {
+            VectorXT p_ls = design_parameters - alpha * dp;
+            
+            p_ls = p_ls.cwiseMax(0.0);
+            T E1 = objective.value(p_ls, true);
+            std::cout << "[GN]\tE1: " << E1 << std::endl;
+            // std::getchar();
+            if (E1 < E0 || ls_cnt > 10)
+            {
+                design_parameters = p_ls;
+                break;
+            }
+            else
+            {
+                alpha *= 0.5;
+            }
+        }
+    }
+    else if (optimizer == MMA)
+    {
+
+    }
+
+    std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
+            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+            << " obj: " << E0 << std::endl;
+    objective.saveState("output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".obj");
+    std::string filename = "output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".txt";
+    std::ofstream out(filename);
+    out << design_parameters << std::endl;
+    out.close();
+    if (g_norm < tol_g)
+        return true;
+    return false;
+}
+
+void SensitivityAnalysis::optimizeMMA()
 {
     std::cout << "########### MMA ###########" << std::endl;
     objective.getDesignParameters(design_parameters);
@@ -40,7 +136,7 @@ void SensitivityAnalysis::optimizeMMA(Objectives& objective)
     int max_mma_iter = 100;
 
     VectorXT min_p = VectorXT::Zero(n_dof_design);
-    VectorXT max_p = VectorXT::Ones(n_dof_design) * 100.0;
+    VectorXT max_p = VectorXT::Ones(n_dof_design);
 
     for (int iter = 0; iter < max_mma_iter; iter++)
     {
@@ -52,7 +148,7 @@ void SensitivityAnalysis::optimizeMMA(Objectives& objective)
         if (g_norm < tol_g)
             break;
         min_p = (design_parameters.array() - mma_step_size).cwiseMax(0.0);
-        max_p = (design_parameters.array() + mma_step_size);
+        max_p = (design_parameters.array() + mma_step_size).cwiseMin(10.0);
         mma.UpdateEigen(design_parameters, dOdp, VectorXT(), VectorXT(), min_p, max_p);
         objective.updateDesignParameters(design_parameters);
         std::string filename = "output/cells/opt/MMA_iter_" + std::to_string(iter) + ".txt";
@@ -62,7 +158,7 @@ void SensitivityAnalysis::optimizeMMA(Objectives& objective)
     }
 }
 
-void SensitivityAnalysis::optimizeGaussNewton(Objectives& objective)
+void SensitivityAnalysis::optimizeGaussNewton()
 {
     std::cout << "########### GAUSS NEWTON ###########" << std::endl;
     int num_iter_max = 100;
@@ -70,6 +166,7 @@ void SensitivityAnalysis::optimizeGaussNewton(Objectives& objective)
     int iter = 0;
     int max_GN_iter = 100;
     objective.getDesignParameters(design_parameters);
+    
 
     while (true)
     {
@@ -98,6 +195,7 @@ void SensitivityAnalysis::optimizeGaussNewton(Objectives& objective)
         for (int ls_cnt = 0; ls_cnt < 15; ls_cnt++)
         {
             VectorXT p_ls = design_parameters - alpha * dp;
+            // p_ls = p_ls.cwiseMax(0.0);
             p_ls = p_ls.cwiseMax(0.0);
             T E1 = objective.value(p_ls, true);
             std::cout << "[GN]\tE1: " << E1 << std::endl;
@@ -124,7 +222,7 @@ void SensitivityAnalysis::optimizeGaussNewton(Objectives& objective)
     
 }
 
-void SensitivityAnalysis::optimizeGradientDescent(Objectives& objective)
+void SensitivityAnalysis::optimizeGradientDescent()
 {
     std::cout << "########### GRADIENT DESCENT ###########" << std::endl;
     int num_iter_max = 100;
@@ -321,7 +419,44 @@ void SensitivityAnalysis::computeEquilibriumState()
 
 void SensitivityAnalysis::loadEquilibriumState()
 {
-    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/cell/cell_mesh_iter_967.obj");
+    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/cell/result.obj");
+}
+
+void SensitivityAnalysis::eigenAnalysisOnSensitivityMatrix()
+{
+    loadEquilibriumState();
+    MatrixXT dxdp;
+    simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+
+    MatrixXT dxdpTdxdp = dxdp.transpose()*dxdp;
+    int n_eigen = 20;
+    Spectra::DenseSymMatProd<T> op(dxdpTdxdp);
+    Spectra::SymEigsSolver<T, Spectra::LARGEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, n_eigen, dxdpTdxdp.rows());
+
+    eigs.init();
+
+    int nconv = eigs.compute();
+
+    if (eigs.info() == Spectra::SUCCESSFUL)
+    {
+        Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+        Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+        std::cout << eigen_values << std::endl;
+        std::ofstream out("dxdp_eigen_vectors.txt");
+        out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+        for (int i = 0; i < eigen_vectors.cols(); i++)
+            out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+        out << std::endl;
+        for (int i = 0; i < eigen_vectors.rows(); i++)
+        {
+            // for (int j = 0; j < eigen_vectors.cols(); j++)
+            for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                out << eigen_vectors(i, j) << " ";
+            out << std::endl;
+        }       
+        out << std::endl;
+        out.close();
+    }
 }
 
 void SensitivityAnalysis::svdOnSensitivityMatrix()
@@ -329,7 +464,8 @@ void SensitivityAnalysis::svdOnSensitivityMatrix()
     // computeEquilibriumState();
     loadEquilibriumState();
     MatrixXT dxdp;
-    buildSensitivityMatrix(dxdp);
+    // buildSensitivityMatrix(dxdp);
+    simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
 
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(dxdp, Eigen::ComputeThinU | Eigen::ComputeThinV);
 	MatrixXT U = svd.matrixU();
@@ -337,15 +473,16 @@ void SensitivityAnalysis::svdOnSensitivityMatrix()
 	MatrixXT V = svd.matrixV();
 
     std::cout << "sigma: " << std::endl;
-    std::cout << Sigma << std::endl;    
-    // std::cout << U.rows() << " " << U.cols() << std::endl;
-    // std::cout << V.rows() << " " << V.cols() << std::endl;
+    // std::cout << Sigma << std::endl;    
+    std::cout << U.rows() << " " << U.cols() << std::endl;
+    std::cout << V.rows() << " " << V.cols() << std::endl;
     // std::cout << U.col(0).norm() << std::endl;
 
     std::cout << "V matrix: " << std::endl;
-    std::cout << V << std::endl;
+    // std::cout << V << std::endl;
     
-    std::ofstream out("cell_svd_vectors.txt");
+    // std::ofstream out("cell_svd_vectors.txt");
+    std::ofstream out("cell_edge_weights_svd_vectors.txt");
     out << U.rows() << " " << U.cols() << std::endl;
     for (int i = 0; i < n_dof_design; i++)
         out << Sigma[i] << " ";
@@ -359,21 +496,32 @@ void SensitivityAnalysis::svdOnSensitivityMatrix()
     out << std::endl;
     out.close();
 
-    out.open("dxdp.txt");
+    out.open("cell_edge_weights_svd_vectors_V.txt");
+    out << n_dof_design << std::endl;
     for (int i = 0; i < n_dof_design; i++)
-        dxdp.col(i).normalize();
-    out << dxdp.rows() << " " << dxdp.cols() << std::endl;
-    for (int i = 0; i < n_dof_design; i++)
-        out << 1.0 << " ";
-    out << std::endl;
-    for (int i = 0; i < n_dof_sim; i++)
     {
         for (int j = 0; j < n_dof_design; j++)
-            out << dxdp(i, j) << " ";
+            out << V(i, j) << " ";
         out << std::endl;
     }
     out << std::endl;
     out.close();
+
+    // out.open("dxdp.txt");
+    // for (int i = 0; i < n_dof_design; i++)
+    //     dxdp.col(i).normalize();
+    // out << dxdp.rows() << " " << dxdp.cols() << std::endl;
+    // for (int i = 0; i < n_dof_design; i++)
+    //     out << 1.0 << " ";
+    // out << std::endl;
+    // for (int i = 0; i < n_dof_sim; i++)
+    // {
+    //     for (int j = 0; j < n_dof_design; j++)
+    //         out << dxdp(i, j) << " ";
+    //     out << std::endl;
+    // }
+    // out << std::endl;
+    // out.close();
 }
 
 

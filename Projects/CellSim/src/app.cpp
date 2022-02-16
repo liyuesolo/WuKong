@@ -231,13 +231,20 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
         case '2':
             modes++;
             modes = (modes + evectors.cols()) % evectors.cols();
-            std::cout << "modes " << modes << std::endl;
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
             return true;
         case '3': //check modes at equilirium after static solve
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
             simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
             std::cout << simulation.computeResidual(simulation.u, residual) << std::endl;
             updateScreen(viewer);
+            return true;
+        case '4':
+            check_modes = true;
+            // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/dxdp_eigen_vectors.txt");
+            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_edge_weights_svd_vectors.txt");
+            modes = 0;
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
             return true;
         case 'a':
             viewer.core().is_animating = !viewer.core().is_animating;
@@ -258,7 +265,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
         }
     };
 
-    simulation.initializeCells();
+    // simulation.initializeCells();
     simulation.dynamic = false;
     if (simulation.dynamic)
         simulation.initializeDynamicsData(1e0, 10000);
@@ -301,6 +308,9 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     setMenu(viewer, menu);
     setMouseDown(viewer);
 
+    show_target_current = true;
+    show_target = true;
+
     viewer.callback_key_pressed = 
         [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
     {
@@ -314,6 +324,18 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
             loaddxdp("dxdp.txt", dx, dp);
             modes = 0;
             std::cout << "modes " << modes << std::endl;
+            return true;
+        case '1':
+            check_modes = true;
+            // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/dxdp_eigen_vectors.txt");
+            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_edge_weights_svd_vectors.txt");
+            modes = 0;
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
+            return true;
+        case '2':
+            modes++;
+            modes = (modes + evectors.cols()) % evectors.cols();
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
             return true;
         case ' ':
             viewer.core().is_animating = true;
@@ -331,15 +353,7 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
             simulation.deformed = simulation.undeformed + simulation.u + evectors.col(modes) * std::sin(t);
             
             t += 0.1;
-            
-            viewer.data().clear();
-            simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
-            viewer.data().set_mesh(V, F);     
-            viewer.data().set_colors(C);
-            if (show_membrane)
-            {
-                viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
-            }
+            updateScreen(viewer);
         }
         return false;
     };
@@ -348,19 +362,17 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     {
         if(viewer.core().is_animating && !check_modes)
         {
-            // bool finished = sa.optimizeOneStep(opt_step);
-            // if (finished)
-            // {
-            //     viewer.core().is_animating = false;
-            // }
-            // else 
-            //     opt_step++;
-            // updateScreen(viewer);
+            bool finished = sa.optimizeOneStep(opt_step, GaussNewton);
+            if (finished)
+            {
+                viewer.core().is_animating = false;
+            }
+            else 
+                opt_step++;
+            updateScreen(viewer);
         }
         return false;
     };
-
-    // simulation.initializeCells();
 
     simulation.sampleBoundingSurface(bounding_surface_samples);
     sdf_test_sample_idx_offset = bounding_surface_samples.rows();
@@ -368,6 +380,7 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     for (int i = 0; i < bounding_surface_samples.rows(); i++)
         bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
 
+    // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/cell/result.obj");
 
     updateScreen(viewer);
 
@@ -384,24 +397,63 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
 
 void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
+    TV max_corner, min_corner;
+    simulation.cells.computeBoundingBox(min_corner, max_corner);
+    TV shift = TV(1 * (max_corner[0] - min_corner[0]), 0, 0);
+
     simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
 
     viewer.data().clear();
 
-    if (show_contracting_edges)
-        simulation.cells.appendCylinderOnContractingEdges(V, F, C);
-        
-    if (show_membrane)
-        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
-
-    if (show_outside_vtx)
+    if (show_edge_weights)
     {
-        simulation.cells.getOutsideVtx(bounding_surface_samples, 
-            bounding_surface_samples_color, sdf_test_sample_idx_offset);
-        viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+        if (svd_V.rows() == 0)
+            loadSVDMatrixV("cell_edge_weights_svd_vectors_V.txt");   
+        appendCylinderToEdges(svd_V.col(modes), V, F, C);
     }
+    if (show_target)
+    {
+        TV color(1, 0, 0);
+        sa.objective.iterateTargets([&](int cell_idx, TV& target){
+            appendSphereToPosition(target + shift, 0.05, color, V, F, C);
+        });
+    }
+    if (show_target_current)
+    {
+        TV color(0, 1, 0);
+        sa.objective.iterateTargets([&](int cell_idx, TV& target){
+            TV current;
+            sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
+            appendSphereToPosition(current + shift, 0.05, color, V, F, C);
+        });
+    }
+        // loaddpAndAppendCylinder("/home/yueli/Documents/ETH/WuKong/output/cells/opt/GN_iter_2.txt", V, F, C);
+    // if (show_contracting_edges)
+    //     simulation.cells.appendCylinderOnContractingEdges(V, F, C);
+        
+    // if (show_membrane)
+    //     viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+
+    // if (show_outside_vtx)
+    // {
+    //     simulation.cells.getOutsideVtx(bounding_surface_samples, 
+    //         bounding_surface_samples_color, sdf_test_sample_idx_offset);
+    //     viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
+    // }
     viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);  
+}
+
+void DiffSimApp::loadSVDMatrixV(const std::string& filename)
+{
+    std::ifstream in(filename);
+    int row;
+    in >> row;
+    svd_V.resize(row, row); svd_V.setZero();
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < row; j++)
+            in >> svd_V(i, j);
+    in.close();
 }
 
 void DiffSimApp::loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& dp)
@@ -419,4 +471,239 @@ void DiffSimApp::loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& d
     in.close();
 
     evectors = dx;
+}
+
+void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
+        igl::opengl::glfw::imgui::ImGuiMenu& menu)
+{
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("ShowCurrent", &show_current))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowTarget", &show_target))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowTargetCurrent", &show_target_current))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowMembrane", &show_membrane))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("YolkOnly", &yolk_only))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowOutsideVtx", &show_outside_vtx))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowEdgeWeight", &show_edge_weights))
+            {
+                updateScreen(viewer);
+            }
+        }
+        if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
+        {
+            igl::writeOBJ("current_mesh.obj", V, F);
+        }
+    };
+
+    if (show_edge_weights)
+        loadSVDMatrixV("cell_edge_weights_svd_vectors_V.txt");
+}
+
+void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector, 
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+       
+    std::vector<Edge> contracting_edges;
+
+    simulation.cells.iterateApicalEdgeSerial([&](Edge& e)
+    {
+        contracting_edges.push_back(e);
+    });
+
+    T visual_R = 0.01;
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
+        0.0, visual_R*std::sin(theta*T(i)));
+    
+    int rod_offset_v = n_div * 2;
+    int rod_offset_f = n_div * 2;
+
+    int n_row_V = V.rows();
+    int n_row_F = F.rows();
+
+    int n_contracting_edges = contracting_edges.size();
+    
+    V.conservativeResize(n_row_V + n_contracting_edges * rod_offset_v, 3);
+    F.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+    C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+
+    
+    for (int j = 0; j < n_contracting_edges; j++)
+    {
+        int rov = n_row_V + j * rod_offset_v;
+        int rof = n_row_F + j * rod_offset_f;
+
+        TV vtx_from = simulation.deformed.segment<3>(contracting_edges[j][0] * 3);
+        TV vtx_to = simulation.deformed.segment<3>(contracting_edges[j][1] * 3);
+
+        TV axis_world = vtx_to - vtx_from;
+        TV axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                V(rov + i, d) = points[i * 3 + d];
+                V(rov + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    V(rov + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+            V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+
+            F.row(rof + i*2 ) = IV(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+            F.row(rof + i*2 + 1) = IV(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+
+            if (weights_vector[j] < 0)
+            {
+                C.row(rof + i*2 ) = TV(1.0, 0.0, 0.0);
+                C.row(rof + i*2 + 1) = TV(1.0, 0.0, 0.0);
+            }
+            else
+            {
+                C.row(rof + i*2 ) = TV(0.0, 1.0, 0.0);
+                C.row(rof + i*2 + 1) = TV(0.0, 1.0, 0.0);
+            }
+            // C.row(rof + i*2 ) = TV(1.0, 1.0, 1.0) * weights_vector[j];
+            // C.row(rof + i*2 + 1) = TV(1.0, 1.0, 1.0) * weights_vector[j];
+        }
+    }   
+}
+
+void DiffSimApp::loaddpAndAppendCylinder(const std::string& filename, 
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    VectorXT p(sa.n_dof_design);
+    std::ifstream in(filename);
+    for (int i = 0; i < sa.n_dof_design; i++)
+        in >> p[i];
+    in.close();
+    p  = p.array() + p.minCoeff();
+    p.normalize();
+    std::vector<Edge> contracting_edges;
+
+    simulation.cells.iterateApicalEdgeSerial([&](Edge& e)
+    {
+        contracting_edges.push_back(e);
+    });
+
+    T visual_R = 0.01;
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
+        0.0, visual_R*std::sin(theta*T(i)));
+    
+    int rod_offset_v = n_div * 2;
+    int rod_offset_f = n_div * 2;
+
+    int n_row_V = V.rows();
+    int n_row_F = F.rows();
+
+    int n_contracting_edges = contracting_edges.size();
+    
+    V.conservativeResize(n_row_V + n_contracting_edges * rod_offset_v, 3);
+    F.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+    C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
+
+
+    for (int j = 0; j < n_contracting_edges; j++)
+    {
+        int rov = n_row_V + j * rod_offset_v;
+        int rof = n_row_F + j * rod_offset_f;
+
+        TV vtx_from = simulation.deformed.segment<3>(contracting_edges[j][0] * 3);
+        TV vtx_to = simulation.deformed.segment<3>(contracting_edges[j][1] * 3);
+
+        TV axis_world = vtx_to - vtx_from;
+        TV axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                V(rov + i, d) = points[i * 3 + d];
+                V(rov + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    V(rov + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            V.row(rov + i) = (V.row(rov + i) * R).transpose() + vtx_from;
+            V.row(rov + i + n_div) = (V.row(rov + i + n_div) * R).transpose() + vtx_from;
+
+            F.row(rof + i*2 ) = IV(rov + i, rov + i+n_div, rov + (i+1)%(n_div));
+            F.row(rof + i*2 + 1) = IV(rov + (i+1)%(n_div), rov + i+n_div, rov + (i+1)%(n_div) + n_div);
+
+            C.row(rof + i*2 ) = TV(1.0, 1.0, 1.0) * p[j];
+            C.row(rof + i*2 + 1) = TV(1.0, 1.0, 1.0) * p[j];
+        }
+    }   
+}
+
+void DiffSimApp::appendSphereToPosition(const TV& position, T radius, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    Eigen::MatrixXd v_sphere;
+    Eigen::MatrixXi f_sphere;
+
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere162.obj", v_sphere, f_sphere);
+    
+    Eigen::MatrixXd c_sphere(f_sphere.rows(), f_sphere.cols());
+    
+    v_sphere = v_sphere * radius;
+
+    tbb::parallel_for(0, (int)v_sphere.rows(), [&](int row_idx){
+        v_sphere.row(row_idx) += position;
+    });
+
+    int n_vtx_prev = V.rows();
+    int n_face_prev = F.rows();
+
+    tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+        f_sphere.row(row_idx) += Eigen::Vector3i(n_vtx_prev, n_vtx_prev, n_vtx_prev);
+    });
+
+    tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+        c_sphere.row(row_idx) = color;
+    });
+
+    V.conservativeResize(V.rows() + v_sphere.rows(), 3);
+    F.conservativeResize(F.rows() + f_sphere.rows(), 3);
+    C.conservativeResize(C.rows() + f_sphere.rows(), 3);
+
+
+    V.block(n_vtx_prev, 0, v_sphere.rows(), 3) = v_sphere;
+    F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
+    C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
 }

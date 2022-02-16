@@ -188,3 +188,26 @@ void VertexModel::positionsFromIndices(VectorXT& positions, const VtxList& indic
         positions.segment<3>(i * 3) = rest_state ? undeformed.segment<3>(indices[i] * 3) : deformed.segment<3>(indices[i] * 3);
     }
 }
+
+void VertexModel::getVFCellIds(VtxList& indices)
+{
+    indices.resize(0);
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    TV mid_point = 0.5 * (min_corner + max_corner);
+    TV delta = max_corner - min_corner;
+    iterateCellSerial([&](VtxList& face_vtx_list, int cell_idx)
+    {
+        TV centroid;
+        computeFaceCentroid(face_vtx_list, centroid);
+        T percent_y = 0.4;
+        bool bottom_y = centroid[1] < min_corner[1] + (max_corner[1] - min_corner[1]) * percent_y;
+        T percent_x = 0.5, percent_z = 0.2;
+        bool middle_z = centroid[2] > mid_point[2] - 0.5 * delta[2] * percent_z && 
+                centroid[2] < mid_point[2] + 0.5 * delta[2] * percent_z;
+        bool middle_x = centroid[0] > mid_point[0] - 0.5 * delta[0] * percent_x &&
+            centroid[0] < mid_point[0] + 0.5 * delta[0] * percent_x;
+        if (bottom_y && middle_z && middle_x)
+            indices.push_back(cell_idx);
+    });
+}

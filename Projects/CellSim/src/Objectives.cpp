@@ -134,6 +134,12 @@ void ObjUMatching::getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof)
     n_dof_design = _design_dof;
 }
 
+void ObjUMatching::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
+{
+    n_dof_design = _design_dof;
+    n_dof_sim = _sim_dof;
+}
+
 T ObjUMatching::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil)
 {
     simulation.reset();
@@ -155,6 +161,12 @@ T ObjUTU::value(const VectorXT& p_curr, bool use_prev_equil)
     updateDesignParameters(p_curr);
     simulation.staticSolve();
     return -0.5 * simulation.u.dot(simulation.u);
+}
+
+void ObjUTU::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
+{
+    n_dof_design = _design_dof;
+    n_dof_sim = _sim_dof;
 }
 
 T ObjUTU::gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil)

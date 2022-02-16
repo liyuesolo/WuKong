@@ -1,14 +1,6 @@
 #ifndef SENSITIVITY_ANALYSIS_H
 #define SENSITIVITY_ANALYSIS_H
 
-// #include <igl/opengl/glfw/Viewer.h>
-// #include <igl/project.h>
-// #include <igl/unproject_on_plane.h>
-// #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
-// #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
-// #include <imgui/imgui.h>
-
-
 #include <utility>
 #include <iostream>
 #include <fstream>
@@ -24,6 +16,11 @@
 #include "VecMatDef.h"
 class Simulation;
 class Objectives;
+
+enum Optimizer
+{
+    GradientDescent, GaussNewton, MMA
+};
 
 class SensitivityAnalysis
 {
@@ -46,11 +43,13 @@ public:
     bool fd_dfdp;
 
     Simulation& simulation;
-    // Objectives* objective;
+    Objectives& objective;
 
     VectorXT design_parameters;
     
     void initialize();
+
+    bool optimizeOneStep(int step, Optimizer optimizer);
     
     void buildSensitivityMatrix(MatrixXT& dxdp);
 
@@ -60,14 +59,16 @@ public:
 
     void svdOnSensitivityMatrix();
 
+    void eigenAnalysisOnSensitivityMatrix();
+
     void optimizePerEdgeWeigths();
-    // bool optimizeGDOneStep(int step);
 
     void dxFromdpAdjoint();
 
-    // void updateViewer(igl::opengl::glfw::Viewer& viewer);
-    // bool gradientDescentWithViewerUpdate(igl::opengl::glfw::Viewer& viewer, int step);
-    
+    // Data generation
+    void generateNucleiDataSingleFrame(const std::string& filename);
+
+    // Derivative tests
     void diffTestdfdp();
     void diffTestdxdp();
 
@@ -75,12 +76,13 @@ private:
     void savedxdp(const VectorXT& dx, 
         const VectorXT& dp, const std::string& filename);
 
-    void optimizeGaussNewton(Objectives& objective);
-    void optimizeGradientDescent(Objectives& objective);
-    void optimizeMMA(Objectives& objective);
+    void optimizeGaussNewton();
+    void optimizeGradientDescent();
+    void optimizeMMA();
 
 public:
-    SensitivityAnalysis(Simulation& _simulation) : simulation(_simulation) {}
+    SensitivityAnalysis(Simulation& _simulation, Objectives& _objective) : 
+        simulation(_simulation), objective(_objective) {}
     ~SensitivityAnalysis() { }
 };
 

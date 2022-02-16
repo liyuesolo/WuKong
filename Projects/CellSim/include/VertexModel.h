@@ -702,6 +702,7 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
+    void getVFCellIds(VtxList& indices);
     void saveSingleCellEdges(const std::string& filename, 
         const VtxList& indices, const VectorXT& positions, bool save_tets = false) const;
 
