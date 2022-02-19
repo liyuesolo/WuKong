@@ -82,6 +82,8 @@ private:
     bool show_target = true;
     bool show_target_current = true;
     Eigen::MatrixXd svd_V;
+    bool show_edge_weights_opt = false;
+    VectorXT edge_weights;
 public:
 
     void runOptimization();
@@ -101,7 +103,10 @@ private:
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void appendCylinderToEdges(const VectorXT weights_vector, 
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    void appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void loadSVDMatrixV(const std::string& filename);
+    void loadEdgeWeights(const std::string& filename, VectorXT& weights);
 public:
     DiffSimApp(Simulation& _simulation, SensitivityAnalysis& _sa) : 
         sa(_sa), SimulationApp(_simulation) {}

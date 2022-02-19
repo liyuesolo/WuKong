@@ -36,7 +36,10 @@ void Simulation::initializeCells()
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_486.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";
         
     else if(cells.scene_type == 0)
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";

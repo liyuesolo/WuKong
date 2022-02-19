@@ -3,7 +3,7 @@
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/DenseSymMatProd.h>
-#include "../../../Solver/MMASolver.h"
+
 
 void SensitivityAnalysis::initialize()
 {
@@ -11,12 +11,12 @@ void SensitivityAnalysis::initialize()
     simulation.save_mesh = false;
     simulation.cells.print_force_norm = false;
     simulation.verbose = false;
-    n_dof_design = simulation.cells.edge_weights.rows();
-    n_dof_sim = simulation.num_nodes * 3;
-    objective.setSimulationAndDesignDoF(n_dof_sim, n_dof_design);
-
-    simulation.cells.edge_weights.setRandom();
-    simulation.cells.edge_weights /= simulation.cells.edge_weights.norm();
+    
+    objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
+    
+    // simulation.cells.edge_weights.setRandom();
+    // simulation.cells.edge_weights /= simulation.cells.edge_weights.norm();
+    simulation.cells.edge_weights.setConstant(0.05);
     objective.getDesignParameters(design_parameters);
 }
 
@@ -61,13 +61,25 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         method = "GD";
     else if (optimizer == MMA)
         method = "MMA";
+    else if (optimizer == Newton)
+        method = "Newton";
+    else
+        std::cout << "optimizer undefined" << std::endl;
     
     T tol_g = 1e-6;
     T g_norm = 0;
     T E0;
     VectorXT dOdp, dp;
 
-    if (optimizer == GradientDescent || optimizer == GaussNewton)
+    // mma 
+    T mma_step_size = 1.0;
+    VectorXT min_p = VectorXT::Zero(n_dof_design);
+    VectorXT max_p = VectorXT::Ones(n_dof_design);
+
+    T lower_bound = 0, upper_bound = 10;
+    bool add_bound_contraint = false;
+
+    if (optimizer == GradientDescent || optimizer == GaussNewton || optimizer == Newton)
     {
         if (step == 0)
         {
@@ -79,24 +91,68 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         {
             g_norm = objective.evaluteGradientAndEnergy(design_parameters, dOdp, E0);
         }
+
+        std::vector<int> projected_entries;
+        auto filterGradient =[&]()
+        {
+            T epsilon = 1e-6;
+            for (int i = 0; i < n_dof_design; i++)
+            {
+                if (design_parameters[i] < lower_bound + epsilon * dOdp[i])
+                {
+                    design_parameters[i] = lower_bound;
+                    dOdp[i] = 0;
+                    projected_entries.push_back(i);
+                }
+                if (design_parameters[i] > upper_bound - epsilon * dOdp[i])
+                {
+                    design_parameters[i] = upper_bound;
+                    dOdp[i] = 0;
+                    projected_entries.push_back(i);
+                }
+
+            }
+            
+        };
+
         dp = dOdp;
+
         if (optimizer == GaussNewton)
         {
-            StiffnessMatrix H_GH;
-            objective.hessianGN(design_parameters, H_GH, false);
-            simulation.linearSolve(H_GH, dOdp, dp);
+            StiffnessMatrix H_GN;
+            objective.hessianGN(design_parameters, H_GN, false);
+            for (int idx : projected_entries)
+            {
+                H_GN.row(idx) *= 0.0;
+                H_GN.col(idx) *= 0.0;
+                H_GN.coeffRef(idx, idx) = 1.0;
+            }
+            simulation.linearSolve(H_GN, dOdp, dp);
+        }
+        else if (optimizer == Newton)
+        {
+            StiffnessMatrix H;
+            objective.hessian(design_parameters, H, false);
+            simulation.linearSolve(H, dOdp, dp);
         }
 
+        // filterGradient();
+        g_norm = dOdp.norm();
+
+        std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
+            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+            << " obj: " << E0 << std::endl;
+
         T alpha = 1.0;    
-        for (int ls_cnt = 0; ls_cnt < 15; ls_cnt++)
+        for (int ls_cnt = 0; ls_cnt < 20; ls_cnt++)
         {
             VectorXT p_ls = design_parameters - alpha * dp;
-            
-            p_ls = p_ls.cwiseMax(0.0);
-            T E1 = objective.value(p_ls, true);
-            std::cout << "[GN]\tE1: " << E1 << std::endl;
+            if (add_bound_contraint)
+                p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
+            T E1 = objective.value(p_ls, false);
+            std::cout << "[" << method << "]\tE1: " << E1 << std::endl;
             // std::getchar();
-            if (E1 < E0 || ls_cnt > 10)
+            if (E1 < E0 || ls_cnt > 20)
             {
                 design_parameters = p_ls;
                 break;
@@ -109,13 +165,29 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     }
     else if (optimizer == MMA)
     {
-
-    }
-
-    std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
+        if (step == 0)
+        {
+            mma_solver.updateDoF(n_dof_design, 0);
+            mma_solver.SetAsymptotes(0.2, 0.65, 1.05);
+            objective.getDesignParameters(design_parameters);
+            
+        }
+        dOdp = VectorXT::Zero(n_dof_design);
+        g_norm = objective.gradient(design_parameters, dOdp, E0);
+        min_p = (design_parameters.array() - mma_step_size).cwiseMax(0.0);
+        max_p = (design_parameters.array() + mma_step_size).cwiseMin(10.0);
+        std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
             << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
             << " obj: " << E0 << std::endl;
+        mma_solver.UpdateEigen(design_parameters, dOdp, VectorXT(), VectorXT(), min_p, max_p);
+        objective.updateDesignParameters(design_parameters);
+    }
+
+    // std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
+    //         << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+    //         << " obj: " << E0 << std::endl;
     objective.saveState("output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".obj");
+    objective.updateDesignParameters(design_parameters);
     std::string filename = "output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".txt";
     std::ofstream out(filename);
     out << design_parameters << std::endl;

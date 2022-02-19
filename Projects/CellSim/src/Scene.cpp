@@ -196,7 +196,10 @@ void VertexModel::initializeContractionData()
                             });
                         int edge_id = std::distance(edges.begin(), find_iter);
                         if (find_iter != edges.end())
+                        {
+                            contracting_edges.push_back(edge);
                             edge_weights[edge_id] = Gamma;
+                        }
                     }
                 }
             }
@@ -560,11 +563,16 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
-    normalizeToUnit(V);
+    // normalizeToUnit(V);
     
-    T scale = 2.0;
+    // T scale = 2.0;
+    unit = 5.0;
 
-    V *= scale;
+    // T scale = 1.3;
+
+    // T scale = 10.0;
+
+    V *= unit;
 
     // face centroids corresponds to the vertices of the dual mesh 
     std::vector<TV> face_centroids(F.rows());
@@ -699,8 +707,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     u = VectorXT::Zero(deformed.rows());
     f = VectorXT::Zero(deformed.rows());
     undeformed = deformed;
+    n_cells = basal_face_start;
 
-    B = 1e6 * scale;
+    B = 1e6 * unit;
     By = 1e5;
 
     contract_apical_face = false;
@@ -715,9 +724,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         nu = 0.48;
     }
 
-    alpha = 10.0 * scale; // WORKED
-    gamma = 3.0 * scale;
-    sigma = 2.0 * scale;// apical
+    alpha = 10.0 * unit; // WORKED
+    gamma = 3.0 * unit;
+    sigma = 2.0 * unit;// apical
 
 
     use_face_centroid = use_cell_centroid;
@@ -762,13 +771,13 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
                 // Gamma = 0.5;//worked for sphere
-                // Gamma = 0.5 * scale * 10.0;//drosophila 4k
-                Gamma = 0.5 * scale * 10.0;
+                // Gamma = 0.5 * unit * 10.0;//drosophila 4k
+                Gamma = 0.5 * unit * 10.0;
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
     }
-
+    // Gamma *= 0.01;
     assign_per_edge_weight = true;
     if (assign_per_edge_weight)
     {
@@ -918,8 +927,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e1 * scale;
-        T normal_offset = 1e-3;// * scale;
+        bound_coeff = 1e1 * unit;
+        T normal_offset = 1e-3;// * unit;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);

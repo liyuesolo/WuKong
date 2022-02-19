@@ -132,6 +132,7 @@ void DataIO::trackCells()
             
             // time 0
             if (parent_id == -1 && frame == 0)
+            // if (parent_id == -1)
             {
                 Nucleus nucleus;
                 nucleus.idx = new_nuclei_cnt;
@@ -146,10 +147,11 @@ void DataIO::trackCells()
             }
             else
             {
-                if (long_int_int_map.find(parent_id) == long_int_int_map.end())
+                if (long_int_int_map.find(parent_id) == long_int_int_map.end() && parent_id == -1)
                 {
                     // std::cout << "this nucleus does have a parent" << std::endl;
-                    // std::cout << parent_id << std::endl;
+                    // std::cout << "parent_id: " << parent_id << " frame " << frame << std::endl;
+                    // std::getchar();
                 }
                 else
                 {
@@ -206,11 +208,11 @@ void DataIO::trackCells()
             valid_cnt++;
         }
     }
-    write_binary<MatrixXi>("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", 
-        cell_trajectories);
+    // write_binary<MatrixXi>("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", 
+    //     cell_trajectories);
 }
 
-void DataIO::loadTrajectories(const std::string& filename)
+void DataIO::loadTrajectories(const std::string& filename, MatrixXT& trajectories)
 {
     MatrixXi cell_trajectories;
     read_binary<MatrixXi>(filename, cell_trajectories);
@@ -218,12 +220,22 @@ void DataIO::loadTrajectories(const std::string& filename)
     int n_frames = cell_trajectories.rows() / 3;
     int n_nucleus = cell_trajectories.cols();
 
-    for (int frame = 0; frame < n_frames; frame++)
-    {
-        std::ofstream out("frame" + std::to_string(frame) + ".obj");
+    // for (int frame = 0; frame < n_frames; frame++)
+    // {
+    //     std::ofstream out("frame" + std::to_string(frame) + ".obj");
+    //     for (int i = 0; i < n_nucleus; i++)
+    //         out << "v " << cell_trajectories.col(i).segment<3>(frame * 3).transpose() << std::endl;
+    //     out.close();
+    // }
+
+    trajectories.resize(n_nucleus * 3, n_frames);
+    tbb::parallel_for(0, n_frames, [&](int frame){
         for (int i = 0; i < n_nucleus; i++)
-            out << "v " << cell_trajectories.col(i).segment<3>(frame * 3).transpose() << std::endl;
-        out.close();
-    }
+        {
+            IV tmp = cell_trajectories.col(i).segment<3>(frame * 3);
+            for (int d = 0; d < 3; d++)
+                trajectories(i* 3 + d, frame) = T(tmp[d]);
+        }
+    });
     
 }

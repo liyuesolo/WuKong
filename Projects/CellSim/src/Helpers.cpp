@@ -211,3 +211,13 @@ void VertexModel::getVFCellIds(VtxList& indices)
             indices.push_back(cell_idx);
     });
 }
+
+void VertexModel::getAllCellCentroids(VectorXT& cell_centroids)
+{
+    cell_centroids.resize(n_cells * 3);
+    iterateCellParallel([&](VtxList& face_vtx_list, int cell_idx){
+        TV centroid;
+        computeCellCentroid(face_vtx_list, centroid);
+        cell_centroids.segment<3>(cell_idx * 3) = centroid;
+    });
+}

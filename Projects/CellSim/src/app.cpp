@@ -1,4 +1,6 @@
+#include <igl/colormap.h>
 #include "../include/app.h"
+
 
 void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
@@ -362,7 +364,7 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     {
         if(viewer.core().is_animating && !check_modes)
         {
-            bool finished = sa.optimizeOneStep(opt_step, GaussNewton);
+            bool finished = sa.optimizeOneStep(opt_step, Newton);
             if (finished)
             {
                 viewer.core().is_animating = false;
@@ -399,8 +401,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     TV max_corner, min_corner;
     simulation.cells.computeBoundingBox(min_corner, max_corner);
-    TV shift = TV(1 * (max_corner[0] - min_corner[0]), 0, 0);
-
+    TV shift = TV(1.5 * (max_corner[0] - min_corner[0]), 0, 0);
+    T sphere_radius = 0.02 * (max_corner - min_corner).norm();
     simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
 
     viewer.data().clear();
@@ -415,16 +417,29 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     {
         TV color(1, 0, 0);
         sa.objective.iterateTargets([&](int cell_idx, TV& target){
-            appendSphereToPosition(target + shift, 0.05, color, V, F, C);
+            appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
         });
     }
     if (show_target_current)
     {
         TV color(0, 1, 0);
+        
         sa.objective.iterateTargets([&](int cell_idx, TV& target){
             TV current;
             sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
-            appendSphereToPosition(current + shift, 0.05, color, V, F, C);
+            appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+        });
+    }
+    if (show_edge_weights_opt && edge_weights.rows() != 0)
+    {
+        VectorXT ewn = edge_weights.normalized();
+        Eigen::MatrixXd colors;
+        igl::colormap(igl::COLOR_MAP_TYPE_JET, edge_weights, false, colors);
+        int cnt = 0;
+        simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
+            TV from = simulation.deformed.segment<3>(edge[0] * 3);
+            TV to = simulation.deformed.segment<3>(edge[1] * 3);
+            appendCylinderToEdge(from, to, colors.row(cnt++), V, F, C);
         });
     }
         // loaddpAndAppendCylinder("/home/yueli/Documents/ETH/WuKong/output/cells/opt/GN_iter_2.txt", V, F, C);
@@ -508,6 +523,24 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
             {
                 updateScreen(viewer);
             }
+            if (ImGui::Checkbox("ShowEdgeWeightOptimization", &show_edge_weights_opt))
+            {
+                updateScreen(viewer);
+            }
+        }
+        if (ImGui::CollapsingHeader("LoadData", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            float w = ImGui::GetContentRegionAvailWidth();
+            float p = ImGui::GetStyle().FramePadding.x;
+            if (ImGui::Button("Load##Edge##Weights", ImVec2((w-p)/2.f, 0)))
+            {
+                std::string fname = igl::file_dialog_open();
+                if (fname.length() != 0)
+                {
+                    loadEdgeWeights(fname, edge_weights);
+                }
+            }
+            // ImGui::SameLine(0, p);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
@@ -595,6 +628,54 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
             // C.row(rof + i*2 + 1) = TV(1.0, 1.0, 1.0) * weights_vector[j];
         }
     }   
+}
+
+void DiffSimApp::appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    T visual_R = 0.01;
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
+        0.0, visual_R*std::sin(theta*T(i)));
+
+    int offset_v = n_div * 2;
+    int offset_f = n_div * 2;
+
+    int n_row_V = _V.rows();
+    int n_row_F = _F.rows();
+
+    _V.conservativeResize(n_row_V + offset_v, 3);
+    _F.conservativeResize(n_row_F + offset_f, 3);
+    _C.conservativeResize(n_row_F + offset_f, 3);
+
+    TV axis_world = vtx_to - vtx_from;
+    TV axis_local(0, axis_world.norm(), 0);
+
+    Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+    for(int i = 0; i < n_div; i++)
+    {
+        for(int d = 0; d < 3; d++)
+        {
+            _V(n_row_V + i, d) = points[i * 3 + d];
+            _V(n_row_V + i+n_div, d) = points[i * 3 + d];
+            if (d == 1)
+                _V(n_row_V + i+n_div, d) += axis_world.norm();
+        }
+
+        // central vertex of the top and bottom face
+        _V.row(n_row_V + i) = (_V.row(n_row_V + i) * R).transpose() + vtx_from;
+        _V.row(n_row_V + i + n_div) = (_V.row(n_row_V + i + n_div) * R).transpose() + vtx_from;
+
+        _F.row(n_row_F + i*2 ) = IV(n_row_V + i, n_row_V + i+n_div, n_row_V + (i+1)%(n_div));
+        _F.row(n_row_F + i*2 + 1) = IV(n_row_V + (i+1)%(n_div), n_row_V + i+n_div, n_row_V + (i+1)%(n_div) + n_div);
+
+        _C.row(n_row_F + i*2 ) = color;
+        _C.row(n_row_F + i*2 + 1) = color;
+    }
 }
 
 void DiffSimApp::loaddpAndAppendCylinder(const std::string& filename, 
@@ -706,4 +787,15 @@ void DiffSimApp::appendSphereToPosition(const TV& position, T radius, const TV& 
     V.block(n_vtx_prev, 0, v_sphere.rows(), 3) = v_sphere;
     F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
     C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
+}
+
+void DiffSimApp::loadEdgeWeights(const std::string& filename, VectorXT& weights)
+{
+    std::ifstream in(filename);
+    std::vector<T> weights_std_vec;
+    T w;
+    while (in >> w)
+        weights_std_vec.push_back(w);
+    weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
+    in.close();
 }

@@ -1,4 +1,4 @@
-#include "../include/Objectives.h"
+#include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
 
 void ObjUMatching::setTargetFromMesh(const std::string& filename)
@@ -134,7 +134,7 @@ void ObjUMatching::getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof)
     n_dof_design = _design_dof;
 }
 
-void ObjUMatching::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
+void Objectives::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
 {
     n_dof_design = _design_dof;
     n_dof_sim = _sim_dof;
@@ -161,12 +161,6 @@ T ObjUTU::value(const VectorXT& p_curr, bool use_prev_equil)
     updateDesignParameters(p_curr);
     simulation.staticSolve();
     return -0.5 * simulation.u.dot(simulation.u);
-}
-
-void ObjUTU::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
-{
-    n_dof_design = _design_dof;
-    n_dof_sim = _sim_dof;
 }
 
 T ObjUTU::gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil)
@@ -301,6 +295,78 @@ void ObjUTU::getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof)
 void ObjUTU::updateDesignParameters(const VectorXT& design_parameters)
 {
     simulation.cells.edge_weights = design_parameters;
+}
+
+void Objectives::diffTestHessian()
+{
+    T epsilon = 1e-5;
+    VectorXT p;
+    getDesignParameters(p);
+    StiffnessMatrix A;
+    hessian(p, A);
+
+    for(int dof_i = 0; dof_i < n_dof_design; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        p[dof_i] += epsilon;
+        VectorXT g0(n_dof_design), g1(n_dof_design);
+        g0.setZero(); g1.setZero();
+        gradient(p, g0);
+
+        p[dof_i] -= 2.0 * epsilon;
+        gradient(p, g1);
+        p[dof_i] += epsilon;
+        VectorXT row_FD = (g0 - g1) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof_design; i++)
+        {
+            if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Hessian Diff Test Passed" << std::endl;
+}
+
+void Objectives::diffTestHessianScale()
+{
+    VectorXT p;
+    getDesignParameters(p);
+    StiffnessMatrix A;
+    hessian(p, A);
+    
+    VectorXT dp(n_dof_design);
+    dp.setRandom();
+    dp *= 1.0 / dp.norm();
+    dp *= 0.001;
+
+    VectorXT f0(n_dof_design);
+    f0.setZero();
+    gradient(p, f0);
+
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        
+        VectorXT f1(n_dof_design);
+        f1.setZero();
+        gradient(p + dp, f1);
+
+        T df_norm = (f0 + (A * dp) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dp *= 0.5;
+    }
 }
 
 void Objectives::diffTestGradient()

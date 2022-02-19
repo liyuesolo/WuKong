@@ -10,6 +10,8 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 
+#include "../../../Solver/MMASolver.h"
+
 #include "Simulation.h"
 #include "Objectives.h"
 
@@ -19,7 +21,7 @@ class Objectives;
 
 enum Optimizer
 {
-    GradientDescent, GaussNewton, MMA
+    GradientDescent, GaussNewton, MMA, Newton
 };
 
 class SensitivityAnalysis
@@ -46,6 +48,8 @@ public:
     Objectives& objective;
 
     VectorXT design_parameters;
+
+    MMASolver mma_solver;
     
     void initialize();
 

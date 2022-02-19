@@ -474,6 +474,10 @@ public:
     int basal_face_start;
     int lateral_face_start;
 
+    int n_cells;
+
+    T unit = 1.0;
+
     // vertex model
     T sigma = 1.0;
     T alpha = 2.13;
@@ -715,6 +719,7 @@ public:
     void computeCellCentroid(const VtxList& face_vtx_list, TV& centroid);
     void computeFaceCentroid(const VtxList& face_vtx_list, TV& centroid);
     void updateFixedCentroids();
+    void getAllCellCentroids(VectorXT& cell_centroids);
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb = false);
