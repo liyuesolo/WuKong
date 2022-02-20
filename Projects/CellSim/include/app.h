@@ -84,6 +84,8 @@ private:
     Eigen::MatrixXd svd_V;
     bool show_edge_weights_opt = false;
     VectorXT edge_weights;
+
+    bool show_edges = true;
 public:
 
     void runOptimization();
@@ -103,7 +105,8 @@ private:
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void appendCylinderToEdges(const VectorXT weights_vector, 
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
-    void appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
+    void appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, 
+        const TV& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void loadSVDMatrixV(const std::string& filename);
     void loadEdgeWeights(const std::string& filename, VectorXT& weights);

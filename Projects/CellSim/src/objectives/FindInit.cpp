@@ -15,6 +15,8 @@ T ObjFindInit::value(const VectorXT& p_curr, bool use_prev_equil)
         energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
     });
     
+    simulation.cells.addSingleTetVolBarrierEnergy(energy);
+
     return energy;
 }
 
@@ -41,6 +43,9 @@ T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_eq
             dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
         }
     });
+    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
+    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
+    dOdx += -vol_barrier_force;
 
     dOdp = dOdx;
 }
@@ -70,6 +75,11 @@ T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool 
         }
     });
 
+    simulation.cells.addSingleTetVolBarrierEnergy(energy);
+    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
+    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
+    dOdx += -vol_barrier_force;
+
     dOdp = dOdx;
 }
 
@@ -91,6 +101,8 @@ T ObjFindInit::hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev
                 for (int d = 0; d < 3; d++)
                     entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
     });
+
+    simulation.cells.addSingleTetVolBarrierHessianEntries(entries);
 
     H.resize(n_dof_design, n_dof_design);
     H.setFromTriplets(entries.begin(), entries.end());
@@ -120,6 +132,11 @@ T ObjFindInit::evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, 
             dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
         }
     });
+
+    simulation.cells.addSingleTetVolBarrierEnergy(energy);
+    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
+    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
+    dOdx += -vol_barrier_force;
 
     dOdp = dOdx;
 }
@@ -166,16 +183,16 @@ bool ObjFindInit::getTargetTrajectoryFrame(VectorXT& frame_data)
         TV pos = frame_data.segment<3>(i * 3);
         TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
         updated = R2 * R * updated;
-        frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
+        frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
     }
     
     return true;
 }
 
-void ObjFindInit::loadTargetTrajectory(const std::string& frame)
+void ObjFindInit::loadTargetTrajectory(const std::string& filename)
 {
     DataIO data_io;
-    data_io.loadTrajectories(frame, cell_trajectories);
+    data_io.loadTrajectories(filename, cell_trajectories);
 }
 
 void ObjFindInit::updateTarget()
@@ -186,15 +203,86 @@ void ObjFindInit::updateTarget()
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
 
-    MatrixXT query = Eigen::Map<MatrixXT>(cell_centroids.data(), cell_centroids.rows() / 3, 3);
-    MatrixXT fixed = Eigen::Map<MatrixXT>(data_points.data(), data_points.rows() / 3, 3);
+    TV min_corner, max_corner;
+    simulation.cells.computeBoundingBox(min_corner, max_corner);
+    T spacing = 0.05 * (max_corner - min_corner).norm();
 
-    VectorXi closest_indices = KnnSearch(fixed, query);
-    // std::cout << query.rows() << " " << closest_indices.rows() << std::endl;
-    // std::cout << closest_indices.transpose() << std::endl;
-    // std::exit(0);
-    for (int i = 0; i < closest_indices.rows(); i++)
+    T max_dis = 0.05 * (max_corner - min_corner).norm();
+    bool inverse = true;
+    std::vector<std::pair<int, int>> pairs;
+    
+    if (inverse)
     {
-        target_positions[i] = data_points.segment<3>(closest_indices[i] * 3);
+        std::vector<bool> visited(data_points.rows() / 3, false);
+        hash.build(spacing, data_points);
+
+        for (int i = 0; i < cell_centroids.rows() / 3; i++)
+        {
+            std::vector<int> neighbors;
+            TV current = cell_centroids.segment<3>(i * 3);
+            hash.getOneRingNeighbors(current, neighbors);
+            T min_dis = 1e6;
+            int min_dis_pt = -1;
+            for (int idx : neighbors)
+            {
+                TV neighbor = data_points.segment<3>(idx * 3);
+                
+                T dis = (current - neighbor).norm();
+                
+                if (dis < min_dis)
+                {
+                    min_dis = dis;
+                    min_dis_pt = idx;
+                }
+            }
+            if (min_dis_pt != -1 && min_dis < max_dis && !visited[min_dis_pt])
+            {
+                target_positions[i] = data_points.segment<3>(min_dis_pt * 3);
+                pairs.push_back(std::make_pair(i, min_dis_pt));
+                visited[min_dis_pt] = true;
+            }
+        }   
     }
+    else
+    {
+        std::vector<bool> visited(cell_centroids.rows() / 3, false);
+        hash.build(spacing, cell_centroids);
+        for (int i = 0; i < data_points.rows() / 3; i++)
+        {
+            std::vector<int> neighbors;
+            TV current = data_points.segment<3>(i * 3);
+            hash.getOneRingNeighbors(current, neighbors);
+            T min_dis = 1e6;
+            int min_dis_pt = -1;
+            for (int idx : neighbors)
+            {
+                TV neighbor = cell_centroids.segment<3>(idx * 3);
+                
+                T dis = (current - neighbor).norm();
+                
+                if (dis < min_dis)
+                {
+                    min_dis = dis;
+                    min_dis_pt = idx;
+                }
+            }
+            if (min_dis_pt != -1 && min_dis < max_dis && !visited[i])
+            {
+                target_positions[min_dis_pt] = current;
+                pairs.push_back(std::make_pair(min_dis_pt, i));
+                visited[i] = true;
+            }
+        }   
+    }
+    // std::ofstream out("idx_map.txt");
+    // for (auto pair : pairs)
+    //     out << pair.first << " " << pair.second << std::endl;
+    // out.close();
+}
+
+T ObjFindInit::maximumStepSize(const VectorXT& dp)
+{
+    VectorXT dummy = VectorXT::Zero(dp.rows());
+    return simulation.cells.computeInversionFreeStepSize(dummy, dp);
+
 }

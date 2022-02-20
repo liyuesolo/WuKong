@@ -78,8 +78,9 @@ int main()
     simulation.cells.tet_vol_barrier_w = 1e-22;
     // obj.initializeTarget();
     // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_test.txt");
-    obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
-    obj.updateTarget();
+    // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+    // obj.updateTarget();
+    // obj.initializeTargetFromMap("idx_map.txt", 30);
 
     obj_find_init.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     obj_find_init.updateTarget();
@@ -112,7 +113,8 @@ int main()
         // sa.svdOnSensitivityMatrix();
         // sa.eigenAnalysisOnSensitivityMatrix();
         // sa.dxFromdpAdjoint();
-        
+        // sa.objective.diffTestHessian();
+        // sa.objective.diffTestHessianScale();
         diff_sim_app.setViewer(viewer, menu);
         viewer.launch();
     };

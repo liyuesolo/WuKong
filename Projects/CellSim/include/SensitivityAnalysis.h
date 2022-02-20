@@ -19,11 +19,6 @@
 class Simulation;
 class Objectives;
 
-enum Optimizer
-{
-    GradientDescent, GaussNewton, MMA, Newton
-};
-
 class SensitivityAnalysis
 {
 public:

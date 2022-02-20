@@ -364,7 +364,7 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     {
         if(viewer.core().is_animating && !check_modes)
         {
-            bool finished = sa.optimizeOneStep(opt_step, Newton);
+            bool finished = sa.optimizeOneStep(opt_step, sa.objective.default_optimizer);
             if (finished)
             {
                 viewer.core().is_animating = false;
@@ -401,8 +401,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     TV max_corner, min_corner;
     simulation.cells.computeBoundingBox(min_corner, max_corner);
-    TV shift = TV(1.5 * (max_corner[0] - min_corner[0]), 0, 0);
-    T sphere_radius = 0.02 * (max_corner - min_corner).norm();
+    TV shift = TV(1.2 * (max_corner[0] - min_corner[0]), 0, 0);
+    T sphere_radius = 0.01 * (max_corner - min_corner).norm();
     simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
 
     viewer.data().clear();
@@ -430,6 +430,27 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
         });
     }
+    if (show_target && show_target_current)
+    {
+        TV color(0, 1, 1);
+        sa.objective.iterateTargets([&](int cell_idx, TV& target){
+            TV current;
+            sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
+            appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+        });
+    }
+    if (show_edges)
+    {
+        TV color(1, 1, 0);
+        int cnt = 0;
+        simulation.cells.iterateEdgeSerial([&](Edge& edge)
+        {
+            TV from = simulation.deformed.segment<3>(edge[0] * 3);
+            TV to = simulation.deformed.segment<3>(edge[1] * 3);
+            appendCylinderToEdge(from + shift, to + shift, color, 0.005, V, F, C);
+            cnt++;
+        });
+    }
     if (show_edge_weights_opt && edge_weights.rows() != 0)
     {
         VectorXT ewn = edge_weights.normalized();
@@ -439,7 +460,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
             TV from = simulation.deformed.segment<3>(edge[0] * 3);
             TV to = simulation.deformed.segment<3>(edge[1] * 3);
-            appendCylinderToEdge(from, to, colors.row(cnt++), V, F, C);
+            appendCylinderToEdge(from, to, colors.row(cnt++), 0.01, V, F, C);
         });
     }
         // loaddpAndAppendCylinder("/home/yueli/Documents/ETH/WuKong/output/cells/opt/GN_iter_2.txt", V, F, C);
@@ -524,6 +545,10 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
                 updateScreen(viewer);
             }
             if (ImGui::Checkbox("ShowEdgeWeightOptimization", &show_edge_weights_opt))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowEdges", &show_edges))
             {
                 updateScreen(viewer);
             }
@@ -631,15 +656,15 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
 }
 
 void DiffSimApp::appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
-        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+        T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
 {
-    T visual_R = 0.01;
+    
     int n_div = 10;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 3);
     for(int i = 0; i < n_div; i++)
-        points.segment<3>(i * 3) = TV(visual_R * std::cos(theta * T(i)), 
-        0.0, visual_R*std::sin(theta*T(i)));
+        points.segment<3>(i * 3) = TV(radius * std::cos(theta * T(i)), 
+        0.0, radius * std::sin(theta*T(i)));
 
     int offset_v = n_div * 2;
     int offset_f = n_div * 2;

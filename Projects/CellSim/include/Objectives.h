@@ -14,7 +14,15 @@
 #include "Simulation.h"
 class Simulation;
 
+#include "SpatialHash.h"
+
 #include "VecMatDef.h"
+
+enum Optimizer
+{
+    GradientDescent, GaussNewton, MMA, Newton
+};
+
 class Objectives
 {
 public:
@@ -29,7 +37,7 @@ public:
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
-
+    Optimizer default_optimizer = GaussNewton;
 public:
     template <class OP>
     void iterateTargets(const OP& f) {
@@ -56,6 +64,8 @@ public:
     virtual void getSimulationAndDesignDoF(int& sim_dof, int& design_dof) {}
     virtual void setSimulationAndDesignDoF(int _sim_dof, int _design_dof);
     virtual void updateTarget() {}
+
+    virtual T maximumStepSize(const VectorXT& dp) { return 1.0; }
 
     void saveState(const std::string& filename) { simulation.saveState(filename); }
     
@@ -127,7 +137,7 @@ class ObjNucleiTracking : public Objectives
 {
 public:
     using VtxList = std::vector<int>;
-    
+    SpatialHash hash;
     MatrixXT cell_trajectories;
     int frame = 0;
     bool test = false;
@@ -150,11 +160,11 @@ public:
     void updateTarget();
 
     void loadTarget(const std::string& filename);
-
+    void initializeTargetFromMap(const std::string& filename, int _frame);
 public: 
     ObjNucleiTracking(Simulation& _simulation) : Objectives(_simulation) 
     {
-        
+        default_optimizer = MMA;
     }
     ~ObjNucleiTracking() {}
 };
@@ -167,6 +177,8 @@ public:
     using VtxList = std::vector<int>;
     MatrixXT cell_trajectories;
     int frame = 0;
+
+    SpatialHash hash;
 public:
     T value(const VectorXT& p_curr, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil = false);
@@ -183,10 +195,12 @@ public:
     void loadTargetTrajectory(const std::string& filename);
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
 
+    T maximumStepSize(const VectorXT& dp);
+
 public: 
     ObjFindInit(Simulation& _simulation) : Objectives(_simulation) 
     {
-        
+        default_optimizer = Newton;
     }
     ~ObjFindInit() {}
 };

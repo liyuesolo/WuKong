@@ -1,7 +1,6 @@
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
 #include "../../include/DataIO.h"
-#include "../../icp/simpleicp.h"
 
 void ObjNucleiTracking::initializeTarget()
 {
@@ -213,10 +212,28 @@ bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)
     return true;
 }
 
-void ObjNucleiTracking::loadTargetTrajectory(const std::string& frame)
+void ObjNucleiTracking::loadTargetTrajectory(const std::string& filename)
 {
     DataIO data_io;
-    data_io.loadTrajectories(frame, cell_trajectories);
+    data_io.loadTrajectories(filename, cell_trajectories);
+}
+
+void ObjNucleiTracking::initializeTargetFromMap(const std::string& filename, int _frame)
+{
+    VectorXT data_points;
+    frame = _frame;
+    bool success = getTargetTrajectoryFrame(data_points);
+    std::ifstream in(filename);
+    int idx0, idx1;
+    std::vector<int> vf_cell_indices;
+    simulation.cells.getVFCellIds(vf_cell_indices);
+    while (in >> idx0 >> idx1)
+    {
+        if (std::find(vf_cell_indices.begin(), vf_cell_indices.end(), idx0) 
+            != vf_cell_indices.end())
+            target_positions[idx0] = data_points.segment<3>(idx1 * 3);
+    }
+    in.close();
 }
 
 void ObjNucleiTracking::updateTarget()
@@ -227,19 +244,75 @@ void ObjNucleiTracking::updateTarget()
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
 
-    MatrixXT query = Eigen::Map<MatrixXT>(cell_centroids.data(), cell_centroids.rows() / 3, 3);
-    MatrixXT fixed = Eigen::Map<MatrixXT>(data_points.data(), data_points.rows() / 3, 3);
+    TV min_corner, max_corner;
+    simulation.cells.computeBoundingBox(min_corner, max_corner);
+    T spacing = 0.05 * (max_corner - min_corner).norm();
 
-    VectorXi closest_indices = KnnSearch(fixed, query);
-    // std::cout << query.rows() << " " << closest_indices.rows() << std::endl;
-    // std::cout << closest_indices.transpose() << std::endl;
-    // std::exit(0);
-    for (int i = 0; i < closest_indices.rows(); i++)
+    T max_dis = 0.02 * (max_corner - min_corner).norm();
+    bool inverse = true;
+    std::vector<std::pair<int, int>> pairs;
+    if (inverse)
     {
-        target_positions[i] = data_points.segment<3>(closest_indices[i] * 3);
-    }
+        hash.build(spacing, data_points);
 
-    // VectorXi dummy;
-    // simulation.cells.saveMeshVector("query.obj", cell_centroids, dummy);
-    // simulation.cells.saveMeshVector("fixed.obj", data_points, dummy);
+        for (int i = 0; i < cell_centroids.rows() / 3; i++)
+        {
+            std::vector<int> neighbors;
+            TV current = cell_centroids.segment<3>(i * 3);
+            hash.getOneRingNeighbors(current, neighbors);
+            T min_dis = 1e6;
+            int min_dis_pt = -1;
+            for (int idx : neighbors)
+            {
+                TV neighbor = data_points.segment<3>(idx * 3);
+                
+                T dis = (current - neighbor).norm();
+                
+                if (dis < min_dis)
+                {
+                    min_dis = dis;
+                    min_dis_pt = idx;
+                }
+            }
+            if (min_dis_pt != -1 && min_dis < max_dis)
+            {
+                target_positions[i] = data_points.segment<3>(min_dis_pt * 3);
+                pairs.push_back(std::make_pair(i, min_dis_pt));
+            }
+        }   
+    }
+    else
+    {
+        hash.build(spacing, cell_centroids);
+        for (int i = 0; i < data_points.rows() / 3; i++)
+        {
+            std::vector<int> neighbors;
+            TV current = data_points.segment<3>(i * 3);
+            hash.getOneRingNeighbors(current, neighbors);
+            T min_dis = 1e6;
+            int min_dis_pt = -1;
+            for (int idx : neighbors)
+            {
+                TV neighbor = cell_centroids.segment<3>(idx * 3);
+                
+                T dis = (current - neighbor).norm();
+                
+                if (dis < min_dis)
+                {
+                    min_dis = dis;
+                    min_dis_pt = idx;
+                }
+            }
+            if (min_dis_pt != -1 && min_dis < max_dis)
+            {
+                target_positions[min_dis_pt] = current;
+                pairs.push_back(std::make_pair(min_dis_pt, i));
+            }
+        }   
+    }
+    // std::ofstream out("idx_map.txt");
+    // for (auto pair : pairs)
+    //     out << pair.first << " " << pair.second << std::endl;
+    // out.close();
 }
+

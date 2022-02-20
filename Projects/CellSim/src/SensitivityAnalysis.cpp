@@ -143,10 +143,12 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
             << " obj: " << E0 << std::endl;
 
-        T alpha = 1.0;    
+        VectorXT search_direction = -dp;
+        T alpha = objective.maximumStepSize(search_direction);
+
         for (int ls_cnt = 0; ls_cnt < 20; ls_cnt++)
         {
-            VectorXT p_ls = design_parameters - alpha * dp;
+            VectorXT p_ls = design_parameters + alpha * search_direction;
             if (add_bound_contraint)
                 p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
             T E1 = objective.value(p_ls, false);
@@ -176,10 +178,11 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         g_norm = objective.gradient(design_parameters, dOdp, E0);
         min_p = (design_parameters.array() - mma_step_size).cwiseMax(0.0);
         max_p = (design_parameters.array() + mma_step_size).cwiseMin(10.0);
-        std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
-            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
-            << " obj: " << E0 << std::endl;
+        VectorXT tmp = design_parameters;
         mma_solver.UpdateEigen(design_parameters, dOdp, VectorXT(), VectorXT(), min_p, max_p);
+        std::cout << "[" << method << "] iter " << step << " |g|: " << g_norm 
+            << " |dp|: " << (design_parameters - tmp).norm() 
+            << " obj: " << E0 << std::endl;
         objective.updateDesignParameters(design_parameters);
     }
 
