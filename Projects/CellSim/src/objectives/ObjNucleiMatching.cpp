@@ -1,35 +1,95 @@
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
 #include "../../include/DataIO.h"
+#include "../../include/LinearSolver.h"
 
 void ObjNucleiTracking::initializeTarget()
 {
-    std::vector<int> VF_cell_idx;
-    simulation.cells.getVFCellIds(VF_cell_idx);
-    // std::cout << "VF cells " << VF_cell_idx.size() << std::endl;
-    for (int idx : VF_cell_idx)
+    // std::vector<int> VF_cell_idx;
+    // simulation.cells.getVFCellIds(VF_cell_idx);
+    // // std::cout << "VF cells " << VF_cell_idx.size() << std::endl;
+    // for (int idx : VF_cell_idx)
+    // {
+    //     TV cell_centroid;
+    //     VtxList face_vtx_list = simulation.cells.faces[idx];
+    //     simulation.cells.computeCellCentroid(face_vtx_list, cell_centroid);
+    //     target_positions[idx] = cell_centroid;
+    // }
+    for (int i = 0; i < simulation.cells.basal_face_start; i++)
     {
-        TV cell_centroid;
-        VtxList face_vtx_list = simulation.cells.faces[idx];
-        simulation.cells.computeCellCentroid(face_vtx_list, cell_centroid);
-        target_positions[idx] = cell_centroid;
+        target_positions[i] = TV::Zero();
     }
+    
 }
 
 void ObjNucleiTracking::loadTarget(const std::string& filename)
 {
+    std::vector<int> VF_cell_idx;
+    simulation.cells.getVFCellIds(VF_cell_idx);
     std::ifstream in(filename);
     int idx; T x, y, z;
     while(in >> idx >> x >> y >> z)
-        target_positions[idx] = TV(x, y, z);
+    {
+        // if (std::find(VF_cell_idx.begin(), VF_cell_idx.end(), idx) != VF_cell_idx.end())
+            target_positions[idx] = TV(x, y, z);
+    }
     in.close();
+}
+
+void ObjNucleiTracking::d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries)
+{
+    updateDesignParameters(p_curr);
+    iterateTargets([&](int cell_idx, TV& target_pos)
+    {
+        
+        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+        VtxList cell_vtx_list = face_vtx_list;
+        for (int idx : face_vtx_list)
+            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+        TV centroid;
+        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+        T coeff = cell_vtx_list.size();
+        for (int idx_i : cell_vtx_list)
+            for (int idx_j : cell_vtx_list)
+                for (int d = 0; d < 3; d++)
+                    d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
+    });
+    for(int i = 0; i < n_dof_sim; i++)
+        d2Odx2_entries.push_back(Entry(i, i, 1e-6));
+}
+
+void ObjNucleiTracking::dOdx(const VectorXT& p_curr, VectorXT& _dOdx)
+{
+    updateDesignParameters(p_curr);
+    
+    _dOdx.resize(n_dof_sim);
+    _dOdx.setZero();
+
+    iterateTargets([&](int cell_idx, TV& target_pos)
+    {
+        
+        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+        VtxList cell_vtx_list = face_vtx_list;
+        for (int idx : face_vtx_list)
+            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+        TV centroid;
+        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+        T coeff = cell_vtx_list.size();
+        for (int idx : cell_vtx_list)
+        {
+            _dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+        }
+    });
 }
 
 
 T ObjNucleiTracking::value(const VectorXT& p_curr, bool use_prev_equil)
 {
     simulation.reset();
+    // simulation.loadDeformedState("current_mesh.obj");
     updateDesignParameters(p_curr);
+    if (use_prev_equil)
+        simulation.u = equilibrium_prev;
     simulation.staticSolve();
 
     T energy = 0.0;
@@ -40,17 +100,89 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool use_prev_equil)
         simulation.cells.computeCellCentroid(face_vtx_list, centroid);
         energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
     });
+    if (use_log_barrier)
+        for (int i = 0; i < n_dof_design; i++)
+            if (p_curr[i] < barrier_distance)
+                energy += barrier_weight * barrier<0>(p_curr[i], barrier_distance);
     
+    if (add_min_act)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            energy += w_min_act * std::abs(p_curr[i]);
+        }
+    }
+        
     return energy;
 }
 
 T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil)
 {
+    simulation.reset();
+    // simulation.loadDeformedState("current_mesh.obj");
+    updateDesignParameters(p_curr);
+    simulation.staticSolve();
+    
+    VectorXT dOdx(n_dof_sim);
+    dOdx.setZero();
 
+    iterateTargets([&](int cell_idx, TV& target_pos)
+    {
+        
+        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+        VtxList cell_vtx_list = face_vtx_list;
+        for (int idx : face_vtx_list)
+            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+        TV centroid;
+        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+        T coeff = cell_vtx_list.size();
+        for (int idx : cell_vtx_list)
+        {
+            dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+        }
+    });
+    
+    
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    VectorXT lambda;
+    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
+    if (simulation.woodbury)
+    {
+        MatrixXT UV;
+        simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
+        LinearSolver::WoodburySolve(d2edx2, UV, dOdx, lambda, true, false, false);
+    }
+    else
+    {   
+        simulation.buildSystemMatrix(simulation.u, d2edx2);
+        simulation.linearSolveNaive(d2edx2, dOdx, lambda);
+    }
+    
+    simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
+
+    if (use_log_barrier)
+        for (int i = 0; i < n_dof_design; i++)
+            if (p_curr[i] < barrier_distance)
+                dOdp[i] += barrier_weight * barrier<1>(p_curr[i], barrier_distance);
+    
+    if (add_min_act)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (p_curr[i] < 0)
+                dOdp[i] -= w_min_act;
+            else
+                dOdp[i] += w_min_act;
+        }
+    }
+        
+    equilibrium_prev = simulation.u;
+    return dOdp.norm();
 }
 
 T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool use_prev_equil)
 {
+    
     simulation.reset();
     updateDesignParameters(p_curr);
     simulation.staticSolve();
@@ -79,27 +211,50 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     
     
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    VectorXT lambda;
+    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
     if (simulation.woodbury)
     {
         MatrixXT UV;
         simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
+        LinearSolver::WoodburySolve(d2edx2, UV, dOdx, lambda, true, false, false);
     }
     else
     {   
         simulation.buildSystemMatrix(simulation.u, d2edx2);
+        simulation.linearSolveNaive(d2edx2, dOdx, lambda);
     }
-
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
-    solver.analyzePattern(d2edx2);
-    solver.factorize(d2edx2);
-    if (solver.info() == Eigen::NumericalIssue)
-        std::cout << "Forward simulation hessian indefinite" << std::endl;
     
-    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
-    VectorXT lambda = solver.solve(dOdx);
     
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
 
+    if (use_log_barrier)
+    {
+        T e_barrier = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (p_curr[i] < barrier_distance)
+            {
+                energy += barrier_weight * barrier<0>(p_curr[i], barrier_distance);
+                dOdp[i] += barrier_weight * barrier<1>(p_curr[i], barrier_distance);
+            }
+        }
+        // std::cout << "barrier energy: " << e_barrier << " " << p_curr.minCoeff() << std::endl;
+    }
+    
+    if (add_min_act)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (p_curr[i] < 0)
+                dOdp[i] -= w_min_act;
+            else
+                dOdp[i] += w_min_act;
+            energy += w_min_act * std::abs(p_curr[i]);
+        }
+    }
+
+    equilibrium_prev = simulation.u;
     return dOdp.norm();
 }
 
@@ -128,27 +283,48 @@ T ObjNucleiTracking::evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& 
     });
 
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    VectorXT lambda;
+    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
     if (simulation.woodbury)
     {
         MatrixXT UV;
         simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
+        LinearSolver::WoodburySolve(d2edx2, UV, dOdx, lambda, true, false, false);
     }
     else
     {   
         simulation.buildSystemMatrix(simulation.u, d2edx2);
+        simulation.linearSolveNaive(d2edx2, dOdx, lambda);
     }
-
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
-    solver.analyzePattern(d2edx2);
-    solver.factorize(d2edx2);
-    if (solver.info() == Eigen::NumericalIssue)
-        std::cout << "Forward simulation hessian indefinite" << std::endl;
-    
-    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
-    VectorXT lambda = solver.solve(dOdx);
     
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
 
+    if (use_log_barrier)
+    {
+        T e_barrier = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (p_curr[i] < barrier_distance)
+            {
+                energy += barrier_weight * barrier<0>(p_curr[i], barrier_distance);
+                dOdp[i] += barrier_weight * barrier<1>(p_curr[i], barrier_distance);
+            }
+        }
+    }
+    
+    if (add_min_act)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (p_curr[i] < 0)
+                dOdp[i] -= w_min_act;
+            else
+                dOdp[i] += w_min_act;
+            energy += w_min_act * std::abs(p_curr[i]);
+        }
+    }
+
+    equilibrium_prev = simulation.u;
     return dOdp.norm();
 }
 
@@ -170,17 +346,50 @@ void ObjNucleiTracking::getSimulationAndDesignDoF(int& _sim_dof, int& _design_do
     n_dof_design = _design_dof;
 }
 
-T ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil)
+T ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate, bool use_prev_equil)
 {
-    simulation.reset();
-    
     updateDesignParameters(p_curr);
-    simulation.staticSolve();
-
+    if (simulate)
+    {
+        simulation.reset();
+        simulation.staticSolve();
+    }
+    
     MatrixXT dxdp;
     simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+    std::vector<Entry> d2Odx2_entries;
+    d2Odx2(p_curr, d2Odx2_entries);
+    StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
+    d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
 
-    H = (dxdp.transpose() * dxdp).sparseView();
+    StiffnessMatrix dxdp_sparse = dxdp.sparseView();
+    H = dxdp_sparse.transpose() * d2Odx2_matrix * dxdp_sparse;
+
+    if (use_log_barrier)
+        tbb::parallel_for(0, (int)H.rows(), [&](int row)
+        {
+            if (p_curr[row] < barrier_distance)
+                H.coeffRef(row, row) += barrier_weight * barrier<2>(p_curr[row], barrier_distance);
+        });
+    H.makeCompressed();
+}
+
+T ObjNucleiTracking::maximumStepSize(const VectorXT& dp)
+{
+    VectorXT p_curr;
+    getDesignParameters(p_curr);
+    T step_size = 1.0;
+    if (!use_log_barrier)
+        return step_size;
+    while (true)
+    {
+        VectorXT forward = p_curr + step_size * dp;
+        if (forward.minCoeff() < 0)
+            step_size *= 0.8;
+        else
+            return step_size;
+    }
+    
 }
 
 bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)

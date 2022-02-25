@@ -140,12 +140,14 @@ void Objectives::setSimulationAndDesignDoF(int _sim_dof, int _design_dof)
     n_dof_sim = _sim_dof;
 }
 
-T ObjUMatching::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil)
+T ObjUMatching::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate, bool use_prev_equil)
 {
-    simulation.reset();
-    
     updateDesignParameters(p_curr);
-    simulation.staticSolve();
+    if (simulate)
+    {
+        simulation.reset();
+        simulation.staticSolve();
+    }
 
     MatrixXT dxdp;
     simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
@@ -297,6 +299,14 @@ void ObjUTU::updateDesignParameters(const VectorXT& design_parameters)
     simulation.cells.edge_weights = design_parameters;
 }
 
+void Objectives::saveDesignParameters(const std::string& filename, const VectorXT& design_parameters)
+{
+    std::ofstream out(filename);
+    for (int i = 0; i < design_parameters.rows(); i++)
+        out << design_parameters[i] << std::endl;
+    out.close();
+}
+
 void Objectives::diffTestHessian()
 {
     T epsilon = 1e-5;
@@ -396,7 +406,7 @@ void Objectives::diffTestGradient()
 
 void Objectives::diffTestGradientScale()
 {
-    
+    std::cout << "###################### CHECK GRADIENT SCALE ######################" << std::endl;   
     VectorXT dOdp(n_dof_design);
     VectorXT p;
     getDesignParameters(p);
@@ -423,4 +433,14 @@ void Objectives::diffTestGradientScale()
         previous = dE;
         dp *= 0.5;
     }
+}
+
+void Objectives::diffTestdOdx()
+{
+    
+}
+
+void Objectives::diffTestd2Odx2()
+{
+
 }

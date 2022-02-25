@@ -3,6 +3,7 @@
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/DenseSymMatProd.h>
+#include "../include/LinearSolver.h"
 
 
 void SensitivityAnalysis::initialize()
@@ -13,11 +14,16 @@ void SensitivityAnalysis::initialize()
     simulation.verbose = false;
     
     objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
-    
+    design_parameter_bound[0] = 0;
+    design_parameter_bound[1] = 10.0 * simulation.cells.unit;
     // simulation.cells.edge_weights.setRandom();
     // simulation.cells.edge_weights /= simulation.cells.edge_weights.norm();
+    // simulation.cells.edge_weights.setConstant(0.05);
+    VectorXT delta = simulation.cells.edge_weights * 0.1;
+    // simulation.cells.edge_weights += delta;
     simulation.cells.edge_weights.setConstant(0.05);
     objective.getDesignParameters(design_parameters);
+    std::cout << "# dof sim: " << n_dof_sim << " # dof design: " << n_dof_design << std::endl;
 }
 
 void SensitivityAnalysis::optimizePerEdgeWeigths()
@@ -40,7 +46,6 @@ void SensitivityAnalysis::optimizePerEdgeWeigths()
 void SensitivityAnalysis::generateNucleiDataSingleFrame(const std::string& filename)
 {
     
-
     simulation.staticSolve();
     std::ofstream out(filename);
     objective.iterateTargets([&](int idx, TV& target){
@@ -63,6 +68,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         method = "MMA";
     else if (optimizer == Newton)
         method = "Newton";
+    else if (optimizer == SGN)
+        method = "SGN";
     else
         std::cout << "optimizer undefined" << std::endl;
     
@@ -72,62 +79,84 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     VectorXT dOdp, dp;
 
     // mma 
-    T mma_step_size = 1.0;
-    VectorXT min_p = VectorXT::Zero(n_dof_design);
-    VectorXT max_p = VectorXT::Ones(n_dof_design);
+    T mma_step_size = 1.0 * simulation.cells.unit;
+    T lower_bound = 0, upper_bound = 10.0 * simulation.cells.unit;
 
-    T lower_bound = 0, upper_bound = 10;
-    bool add_bound_contraint = false;
+    VectorXT min_p = VectorXT::Ones(n_dof_design) * lower_bound;
+    VectorXT max_p = VectorXT::Ones(n_dof_design) * upper_bound;
 
-    if (optimizer == GradientDescent || optimizer == GaussNewton || optimizer == Newton)
+    bool add_bound_contraint = true;
+
+    if (optimizer == GradientDescent || optimizer == GaussNewton || optimizer == Newton || optimizer == SGN)
     {
         if (step == 0)
         {
             std::cout << "########### " << method << " ###########" << std::endl;
             objective.getDesignParameters(design_parameters);
+            std::cout << "initial value max: " << design_parameters.maxCoeff() << " min: " << design_parameters.minCoeff() <<std::endl;
             g_norm = objective.gradient(design_parameters, dOdp, E0);   
         }
         else
         {
             g_norm = objective.evaluteGradientAndEnergy(design_parameters, dOdp, E0);
         }
+        g_norm = dOdp.norm();
+
+        std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
+            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
+            << " obj: " << E0 << std::endl;
 
         std::vector<int> projected_entries;
-        auto filterGradient =[&]()
+        auto projectGradient =[&](VectorXT& g, VectorXT& design_parameters_projected)
         {
-            T epsilon = 1e-6;
+            // design_parameters_projected = design_parameters;
+            T epsilon = 1e-3;
             for (int i = 0; i < n_dof_design; i++)
             {
-                if (design_parameters[i] < lower_bound + epsilon * dOdp[i])
+                if (design_parameters[i] < lower_bound + epsilon && g[i] > 0)
                 {
-                    design_parameters[i] = lower_bound;
-                    dOdp[i] = 0;
+                    // design_parameters_projected[i] = lower_bound;
+                    // g[i] = 0;
                     projected_entries.push_back(i);
                 }
-                if (design_parameters[i] > upper_bound - epsilon * dOdp[i])
+                if (design_parameters[i] > upper_bound - epsilon && g[i] < 0)
                 {
-                    design_parameters[i] = upper_bound;
-                    dOdp[i] = 0;
+                    // design_parameters_projected[i] = upper_bound;
+                    // g[i] = 0;
                     projected_entries.push_back(i);
                 }
 
             }
             
         };
+        VectorXT design_parameters_projected = design_parameters;
 
+        if (add_bound_contraint)
+            projectGradient(dOdp, design_parameters_projected);
+        
         dp = dOdp;
 
+        Timer gn_timer(true);
         if (optimizer == GaussNewton)
         {
+            
             StiffnessMatrix H_GN;
-            objective.hessianGN(design_parameters, H_GN, false);
+            objective.hessianGN(design_parameters, H_GN, false, false);
+            std::cout << "\tGN # projected entries " << projected_entries.size() << std::endl;
             for (int idx : projected_entries)
             {
                 H_GN.row(idx) *= 0.0;
                 H_GN.col(idx) *= 0.0;
                 H_GN.coeffRef(idx, idx) = 1.0;
             }
-            simulation.linearSolve(H_GN, dOdp, dp);
+            VectorXT rhs = -dOdp;
+            // LinearSolver::linearSolve(H_GN, rhs, dp);
+            simulation.verbose = true;
+            simulation.linearSolve(H_GN, rhs, dp);
+            simulation.verbose = false;
+            dp *= -1.0;
+            gn_timer.stop();
+            std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
         }
         else if (optimizer == Newton)
         {
@@ -135,23 +164,37 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             objective.hessian(design_parameters, H, false);
             simulation.linearSolve(H, dOdp, dp);
         }
+        else if (optimizer == SGN)
+        {
+            StiffnessMatrix mat_SGN;
+            std::vector<Entry> d2Odx2_entries;
+            objective.d2Odx2(design_parameters, d2Odx2_entries);
+            simulation.cells.edgeWeightsSGNMatrix(mat_SGN, d2Odx2_entries);
+            VectorXT rhs_SGN(n_dof_design + n_dof_sim * 2);
+            rhs_SGN.setZero();
+            rhs_SGN.segment(n_dof_sim, n_dof_design) = -dOdp;
+            VectorXT delta;
+            LinearSolver::linearSolve(mat_SGN, rhs_SGN, delta, true, true, true);
+            dp = delta.segment(n_dof_sim, n_dof_design);
+            dp *= -1.0;
+            gn_timer.stop();
+            std::cout << "\tSGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+        }
 
         // filterGradient();
-        g_norm = dOdp.norm();
+        
 
-        std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
-            << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
-            << " obj: " << E0 << std::endl;
-
+        
         VectorXT search_direction = -dp;
         T alpha = objective.maximumStepSize(search_direction);
+        std::cout << "|dp|: " << alpha * search_direction.norm() << std::endl;
 
         for (int ls_cnt = 0; ls_cnt < 20; ls_cnt++)
         {
-            VectorXT p_ls = design_parameters + alpha * search_direction;
+            VectorXT p_ls = design_parameters_projected + alpha * search_direction;
             if (add_bound_contraint)
                 p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
-            T E1 = objective.value(p_ls, false);
+            T E1 = objective.value(p_ls, true);
             std::cout << "[" << method << "]\tE1: " << E1 << std::endl;
             // std::getchar();
             if (E1 < E0 || ls_cnt > 20)
@@ -172,12 +215,12 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             mma_solver.updateDoF(n_dof_design, 0);
             mma_solver.SetAsymptotes(0.2, 0.65, 1.05);
             objective.getDesignParameters(design_parameters);
-            
+            std::cout << "initial value max: " << design_parameters.maxCoeff() << " min: " << design_parameters.minCoeff() <<std::endl;
         }
         dOdp = VectorXT::Zero(n_dof_design);
         g_norm = objective.gradient(design_parameters, dOdp, E0);
-        min_p = (design_parameters.array() - mma_step_size).cwiseMax(0.0);
-        max_p = (design_parameters.array() + mma_step_size).cwiseMin(10.0);
+        // min_p = (design_parameters.array() - mma_step_size).cwiseMax(lower_bound);
+        // max_p = (design_parameters.array() + mma_step_size).cwiseMin(upper_bound);
         VectorXT tmp = design_parameters;
         mma_solver.UpdateEigen(design_parameters, dOdp, VectorXT(), VectorXT(), min_p, max_p);
         std::cout << "[" << method << "] iter " << step << " |g|: " << g_norm 

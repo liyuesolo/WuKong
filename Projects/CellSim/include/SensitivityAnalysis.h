@@ -38,6 +38,7 @@ public:
     int n_dof_sim;
 
     bool fd_dfdp;
+    Vector<T, 2> design_parameter_bound;
 
     Simulation& simulation;
     Objectives& objective;

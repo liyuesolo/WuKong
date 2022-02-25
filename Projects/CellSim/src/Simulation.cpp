@@ -1,6 +1,10 @@
 #include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
 #include <Eigen/CholmodSupport>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../../../Solver/CHOLMODSolver.hpp"
 
 #include <igl/readOBJ.h>
@@ -10,11 +14,108 @@
 
 #define FOREVER 30000
 
-
-void generatePolygonRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
-        Eigen::MatrixXd& C)
+void Simulation::checkHessianPD(bool save_txt)
 {
+    int nmodes = 15;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    if (woodbury)
+    {
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(u, d2edx2, UV);
+        Eigen::MatrixXd UVT  = UV * UV.transpose();
+        UVT += d2edx2;
+        d2edx2 = UVT.sparseView();
+    }
+    else
+    {   
+        buildSystemMatrix(u, d2edx2);
+    }
+    bool use_Spectra = false;
 
+    if (use_Spectra)
+    {
+
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+
+        //0 cannot cannot be used as a shift
+        T shift = -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+            Spectra::LARGEST_MAGN, 
+            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values << std::endl;
+            if (save_txt)
+            {
+                std::ofstream out("cell_eigen_vectors.txt");
+                out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+                for (int i = 0; i < eigen_vectors.cols(); i++)
+                    out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+                out << std::endl;
+                for (int i = 0; i < eigen_vectors.rows(); i++)
+                {
+                    // for (int j = 0; j < eigen_vectors.cols(); j++)
+                    for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                        out << eigen_vectors(i, j) << " ";
+                    out << std::endl;
+                }       
+                out << std::endl;
+                out.close();
+            }
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+    else
+    {
+        Eigen::MatrixXd A_dense = d2edx2;
+        Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+        eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
+        auto eigen_values = eigen_solver.eigenvalues();
+        auto eigen_vectors = eigen_solver.eigenvectors();
+        
+        std::vector<T> ev_all(A_dense.cols());
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            ev_all[i] = eigen_values[i].real();
+        }
+        
+        std::vector<int> indices;
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            indices.push_back(i);    
+        }
+        std::sort(indices.begin(), indices.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
+        // std::sort(ev_all.begin(), ev_all.end());
+
+        for (int i = 0; i < nmodes; i++)
+            std::cout << ev_all[indices[i]] << std::endl;
+        
+        if (save_txt)
+        {
+            std::ofstream out("cell_eigen_vectors.txt");
+            out << nmodes << " " << A_dense.cols() << std::endl;
+            for (int i = 0; i < nmodes; i++)
+                out << ev_all[indices[i]] << " ";
+            out << std::endl;
+            for (int i = 0; i < nmodes; i++)
+            {
+                out << eigen_vectors.col(indices[i]).real().transpose() << std::endl;
+            }
+            out.close();
+        }
+    }
 }
 
 void Simulation::computeLinearModes()
@@ -63,279 +164,6 @@ void Simulation::initializeCells()
     // save_mesh = true;
     
 }
-
-// void Simulation::setViewer(igl::opengl::glfw::Viewer& viewer)
-// {
-//     igl::opengl::glfw::imgui::ImGuiMenu menu;
-
-//     viewer.plugins.push_back(&menu);
-
-//     menu.callback_draw_viewer_menu = [&]()
-//     {
-//         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
-//         {
-//             if (ImGui::Checkbox("SelectVertex", &viewer_data.enable_selection))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ShowCurrent", &viewer_data.show_current))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ShowRest", &viewer_data.show_rest))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("SplitPrism", &viewer_data.split))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("SplitPrismABit", &viewer_data.split_a_bit))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ShowMembrane", &viewer_data.show_membrane))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("YolkOnly", &viewer_data.yolk_only))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ContractingEdges", &viewer_data.show_contracting_edges))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ShowOutsideVtx", &viewer_data.show_outside_vtx))
-//             {
-//                 updateScreen(viewer);
-//             }
-//             if (ImGui::Checkbox("ComputeEnergy", &viewer_data.compute_energy))
-//             {
-//                 updateScreen(viewer);
-//             }
-//         }
-//         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
-//         {
-//             if (ImGui::Checkbox("Dynamics", &dynamic))
-//             {
-//                 if (dynamic)
-//                     initializeDynamicsData(1e-2, 5e-2);
-//             }
-//         }
-//         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
-//         {
-//             staticSolve();
-//             updateScreen(viewer);
-//         }
-//         if (ImGui::Button("Reset", ImVec2(-1,0)))
-//         {
-//             deformed = undeformed;
-//             u.setZero();
-//             updateScreen(viewer);
-//         }
-//         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
-//         {
-//             igl::writeOBJ("current_mesh.obj", viewer_data.V, viewer_data.F);
-//         }
-//     };
-
-//     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer&, int, int)->bool
-//     {
-//         if (!viewer_data.enable_selection)
-//             return false;
-//         double x = viewer.current_mouse_x;
-//         double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-
-//         for (int i = 0; i < cells.num_nodes; i++)
-//         {
-//             Vector<T, 3> pos = deformed.template segment<3>(i * 3);
-//             Eigen::MatrixXd x3d(1, 3); x3d.setZero();
-//             x3d.row(0).template segment<3>(0) = pos;
-
-//             Eigen::MatrixXd pxy(1, 3);
-//             igl::project(x3d, viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
-//             if(abs(pxy.row(0)[0]-x)<20 && abs(pxy.row(0)[1]-y)<20)
-//             {
-//                 std::cout << "selected " << i << std::endl;
-//                 return true;
-//             }
-//         }
-//         return false;
-//     };
-
-//     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
-//     {
-//         if(viewer.core().is_animating && viewer_data.check_modes)
-//         {
-//             deformed = undeformed + u + viewer_data.evectors.col(viewer_data.modes) * std::sin(viewer_data.t);
-//             if (viewer_data.compute_energy)
-//             {
-//                 verbose = false;
-//                 T energy = computeTotalEnergy(u, false);
-//                 verbose = false;
-//                 std::cout << std::setprecision(8) << "E: " << energy << std::endl;
-//             }
-//             viewer_data.t += 0.1;
-//             viewer_data.compute_energy_cnt++;
-            
-//             viewer.data().clear();
-//             generateMeshForRendering(viewer_data.V, viewer_data.F, viewer_data.C, 
-//                 viewer_data.show_current, viewer_data.show_rest, viewer_data.split, 
-//                 viewer_data.split_a_bit, viewer_data.yolk_only);
-//             viewer.data().set_mesh(viewer_data.V, viewer_data.F);     
-//             viewer.data().set_colors(viewer_data.C);
-//             if (viewer_data.show_membrane)
-//             {
-//                 viewer.data().set_points(viewer_data.bounding_surface_samples, viewer_data.bounding_surface_samples_color);
-//             }
-//         }
-//         return false;
-//     };
-
-//     viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
-//     {
-//         if(viewer.core().is_animating && !viewer_data.check_modes)
-//         {
-//             bool finished = advanceOneStep(viewer_data.static_solve_step);
-//             if (finished)
-//             {
-//                 viewer.core().is_animating = false;
-//             }
-//             else 
-//                 viewer_data.static_solve_step++;
-//             updateScreen(viewer);
-//         }
-//         return false;
-//     };
-
-//     viewer.callback_key_pressed = 
-//         [&](igl::opengl::glfw::Viewer &,unsigned int key,int mods)->bool
-//     {
-//         VectorXT residual(num_nodes * 3);
-//         residual.setZero();
-//         switch(key)
-//         {
-//         default: 
-//             return false;
-//         case ' ':
-//             viewer.core().is_animating = true;
-//             return true;
-//         case '0':
-//             viewer_data.check_modes = true;
-//             // loadEigenVectors("/home/yueli/Documents/ETH/WuKong/cell_svd_vectors.txt");
-//             // loadEigenVectors("/home/yueli/Documents/ETH/WuKong/dxdp.txt");
-//             viewer_data.modes = 0;
-//             std::cout << "modes " << viewer_data.modes << std::endl;
-//             return true;
-//         case '1':
-//             viewer_data.check_modes = true;
-//             computeLinearModes();
-//             // loadEigenVectors("/home/yueli/Documents/ETH/WuKong/cell_eigen_vectors.txt");
-            
-//             for (int i = 0; i < viewer_data.evalues.rows(); i++)
-//             {
-//                 if (viewer_data.evalues[i] > 1e-6)
-//                 {
-//                     viewer_data.modes = i;
-//                     return true;
-//                 }
-//             }
-//             return true;
-//         case '2':
-//             viewer_data.modes++;
-//             viewer_data.modes = (viewer_data.modes + viewer_data.evectors.cols()) % viewer_data.evectors.cols();
-//             std::cout << "modes " << viewer_data.modes << std::endl;
-//             return true;
-//         case '3': //check modes at equilirium after static solve
-//             std::cout << "state: " << viewer_data.load_obj_iter_cnt << std::endl;
-//             loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(viewer_data.load_obj_iter_cnt) + ".obj");
-//             std::cout << computeResidual(u, residual) << std::endl;
-//             updateScreen(viewer);
-//             return true;
-//         case 'a':
-//             viewer.core().is_animating = !viewer.core().is_animating;
-//             return true;
-//         case 'n':
-//             viewer_data.load_obj_iter_cnt++;
-//             std::cout << "state: " << viewer_data.load_obj_iter_cnt << std::endl;
-//             loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(viewer_data.load_obj_iter_cnt) + ".obj");
-//             updateScreen(viewer);
-//             return true;
-//         case 'l':
-//             viewer_data.load_obj_iter_cnt--;
-//             viewer_data.load_obj_iter_cnt = std::max(0, viewer_data.load_obj_iter_cnt);
-//             std::cout << "state: " << viewer_data.load_obj_iter_cnt << std::endl;
-//             loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(viewer_data.load_obj_iter_cnt) + ".obj");
-//             updateScreen(viewer);
-//             return true;
-//         }
-//     };
-
-//     initializeCells();
-//     dynamic = false;
-//     if (dynamic)
-//         initializeDynamicsData(1e0, 10000);
-
-//     sampleBoundingSurface(viewer_data.bounding_surface_samples);
-//     viewer_data.sdf_test_sample_idx_offset = viewer_data.bounding_surface_samples.rows();
-//     viewer_data.bounding_surface_samples_color = viewer_data.bounding_surface_samples;
-//     for (int i = 0; i < viewer_data.bounding_surface_samples.rows(); i++)
-//         viewer_data.bounding_surface_samples_color.row(i) = TV(0.1, 1.0, 0.1);
-
-//     // cells.loadMeshAndSaveCentroid("output/cells/cell_drosophila_4k_with_cephalic", 0, 1117);
-//     // verbose = true;
-//     cells.print_force_norm = false;
-//     // sa.initialize();
-//     // sa.svdOnSensitivityMatrix();
-//     // sa.optimizePerEdgeWeigths();
-    
-    
-//     updateScreen(viewer);
-
-//     viewer.core().background_color.setOnes();
-//     viewer.data().set_face_based(true);
-//     viewer.data().shininess = 1.0;
-//     viewer.data().point_size = 10.0;
-
-//     viewer.data().set_mesh(viewer_data.V, viewer_data.F);     
-//     viewer.data().set_colors(viewer_data.C);
-
-//     viewer.core().align_camera_center(viewer_data.V);
-
-//     viewer.launch();
-// }
-
-// void Simulation::updateScreen(igl::opengl::glfw::Viewer& viewer)
-// {
-//     generateMeshForRendering(viewer_data.V, viewer_data.F, viewer_data.C, 
-//                 viewer_data.show_current, viewer_data.show_rest, viewer_data.split, 
-//                 viewer_data.split_a_bit, viewer_data.yolk_only);
-
-//     viewer.data().clear();
-//     // viewer.data().set_mesh(V, F);
-//     // viewer.data().set_colors(C);
-
-//     if (viewer_data.show_contracting_edges)
-//     {
-//         // viewer.data().clear();
-//         cells.appendCylinderOnContractingEdges(viewer_data.V, viewer_data.F, viewer_data.C);
-//     }
-        
-//     if (viewer_data.show_membrane)
-//     {
-//         viewer.data().set_points(viewer_data.bounding_surface_samples, viewer_data.bounding_surface_samples_color);
-//     }
-//     if (viewer_data.show_outside_vtx)
-//     {
-//         cells.getOutsideVtx(viewer_data.bounding_surface_samples, 
-//             viewer_data.bounding_surface_samples_color, viewer_data.sdf_test_sample_idx_offset);
-//         viewer.data().set_points(viewer_data.bounding_surface_samples, viewer_data.bounding_surface_samples_color);
-//     }
-//     viewer.data().set_mesh(viewer_data.V, viewer_data.F);
-//     viewer.data().set_colors(viewer_data.C);   
-// }
-
 void Simulation::reinitializeCells()
 {
     
@@ -652,6 +480,8 @@ bool Simulation::staticSolve()
     return true;
 }
 
+
+
 bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
@@ -752,6 +582,40 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
     return false;
 }
 
+
+bool Simulation::WoodburySolveNaive(StiffnessMatrix& A, const MatrixXT& UV,
+        const VectorXT& b, VectorXT& x)
+{
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    solver.analyzePattern(A);
+    solver.factorize(A);
+    if (UV.cols() == 1)
+    {
+        VectorXT v = UV.col(0);
+        VectorXT A_inv_g = solver.solve(b);
+        VectorXT A_inv_u = solver.solve(v);
+
+        T dem = 1.0 + v.dot(A_inv_u);
+
+        x = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+    }
+    // UV is actually only U, since UV is the same in the case
+    // C is assume to be Identity
+    else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+    {
+        VectorXT A_inv_g = solver.solve(b);
+
+        MatrixXT A_inv_U(UV.rows(), UV.cols());
+        for (int col = 0; col < UV.cols(); col++)
+            A_inv_U.col(col) = solver.solve(UV.col(col));
+        
+        MatrixXT C(UV.cols(), UV.cols());
+        C.setIdentity();
+        C += UV.transpose() * A_inv_U;
+        x = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+    }
+    return true;
+}
 
 bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
@@ -854,6 +718,14 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         }
     }
     return false;
+}
+
+bool Simulation::linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorXT& x)
+{
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    solver.analyzePattern(A);
+    solver.factorize(A);
+    x = solver.solve(b);
 }
 
 bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
@@ -1200,4 +1072,15 @@ void Simulation::loadDeformedState(const std::string& filename)
     u = deformed - undeformed;
     if (verbose)
         cells.computeCellInfo();
+}
+
+void Simulation::loadEdgeWeights(const std::string& filename, VectorXT& weights)
+{
+    std::ifstream in(filename);
+    std::vector<T> weights_std_vec;
+    T w;
+    while (in >> w)
+        weights_std_vec.push_back(w);
+    weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
+    in.close();
 }

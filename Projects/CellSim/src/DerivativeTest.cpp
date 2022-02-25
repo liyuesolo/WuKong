@@ -80,7 +80,8 @@ void VertexModel::checkTotalHessian(bool perturb)
     du *= 0.001;
     if (perturb)
         u += du;
-
+    
+    print_force_norm = false;
     StiffnessMatrix A;
     if (woodbury)
     {
@@ -92,6 +93,13 @@ void VertexModel::checkTotalHessian(bool perturb)
     }
     else
         buildSystemMatrix(u, A);
+
+    // std::ofstream out("hessian.txt");
+    // out << A;
+    // out.close();
+    
+    // std::exit(0);
+
     // std::cout << "Full hessian" << std::endl;
     // std::cout << A << std::endl;
     for(int dof_i = 0; dof_i < n_dof; dof_i++)

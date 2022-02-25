@@ -169,14 +169,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             t += 0.1;
             compute_energy_cnt++;
             
-            viewer.data().clear();
-            simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
-            viewer.data().set_mesh(V, F);     
-            viewer.data().set_colors(C);
-            if (show_membrane)
-            {
-                viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
-            }
+            updateScreen(viewer);
         }
         return false;
     };
@@ -189,6 +182,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             if (finished)
             {
                 viewer.core().is_animating = false;
+                simulation.checkHessianPD(true);
             }
             else 
                 static_solve_step++;
@@ -218,17 +212,17 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             return true;
         case '1':
             check_modes = true;
-            simulation.computeLinearModes();
+            // simulation.computeLinearModes();
             loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_eigen_vectors.txt");
             
-            for (int i = 0; i < evalues.rows(); i++)
-            {
-                if (evalues[i] > 1e-6)
-                {
-                    modes = i;
-                    return true;
-                }
-            }
+            // for (int i = 0; i < evalues.rows(); i++)
+            // {
+            //     if (evalues[i] > 1e-6)
+            //     {
+            //         modes = i;
+            //         return true;
+            //     }
+            // }
             return true;
         case '2':
             modes++;
@@ -312,7 +306,8 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
 
     show_target_current = true;
     show_target = true;
-
+    show_edges = false;
+    
     viewer.callback_key_pressed = 
         [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
     {
@@ -455,12 +450,26 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     {
         VectorXT ewn = edge_weights.normalized();
         Eigen::MatrixXd colors;
-        igl::colormap(igl::COLOR_MAP_TYPE_JET, edge_weights, false, colors);
+        igl::colormap(igl::COLOR_MAP_TYPE_TURBO, edge_weights, false, colors);
         int cnt = 0;
+        
+        T max_w = sa.design_parameter_bound[1], min_w = sa.design_parameter_bound[0];
+
+        T epsilon = min_w + (max_w - min_w) * threshold;
+
         simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
             TV from = simulation.deformed.segment<3>(edge[0] * 3);
             TV to = simulation.deformed.segment<3>(edge[1] * 3);
-            appendCylinderToEdge(from, to, colors.row(cnt++), 0.01, V, F, C);
+            if (edge_weights[cnt] < epsilon)
+            {
+                TV color = (edge_weights[cnt] - min_w) / (epsilon - min_w) * TV::Ones();
+                appendCylinderToEdge(from, to, color, 0.01, V, F, C);
+            }
+            else
+                appendCylinderToEdge(from, to, TV(1, 1, 1), 0.01, V, F, C);
+            if (edge_weights[cnt] < max_w - 1e-3)
+                appendCylinderToEdge(from, to, TV(1, 1, 0), 0.01, V, F, C);
+            cnt++;
         });
     }
         // loaddpAndAppendCylinder("/home/yueli/Documents/ETH/WuKong/output/cells/opt/GN_iter_2.txt", V, F, C);
@@ -552,17 +561,30 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
             {
                 updateScreen(viewer);
             }
+            if (ImGui::DragFloat("Threshold", &(threshold), 0.1f, 0.01f, 1.0f))
+            {
+                updateScreen(viewer);
+            }
         }
         if (ImGui::CollapsingHeader("LoadData", ImGuiTreeNodeFlags_DefaultOpen))
         {
             float w = ImGui::GetContentRegionAvailWidth();
             float p = ImGui::GetStyle().FramePadding.x;
-            if (ImGui::Button("Load##Edge##Weights", ImVec2((w-p)/2.f, 0)))
+            if (ImGui::Button("Weights", ImVec2((w-p)/2.f, 0)))
             {
                 std::string fname = igl::file_dialog_open();
                 if (fname.length() != 0)
                 {
-                    loadEdgeWeights(fname, edge_weights);
+                    simulation.loadEdgeWeights(fname, edge_weights);
+                }
+            }
+            ImGui::SameLine(0, p);
+            if (ImGui::Button("State", ImVec2((w-p)/2.f, 0)))
+            {
+                std::string fname = igl::file_dialog_open();
+                if (fname.length() != 0)
+                {
+                    simulation.loadDeformedState(fname);
                 }
             }
             // ImGui::SameLine(0, p);
@@ -814,13 +836,13 @@ void DiffSimApp::appendSphereToPosition(const TV& position, T radius, const TV& 
     C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
 }
 
-void DiffSimApp::loadEdgeWeights(const std::string& filename, VectorXT& weights)
-{
-    std::ifstream in(filename);
-    std::vector<T> weights_std_vec;
-    T w;
-    while (in >> w)
-        weights_std_vec.push_back(w);
-    weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
-    in.close();
-}
+// void DiffSimApp::loadEdgeWeights(const std::string& filename, VectorXT& weights)
+// {
+//     std::ifstream in(filename);
+//     std::vector<T> weights_std_vec;
+//     T w;
+//     while (in >> w)
+//         weights_std_vec.push_back(w);
+//     weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
+//     in.close();
+// }

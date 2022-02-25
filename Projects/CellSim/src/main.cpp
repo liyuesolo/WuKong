@@ -23,8 +23,8 @@ using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 Simulation simulation;
 ObjNucleiTracking obj(simulation);
 ObjFindInit obj_find_init(simulation);
-// SensitivityAnalysis sa(simulation, obj);
-SensitivityAnalysis sa(simulation, obj_find_init);
+SensitivityAnalysis sa(simulation, obj);
+// SensitivityAnalysis sa(simulation, obj_find_init);
 
 int main()
 {
@@ -76,14 +76,19 @@ int main()
     
     simulation.initializeCells();
     simulation.cells.tet_vol_barrier_w = 1e-22;
-    // obj.initializeTarget();
-    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_test.txt");
+    obj.initializeTarget();
+    obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+    // obj.add_min_act = true;
+    // obj.w_min_act = 1;
+    obj.setOptimizer(GaussNewton);
+    // obj.setOptimizer(SGN);
+    // obj.use_log_barrier = true;
     // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     // obj.updateTarget();
     // obj.initializeTargetFromMap("idx_map.txt", 30);
 
-    obj_find_init.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
-    obj_find_init.updateTarget();
+    // obj_find_init.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+    // obj_find_init.updateTarget();
     
     
     igl::opengl::glfw::Viewer viewer;
@@ -100,6 +105,10 @@ int main()
         simulation.save_mesh = false;
         simulation.cells.print_force_norm = true;
         simulation.cells.tet_vol_barrier_w = 1e-22;
+        // simulation.cells.checkTotalHessian();
+        // VectorXT ew;
+        // simulation.loadEdgeWeights("trouble_design_parameters.txt", ew);
+        // simulation.cells.edge_weights = ew;
         viewer.launch();
     };
 
@@ -115,6 +124,8 @@ int main()
         // sa.dxFromdpAdjoint();
         // sa.objective.diffTestHessian();
         // sa.objective.diffTestHessianScale();
+        // sa.objective.diffTestGradientScale();
+        // sa.objective.diffTestGradient();
         diff_sim_app.setViewer(viewer, menu);
         viewer.launch();
     };
@@ -123,7 +134,7 @@ int main()
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
-        sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_test.txt");
+        sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
     };
 
     

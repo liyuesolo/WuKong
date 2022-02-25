@@ -627,13 +627,13 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
 
     }
 
-        if (add_tet_vol_barrier)
-        {
-            if (use_cell_centroid)
-                addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
-            else
-                addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
-        }
+    if (add_tet_vol_barrier)
+    {
+        if (use_cell_centroid)
+            addSingleTetVolBarrierHessianEntries(entries, project_block_hessian_PD);
+        else
+            addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
+    }
 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
@@ -666,9 +666,16 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
     // std::cout << K << std::endl;
+
+    // Matrix<T, 2, 2> I;
+    // I.setIdentity();    
+    // MatrixXT dense_part = UV * I * UV.transpose();
+    // dense_part += K;
+    // K = dense_part.sparseView();
     // std::ofstream out("hessian.txt");
     // out << K;
     // out.close();
+    // std::exit(0);
     // std::getchar();
     K.makeCompressed();
 }
@@ -699,6 +706,9 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
                 addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         }
     }
+
+    if (dynamics)
+        addInertialHessianEntries(entries);
 
     if (use_elastic_potential)
     {
@@ -761,6 +771,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     // std::ofstream out("hessian.txt");
     // out << K;
     // out.close();
+    // std::exit(0);
     // std::getchar();
     K.makeCompressed();
 }

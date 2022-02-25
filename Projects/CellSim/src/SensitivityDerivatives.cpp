@@ -1,6 +1,64 @@
 #include "../include/VertexModel.h"
+#include "../include/LinearSolver.h"
 #include "../include/autodiff/EdgeEnergy.h"
+
 #include <Eigen/PardisoSupport>
+
+void VertexModel::edgeWeightsSGNMatrix(StiffnessMatrix& mat_SGN, std::vector<Entry>& d2Odx2_entries)
+{
+    int n_dof_design = edge_weights.rows();
+    int n_dof_sim = num_nodes * 3;
+    mat_SGN.resize(n_dof_sim * 2 + n_dof_design, n_dof_sim * 2 + n_dof_design);
+    StiffnessMatrix hessian;
+    MatrixXT UV;
+    buildSystemMatrixWoodbury(u, hessian, UV);
+    Eigen::MatrixXd UVT  = UV * UV.transpose();
+    UVT += hessian;
+    hessian = UVT.sparseView();
+
+    std::vector<Entry> entries = entriesFromSparseMatrix(hessian);
+    std::vector<Entry> mat_SGN_entries;
+    for (auto entry : entries)
+    {
+        mat_SGN_entries.push_back(Entry(entry.row() + n_dof_sim + n_dof_design,
+            entry.col(), entry.value()));
+        mat_SGN_entries.push_back(Entry(entry.row(),
+            entry.col() + n_dof_sim + n_dof_design, entry.value()));
+    }
+    mat_SGN_entries.insert(mat_SGN_entries.end(), d2Odx2_entries.begin(), d2Odx2_entries.end());
+
+    for (int i = 0; i < n_dof_sim * 2 + n_dof_design; i++)
+    {
+        mat_SGN_entries.push_back(Entry(i, i, 1e-6));
+    }
+    
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Vector<T, 6> dedx;
+        computeEdgeSquaredNormGradient(vi, vj, dedx);
+        dedx *= -1.0;
+        for (int i = 0; i < 3; i++)
+        {
+            mat_SGN_entries.push_back(Entry(e[0] * 3 + i + n_dof_sim, cnt + n_dof_sim + n_dof_design, dedx[i]));
+            mat_SGN_entries.push_back(Entry(e[1] * 3 + i + n_dof_sim, cnt + n_dof_sim + n_dof_design, dedx[i+3]));
+
+            mat_SGN_entries.push_back(Entry(cnt + n_dof_sim + n_dof_design, e[0] * 3 + i + n_dof_sim, dedx[i]));
+            mat_SGN_entries.push_back(Entry(cnt + n_dof_sim + n_dof_design, e[1] * 3 + i + n_dof_sim, dedx[i+3]));
+        }
+        cnt++;
+    });
+    mat_SGN.setFromTriplets(mat_SGN_entries.begin(), mat_SGN_entries.end());
+    mat_SGN.makeCompressed();
+
+    // std::ofstream out("hessian.txt");
+    // out << hessian << std::endl;
+    // out.close();
+    // std::exit(0);
+}
+
+
 
 void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
 {
@@ -18,27 +76,29 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
         cnt++;
     });
 
+    dxdp.resize(num_nodes * 3, edge_weights.rows());
+    dxdp.setZero();
+
     StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
-    if (woodbury)
-    {
-        MatrixXT UV;
-        buildSystemMatrixWoodbury(u, d2edx2, UV);
-    }
-    else
-    {
-        buildSystemMatrix(u, d2edx2);
-    }
-    
+    MatrixXT UV;
+    buildSystemMatrixWoodbury(u, d2edx2, UV);
+
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     solver.analyzePattern(d2edx2);
     solver.factorize(d2edx2);
-    if (solver.info() == Eigen::NumericalIssue)
-        std::cout << "Forward simulation hessian indefinite" << std::endl;
-    dxdp.resize(num_nodes * 3, edge_weights.rows());
-    dxdp.setZero();
+    
+    MatrixXT A_inv_U(UV.rows(), UV.cols());
+    for (int col = 0; col < UV.cols(); col++)
+        A_inv_U.col(col) = solver.solve(UV.col(col));
+
+    MatrixXT C(UV.cols(), UV.cols());
+    C.setIdentity();
+    C += UV.transpose() * A_inv_U;
+
     for (int i = 0; i < cnt; i++)
     {
-        dxdp.col(i) = solver.solve(dfdp.col(i));
+        VectorXT A_inv_g = solver.solve(dfdp.col(i));    
+        dxdp.col(i) = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
     }
 }
 

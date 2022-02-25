@@ -84,7 +84,7 @@ private:
     Eigen::MatrixXd svd_V;
     bool show_edge_weights_opt = false;
     VectorXT edge_weights;
-
+    float threshold = 1.0;
     bool show_edges = true;
 public:
 
@@ -109,7 +109,7 @@ private:
         const TV& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void loadSVDMatrixV(const std::string& filename);
-    void loadEdgeWeights(const std::string& filename, VectorXT& weights);
+    // void loadEdgeWeights(const std::string& filename, VectorXT& weights);
 public:
     DiffSimApp(Simulation& _simulation, SensitivityAnalysis& _sa) : 
         sa(_sa), SimulationApp(_simulation) {}

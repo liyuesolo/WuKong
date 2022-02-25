@@ -20,7 +20,7 @@ class Simulation;
 
 enum Optimizer
 {
-    GradientDescent, GaussNewton, MMA, Newton
+    GradientDescent, GaussNewton, MMA, Newton, SGN
 };
 
 class Objectives
@@ -56,8 +56,10 @@ public:
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool use_prev_equil = false) {}
     virtual T evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, T& energy) {}
-    virtual T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
+    virtual T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
     virtual T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
+    virtual void dOdx(const VectorXT& p_curr, VectorXT& _dOdx) {}
+    virtual void d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries) {}
 
     virtual void updateDesignParameters(const VectorXT& design_parameters) {}
     virtual void getDesignParameters(VectorXT& design_parameters) {}
@@ -66,13 +68,18 @@ public:
     virtual void updateTarget() {}
 
     virtual T maximumStepSize(const VectorXT& dp) { return 1.0; }
+    virtual void setOptimizer(Optimizer opt) { default_optimizer = opt; }
 
     void saveState(const std::string& filename) { simulation.saveState(filename); }
+    void saveDesignParameters(const std::string& filename, const VectorXT& design_parameters);
     
     void diffTestGradientScale();
     void diffTestGradient();
     void diffTestHessian();
     void diffTestHessianScale();
+    void diffTestdOdx();
+    void diffTestd2Odx2();
+
 public:
     Objectives(Simulation& _simulation) : simulation(_simulation) 
     {
@@ -121,7 +128,7 @@ public:
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
     void updateTarget() {}
-    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
+    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
 
 public:
@@ -140,7 +147,12 @@ public:
     SpatialHash hash;
     MatrixXT cell_trajectories;
     int frame = 0;
-    bool test = false;
+    bool use_log_barrier = false;
+    T barrier_distance = 1e-5;
+    T barrier_weight = 1e3;
+    bool add_min_act = false;
+    T w_min_act = 1.0;
+
 public:
     T value(const VectorXT& p_curr, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil = false);
@@ -149,8 +161,10 @@ public:
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
+    void dOdx(const VectorXT& p_curr, VectorXT& _dOdx);
+    void d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries);
 
-    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
+    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
 
     void initializeTarget();
@@ -161,6 +175,19 @@ public:
 
     void loadTarget(const std::string& filename);
     void initializeTargetFromMap(const std::string& filename, int _frame);
+    T maximumStepSize(const VectorXT& dp);
+    template<int order>
+    T barrier(T d, T eps)
+    {
+        if (d <= 0)
+            std::cout << "d has to be a positive value" << std::endl;
+        if constexpr (order == 0)
+            return - std::pow(d / eps - 1, 2) * std::log(d / eps);
+        else if constexpr (order == 1)
+            return (d - eps) * (-2 * d * std::log(d / eps) + eps - d) / (eps * eps * d);
+        else
+            return 1 / (d * d) + (2 / (d * eps) - 2 * std::log(d / eps) - 3) / (eps * eps);
+    }
 public: 
     ObjNucleiTracking(Simulation& _simulation) : Objectives(_simulation) 
     {
@@ -188,7 +215,7 @@ public:
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
 
-    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
+    T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false);
     
     void updateTarget();

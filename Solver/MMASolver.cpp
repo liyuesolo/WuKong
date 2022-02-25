@@ -40,27 +40,6 @@ MMASolver::MMASolver(int nn, int mm, double ai, double ci, double di)
     , xmamieps(1.0e-5)
     //, epsimin(1e-7)
     , epsimin(std::sqrt(n + m) * 1e-9)
-    //        , epsimin(10e-8)
-    //            , raa0(0.01)
-    //            , move(0.5)
-    //            , albefa(0.4)
-    //            , asyminit(0.1) // 0.2;
-    //            , asymdec(0.6) // 0.65;
-    //            , asyminc(0.8) // 1.08;
-    //        , epsimin(10 * 1e-9)
-    //        , raa0(10e-5)
-    //        , move(0.5)
-    //        , albefa(0.1)
-    //        , asyminit(0.05) // 0.2;
-    //        , asymdec(0.7) // 0.65;
-    //        , asyminc(1.2) // 1.08;
-    //    , epsimin(std::sqrt(n + m) * 1e-9)
-    //    , raa0(0.00001)
-    //    , move(0.5)
-    //    , albefa(0.1)
-    //    , asyminit(0.5) // 0.2;
-    //    , asymdec(0.7) // 0.65;
-    //    , asyminc(1.2) // 1.08;
     , raa0(0.0001)
     // , move(0.5)
     , albefa(0.4)
@@ -90,6 +69,70 @@ MMASolver::MMASolver(int nn, int mm, double ai, double ci, double di)
     , xold1(n)
     , xold2(n)
 {
+}
+
+MMASolver::MMASolver(): n(0)
+    , m(0)
+    , iter(0)
+    , xmamieps(1.0e-5)
+    //, epsimin(1e-7)
+    , epsimin(std::sqrt(n + m) * 1e-9)
+    , raa0(0.0001)
+    // , move(0.5)
+    , albefa(0.4)
+    , asyminit(0.02)
+    , asymdec(0.65)
+    , asyminc(1.05)
+    , a(m, 0.0)
+    , c(m, 1000.0)
+    , d(m, 0.0)
+    , y(m)
+    , lam(m)
+    , mu(m)
+    , s(2 * m)
+    , low(n)
+    , upp(n)
+    , alpha(n)
+    , beta(n)
+    , p0(n)
+    , q0(n)
+    , pij(n * m)
+    , qij(n * m)
+    , b(m)
+    , grad(m)
+    , hess(m * m)
+    , xold1(n)
+    , xold2(n)
+{
+
+}
+
+void MMASolver::updateDoF(int _n, int _m)
+{
+    n = _n;
+    m = _m;
+
+    epsimin = std::sqrt(n + m) * 1e-9;
+    a.resize(m, 0.0);
+    c.resize(m, 1000.0);
+    d.resize(m, 0.0);
+    y.resize(m);
+    lam.resize(m);
+    mu.resize(m);
+    s.resize(2*m);
+    low.resize(n);
+    upp.resize(n);
+    alpha.resize(n);
+    beta.resize(n);
+    p0.resize(n);
+    q0.resize(n);
+    pij.resize(n * m);
+    qij.resize(n * m);
+    b.resize(m);
+    grad.resize(m);
+    hess.resize(m * m);
+    xold1.resize(n);
+    xold2.resize(n);
 }
 
 void MMASolver::SetAsymptotes(double init, double decrease, double increase)

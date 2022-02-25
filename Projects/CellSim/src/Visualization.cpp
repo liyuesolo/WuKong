@@ -796,7 +796,7 @@ void VertexModel::appendCylinderOnContractingEdges(
 {
     if (!add_contraction_term)
         return;
-    T visual_R = 0.01;
+    T visual_R = 0.05;
     int n_div = 10;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 3);

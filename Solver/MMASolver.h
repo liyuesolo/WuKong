@@ -61,6 +61,10 @@ class MMASolver {
 public:
     MMASolver(int n, int m, double a = 0.0, double c = 1000.0, double d = 0.0);
 
+    MMASolver();
+
+    void updateDoF(int _n, int _m);
+
     void SetAsymptotes(double init, double decrease, double increase);
 
     void ConstraintModification(bool conMod) {}
@@ -83,7 +87,7 @@ private:
     int n, m, iter;
 
     const double xmamieps;
-    const double epsimin;
+    double epsimin;
 
     const double raa0;
     const double albefa; //move,
