@@ -41,21 +41,17 @@ void ObjNucleiTracking::d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx
     updateDesignParameters(p_curr);
     iterateTargets([&](int cell_idx, TV& target_pos)
     {
-        
         VtxList face_vtx_list = simulation.cells.faces[cell_idx];
         VtxList cell_vtx_list = face_vtx_list;
         for (int idx : face_vtx_list)
             cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+        
         T coeff = cell_vtx_list.size();
         for (int idx_i : cell_vtx_list)
             for (int idx_j : cell_vtx_list)
                 for (int d = 0; d < 3; d++)
                     d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
     });
-    for(int i = 0; i < n_dof_sim; i++)
-        d2Odx2_entries.push_back(Entry(i, i, 1e-6));
 }
 
 void ObjNucleiTracking::dOdx(const VectorXT& p_curr, VectorXT& _dOdx)
@@ -346,6 +342,58 @@ void ObjNucleiTracking::getSimulationAndDesignDoF(int& _sim_dof, int& _design_do
     n_dof_design = _design_dof;
 }
 
+void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr, 
+    StiffnessMatrix& H, bool simulate, bool use_prev_equil)
+{
+    updateDesignParameters(p_curr);
+    if (simulate)
+    {
+        simulation.reset();
+        simulation.staticSolve();
+    }
+
+    std::vector<Entry> d2Odx2_entries;
+    d2Odx2(p_curr, d2Odx2_entries);
+
+    StiffnessMatrix dfdx(n_dof_sim, n_dof_sim);
+    simulation.buildSystemMatrix(simulation.u, dfdx);
+    dfdx *= -1.0;
+
+    StiffnessMatrix dfdp;
+    simulation.cells.dfdpWeightsSparse(dfdp);
+
+    StiffnessMatrix d2Odx2_mat(n_dof_sim, n_dof_sim);
+    d2Odx2_mat.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+
+    int nx = n_dof_sim, np = n_dof_design, nxnp = n_dof_sim + n_dof_design;
+
+    H.resize(n_dof_sim * 2 + n_dof_design, n_dof_sim * 2 + n_dof_design);
+    std::vector<Entry> entries;
+    
+    entries.insert(entries.end(), d2Odx2_entries.begin(), d2Odx2_entries.end());
+
+    for (int i = 0; i < dfdx.outerSize(); i++)
+    {
+        for (StiffnessMatrix::InnerIterator it(dfdx, i); it; ++it)
+        {
+            entries.push_back(Entry(it.row() + nxnp, it.col(), it.value()));
+            entries.push_back(Entry(it.row(), it.col() + nxnp, it.value()));
+        }
+    }
+    
+    for (int i = 0; i < dfdp.outerSize(); i++)
+    {
+        for (StiffnessMatrix::InnerIterator it(dfdp, i); it; ++it)
+        {
+            entries.push_back(Entry(it.col() + nx, it.row() + nxnp, it.value()));
+            entries.push_back(Entry(it.row() + nxnp, it.col() + nx, it.value()));
+        }
+    }
+    
+    H.setFromTriplets(entries.begin(), entries.end());
+    H.makeCompressed();
+}
+
 T ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
@@ -363,8 +411,9 @@ T ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool 
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
 
     StiffnessMatrix dxdp_sparse = dxdp.sparseView();
+    
     H = dxdp_sparse.transpose() * d2Odx2_matrix * dxdp_sparse;
-
+    
     if (use_log_barrier)
         tbb::parallel_for(0, (int)H.rows(), [&](int row)
         {

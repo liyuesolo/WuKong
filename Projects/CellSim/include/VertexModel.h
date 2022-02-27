@@ -66,8 +66,8 @@ public:
 
     using Edge = Vector<int, 2>;
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    typedef long StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
     using Entry = Eigen::Triplet<T>;
     
 public:
@@ -776,7 +776,7 @@ public:
 
     // SensitivityDerivatives.cpp
     void dfdpWeights(MatrixXT& dfdp);
-    
+    void dfdpWeightsSparse(StiffnessMatrix& dfdp);
     void edgeWeightsSGNMatrix(StiffnessMatrix& mat_SGN, std::vector<Entry>& d2Odx2_entries);
 
     void dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dOdp);

@@ -80,8 +80,8 @@ int main()
     obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
     // obj.add_min_act = true;
     // obj.w_min_act = 1;
-    obj.setOptimizer(GaussNewton);
-    // obj.setOptimizer(SGN);
+    // obj.setOptimizer(GaussNewton);
+    obj.setOptimizer(SGN);
     // obj.use_log_barrier = true;
     // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     // obj.updateTarget();

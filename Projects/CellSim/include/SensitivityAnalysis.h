@@ -26,8 +26,9 @@ public:
     using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
 
-    typedef long StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;

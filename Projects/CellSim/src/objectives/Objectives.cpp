@@ -307,6 +307,152 @@ void Objectives::saveDesignParameters(const std::string& filename, const VectorX
     out.close();
 }
 
+void Objectives::assembleSGNHessianBCZero(StiffnessMatrix &A, const StiffnessMatrix &dfdx,
+	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT)
+{
+	StiffnessMatrix dfdxT = dfdx.transpose();
+	StiffnessMatrix dfdpT = dfdp.transpose();
+
+    int nx = A.rows();
+	int np = dfdp.cols();
+	int npnx = np + nx;
+
+    int nl = dfdx.rows();
+
+    KKT.resize(npnx + nl, npnx + nl);
+
+    for (int k = 0; k < nx; k++)
+	{
+		KKT.startVec(k);
+		for (StiffnessMatrix::InnerIterator it(A, k); it; ++it)
+		{
+			KKT.insertBack(it.row(), k) = it.value();
+		}
+		for (StiffnessMatrix::InnerIterator it(dfdx, k); it; ++it)
+		{
+			KKT.insertBack(it.row() + npnx, k) = it.value();
+		}
+	}
+
+    for (int k = 0; k < np; k++)
+	{
+		KKT.startVec(k + nx);
+		for (StiffnessMatrix::InnerIterator it(dfdp, k); it; ++it)
+		{
+			KKT.insertBack(it.row() + npnx, k + nx) = it.value();
+		}
+        
+	}
+    
+	for (int k = 0; k < nl; k++)
+	{
+		KKT.startVec(k + npnx);
+		for (StiffnessMatrix::InnerIterator it(dfdxT, k); it; ++it)
+		{
+			KKT.insertBack(it.row(), k + npnx) = it.value();
+		}
+        for (StiffnessMatrix::InnerIterator it(dfdpT, k); it; ++it)
+		{
+			KKT.insertBack(it.row()+nx, k + npnx) = it.value();
+		}
+	}
+    KKT.finalize();
+}
+
+void Objectives::assembleSGNHessian(StiffnessMatrix &A,
+	const StiffnessMatrix &B,
+	const StiffnessMatrix &C,
+	const StiffnessMatrix &dfdx,
+	const StiffnessMatrix &dfdp,
+	StiffnessMatrix &KKT)
+{
+	//START_SECTION_TIMER_METHOD_WITH_HELPER();
+	//we are constructing [A, B', c[0]';
+	//                     B, C,  c[1]';
+	//                     c[0], c[1], 0]
+	//A = Hessian of objective wrt. x (regularizer) 
+	//C = Hessian of objective wrt. p (real objective)
+	//B = Mixed partials of objective wrt. p and x
+	StiffnessMatrix Btransposed = B.transpose();
+	//StiffnessMatrix constraintJacobianTransposed = constraintJacobian.transpose();
+	StiffnessMatrix dfdxT = dfdx.transpose();
+	StiffnessMatrix dfdpT = dfdp.transpose();
+	int nx = A.rows();
+	int np = C.rows();
+	int npnx = np + nx;
+
+	int nl = dfdx.rows();
+	//int nlx = dfdx.rows();
+	//int nlp = dfdp.rows();
+	//int nl = nlx + nlp
+
+	//KKT.resize(npnx + nl, npnx + nl);
+	KKT.resize(npnx + nl, npnx + nl);
+	for (int k = 0; k < nx; k++)
+	{
+		KKT.startVec(k);
+		for (StiffnessMatrix::InnerIterator it(A, k); it; ++it)
+		{
+			KKT.insertBack(it.row(), k) = it.value();
+		}
+		// for (StiffnessMatrix::InnerIterator it(B, k); it; ++it)
+		// {
+		// 	KKT.insertBack(it.row() + nx, k) = it.value();
+		// }
+		// for (StiffnessMatrix::InnerIterator it(dfdx, k); it; ++it)
+		// {
+		// 	KKT.insertBack(it.row() + npnx, k) = it.value();
+		// }
+	}
+    
+	// for (int k = 0; k < np; k++)
+	// {
+	// 	KKT.startVec(k + nx);
+	// 	for (StiffnessMatrix::InnerIterator it(Btransposed, k); it; ++it)
+	// 	{
+	// 		KKT.insertBack(it.row(), k + nx) = it.value();
+	// 	}
+        
+	// 	for (StiffnessMatrix::InnerIterator it(C, k); it; ++it)
+	// 	{
+	// 		KKT.insertBack(it.row() + nx, k + nx) = it.value();
+	// 	}
+	// 	//for (StiffnessMatrix::InnerIterator it(constraintJacobian, k + np); it; ++it)
+	// 	//{
+	// 	//	KKT.insertBack(it.row() + npnx, k + np) = it.value();
+	// 	//}
+        
+	// 	for (StiffnessMatrix::InnerIterator it(dfdp, k); it; ++it)
+	// 	{
+	// 		KKT.insertBack(it.row() + npnx, k + nx) = it.value();
+	// 	}
+        
+	// }
+    
+	// for (int k = 0; k < nl; k++)
+	// {
+	// 	KKT.startVec(k + npnx);
+	// 	for (StiffnessMatrix::InnerIterator it(dfdxT, k); it; ++it)
+	// 	{
+	// 		KKT.insertBack(it.row(), k + npnx) = it.value();
+	// 	}
+		
+	// 	//KKT.insertBack(npnx + k, npnx + k) = 1.0;
+	// }
+    // for (int k = 0; k < np; k++)
+    // {
+    //     KKT.startVec(k + npnx);
+    //     for (StiffnessMatrix::InnerIterator it(dfdpT, k); it; ++it)
+	// 	{
+	// 		KKT.insertBack(it.row()+np, k + npnx) = it.value();
+	// 	}
+    // }
+    
+	KKT.finalize();
+
+}
+
+
 void Objectives::diffTestHessian()
 {
     T epsilon = 1e-5;

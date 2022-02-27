@@ -107,32 +107,24 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             << " obj: " << E0 << std::endl;
 
         std::vector<int> projected_entries;
-        auto projectGradient =[&](VectorXT& g, VectorXT& design_parameters_projected)
+        auto getProjectingEntries =[&](VectorXT& g)
         {
-            // design_parameters_projected = design_parameters;
             T epsilon = 1e-3;
             for (int i = 0; i < n_dof_design; i++)
             {
                 if (design_parameters[i] < lower_bound + epsilon && g[i] > 0)
                 {
-                    // design_parameters_projected[i] = lower_bound;
-                    // g[i] = 0;
                     projected_entries.push_back(i);
                 }
                 if (design_parameters[i] > upper_bound - epsilon && g[i] < 0)
                 {
-                    // design_parameters_projected[i] = upper_bound;
-                    // g[i] = 0;
                     projected_entries.push_back(i);
                 }
-
-            }
-            
+            }   
         };
-        VectorXT design_parameters_projected = design_parameters;
-
+        
         if (add_bound_contraint)
-            projectGradient(dOdp, design_parameters_projected);
+            getProjectingEntries(dOdp);
         
         dp = dOdp;
 
@@ -142,7 +134,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             
             StiffnessMatrix H_GN;
             objective.hessianGN(design_parameters, H_GN, false, false);
-            std::cout << "\tGN # projected entries " << projected_entries.size() << std::endl;
+            // std::cout << "\tGN # projected entries " << projected_entries.size() << std::endl;
             for (int idx : projected_entries)
             {
                 H_GN.row(idx) *= 0.0;
@@ -167,23 +159,54 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         else if (optimizer == SGN)
         {
             StiffnessMatrix mat_SGN;
-            std::vector<Entry> d2Odx2_entries;
-            objective.d2Odx2(design_parameters, d2Odx2_entries);
-            simulation.cells.edgeWeightsSGNMatrix(mat_SGN, d2Odx2_entries);
+            objective.hessianSGN(design_parameters, mat_SGN, false, false);
             VectorXT rhs_SGN(n_dof_design + n_dof_sim * 2);
             rhs_SGN.setZero();
             rhs_SGN.segment(n_dof_sim, n_dof_design) = -dOdp;
             VectorXT delta;
-            LinearSolver::linearSolve(mat_SGN, rhs_SGN, delta, true, true, true);
+            for (int idx : projected_entries)
+            {
+                mat_SGN.row(idx + n_dof_sim) *= 0.0;
+                mat_SGN.col(idx + n_dof_sim) *= 0.0;
+                mat_SGN.coeffRef(idx + n_dof_sim, idx + n_dof_sim) = 1.0;
+            }
+            // This gives correct result
+            // LinearSolver::solve<Eigen::SparseLU<StiffnessMatrix>>(mat_SGN, rhs_SGN, delta, n_dof_sim, n_dof_design);
+
+            // This is fast
+            LinearSolver::solve<Eigen::PardisoLU<StiffnessMatrix>>(mat_SGN, rhs_SGN, delta, n_dof_sim, n_dof_design);
+            
             dp = delta.segment(n_dof_sim, n_dof_design);
             dp *= -1.0;
             gn_timer.stop();
             std::cout << "\tSGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            // gn_timer.start();
+
+            // StiffnessMatrix H_GN;
+            // objective.hessianGN(design_parameters, H_GN, false, false);
+            // for (int idx : projected_entries)
+            // {
+            //     H_GN.row(idx) *= 0.0;
+            //     H_GN.col(idx) *= 0.0;
+            //     H_GN.coeffRef(idx, idx) = 1.0;
+            // }
+
+            // VectorXT rhs_GN = -dOdp;
+            // VectorXT search_direction_GN;
+            // std::cout << "GN linear solve " << std::endl;
+            // LinearSolver::solve<Eigen::SparseLU<StiffnessMatrix>>(H_GN, rhs_GN, search_direction_GN, 0, n_dof_design);
+            // gn_timer.stop();
+            // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            // search_direction_GN *= -1.0;
+            // std::cout << (search_direction_GN - dp).norm() << std::endl;
+            // std::cout << search_direction_GN.normalized().dot(dOdp.normalized()) << std::endl;
+            // std::cout << dp.normalized().dot(dOdp.normalized()) << std::endl;
+            // for (int i = 0; i < n_dof_design; i++)
+            // {
+            //     std::cout << search_direction_GN[i] << " " << dp[i] << std::endl;
+            //     std::getchar();
+            // }
         }
-
-        // filterGradient();
-        
-
         
         VectorXT search_direction = -dp;
         T alpha = objective.maximumStepSize(search_direction);
@@ -191,7 +214,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
 
         for (int ls_cnt = 0; ls_cnt < 20; ls_cnt++)
         {
-            VectorXT p_ls = design_parameters_projected + alpha * search_direction;
+            VectorXT p_ls = design_parameters + alpha * search_direction;
             if (add_bound_contraint)
                 p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
             T E1 = objective.value(p_ls, true);

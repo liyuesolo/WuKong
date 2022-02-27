@@ -1,11 +1,11 @@
 #include <unordered_set>
 #include <fstream>
+#include <Eigen/PardisoSupport>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
-#include <Eigen/PardisoSupport>
 
 #include <ipc/ipc.hpp>
 
@@ -72,13 +72,13 @@ void VertexModel::computeLinearModes()
     if (use_Spectra)
     {
 
-        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(K);
 
         //0 cannot cannot be used as a shift
         T shift = -1e-4;
         Spectra::SymEigsShiftSolver<T, 
             Spectra::LARGEST_MAGN, 
-            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
             eigs(&op, nmodes, 2 * nmodes, shift);
 
         eigs.init();

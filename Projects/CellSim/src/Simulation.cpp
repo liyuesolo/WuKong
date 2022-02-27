@@ -1,10 +1,10 @@
-#include "../include/Simulation.h"
 #include <Eigen/PardisoSupport>
 #include <Eigen/CholmodSupport>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
+#include "../include/Simulation.h"
 #include "../../../Solver/CHOLMODSolver.hpp"
 
 #include <igl/readOBJ.h>
@@ -486,100 +486,102 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
     
-    Timer t(true);
+    // Timer t(true);
     
-    Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> solver;
-    T alpha = 10e-6;
-    solver.set_pattern(K);
-    solver.analyze_pattern();    
-    int i = 0;
-    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
-    for (; i < 50; i++)
-    {
-        if (!solver.factorize())
-        {
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            }); 
-            alpha *= 10;
-            indefinite_count_reg_cnt++;
-            continue;
-        }
+    // Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> solver;
+    // T alpha = 10e-6;
+    // solver.set_pattern(K);
+    // solver.analyze_pattern();    
+    // int i = 0;
+    // int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    // for (; i < 50; i++)
+    // {
+    //     if (!solver.factorize())
+    //     {
+    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+    //         // {
+    //         //     K.coeffRef(row, row) += alpha;
+    //         // }); 
+    //         K.diagonal().array() += alpha; 
+    //         alpha *= 10;
+    //         indefinite_count_reg_cnt++;
+    //         continue;
+    //     }
 
-        // sherman morrison
-        if (UV.cols() == 1)
-        {
-            VectorXT v = UV.col(0);
-            VectorXT A_inv_g = VectorXT::Zero(du.rows());
-            VectorXT A_inv_u = VectorXT::Zero(du.rows());
-            solver.solve(residual.data(), A_inv_g.data(), true);
-            solver.solve(v.data(), A_inv_u.data(), true);
+    //     // sherman morrison
+    //     if (UV.cols() == 1)
+    //     {
+    //         VectorXT v = UV.col(0);
+    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
+    //         VectorXT A_inv_u = VectorXT::Zero(du.rows());
+    //         solver.solve(residual.data(), A_inv_g.data(), true);
+    //         solver.solve(v.data(), A_inv_u.data(), true);
 
-            T dem = 1.0 + v.dot(A_inv_u);
+    //         T dem = 1.0 + v.dot(A_inv_u);
 
-            du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
-        }
-        // UV is actually only U, since UV is the same in the case
-        // C is assume to be Identity
-        else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-        {
-            VectorXT A_inv_g = VectorXT::Zero(du.rows());
-            solver.solve(residual.data(), A_inv_g.data(), true);
-            // VectorXT A_inv_g = solver.solve(residual);
+    //         du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+    //     }
+    //     // UV is actually only U, since UV is the same in the case
+    //     // C is assume to be Identity
+    //     else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+    //     {
+    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
+    //         solver.solve(residual.data(), A_inv_g.data(), true);
+    //         // VectorXT A_inv_g = solver.solve(residual);
 
-            MatrixXT A_inv_U(UV.rows(), UV.cols());
-            for (int col = 0; col < UV.cols(); col++)
-                solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
-                // A_inv_U.col(col) = solver.solve(UV.col(col));
+    //         MatrixXT A_inv_U(UV.rows(), UV.cols());
+    //         for (int col = 0; col < UV.cols(); col++)
+    //             solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
+    //             // A_inv_U.col(col) = solver.solve(UV.col(col));
             
-            MatrixXT C(UV.cols(), UV.cols());
-            C.setIdentity();
-            C += UV.transpose() * A_inv_U;
-            du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
-        }
+    //         MatrixXT C(UV.cols(), UV.cols());
+    //         C.setIdentity();
+    //         C += UV.transpose() * A_inv_U;
+    //         du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+    //     }
         
 
-        T dot_dx_g = du.normalized().dot(residual.normalized());
+    //     T dot_dx_g = du.normalized().dot(residual.normalized());
 
-        int num_negative_eigen_values = 0;
-        int num_zero_eigen_value = 0;
+    //     int num_negative_eigen_values = 0;
+    //     int num_zero_eigen_value = 0;
 
-        bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-3;
-        if (!search_dir_correct_sign)
-            invalid_search_dir_cnt++;
-        bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6;
-        if (!solve_success)
-            invalid_residual_cnt++;
-        // std::cout << "PD: " << positive_definte << " direction " 
-        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+    //     bool positive_definte = num_negative_eigen_values == 0;
+    //     bool search_dir_correct_sign = dot_dx_g > 1e-3;
+    //     if (!search_dir_correct_sign)
+    //         invalid_search_dir_cnt++;
+    //     bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6;
+    //     if (!solve_success)
+    //         invalid_residual_cnt++;
+    //     // std::cout << "PD: " << positive_definte << " direction " 
+    //     //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
-        if (positive_definte && search_dir_correct_sign && solve_success)
-        {
-            t.stop();
-            std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-            std::cout << "\t# regularization step " << i 
-                << " indefinite " << indefinite_count_reg_cnt 
-                << " invalid search dir " << invalid_search_dir_cnt
-                << " invalid solve " << invalid_residual_cnt << std::endl;
-            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            std::cout << "\t======================== " << std::endl;
-            return true;
-        }
-        else
-        {
-            // K = H + alpha * I;       
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });  
-            alpha *= 10;
-        }
-    }
-    return false;
+    //     if (positive_definte && search_dir_correct_sign && solve_success)
+    //     {
+    //         t.stop();
+    //         std::cout << "\t===== Linear Solve ===== " << std::endl;
+    //         std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+    //         std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+    //         std::cout << "\t# regularization step " << i 
+    //             << " indefinite " << indefinite_count_reg_cnt 
+    //             << " invalid search dir " << invalid_search_dir_cnt
+    //             << " invalid solve " << invalid_residual_cnt << std::endl;
+    //         std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+    //         std::cout << "\t======================== " << std::endl;
+    //         return true;
+    //     }
+    //     else
+    //     {
+    //         // K = H + alpha * I;       
+    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+    //         // {
+    //         //     K.coeffRef(row, row) += alpha;
+    //         // });  
+    //         K.diagonal().array() += alpha; 
+    //         alpha *= 10;
+    //     }
+    // }
+    // return false;
 }
 
 
@@ -638,10 +640,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         if (solver.info() == Eigen::NumericalIssue)
         {
             // K = H + alpha * I;        
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            }); 
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // }); 
+            K.diagonal().array() += alpha;
             alpha *= 10;
             indefinite_count_reg_cnt++;
             continue;
@@ -684,7 +687,9 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         bool search_dir_correct_sign = dot_dx_g > 1e-3;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
+        
         bool solve_success = (K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+
         if (!solve_success)
             invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 
@@ -710,10 +715,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         else
         {
             // K = H + alpha * I;       
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });  
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // });  
+            K.diagonal().array() += alpha;
             alpha *= 10;
         }
     }
@@ -722,7 +728,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 
 bool Simulation::linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorXT& x)
 {
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    Eigen::PardisoLU<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     solver.analyzePattern(A);
     solver.factorize(A);
     x = solver.solve(b);
@@ -735,13 +741,14 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
 
 
 #ifdef USE_PARDISO
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
 #else
     Eigen::SimplicialLDLT<StiffnessMatrix> solver;
     // Eigen::CholmodSimplicialLLT<StiffnessMatrix> solver;
 #endif
 
     T alpha = 10e-6;
+    // std::cout << "analyzePattern" << std::endl;
     solver.analyzePattern(K);
     int i = 0;
     for (; i < 50; i++)
@@ -751,13 +758,15 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
         if (solver.info() == Eigen::NumericalIssue)
         {
             // std::cout << "indefinite" << std::endl;
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });  
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // });  
+            K.diagonal().array() += alpha; 
             alpha *= 10;
             continue;
         }
+        
         du = solver.solve(residual);
 
         T dot_dx_g = du.normalized().dot(residual.normalized());
@@ -805,10 +814,11 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
         }
         else
         {
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });        
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // });
+            K.diagonal().array() += alpha; 
             alpha *= 10;
         }
     }

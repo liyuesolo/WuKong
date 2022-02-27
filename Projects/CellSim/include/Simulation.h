@@ -28,8 +28,8 @@ public:
 
     using CellModel = VertexModel;
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    typedef long StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
 
     T newton_tol = 1e-6;
     int max_newton_iter = 500;

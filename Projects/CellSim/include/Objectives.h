@@ -30,8 +30,9 @@ public:
     using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
 
-    typedef long StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
@@ -57,6 +58,13 @@ public:
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool use_prev_equil = false) {}
     virtual T evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, T& energy) {}
     virtual T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
+    
+    virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
+    virtual void assembleSGNHessian(StiffnessMatrix &A, const StiffnessMatrix &B,
+	    const StiffnessMatrix &C, const StiffnessMatrix &dfdx,
+	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT);
+    virtual void assembleSGNHessianBCZero(StiffnessMatrix &A, const StiffnessMatrix &dfdx,
+	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT);
     virtual T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
     virtual void dOdx(const VectorXT& p_curr, VectorXT& _dOdx) {}
     virtual void d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries) {}
@@ -166,7 +174,7 @@ public:
 
     T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
-
+    void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
     void initializeTarget();
 
     void loadTargetTrajectory(const std::string& filename);
