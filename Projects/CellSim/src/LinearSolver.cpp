@@ -103,6 +103,13 @@ bool LinearSolver::linearSolve(StiffnessMatrix& A,
     }
     return false;
 }
+bool LinearSolver::solveLUEigen(StiffnessMatrix& A, const VectorXT& b, VectorXT& x)
+{
+    Eigen::SparseLU<StiffnessMatrix> solver;
+    solver.analyzePattern(A);
+    solver.factorize(A);
+    x = solver.solve(b);
+}
 
 bool LinearSolver::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du, bool add_to_diagonal, 

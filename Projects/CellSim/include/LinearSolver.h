@@ -33,6 +33,8 @@ namespace LinearSolver
          const VectorXT& b, VectorXT& x, bool add_to_diagonal = true, 
          bool check_search_dir = true, bool check_residual = true);
 
+    bool solveLUEigen(StiffnessMatrix& A, const VectorXT& b, VectorXT& x);
+
     template <class Solver>
     bool solve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du, int reg_start, int reg_offset)
     {

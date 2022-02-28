@@ -343,7 +343,8 @@ void ObjNucleiTracking::getSimulationAndDesignDoF(int& _sim_dof, int& _design_do
 }
 
 void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr, 
-    StiffnessMatrix& H, bool simulate, bool use_prev_equil)
+    StiffnessMatrix& H, const std::vector<int>& projected_entries,
+    bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
     if (simulate)
@@ -389,6 +390,9 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
             entries.push_back(Entry(it.row() + nxnp, it.col() + nx, it.value()));
         }
     }
+
+    for (int i = 0; i < n_dof_design; i++)
+        entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 1e-10));
     
     H.setFromTriplets(entries.begin(), entries.end());
     H.makeCompressed();

@@ -612,8 +612,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                     TV dVdxi = dVdx.segment<3>(0);
                     TV dVdxj = dVdx.segment<3>(3);
                     Matrix<T, 3, 3> hessian_partial = By * dVdxi * dVdxj.transpose();
-                    if (hessian_partial.nonZeros() > 0)
-                        addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
+                    // if (hessian_partial.nonZeros() > 0)
+                    addHessianBlock<3>(entries, {dof_i, dof_j}, hessian_partial);
                 }
             }
         }

@@ -59,7 +59,8 @@ public:
     virtual T evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, T& energy) {}
     virtual T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
     
-    virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false) {}
+    virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, const std::vector<int>& projected_entries,
+        bool simulate = true, bool use_prev_equil = false) {}
     virtual void assembleSGNHessian(StiffnessMatrix &A, const StiffnessMatrix &B,
 	    const StiffnessMatrix &C, const StiffnessMatrix &dfdx,
 	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT);
@@ -174,7 +175,8 @@ public:
 
     T hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
     T hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil = false) {}
-    void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = true, bool use_prev_equil = false);
+    void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, const std::vector<int>& projected_entries,
+        bool simulate = true, bool use_prev_equil = false);
     void initializeTarget();
 
     void loadTargetTrajectory(const std::string& filename);

@@ -682,6 +682,8 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
 
 void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 {
+    bool using_woodbury_formulation = woodbury;
+    woodbury = false;
     VectorXT projected = _u;
     if (!run_diff_test)
     {
@@ -774,6 +776,7 @@ void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     // std::exit(0);
     // std::getchar();
     K.makeCompressed();
+    woodbury = using_woodbury_formulation;
 }
 
 void VertexModel::projectDirichletDoFMatrix(StiffnessMatrix& A, 

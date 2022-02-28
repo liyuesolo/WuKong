@@ -108,49 +108,49 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     
     dxdp.resize(num_nodes * 3, edge_weights.rows());
     dxdp.setZero();
-    StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
-    buildSystemMatrix(u, d2edx2);
-    Eigen::PardisoLLT<StiffnessMatrix> solver;
-    solver.analyzePattern(d2edx2);
-    solver.factorize(d2edx2);
-    for (int i = 0; i < cnt; i++)
-    {
-        dxdp.col(i) = solver.solve(dfdp.col(i));
-    }
-
     // StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
-    // MatrixXT UV;
-    // buildSystemMatrixWoodbury(u, d2edx2, UV);
-
-    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    // buildSystemMatrix(u, d2edx2);
+    // Eigen::PardisoLLT<StiffnessMatrix> solver;
     // solver.analyzePattern(d2edx2);
-    // T alpha = 1.0;
-    // for (int i = 0; i < 50; i++)
-    // {
-    //     solver.factorize(d2edx2);
-        
-    //     if (solver.info() == Eigen::NumericalIssue)
-    //     {
-    //         d2edx2.diagonal().array() += alpha; 
-    //         alpha *= 10;
-    //         continue;
-    //     }
-    // }
-    
-    // MatrixXT A_inv_U(UV.rows(), UV.cols());
-    // for (int col = 0; col < UV.cols(); col++)
-    //     A_inv_U.col(col) = solver.solve(UV.col(col));
-
-    // MatrixXT C(UV.cols(), UV.cols());
-    // C.setIdentity();
-    // C += UV.transpose() * A_inv_U;
-    // MatrixXT C_inv = C.inverse();
+    // solver.factorize(d2edx2);
     // for (int i = 0; i < cnt; i++)
     // {
-        
-    //     VectorXT A_inv_g = solver.solve(dfdp.col(i));    
-    //     dxdp.col(i) = A_inv_g - A_inv_U * C_inv * UV.transpose() * A_inv_g;
+    //     dxdp.col(i) = solver.solve(dfdp.col(i));
     // }
+
+    StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
+    MatrixXT UV;
+    buildSystemMatrixWoodbury(u, d2edx2, UV);
+
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    solver.analyzePattern(d2edx2);
+    T alpha = 1.0;
+    for (int i = 0; i < 50; i++)
+    {
+        solver.factorize(d2edx2);
+        
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            d2edx2.diagonal().array() += alpha; 
+            alpha *= 10;
+            continue;
+        }
+    }
+    
+    MatrixXT A_inv_U(UV.rows(), UV.cols());
+    for (int col = 0; col < UV.cols(); col++)
+        A_inv_U.col(col) = solver.solve(UV.col(col));
+
+    MatrixXT C(UV.cols(), UV.cols());
+    C.setIdentity();
+    C += UV.transpose() * A_inv_U;
+    MatrixXT C_inv = C.inverse();
+    for (int i = 0; i < cnt; i++)
+    {
+        
+        VectorXT A_inv_g = solver.solve(dfdp.col(i));    
+        dxdp.col(i) = A_inv_g - A_inv_U * C_inv * UV.transpose() * A_inv_g;
+    }
 }
 
 void VertexModel::dOdpFromdxdpEdgeWeights(const VectorXT& dOdu, VectorXT& dOdp)
