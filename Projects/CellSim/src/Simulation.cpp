@@ -389,7 +389,7 @@ bool Simulation::staticSolve()
     }
 
     T total_volume_apical_surface = cells.computeTotalVolumeFromApicalSurface();
-
+    
     
     // std::cout << cells.computeTotalEnergy(u, true) << std::endl;
     int cnt = 0;

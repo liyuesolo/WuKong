@@ -9,83 +9,81 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
+#include <Eigen/PardisoSupport>
 
 #include "VecMatDef.h"
 
-namespace LinearSolver
+class LinearSolver
 {
-
-    typedef int StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
+public:
+    using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-    using Entry = Eigen::Triplet<T>;
+    using Entry = Eigen::Triplet<T>;    
 
+    virtual void compute() = 0;
+	virtual void solve(const Eigen::VectorXd &b, VectorXT &x) = 0;
 
-    bool WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
-         VectorXT& residual, VectorXT& du, bool add_to_diagonal = true, 
-         bool check_search_dir = true, bool check_residual = true);
-    bool linearSolve(StiffnessMatrix& A,
-         const VectorXT& b, VectorXT& x, bool add_to_diagonal = true, 
-         bool check_search_dir = true, bool check_residual = true);
+    StiffnessMatrix& A;
 
-     bool linearSolveEigen(StiffnessMatrix& A,
-         const VectorXT& b, VectorXT& x, bool add_to_diagonal = true, 
-         bool check_search_dir = true, bool check_residual = true);
-
-    bool solveLUEigen(StiffnessMatrix& A, const VectorXT& b, VectorXT& x);
-
-    template <class Solver>
-    bool solve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du, int reg_start, int reg_offset)
-    {
-        // K = K.selfadjointView<Eigen::Lower>();
-        Solver solver;
-        T alpha = 10e-6;
-        
-        solver.analyzePattern(K);
-        
-
-        int i = 0;
-        for (; i < 50; i++)
-        {
-            
-            solver.factorize(K);
-            if (solver.info() != Eigen::Success)
-            {
-                std::cout << "decomposition failed" << std::endl;
-                tbb::parallel_for(reg_start, reg_start + reg_offset, [&](int row)
-                {
-                    K.coeffRef(row, row) += alpha;
-                });  
-                // K.diagonal().array() += alpha; 
-                alpha *= 10;
-                continue;
-            }
-            
-            du = solver.solve(residual);
-
-            T dot_dx_g = du.normalized().dot(residual.normalized());
-            
-            bool search_dir_correct_sign = dot_dx_g > 1e-6;
-            bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
-            
-            if (search_dir_correct_sign && solve_success)
-            {
-                return true;
-            }
-            else
-            {
-                // tbb::parallel_for(reg_start, reg_start + reg_offset, [&](int row)
-                // {
-                //     K.coeffRef(row, row) += alpha;
-                // }); 
-                K.diagonal().array() += alpha;        
-                alpha *= 10;
-            }
-        }
-        return false;
-    }
+public:
+    LinearSolver(StiffnessMatrix& _A) : A(_A) {}
+    ~LinearSolver() {}
 };
 
+class PardisoLDLTSolver : public LinearSolver
+{
+public:
+    Eigen::PardisoLDLT<StiffnessMatrix> solver;
+    bool use_default = true;
+public:
+    
+    void compute();
+	void solve(const Eigen::VectorXd &b, VectorXT &x);
+
+private:
+	void setDefaultLDLTPardisoSolverParameters();
+
+public:
+    PardisoLDLTSolver(StiffnessMatrix& _A, bool _use_default) : use_default(_use_default), LinearSolver(_A) 
+    {
+        setDefaultLDLTPardisoSolverParameters();
+    }
+    PardisoLDLTSolver(StiffnessMatrix& _A) : use_default(true), LinearSolver(_A) {}
+    ~PardisoLDLTSolver() {}
+};
+
+class PardisoLLTSolver : public LinearSolver
+{
+public:
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    MatrixXT UV;
+    bool woodbury;
+public:
+    void setWoodburyMatrix(const MatrixXT& _UV) { UV = _UV; woodbury = true; }
+
+    void compute() {}
+	void solve(const Eigen::VectorXd &b, VectorXT &x);
+
+public:
+    PardisoLLTSolver(StiffnessMatrix& _A) : woodbury(false), LinearSolver(_A) {}
+    PardisoLLTSolver(StiffnessMatrix& _A, MatrixXT& _UV) : UV(_UV), woodbury(true), LinearSolver(_A) {}
+    ~PardisoLLTSolver() {}
+};
+
+class EigenLUSolver : public LinearSolver
+{
+public:
+    Eigen::SparseLU<StiffnessMatrix> solver;
+public:
+    
+    void compute();
+	void solve(const Eigen::VectorXd &b, VectorXT &x);
+
+
+public:
+    EigenLUSolver(StiffnessMatrix& _A) : LinearSolver(_A) {}
+    ~EigenLUSolver() {}
+};
 
 #endif

@@ -3,7 +3,7 @@
 #include "../../include/DataIO.h"
 #include "../../icp/simpleicp.h"
 
-T ObjFindInit::value(const VectorXT& p_curr, bool use_prev_equil)
+T ObjFindInit::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
     T energy = 0.0;
@@ -20,40 +20,10 @@ T ObjFindInit::value(const VectorXT& p_curr, bool use_prev_equil)
     return energy;
 }
 
-T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, bool use_prev_equil)
+T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate)
 {
     updateDesignParameters(p_curr);
-
-    VectorXT dOdx(n_dof_sim);
-    dOdx.setZero();
-
-    iterateTargets([&](int cell_idx, TV& target_pos)
-    {
-        
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        VtxList cell_vtx_list = face_vtx_list;
-        for (int idx : face_vtx_list)
-            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-
-        T coeff = cell_vtx_list.size();
-        for (int idx : cell_vtx_list)
-        {
-            dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
-        }
-    });
-    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
-    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
-    dOdx += -vol_barrier_force;
-
-    dOdp = dOdx;
-}
-
-T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool use_prev_equil)
-{
-    updateDesignParameters(p_curr);
-
+    
     energy = 0.0;
     VectorXT dOdx(n_dof_sim);
     dOdx.setZero();
@@ -83,7 +53,7 @@ T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool 
     dOdp = dOdx;
 }
 
-T ObjFindInit::hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev_equil)
+void ObjFindInit::hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate)
 {
     std::vector<Entry> entries;
 
@@ -109,37 +79,6 @@ T ObjFindInit::hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool use_prev
     H.makeCompressed();
 }
 
-T ObjFindInit::evaluteGradientAndEnergy(const VectorXT& p_curr, VectorXT& dOdp, T& energy)
-{ 
-    updateDesignParameters(p_curr);
-    energy = 0.0;
-    VectorXT dOdx(n_dof_sim);
-    dOdx.setZero();
-
-    iterateTargets([&](int cell_idx, TV& target_pos)
-    {
-        
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        VtxList cell_vtx_list = face_vtx_list;
-        for (int idx : face_vtx_list)
-            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
-        T coeff = cell_vtx_list.size();
-        for (int idx : cell_vtx_list)
-        {
-            dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
-        }
-    });
-
-    simulation.cells.addSingleTetVolBarrierEnergy(energy);
-    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
-    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
-    dOdx += -vol_barrier_force;
-
-    dOdp = dOdx;
-}
 
 void ObjFindInit::updateDesignParameters(const VectorXT& design_parameters)
 {
