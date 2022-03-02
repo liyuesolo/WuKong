@@ -8,6 +8,10 @@ void EigenLUSolver::compute()
 void EigenLUSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
 {
     x = solver.solve(b);
+    VectorXT error = A * x - b;
+    std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
+    T search_direction_dot = x.normalized().dot(b.normalized());
+    std::cout << "\t[" << name << "] dot(dx, -g) " << search_direction_dot << std::endl;
 }
 
 
@@ -17,7 +21,24 @@ void PardisoLDLTSolver::compute()
     if (!use_default)
         solver.pardisoParameterArray()[13] = 0;
     solver.factorize(A);
-
+    
+    bool refactorize = (solver.pardisoParameterArray()[22] != num_neg_ev);
+    refactorize |= (solver.pardisoParameterArray()[21] != num_pos_ev);
+    T alpha = 1e-6;
+    while (refactorize)
+    {
+        A.diagonal().segment(0, num_pos_ev).array() += alpha;
+        A.diagonal().segment(num_pos_ev, num_neg_ev).array() -= alpha;      
+        alpha *= 10.0;
+        solver.factorize(A);
+        refactorize = (solver.pardisoParameterArray()[22] != num_neg_ev);
+        refactorize |= (solver.pardisoParameterArray()[21] != num_pos_ev);
+        // int num_pos_ev = solver.pardisoParameterArray()[21];
+        std::cout << "\t[" << name << "] # positive eigen values " << solver.pardisoParameterArray()[21] << 
+            " #negative eigen values: " << solver.pardisoParameterArray()[22] << std::endl;
+    }
+    std::cout << "\t[" << name << "] # positive eigen values " << solver.pardisoParameterArray()[21] << 
+            " #negative eigen values: " << solver.pardisoParameterArray()[22] << std::endl;
 }
 
 void PardisoLDLTSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
@@ -26,7 +47,51 @@ void PardisoLDLTSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
         solver.pardisoParameterArray()[6] = 0;
     x = solver.solve(b);
     VectorXT error = A * x - b;
-    // std::cout << error.norm() / b.norm() << std::endl;
+    std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
+    T search_direction_dot = x.normalized().dot(b.normalized());
+    std::cout << "\t[" << name << "] dot(dx, -g) " << search_direction_dot << std::endl;
+}
+
+void PardisoLUSolver::compute()
+{
+    solver.analyzePattern(A);
+    if (!use_default)
+        solver.pardisoParameterArray()[13] = 0;
+    bool refactorize = false;
+    solver.factorize(A);
+}
+
+void PardisoLUSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
+{
+    if(!use_default)
+        solver.pardisoParameterArray()[6] = 0;
+    x = solver.solve(b);
+    VectorXT error = A * x - b;
+    std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
+    T search_direction_dot = x.normalized().dot(b.normalized());
+    std::cout << "\t[" << name << "] dot(dx, -g) " << search_direction_dot << std::endl;
+}
+
+void PardisoLUSolver::setDefaultPardisoSolverParameters()
+{
+    auto& iparm = solver.pardisoParameterArray();
+	iparm.setZero();
+	iparm[0] = 1; /// not default values, set everything
+	iparm[1] = 2; // ordering
+	iparm[7] = 2;
+	iparm[9] = 13; //pivot perturbation
+
+	iparm[10] = 2; //scaling diagonals/vectors   this can only be used in conjunction with iparm[12] = 1
+	iparm[12] = 1;
+
+	iparm[17] = -1;
+	iparm[18] = -1;
+	iparm[20] = 1; //https://software.intel.com/en-us/mkl-developer-reference-c-pardiso-iparm-parameter
+
+	iparm[23] = 1; // parallel solve
+	iparm[24] = 1; // parallel backsubst.
+	iparm[26] = 1; // check matrix
+	iparm[34] = 1; // 0 based indexing
 }
 
 // From Jonas Zehnder

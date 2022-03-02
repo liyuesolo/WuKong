@@ -175,32 +175,23 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 mat_SGN.col(idx + n_dof_sim) *= 0.0;
                 mat_SGN.coeffRef(idx + n_dof_sim, idx + n_dof_sim) = 1.0;
             }
-            // Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(mat_SGN);
+            // StiffnessMatrix mat_SGN_copy = mat_SGN;
+            // std::cout << projected_entries.size() << std::endl;
 
-            // //0 cannot cannot be used as a shift
-            // T shift = -1e-4;
-            // Spectra::SymEigsShiftSolver<T, 
-            //     Spectra::LARGEST_MAGN, 
-            //     Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
-            //     eigs(&op, 10, 2 * 10, shift);
-
-            // eigs.init();
-
-            // int nconv = eigs.compute();
-
-            // if (eigs.info() == Spectra::SUCCESSFUL)
-            // {
-            //     Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-            //     std::cout << eigen_values << std::endl;
-            // }
             // std::getchar();
 
             gn_timer.start();
             PardisoLDLTSolver solver(mat_SGN, /*use_default=*/false);
+            solver.setPositiveNegativeEigenValueNumber(n_dof_sim + n_dof_design, n_dof_sim);
+            solver.setRegularizationIndices(n_dof_sim, n_dof_design);
             // EigenLUSolver solver(mat_SGN);
             solver.compute();
             solver.solve(rhs_SGN, delta);
-            // LinearSolver::solveLUEigen(mat_SGN, rhs_SGN, delta);
+            
+            // VectorXT delta2;
+            // EigenLUSolver solver_eigenLU(mat_SGN_copy);
+            // solver_eigenLU.compute();
+            // solver_eigenLU.solve(rhs_SGN, delta2);
 
             // std::ofstream out("mat_SGN.txt");
             // out << mat_SGN << std::endl;
@@ -217,7 +208,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             // gn_timer.restart();
 
             // StiffnessMatrix H_GN;
-            // objective.hessianGN(design_parameters, H_GN, false, false);
+            // objective.hessianGN(design_parameters, H_GN, false);
             // gn_timer.stop();
             // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
             // for (int idx : projected_entries)
@@ -230,8 +221,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
 
             // VectorXT rhs_GN = -dOdp;
             // VectorXT search_direction_GN;
+            // MatrixXT dense_GN_hessian(H_GN);
             // gn_timer.restart();
-            // LinearSolver::solve<Eigen::SparseLU<StiffnessMatrix>>(H_GN, rhs_GN, search_direction_GN, 0, n_dof_design);
+            // search_direction_GN = dense_GN_hessian.llt().solve(rhs_GN);
             // gn_timer.stop();
             // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
             // search_direction_GN *= -1.0;
@@ -254,7 +246,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             VectorXT p_ls = design_parameters + alpha * search_direction;
             if (add_bound_contraint)
                 p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
-            T E1 = objective.value(p_ls, true);
+            T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
             std::cout << "[" << method << "]\tE1: " << E1 << std::endl;
             // std::getchar();
             if (E1 < E0 || ls_cnt > 20)

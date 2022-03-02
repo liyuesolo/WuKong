@@ -267,13 +267,17 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
         }
     }
 
-    // for (int i = 0; i < n_dof_design; i++)
-    //     entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 100));
+    for (int i = 0; i < n_dof_sim; i++)
+        entries.push_back(Entry(i, i, 1e-10));
+    for (int i = 0; i < n_dof_design; i++)
+        entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 1e-10));
+    for (int i = 0; i < n_dof_sim; i++)
+        entries.push_back(Entry(i + n_dof_sim + n_dof_design, i + n_dof_sim + n_dof_design, -1e-10));
     
     // for (int i = 0; i < nxnp; i++)
     //     entries.push_back(Entry(i, i, 1e-4));
-    for (int i = nx; i < nxnp; i++)
-        entries.push_back(Entry(i, i, 1e-8));
+    // for (int i = nx; i < nxnp; i++)
+    //     entries.push_back(Entry(i, i, 1e-8));
     // for (int i = nxnp; i < nxnp + n_dof_sim; i++)
     //     entries.push_back(Entry(i, i, -1e-6));
     
