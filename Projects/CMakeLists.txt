@@ -1,5 +1,6 @@
 # add_subdirectory(TopographyOptimization)
 add_subdirectory(Tiling3D)
+add_subdirectory(FEM)
 # add_subdirectory(DigitalFabrics)
 add_subdirectory(DigitalFabrics3D)
 add_subdirectory(CellSim)
