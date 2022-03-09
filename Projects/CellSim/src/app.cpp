@@ -411,28 +411,72 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     if (show_target)
     {
         TV color(1, 0, 0);
-        sa.objective.iterateTargets([&](int cell_idx, TV& target){
-            appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
-        });
+        if (sa.objective.match_centroid)
+            sa.objective.iterateTargets([&](int cell_idx, TV& target){
+                appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
+            });
+        else
+            sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                const TV& target, const VectorXT& weights)
+            {
+                appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
+            });
     }
     if (show_target_current)
     {
         TV color(0, 1, 0);
-        
-        sa.objective.iterateTargets([&](int cell_idx, TV& target){
-            TV current;
-            sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
-            appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
-        });
+        if (sa.objective.match_centroid)
+        {
+            sa.objective.iterateTargets([&](int cell_idx, TV& target){
+                TV current;
+                sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
+                appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+            });
+        }
+        else
+        {
+            sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                const TV& target, const VectorXT& weights)
+            {
+                VectorXT positions;
+                std::vector<int> indices;
+                simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+                int n_pt = weights.rows();
+                // std::cout << "n_pt: " <<  n_pt << " w sum " << weights.sum() << std::endl;
+                TV current = TV::Zero();
+                for (int i = 0; i < n_pt; i++)
+                    current += weights[i] * positions.segment<3>(i * 3);
+                // std::cout << current.transpose() << std::endl;
+                appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+            });
+        }
     }
     if (show_target && show_target_current)
     {
         TV color(0, 1, 1);
-        sa.objective.iterateTargets([&](int cell_idx, TV& target){
-            TV current;
-            sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
-            appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
-        });
+        if (sa.objective.match_centroid)
+        {
+            sa.objective.iterateTargets([&](int cell_idx, TV& target){
+                TV current;
+                sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
+                appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+            });
+        }
+        else
+        {
+            sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                const TV& target, const VectorXT& weights)
+            {
+                VectorXT positions;
+                std::vector<int> indices;
+                simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+                int n_pt = weights.rows();
+                TV current = TV::Zero();
+                for (int i = 0; i < n_pt; i++)
+                    current += weights[i] * positions.segment<3>(i * 3);
+                appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+            });
+        }
     }
     if (show_edges)
     {
@@ -472,19 +516,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             cnt++;
         });
     }
-        // loaddpAndAppendCylinder("/home/yueli/Documents/ETH/WuKong/output/cells/opt/GN_iter_2.txt", V, F, C);
-    // if (show_contracting_edges)
-    //     simulation.cells.appendCylinderOnContractingEdges(V, F, C);
-        
-    // if (show_membrane)
-    //     viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
 
-    // if (show_outside_vtx)
-    // {
-    //     simulation.cells.getOutsideVtx(bounding_surface_samples, 
-    //         bounding_surface_samples_color, sdf_test_sample_idx_offset);
-    //     viewer.data().set_points(bounding_surface_samples, bounding_surface_samples_color);
-    // }
+    
     viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);  
 }
@@ -677,7 +710,7 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
     }   
 }
 
-void DiffSimApp::appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
+void SimulationApp::appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
         T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
 {
     
@@ -799,7 +832,7 @@ void DiffSimApp::loaddpAndAppendCylinder(const std::string& filename,
     }   
 }
 
-void DiffSimApp::appendSphereToPosition(const TV& position, T radius, const TV& color,
+void SimulationApp::appendSphereToPosition(const TV& position, T radius, const TV& color,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
 {
     Eigen::MatrixXd v_sphere;
@@ -835,14 +868,3 @@ void DiffSimApp::appendSphereToPosition(const TV& position, T radius, const TV& 
     F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
     C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
 }
-
-// void DiffSimApp::loadEdgeWeights(const std::string& filename, VectorXT& weights)
-// {
-//     std::ifstream in(filename);
-//     std::vector<T> weights_std_vec;
-//     T w;
-//     while (in >> w)
-//         weights_std_vec.push_back(w);
-//     weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
-//     in.close();
-// }

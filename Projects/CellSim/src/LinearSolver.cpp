@@ -7,6 +7,7 @@ void EigenLUSolver::compute()
 
 void EigenLUSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
 {
+    compute();
     x = solver.solve(b);
     VectorXT error = A * x - b;
     std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
@@ -43,6 +44,7 @@ void PardisoLDLTSolver::compute()
 
 void PardisoLDLTSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
 {
+    compute();
     if(!use_default)
         solver.pardisoParameterArray()[6] = 0;
     x = solver.solve(b);
@@ -63,6 +65,7 @@ void PardisoLUSolver::compute()
 
 void PardisoLUSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
 {
+    compute();
     if(!use_default)
         solver.pardisoParameterArray()[6] = 0;
     x = solver.solve(b);

@@ -76,14 +76,18 @@ int main()
     
     simulation.initializeCells();
     simulation.cells.tet_vol_barrier_w = 1e-22;
-    obj.initializeTarget();
-    obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
-    // obj.add_min_act = true;
-    // obj.w_min_act = 1;
-    // obj.setOptimizer(GaussNewton);
-    obj.setOptimizer(SGN);
+    // obj.initializeTarget();
+    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+    
+    
+    obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+    // obj.loadWeightedTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/targets_and_weights.txt");
+    obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sss.txt");
+    obj.match_centroid = false;
+    // obj.setOptimizer(SGN);
+    obj.setOptimizer(GaussNewton);
+    
     // obj.use_log_barrier = true;
-    // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     // obj.updateTarget();
     // obj.initializeTargetFromMap("idx_map.txt", 30);
 
@@ -105,6 +109,7 @@ int main()
         simulation.save_mesh = false;
         simulation.cells.print_force_norm = true;
         simulation.cells.tet_vol_barrier_w = 1e-22;
+        // simulation.cells.edge_weights.setConstant(0.05);
         // simulation.cells.checkTotalHessian();
         // VectorXT ew;
         // simulation.loadEdgeWeights("trouble_design_parameters.txt", ew);
@@ -116,6 +121,7 @@ int main()
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
+        // sa.setSimulationEnergyWeights();
         // sa.optimizePerEdgeWeigths();
         // diff_sim_app.runOptimization();
         // sa.initialize();
@@ -137,6 +143,13 @@ int main()
         sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
     };
 
+    auto generateWeights = [&]()
+    {
+        obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+        // obj.computeKernelWeights();
+        obj.computeCellTargetFromDatapoints();
+    };
+
     
     // registerMesh();
     // exit(0);
@@ -144,6 +157,7 @@ int main()
     // loadDrosophilaData();
     // runSim();
     runSA();
+    // generateWeights();
     // generateNucleiGT();
 
     return 0;

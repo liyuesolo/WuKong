@@ -6,6 +6,17 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../include/LinearSolver.h"
 
+void SensitivityAnalysis::setSimulationEnergyWeights()
+{
+    auto& cell_model = simulation.cells;
+
+    cell_model.add_yolk_volume = false;
+    cell_model.use_sphere_radius_bound = true;
+    cell_model.add_perivitelline_liquid_volume = false;
+    cell_model.woodbury = false;
+    // cell_model.B = 1e4;
+    // cell_model.bound_coeff = 0.1;
+}
 
 void SensitivityAnalysis::initialize()
 {
@@ -132,8 +143,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         Timer gn_timer(false);
         if (optimizer == GaussNewton)
         {
-            
-            StiffnessMatrix H_GN;
+            gn_timer.start();
+            MatrixXT H_GN;
             objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
             // std::cout << "\tGN # projected entries " << projected_entries.size() << std::endl;
             for (int idx : projected_entries)
@@ -143,10 +154,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 H_GN.coeffRef(idx, idx) = 1.0;
             }
             VectorXT rhs = -dOdp;
-            EigenLUSolver solver(H_GN);
-            solver.compute();
-            solver.solve(rhs, dp);
-            // LinearSolver::solve<Eigen::SparseLU<StiffnessMatrix>>(H_GN, rhs, dp, 0, n_dof_design);
+            dp = H_GN.llt().solve(rhs);
+            std::cout << "\t[EigenLLT] |Ax-b|/|b|: " << (H_GN * dp - rhs).norm() / rhs.norm() << std::endl;
             dp *= -1.0;
             gn_timer.stop();
             std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
@@ -154,8 +163,10 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         else if (optimizer == Newton)
         {
             StiffnessMatrix H;
+            VectorXT rhs = -dOdp;
             objective.hessian(design_parameters, H, /*simulate = */false);
-            simulation.linearSolve(H, dOdp, dp);
+            simulation.linearSolve(H, rhs, dp);
+            dp *= -1.0;
         }
         else if (optimizer == SGN)
         {
@@ -184,22 +195,15 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             PardisoLDLTSolver solver(mat_SGN, /*use_default=*/false);
             solver.setPositiveNegativeEigenValueNumber(n_dof_sim + n_dof_design, n_dof_sim);
             solver.setRegularizationIndices(n_dof_sim, n_dof_design);
+
             // EigenLUSolver solver(mat_SGN);
-            solver.compute();
+            // PardisoLUSolver solver(mat_SGN, false);
+            
             solver.solve(rhs_SGN, delta);
             
             // VectorXT delta2;
             // EigenLUSolver solver_eigenLU(mat_SGN_copy);
-            // solver_eigenLU.compute();
             // solver_eigenLU.solve(rhs_SGN, delta2);
-
-            // std::ofstream out("mat_SGN.txt");
-            // out << mat_SGN << std::endl;
-            // out.close();
-            // std::exit(0);
-            // LinearSolver::solve<Eigen::PardisoLDLT<StiffnessMatrix>>(
-            //     mat_SGN, rhs_SGN, delta, n_dof_sim, n_dof_design);
-            // std::cout << "|Ax-b|: " << (mat_SGN * delta - rhs_SGN).norm() << std::endl;
 
             dp = delta.segment(n_dof_sim, n_dof_design);
             dp *= -1.0;
@@ -207,10 +211,10 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             std::cout << "\tSGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
             // gn_timer.restart();
 
-            // StiffnessMatrix H_GN;
+            // MatrixXT H_GN;
             // objective.hessianGN(design_parameters, H_GN, false);
-            // gn_timer.stop();
-            // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            // // gn_timer.stop();
+            // // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
             // for (int idx : projected_entries)
             // {
             //     H_GN.row(idx) *= 0.0;
@@ -218,12 +222,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             //     H_GN.coeffRef(idx, idx) = 1.0;
             // }
 
-
-            // VectorXT rhs_GN = -dOdp;
-            // VectorXT search_direction_GN;
-            // MatrixXT dense_GN_hessian(H_GN);
-            // gn_timer.restart();
-            // search_direction_GN = dense_GN_hessian.llt().solve(rhs_GN);
+            // VectorXT search_direction_G = -H_GN.llt().solve(dOdp);
             // gn_timer.stop();
             // std::cout << "\tGN takes " << gn_timer.elapsed_sec() << "s" << std::endl;
             // search_direction_GN *= -1.0;
@@ -235,6 +234,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             //     std::cout << search_direction_GN[i] << " " << dp[i] << std::endl;
             //     std::getchar();
             // }
+            // std::getchar();
         }
         // std::cout << "here" << std::endl;
         VectorXT search_direction = -dp;
@@ -355,10 +355,9 @@ void SensitivityAnalysis::optimizeGaussNewton()
         if (g_norm < tol_g)
             break;
             
-        StiffnessMatrix H_GH;
+        MatrixXT H_GH;
         objective.hessianGN(design_parameters, H_GH, false);
-        VectorXT dp;
-        simulation.linearSolve(H_GH, dOdp, dp);
+        VectorXT dp = H_GH.llt().solve(dOdp);
 
         T alpha = 1.0;
         
@@ -367,7 +366,7 @@ void SensitivityAnalysis::optimizeGaussNewton()
             VectorXT p_ls = design_parameters - alpha * dp;
             // p_ls = p_ls.cwiseMax(0.0);
             p_ls = p_ls.cwiseMax(0.0);
-            T E1 = objective.value(p_ls, true);
+            T E1 = objective.value(p_ls, true, true);
             std::cout << "[GN]\tE1: " << E1 << std::endl;
             // std::getchar();
             if (E1 < E0 || ls_cnt > 10)
@@ -418,7 +417,7 @@ void SensitivityAnalysis::optimizeGradientDescent()
         {
             VectorXT p_ls = design_parameters - alpha * dOdp;
             p_ls = p_ls.cwiseMax(0.0);
-            T E1 = objective.value(p_ls, false);
+            T E1 = objective.value(p_ls, true, true);
             std::cout << "[GD]\tE1: " << E1 << std::endl;
             // std::getchar();
             if (E1 < E0 || ls_cnt > 10)

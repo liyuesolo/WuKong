@@ -588,12 +588,155 @@ void Objectives::diffTestGradientScale()
     }
 }
 
+void Objectives::diffTestdOdxScale()
+{
+    std::cout << "###################### CHECK dOdx SCALE ######################" << std::endl;   
+    VectorXT dOdx(n_dof_sim);
+    VectorXT dx(n_dof_sim);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+    T previous = 0.0;
+    VectorXT x = simulation.deformed;
+    computedOdx(x, dOdx);
+    T E0;
+    computeOx(x, E0);
+    for (int i = 0; i < 10; i++)
+    {
+        T E1;
+        computeOx(x + dx, E1);
+        T dE = E1 - E0;
+        
+        dE -= dOdx.dot(dx);
+        
+        if (i > 0)
+        {
+            // std::cout << "scale" << std::endl;
+            std::cout << (previous/dE) << std::endl;
+            // std::getchar();
+        }
+        previous = dE;
+        dx *= 0.5;
+    }
+}
+
 void Objectives::diffTestdOdx()
 {
+    std::cout << "###################### CHECK dOdx ENTRY ######################" << std::endl;   
+    VectorXT dOdx(n_dof_sim);
+    VectorXT dx(n_dof_sim);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+    T previous = 0.0;
+    VectorXT x = simulation.deformed;
+    computedOdx(x, dOdx);
     
+    VectorXT gradient_FD(n_dof_sim);
+    gradient_FD.setZero();
+    int cnt = 0;
+    T epsilon = 1e-6;
+    for(int dof_i = 0; dof_i < n_dof_sim; dof_i++)
+    {
+        x(dof_i) += epsilon;
+        // std::cout << W * dq << std::endl;
+        T E0; computeOx(x, E0);
+        
+        x(dof_i) -= 2.0 * epsilon;
+        T E1; computeOx(x, E1);
+        x(dof_i) += epsilon;
+        // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
+        gradient_FD(dof_i) = (E0 - E1) / (2.0 *epsilon);
+        // if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+            // continue;
+        // if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
+        //     continue;
+        std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << dOdx(dof_i) << std::endl;
+        std::getchar();
+        cnt++;   
+    }
+}
+void Objectives::diffTestd2Odx2Scale()
+{
+    std::cout << "###################### CHECK dOdx SCALE ######################" << std::endl; 
+    running_diff_test = true;   
+    VectorXT x = simulation.deformed;
+    StiffnessMatrix A(x.rows(), x.rows());
+    std::vector<Entry> d2Odx2_entries;
+    computed2Odx2(x, d2Odx2_entries);
+    A.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+
+    VectorXT dx(n_dof_sim);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+
+    VectorXT f0(n_dof_sim);
+    f0.setZero();
+    computedOdx(x, f0);
+    
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        
+        VectorXT f1(n_dof_sim);
+        f1.setZero();
+        computedOdx(x + dx, f1);
+        
+        T df_norm = (f0 + (A * dx) - f1).norm();
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+    }
+    running_diff_test = false;
 }
 
 void Objectives::diffTestd2Odx2()
 {
+    std::cout << "###################### CHECK dO2dx2 ENTRY ######################" << std::endl; 
+    running_diff_test = true;   
+    VectorXT x = simulation.deformed;
+    StiffnessMatrix A(x.rows(), x.rows());
+    std::vector<Entry> d2Odx2_entries;
+    computed2Odx2(x, d2Odx2_entries);
+    A.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
 
+    VectorXT dx(n_dof_sim);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    dx *= 0.001;
+
+
+    T epsilon = 1e-6;
+    for(int dof_i = 0; dof_i < n_dof_sim; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        x(dof_i) += epsilon;
+        VectorXT g0(n_dof_sim), g1(n_dof_sim);
+        g0.setZero(); g1.setZero();
+        computedOdx(x, g0);
+
+        x(dof_i) -= 2.0 * epsilon;
+        computedOdx(x, g1);
+        x(dof_i) += epsilon;
+        VectorXT row_FD = (g0 - g1) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof_sim; i++)
+        {
+            if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Diff Test Passed" << std::endl;
+    running_diff_test = false;
 }

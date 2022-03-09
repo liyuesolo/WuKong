@@ -66,6 +66,14 @@ public:
     virtual void setMenu(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     virtual void setMouseDown(igl::opengl::glfw::Viewer& viewer);
+
+    virtual void appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, 
+        const TV& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
+    virtual void appendSphereToPosition(const TV& position, T radius, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
 public:
     SimulationApp(Simulation& _simulation) : simulation(_simulation) {}
     ~SimulationApp() {}
@@ -97,16 +105,12 @@ public:
     void setMenu(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
 
-    void appendSphereToPosition(const TV& position, T radius, const TV& color,
-        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
 private:
     void loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& dp);
     void loaddpAndAppendCylinder(const std::string& filename, 
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void appendCylinderToEdges(const VectorXT weights_vector, 
-        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
-    void appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, 
-        const TV& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     void loadSVDMatrixV(const std::string& filename);
     // void loadEdgeWeights(const std::string& filename, VectorXT& weights);
@@ -115,5 +119,6 @@ public:
         sa(_sa), SimulationApp(_simulation) {}
     ~DiffSimApp() {}
 };
+
 
 #endif

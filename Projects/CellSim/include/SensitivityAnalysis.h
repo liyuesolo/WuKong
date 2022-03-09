@@ -50,6 +50,8 @@ public:
     
     void initialize();
 
+    void setSimulationEnergyWeights();
+
     bool optimizeOneStep(int step, Optimizer optimizer);
     
     void buildSensitivityMatrix(MatrixXT& dxdp);

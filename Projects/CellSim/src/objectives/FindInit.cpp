@@ -3,6 +3,8 @@
 #include "../../include/DataIO.h"
 #include "../../icp/simpleicp.h"
 
+T obj_weight = 1e1;
+
 T ObjFindInit::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
@@ -12,10 +14,14 @@ T ObjFindInit::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
         VtxList face_vtx_list = simulation.cells.faces[cell_idx];
         TV centroid;
         simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+        energy += obj_weight * 0.5 * (centroid - target_pos).dot(centroid - target_pos);
     });
     
     simulation.cells.addSingleTetVolBarrierEnergy(energy);
+    simulation.cells.addEdgeEnergy(ALL, simulation.cells.weights_all_edges, energy);
+    simulation.cells.addFaceAreaEnergy(Apical, simulation.cells.sigma, energy);
+    simulation.cells.addFaceAreaEnergy(Basal, simulation.cells.gamma, energy);
+    simulation.cells.addFaceAreaEnergy(Lateral, simulation.cells.alpha, energy);
 
     return energy;
 }
@@ -37,18 +43,28 @@ T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool 
             cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
         TV centroid;
         simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+        energy += obj_weight * 0.5 * (centroid - target_pos).dot(centroid - target_pos);
         T coeff = cell_vtx_list.size();
         for (int idx : cell_vtx_list)
         {
-            dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+            dOdx.segment<3>(idx * 3) += obj_weight * (centroid - target_pos) / coeff;
         }
     });
 
     simulation.cells.addSingleTetVolBarrierEnergy(energy);
-    VectorXT vol_barrier_force(n_dof_sim); vol_barrier_force.setZero();
-    simulation.cells.addSingleTetVolBarrierForceEntries(vol_barrier_force);
-    dOdx += -vol_barrier_force;
+    simulation.cells.addEdgeEnergy(ALL, simulation.cells.weights_all_edges, energy);
+    simulation.cells.addFaceAreaEnergy(Apical, simulation.cells.sigma, energy);
+    simulation.cells.addFaceAreaEnergy(Basal, simulation.cells.gamma, energy);
+    simulation.cells.addFaceAreaEnergy(Lateral, simulation.cells.alpha, energy);
+
+    VectorXT cell_forces(n_dof_sim); cell_forces.setZero();
+    simulation.cells.addSingleTetVolBarrierForceEntries(cell_forces);
+    simulation.cells.addEdgeForceEntries(ALL, simulation.cells.weights_all_edges, cell_forces);
+    simulation.cells.addFaceAreaForceEntries(Apical, simulation.cells.sigma, cell_forces);
+    simulation.cells.addFaceAreaForceEntries(Basal, simulation.cells.gamma, cell_forces);
+    simulation.cells.addFaceAreaForceEntries(Lateral, simulation.cells.alpha, cell_forces);
+
+    dOdx += -cell_forces;
 
     dOdp = dOdx;
 }
@@ -69,10 +85,14 @@ void ObjFindInit::hessian(const VectorXT& p_curr, StiffnessMatrix& H, bool simul
         for (int idx_i : cell_vtx_list)
             for (int idx_j : cell_vtx_list)
                 for (int d = 0; d < 3; d++)
-                    entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
+                    entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, obj_weight / coeff / coeff));
     });
 
     simulation.cells.addSingleTetVolBarrierHessianEntries(entries);
+    simulation.cells.addEdgeHessianEntries(ALL, simulation.cells.weights_all_edges, entries);
+    simulation.cells.addFaceAreaHessianEntries(Apical, simulation.cells.sigma, entries);
+    simulation.cells.addFaceAreaHessianEntries(Basal, simulation.cells.gamma, entries);
+    simulation.cells.addFaceAreaHessianEntries(Lateral, simulation.cells.alpha, entries);
 
     H.resize(n_dof_design, n_dof_design);
     H.setFromTriplets(entries.begin(), entries.end());

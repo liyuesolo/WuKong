@@ -33,6 +33,8 @@ option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    ON)
 option(LIBIGL_WITH_PNG               "Use PNG"                      ON)
 option(LIBIGL_WITH_XML               "Use XML"                      ON)
 
+option(LIBIGL_WITH_MOSEK             "Use MOSEK"          ON)
+
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (SuiteSparse REQUIRED)
 find_package (OpenMP REQUIRED)

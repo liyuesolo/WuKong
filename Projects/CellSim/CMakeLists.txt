@@ -1,4 +1,4 @@
-set(DEPS cholmod_solver solver partio Half openvdb tbb tbbmalloc tbbmalloc_proxy mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis cholmod amd camd ccolamd colamd spqr)
+set(DEPS cholmod_solver solver partio Half openvdb tbb tbbmalloc tbbmalloc_proxy mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis cholmod amd camd ccolamd colamd spqr igl::mosek)
 
 file(GLOB HEADERS "include/*.h" "include/*.hpp" "icp/*.h")
 file(GLOB SOURCES "*.c" "*.cpp" "src/*.cpp" "src/autodiff/*.cpp" "icp/*.cpp" "src/objectives/*.cpp")
@@ -17,8 +17,11 @@ target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/predic
 target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/spdlog-build/libspdlog.a)
 target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/install/collisiondetection/build/libcollisiondetection.a)
 target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/tight_inclusion-build/libtight_inclusion.a)
+# target_link_libraries(CellSim /home/yueli/Documents/mosek/9.2/tools/platform/linux64x86/src/fusion_cxx/libmosek64.a)
+
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/nanoflann/include)
 target_include_directories(CellSim PUBLIC ../../Libs/spectra/include)
+target_include_directories(CellSim PUBLIC /home/yueli/Documents/mosek/9.2/tools/platform/linux64x86/h)
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
 
 target_link_libraries(CellSim ${DEPS})

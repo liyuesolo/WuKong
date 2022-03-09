@@ -1,7 +1,10 @@
+#include <igl/mosek/mosek_quadprog.h>
+// #include <mosek.h>
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
 #include "../../include/DataIO.h"
 #include "../../include/LinearSolver.h"
+#include "../../include/eiquadprog.h"
 
 void ObjNucleiTracking::initializeTarget()
 {
@@ -22,6 +25,68 @@ void ObjNucleiTracking::initializeTarget()
     
 }
 
+void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
+{
+    
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+
+    if (success)
+    {
+        std::ifstream in(filename);
+        int data_point_idx, cell_idx, nw;
+        while (in >> data_point_idx >> cell_idx >> nw)
+        {
+            VectorXT w(nw); w.setZero();
+            for (int j = 0; j < nw; j++)
+                in >> w[j];
+            TV target = data_points.segment<3>(data_point_idx * 3);
+
+            VectorXT positions;
+            std::vector<int> indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            TV current = TV::Zero();
+            for (int i = 0; i < nw; i++)
+                current += w[i] * positions.segment<3>(i * 3);
+            T error = (current - target).norm();
+            
+            if (error < 1e-5)
+                weight_targets.push_back(TargetData(w, data_point_idx, cell_idx, target));
+            // else
+            //     std::cout << error << std::endl;
+        }
+        in.close();
+    }
+    
+}
+
+void ObjNucleiTracking::loadWeightedTarget(const std::string& filename)
+{
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+    if (success)
+    {
+        std::ifstream in(filename);
+        int cell_idx, nw;
+        while (in >> cell_idx >> nw)
+        {
+            // std::cout << cell_idx << std::endl;
+            std::vector<T> w(nw, 0.0);
+            std::vector<int> neighbors(nw, 0);
+            for (int j = 0; j < nw; j++)
+                in >> neighbors[j] >> w[j];
+            TV target = TV::Zero();
+            for (int i = 0; i < nw; i++)
+            {
+                target += w[i] * data_points.segment<3>(neighbors[i] * 3);
+            }
+            target_positions[cell_idx] = target;
+        }
+        in.close();
+    }
+}
+
 void ObjNucleiTracking::loadTarget(const std::string& filename)
 {
     std::vector<int> VF_cell_idx;
@@ -36,46 +101,123 @@ void ObjNucleiTracking::loadTarget(const std::string& filename)
     in.close();
 }
 
-void ObjNucleiTracking::d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries)
+void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
 {
-    updateDesignParameters(p_curr);
-    iterateTargets([&](int cell_idx, TV& target_pos)
+    simulation.deformed = x;
+    if (match_centroid)
     {
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        VtxList cell_vtx_list = face_vtx_list;
-        for (int idx : face_vtx_list)
-            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+        iterateTargets([&](int cell_idx, TV& target_pos)
+        {
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+            
+            T coeff = cell_vtx_list.size();
+            for (int idx_i : cell_vtx_list)
+                for (int idx_j : cell_vtx_list)
+                    for (int d = 0; d < 3; d++)
+                        d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            for (int i = 0; i < indices.size(); i++)
+                for (int j = 0; j < indices.size(); j++)
+                    for (int d = 0; d < 3; d++)
+                        d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + d, weights[i] * weights[j])); 
+        });
         
-        T coeff = cell_vtx_list.size();
-        for (int idx_i : cell_vtx_list)
-            for (int idx_j : cell_vtx_list)
-                for (int d = 0; d < 3; d++)
-                    d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
-    });
+        if (!running_diff_test)
+            for (int i = 0; i < n_dof_sim; i++)
+                d2Odx2_entries.push_back(Entry(i, i, 1e-6));
+    }
 }
 
-void ObjNucleiTracking::dOdx(const VectorXT& p_curr, VectorXT& _dOdx)
+void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
 {
-    updateDesignParameters(p_curr);
-    
-    _dOdx.resize(n_dof_sim);
-    _dOdx.setZero();
-
-    iterateTargets([&](int cell_idx, TV& target_pos)
+    Ox = 0.0;
+    simulation.deformed = x;
+    if (match_centroid)
     {
-        
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        VtxList cell_vtx_list = face_vtx_list;
-        for (int idx : face_vtx_list)
-            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        T coeff = cell_vtx_list.size();
-        for (int idx : cell_vtx_list)
+        iterateTargets([&](int cell_idx, TV& target_pos)
         {
-            _dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
-        }
-    });
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            Ox += 0.5 * (current - target).dot(current - target);
+        });
+    }
+}
+
+void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
+{
+    simulation.deformed = x;
+    dOdx.resize(n_dof_sim);
+    dOdx.setZero();
+
+    if (match_centroid)
+    {
+        iterateTargets([&](int cell_idx, TV& target_pos)
+        {
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            T coeff = cell_vtx_list.size();
+            for (int idx : cell_vtx_list)
+            {
+                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+            }
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            for (int i = 0; i < indices.size(); i++)
+            {
+                dOdx.segment<3>(indices[i] * 3) += (current - target) * weights[i];
+            }
+        });
+    }
 }
 
 
@@ -92,26 +234,32 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
     }
 
     T energy = 0.0;
-    iterateTargets([&](int cell_idx, TV& target_pos)
+    if (match_centroid)
     {
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
-    });
-    if (use_log_barrier)
-        for (int i = 0; i < n_dof_design; i++)
-            if (p_curr[i] < barrier_distance)
-                energy += barrier_weight * barrier<0>(p_curr[i], barrier_distance);
-    
-    if (add_min_act)
-    {
-        for (int i = 0; i < n_dof_design; i++)
+        iterateTargets([&](int cell_idx, TV& target_pos)
         {
-            energy += w_min_act * std::abs(p_curr[i]);
-        }
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+        });
     }
-        
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            energy += 0.5 * (current - target).dot(current - target);
+        });
+    }
+ 
     return energy;
 }
 
@@ -128,23 +276,46 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     VectorXT dOdx(n_dof_sim);
     dOdx.setZero();
 
-    iterateTargets([&](int cell_idx, TV& target_pos)
+    if (match_centroid)
     {
-        
-        VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-        VtxList cell_vtx_list = face_vtx_list;
-        for (int idx : face_vtx_list)
-            cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-        TV centroid;
-        simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-        energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
-        T coeff = cell_vtx_list.size();
-        for (int idx : cell_vtx_list)
+        iterateTargets([&](int cell_idx, TV& target_pos)
         {
-            dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
-        }
-    });
-    
+            
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+            T coeff = cell_vtx_list.size();
+            for (int idx : cell_vtx_list)
+            {
+                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+            }
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            energy += 0.5 * (current - target).dot(current - target);
+
+            for (int i = 0; i < indices.size(); i++)
+            {
+                dOdx.segment<3>(indices[i] * 3) += (current - target) * weights[i];
+            }
+        });
+    }
     
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     VectorXT lambda;
@@ -155,7 +326,6 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
         simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
         PardisoLLTSolver solver(d2edx2, UV);
         solver.solve(dOdx, lambda);
-        // LinearSolver::WoodburySolve(d2edx2, UV, dOdx, lambda, true, false, false);
     }
     else
     {   
@@ -166,31 +336,6 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
 
-    if (use_log_barrier)
-    {
-        T e_barrier = 0.0;
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            if (p_curr[i] < barrier_distance)
-            {
-                energy += barrier_weight * barrier<0>(p_curr[i], barrier_distance);
-                dOdp[i] += barrier_weight * barrier<1>(p_curr[i], barrier_distance);
-            }
-        }
-        // std::cout << "barrier energy: " << e_barrier << " " << p_curr.minCoeff() << std::endl;
-    }
-    
-    if (add_min_act)
-    {
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            if (p_curr[i] < 0)
-                dOdp[i] -= w_min_act;
-            else
-                dOdp[i] += w_min_act;
-            energy += w_min_act * std::abs(p_curr[i]);
-        }
-    }
 
     equilibrium_prev = simulation.u;
     return dOdp.norm();
@@ -225,7 +370,7 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
     }
 
     std::vector<Entry> d2Odx2_entries;
-    d2Odx2(p_curr, d2Odx2_entries);
+    computed2Odx2(simulation.deformed, d2Odx2_entries);
 
     StiffnessMatrix dfdx(n_dof_sim, n_dof_sim);
     simulation.buildSystemMatrix(simulation.u, dfdx);
@@ -233,11 +378,6 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
 
     StiffnessMatrix dfdp;
     simulation.cells.dfdpWeightsSparse(dfdp);
-
-    MatrixXT dfdp_dense = MatrixXT(dfdp);
-    // Eigen::JacobiSVD<Eigen::MatrixXd> svd(dfdp_dense, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    // VectorXT Sigma = svd.singularValues();
-    // std::cout << Sigma[0] << " " << Sigma[Sigma.rows() - 1] << std::endl;
 
     StiffnessMatrix d2Odx2_mat(n_dof_sim, n_dof_sim);
     d2Odx2_mat.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
@@ -285,7 +425,7 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
     H.makeCompressed();
 }
 
-void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate)
+void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate)
 {
     updateDesignParameters(p_curr);
     if (simulate)
@@ -297,23 +437,15 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bo
     MatrixXT dxdp;
     simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
     std::vector<Entry> d2Odx2_entries;
-    d2Odx2(p_curr, d2Odx2_entries);
+    computed2Odx2(simulation.deformed, d2Odx2_entries);
     StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
 
-    StiffnessMatrix dxdp_sparse = dxdp.sparseView();
     // Timer tt(true);
-    H = dxdp_sparse.transpose() * d2Odx2_matrix * dxdp_sparse;
+    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
     // tt.stop();
     // std::cout << "multiplication: " << tt.elapsed_sec() << std::endl;
-
-    if (use_log_barrier)
-        tbb::parallel_for(0, (int)H.rows(), [&](int row)
-        {
-            if (p_curr[row] < barrier_distance)
-                H.coeffRef(row, row) += barrier_weight * barrier<2>(p_curr[row], barrier_distance);
-        });
-    H.makeCompressed();
+    
 }
 
 T ObjNucleiTracking::maximumStepSize(const VectorXT& dp)
@@ -467,3 +599,186 @@ void ObjNucleiTracking::updateTarget()
     // out.close();
 }
 
+void ObjNucleiTracking::computeCellTargetFromDatapoints()
+{
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+
+    if (success)
+    {
+        std::string base_dir = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
+        std::ofstream out(base_dir + "sss.txt");
+        VectorXT cell_centroids;
+        simulation.cells.getAllCellCentroids(cell_centroids);
+        TV min_corner, max_corner;
+        simulation.cells.computeBoundingBox(min_corner, max_corner);
+        T spacing = 0.05 * (max_corner - min_corner).norm();
+        hash.build(spacing, cell_centroids);
+        int n_data_pts = data_points.size();
+        
+        int n_cells = cell_centroids.rows() / 3;
+
+        std::vector<T> errors(cell_centroids.rows() / 3, -1.0);
+    
+        
+        std::vector<TargetData> target_data(n_cells, TargetData());
+
+        for (int i = 0; i < n_data_pts; i++)
+        {
+            TV pi = data_points.segment<3>(i * 3);
+            std::vector<int> neighbors;
+            hash.getOneRingNeighbors(pi, neighbors);
+            
+            T min_dis = 1e10;
+            int min_cell_idx = -1;
+            for (int neighbor : neighbors)
+            {
+                TV centroid = cell_centroids.segment<3>(neighbor * 3);
+                T dis = (centroid - pi).norm();
+                if (dis < min_dis)
+                {
+                    min_cell_idx = neighbor;
+                    min_dis = dis;
+                }
+            }
+            if (min_cell_idx == -1)
+                continue;
+            std::cout << i << "/" << n_data_pts << " min cell " << min_cell_idx << std::endl;
+            
+            VectorXT positions;
+            std::vector<int> indices;
+            simulation.cells.getCellVtxAndIdx(min_cell_idx, positions, indices);
+            
+            int nw = positions.rows() / 3;
+            VectorXT weights(nw);
+            weights.setConstant(1.0 / nw);
+            
+            MatrixXT C(3, nw);
+            for (int i = 0; i < nw; i++)
+                C.col(i) = positions.segment<3>(i * 3);
+            
+            StiffnessMatrix Q = (C.transpose() * C).sparseView();
+            VectorXT c = -C.transpose() * pi;
+            StiffnessMatrix A(1, nw);
+            for (int i = 0; i < nw; i++)
+                A.insert(0, i) = 1.0;
+
+            VectorXT lc(1); lc[0] = 1.0;
+            VectorXT uc(1); uc[0] = 1.0;
+
+            VectorXT lx(nw); 
+            lx.setConstant(1e-4);
+            VectorXT ux(nw); 
+            ux.setConstant(1e4);
+
+            VectorXT w;
+            igl::mosek::MosekData mosek_data;
+            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w);
+            T error = (C * w - pi).norm();
+            
+            // std::cout << error << " " << w.transpose() << " " << w.sum() << std::endl;
+        
+            if (error > 1e-5)
+                continue;
+
+            if (errors[min_cell_idx] != -1)
+            {
+                if (error < errors[min_cell_idx])
+                {
+                    target_data[min_cell_idx] = TargetData(w, i, min_cell_idx);
+                    errors[min_cell_idx] = error;
+                }
+            }
+            else
+            {
+                errors[min_cell_idx] = error;
+                target_data[min_cell_idx] = TargetData(w, i, min_cell_idx);
+            }
+            
+        }
+
+        for (auto data : target_data)
+        {
+            if (data.data_point_idx != -1)
+            {
+                out << data.data_point_idx << " " << data.cell_idx << " " << data.weights.rows() << " " << data.weights.transpose() << std::endl;
+            }
+        }
+        
+        out.close();
+    }
+}
+
+void ObjNucleiTracking::computeKernelWeights()
+{
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+    std::ofstream out("targets_and_weights.txt");
+    if (success)
+    {
+        VectorXT cell_centroids;
+        simulation.cells.getAllCellCentroids(cell_centroids);
+        TV min_corner, max_corner;
+        simulation.cells.computeBoundingBox(min_corner, max_corner);
+        T spacing = 0.02 * (max_corner - min_corner).norm();
+
+        hash.build(spacing, data_points);
+        int n_cells = cell_centroids.rows() / 3;
+        int cons_cnt = 0;
+        for (int i = 0; i < n_cells; i++)
+        {
+            std::vector<int> neighbors;
+            TV ci = cell_centroids.segment<3>(i * 3);
+            hash.getOneRingNeighbors(ci, neighbors);
+
+            // std::cout << "# of selected point: " << neighbors.size() << std::endl;
+            
+            int nw = neighbors.size();
+            VectorXT weights(nw);
+            weights.setConstant(1.0 / nw);
+            
+            MatrixXT C(3, nw);
+            for (int i = 0; i < nw; i++)
+                C.col(i) = data_points.segment<3>(neighbors[i] * 3);
+            
+            StiffnessMatrix Q = (C.transpose() * C).sparseView();
+            VectorXT c = -C.transpose() * ci;
+            StiffnessMatrix A(1, nw);
+            for (int i = 0; i < nw; i++)
+                A.insert(0, i) = 1.0;
+
+            VectorXT lc(1); lc[0] = 1.0;
+            VectorXT uc(1); uc[0] = 1.0;
+
+            VectorXT lx(nw); 
+            lx.setConstant(-2.0);
+            VectorXT ux(nw); 
+            ux.setConstant(2.0);
+
+            VectorXT w;
+            igl::mosek::MosekData mosek_data;
+            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w);
+            
+            // std::cout << w.transpose() << std::endl;
+            // std::cout << "weights sum: " <<  w.sum() << std::endl;
+            T error = (C * w - ci).norm();
+            // std::cout << "error: " << (C * w - ci).norm() << std::endl;
+            if (error < 1e-4)
+            {
+                cons_cnt++;
+                out << i << " " << nw << " ";
+                for (int j = 0; j < nw; j++)
+                {
+                    out << neighbors[j] << " " << w[j] << " ";
+                }
+                out << std::endl;
+            }
+            // std::getchar();
+        }
+        std::cout << cons_cnt << "/" << n_cells << " have targets" << std::endl;
+    }
+    else
+    {
+        std::cout << "error with loading cell trajectory data" << std::endl;
+    }
+}

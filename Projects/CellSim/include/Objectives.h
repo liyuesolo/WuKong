@@ -23,6 +23,11 @@ enum Optimizer
     GradientDescent, GaussNewton, MMA, Newton, SGN
 };
 
+enum LinearSolverType
+{
+    PardisoLDLT, PardisoLU, EigenLU
+};
+
 class Objectives
 {
 public:
@@ -39,6 +44,8 @@ public:
     using VectorXi = Vector<int, Eigen::Dynamic>;
 
     Optimizer default_optimizer = GaussNewton;
+    LinearSolverType default_linear_solver = PardisoLDLT;
+    
 public:
     template <class OP>
     void iterateTargets(const OP& f) {
@@ -46,16 +53,39 @@ public:
             f(dirichlet.first, dirichlet.second);
         } 
     }
+    template <class OP>
+    void iterateWeightedTargets(const OP& f) {
+        for (auto target_data: weight_targets){
+            f(target_data.cell_idx, target_data.data_point_idx, target_data.target_pos, target_data.weights);
+        } 
+    }
+
 public:
+
     Simulation& simulation;
     int n_dof_sim, n_dof_design;
     VectorXT equilibrium_prev;
+    bool match_centroid = false;
+    bool running_diff_test = false;
+    struct TargetData
+    {
+        int cell_idx;
+        int data_point_idx;
+        VectorXT weights;
+        TV target_pos;
 
+        TargetData(const VectorXT& _weights, int _idx, int _cell_idx) : data_point_idx(_idx), weights(_weights), cell_idx(_cell_idx) {}
+        TargetData(const VectorXT& _weights, int _idx, int _cell_idx, const TV& _target_pos) : 
+            data_point_idx(_idx), weights(_weights), cell_idx(_cell_idx), target_pos(_target_pos) {}
+        TargetData() : data_point_idx(-1), cell_idx(-1) {}
+    };
+
+    std::vector<TargetData> weight_targets;
     std::unordered_map<int, TV> target_positions;
 
     virtual T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true) {}
-    virtual void hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = false) {}
+    virtual void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
     
     virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H,
         bool simulate = false) {}
@@ -67,8 +97,10 @@ public:
 	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT);
     virtual void assembleSGNHessianBCZero(StiffnessMatrix &A, const StiffnessMatrix &dfdx,
 	    const StiffnessMatrix &dfdp, StiffnessMatrix &KKT);
-    virtual void dOdx(const VectorXT& p_curr, VectorXT& _dOdx) {}
-    virtual void d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries) {}
+    
+    virtual void computeOx(const VectorXT& x, T& Ox) {}
+    virtual void computedOdx(const VectorXT& x, VectorXT& dOdx) {}
+    virtual void computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries) {}
 
     virtual void updateDesignParameters(const VectorXT& design_parameters) {}
     virtual void getDesignParameters(VectorXT& design_parameters) {}
@@ -78,6 +110,7 @@ public:
 
     virtual T maximumStepSize(const VectorXT& dp) { return 1.0; }
     virtual void setOptimizer(Optimizer opt) { default_optimizer = opt; }
+    virtual void setLinearSolver(LinearSolverType ls) { default_linear_solver = ls; }
 
     void saveState(const std::string& filename) { simulation.saveState(filename); }
     void saveDesignParameters(const std::string& filename, const VectorXT& design_parameters);
@@ -87,7 +120,9 @@ public:
     void diffTestHessian();
     void diffTestHessianScale();
     void diffTestdOdx();
+    void diffTestdOdxScale();
     void diffTestd2Odx2();
+    void diffTestd2Odx2Scale();
 
 public:
     Objectives(Simulation& _simulation) : simulation(_simulation) 
@@ -162,11 +197,13 @@ public:
     bool add_min_act = false;
     T w_min_act = 1.0;
 
+    
+
 public:
     
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true);
-    void hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = false);
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false);
     
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H,
         bool simulate = false);
@@ -175,19 +212,29 @@ public:
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
-    void dOdx(const VectorXT& p_curr, VectorXT& _dOdx);
-    void d2Odx2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries);
 
+    void computeOx(const VectorXT& x, T& Ox);
+    void computedOdx(const VectorXT& x, VectorXT& _dOdx);
+    void computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries);
+
+    void computeKernelWeights();
+    void computeCellTargetFromDatapoints();
 
     void initializeTarget();
 
     void loadTargetTrajectory(const std::string& filename);
+
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
     void updateTarget();
 
     void loadTarget(const std::string& filename);
+    void loadWeightedTarget(const std::string& filename);
+    void loadWeightedCellTarget(const std::string& filename);
+
     void initializeTargetFromMap(const std::string& filename, int _frame);
     T maximumStepSize(const VectorXT& dp);
+
+private:
     template<int order>
     T barrier(T d, T eps)
     {
@@ -221,7 +268,7 @@ public:
 public:
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true);
-    void hessianGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = false) {}
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
     
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, 
         bool simulate = false) {}
