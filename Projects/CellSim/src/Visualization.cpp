@@ -70,6 +70,76 @@ void VertexModel::sampleBoundingSurface(Eigen::MatrixXd& V)
     
 }
 
+void VertexModel::splitYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool a_bit)
+{
+    int face_cnt = 0, vtx_cnt = 0;
+    T offset_percentage = 2.0;
+    if (a_bit)
+        offset_percentage = 1.5;
+    std::vector<IV> tri_faces;
+    std::vector<TV> vertices;
+    std::vector<TV> colors;
+    
+    if (use_cell_centroid)
+    {
+        vertices.push_back(mesh_centroid);
+        vtx_cnt++;
+
+        iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+        {
+            if (face_idx < basal_face_start)
+            {
+                VectorXT positions;
+                positionsFromIndices(positions, face_vtx_list);
+                VectorXT positions_basal;
+                VtxList basal_face_vtx_list = face_vtx_list;
+                TV basal_centroid;
+                computeFaceCentroid(basal_face_vtx_list, basal_centroid);
+                TV basal_centroid_shifted = mesh_centroid + (basal_centroid - mesh_centroid) * offset_percentage;
+
+                TV shift = basal_centroid_shifted - basal_centroid;
+                VtxList new_face_vtx;
+                vertices.push_back(basal_centroid_shifted);
+
+                new_face_vtx.push_back(vtx_cnt);
+                for (int i = 0; i < face_vtx_list.size(); i++)
+                    new_face_vtx.push_back(vtx_cnt + i + 1);
+                vtx_cnt++;
+
+                for (int i = 0; i < face_vtx_list.size(); i++)
+                {
+                    int j = (i + 1) % face_vtx_list.size();
+                    positions.segment<3>(i * 3) += shift;
+                    vertices.push_back(positions.segment<3>(i * 3));
+                    colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
+                    colors.push_back(Eigen::Vector3d(0.0, 1.0, 0.0));
+                    // colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
+                    // colors.push_back(Eigen::Vector3d(1.0, 0.3, 0.0));
+
+                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[0], new_face_vtx[1 + j]));
+                    tri_faces.push_back(IV(new_face_vtx[1 + i], new_face_vtx[1 + j], 0));
+                    vtx_cnt++;
+                }
+            }
+        });
+
+        V.resize(vtx_cnt, 3);
+        F.resize(tri_faces.size(), 3);
+        C.resize(tri_faces.size(), 3);
+        for (int i = 0; i < vtx_cnt; i++)
+        {
+            V.row(i) = vertices[i];
+        }
+        
+        for (int i = 0; i < tri_faces.size(); i++)
+        {
+            F.row(i) = tri_faces[i];
+            C.row(i) = colors[i];
+        }
+    }
+}
+
 void VertexModel::splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool a_bit)
 {
     if (single_prism)

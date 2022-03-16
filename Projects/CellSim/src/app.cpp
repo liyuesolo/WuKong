@@ -46,6 +46,28 @@ void SimulationApp::loadDisplacementVectors(const std::string& filename)
     in.close();
 }
 
+void SimulationApp::loadSVDData(const std::string& filename)
+{
+    std::ifstream in(filename);
+    int row, col;
+    in >> row >> col;
+    svd_U.resize(row, col);
+    svd_Sigma.resize(col);
+    double entry;
+    for (int i = 0; i < col; i++)
+        in >> svd_Sigma[i];
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < col; j++)
+            in >> svd_U(i, j);
+    in >> row >> col;
+    
+    svd_V.resize(row, col);
+    for (int i = 0; i < row; i++)
+        for (int j = 0; j < col; j++)
+            in >> svd_V(i, j);
+    in.close();
+}
+
 void SimulationApp::setMenu(igl::opengl::glfw::Viewer& viewer, 
     igl::opengl::glfw::imgui::ImGuiMenu& menu)
 {
@@ -182,7 +204,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             if (finished)
             {
                 viewer.core().is_animating = false;
-                simulation.checkHessianPD(true);
+                // simulation.checkHessianPD(true);
             }
             else 
                 static_solve_step++;
@@ -307,6 +329,9 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     show_target_current = true;
     show_target = true;
     show_edges = false;
+
+    color.resize(sa.n_dof_design);
+    color.setZero();
     
     viewer.callback_key_pressed = 
         [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
@@ -325,14 +350,17 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
         case '1':
             check_modes = true;
             // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/dxdp_eigen_vectors.txt");
-            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_edge_weights_svd_vectors.txt");
+            // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_edge_weights_svd_vectors.txt");
+            loadSVDData("cell_edge_weights_svd_vectors.txt");
+            color.resize(svd_V.cols());
+            color.setZero();
             modes = 0;
-            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
+            std::cout << "modes " << modes << " singular value: " << svd_Sigma(modes) << std::endl;
             return true;
         case '2':
             modes++;
-            modes = (modes + evectors.cols()) % evectors.cols();
-            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
+            modes = (modes + svd_U.cols()) % svd_U.cols();
+            std::cout << "modes " << modes << " singular value: " << svd_Sigma(modes) << std::endl;
             return true;
         case ' ':
             viewer.core().is_animating = true;
@@ -347,8 +375,9 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
     {
         if(viewer.core().is_animating && check_modes)
         {
-            simulation.deformed = simulation.undeformed + simulation.u + evectors.col(modes) * std::sin(t);
-            
+            simulation.deformed = simulation.undeformed + simulation.u + svd_U.col(modes) * std::sin(t);
+            color.resize(svd_V.cols());
+            color = VectorXT::Constant(svd_V.cols(), 0.5) + 10.0 * svd_V.col(modes) * std::sin(t);
             t += 0.1;
             updateScreen(viewer);
         }
@@ -498,6 +527,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         int cnt = 0;
         
         T max_w = sa.design_parameter_bound[1], min_w = sa.design_parameter_bound[0];
+        // T max_w = edge_weights.maxCoeff(), min_w = edge_weights.minCoeff();
 
         T epsilon = min_w + (max_w - min_w) * threshold;
 
@@ -513,6 +543,20 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                 appendCylinderToEdge(from, to, TV(1, 1, 1), 0.01, V, F, C);
             if (edge_weights[cnt] < max_w - 1e-3)
                 appendCylinderToEdge(from, to, TV(1, 1, 0), 0.01, V, F, C);
+            cnt++;
+        });
+    }
+
+    if (show_undeformed)
+    {
+        appendRestShapeShifted(V, F, C, shift);
+        
+        int cnt = 0;
+        simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
+            TV from = simulation.undeformed.segment<3>(edge[0] * 3);
+            TV to = simulation.undeformed.segment<3>(edge[1] * 3);
+            TV cc = color[cnt] * TV::Ones();
+            appendCylinderToEdge(from + shift, to + shift, cc, 0.01, V, F, C);
             cnt++;
         });
     }
@@ -594,6 +638,15 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
             {
                 updateScreen(viewer);
             }
+            if (ImGui::Checkbox("Undeformed", &show_undeformed))
+            {
+                if (show_undeformed)
+                {
+                    show_target = false;
+                    show_target_current = false;
+                }
+                updateScreen(viewer);
+            }
             if (ImGui::DragFloat("Threshold", &(threshold), 0.1f, 0.01f, 1.0f))
             {
                 updateScreen(viewer);
@@ -622,6 +675,16 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
             }
             // ImGui::SameLine(0, p);
         }
+        if (ImGui::Button("ComputeGraident", ImVec2(-1,0)))
+        {
+            VectorXT gradient;
+            T energy = 0.0;
+            sa.objective.gradient(sa.design_parameters, gradient, energy, false);
+            std::cout << "E " << energy << " |g| " << gradient.norm() << std::endl;
+            std::ofstream out("gradient.txt");
+            out << gradient.rows() << " " << gradient.transpose() << std::endl;
+            out.close();
+        }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
             igl::writeOBJ("current_mesh.obj", V, F);
@@ -630,6 +693,35 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
 
     if (show_edge_weights)
         loadSVDMatrixV("cell_edge_weights_svd_vectors_V.txt");
+}
+
+void DiffSimApp::appendRestShapeShifted(Eigen::MatrixXd& _V, 
+    Eigen::MatrixXi& _F, Eigen::MatrixXd& _C, const TV& shift)
+{
+    Eigen::MatrixXd V_rest, C_rest;
+    Eigen::MatrixXi F_rest;
+    
+    simulation.cells.generateMeshForRendering(V_rest, F_rest, C_rest, true);
+
+    int n_vtx_prev = V_rest.rows();
+    int n_face_prev = F_rest.rows();
+
+    tbb::parallel_for(0, (int)V_rest.rows(), [&](int row_idx){
+        V_rest.row(row_idx) += shift;
+    });
+
+    tbb::parallel_for(0, (int)F_rest.rows(), [&](int row_idx){
+        F_rest.row(row_idx) += Eigen::Vector3i(n_vtx_prev, n_vtx_prev, n_vtx_prev);
+    });
+
+    V.conservativeResize(V.rows() + V_rest.rows(), 3);
+    F.conservativeResize(F.rows() + F_rest.rows(), 3);
+    C.conservativeResize(C.rows() + F_rest.rows(), 3);
+
+
+    V.block(n_vtx_prev, 0, V_rest.rows(), 3) = V_rest;
+    F.block(n_face_prev, 0, F_rest.rows(), 3) = F_rest;
+    C.block(n_face_prev, 0, F_rest.rows(), 3) = C_rest;
 }
 
 void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector, 

@@ -212,24 +212,31 @@ void Simulation::generateMeshForRendering(Eigen::MatrixXd& V,
     }
     if (yolk_only)
     {
-        if (show_deformed)
-            cells.getYolkForRendering(V, F, C);
-        int nv = V.rows(), nf = F.rows();
-        if (show_rest)
+        if (split || split_a_bit)
         {
-            cells.getYolkForRendering(V_rest, F_rest, C_rest, true);
-            int nv_rest = V_rest.rows(), nf_rest = F_rest.rows();
-            V.conservativeResize(V.rows() + V_rest.rows(), 3);
-            F.conservativeResize(F.rows() + F_rest.rows(), 3);
-            C.conservativeResize(C.rows() + C_rest.rows(), 3);
-            C_rest.col(0).setConstant(1.0);
-            C_rest.col(1).setConstant(1.0);
-            C_rest.col(2).setConstant(0.0);
-            offset = F_rest;
-            offset.setConstant(nv);
-            V.block(nv, 0, nv_rest, 3) = V_rest;
-            F.block(nf, 0, nf_rest, 3) = F_rest + offset;
-            C.block(nf, 0, nf_rest, 3) = C_rest;
+            cells.splitYolkForRendering(V, F, C, split_a_bit);
+        }
+        else
+        {
+            if (show_deformed)
+                cells.getYolkForRendering(V, F, C);
+            int nv = V.rows(), nf = F.rows();
+            if (show_rest)
+            {
+                cells.getYolkForRendering(V_rest, F_rest, C_rest, true);
+                int nv_rest = V_rest.rows(), nf_rest = F_rest.rows();
+                V.conservativeResize(V.rows() + V_rest.rows(), 3);
+                F.conservativeResize(F.rows() + F_rest.rows(), 3);
+                C.conservativeResize(C.rows() + C_rest.rows(), 3);
+                C_rest.col(0).setConstant(1.0);
+                C_rest.col(1).setConstant(1.0);
+                C_rest.col(2).setConstant(0.0);
+                offset = F_rest;
+                offset.setConstant(nv);
+                V.block(nv, 0, nv_rest, 3) = V_rest;
+                F.block(nf, 0, nf_rest, 3) = F_rest + offset;
+                C.block(nf, 0, nf_rest, 3) = C_rest;
+            }
         }
     }
 }
@@ -337,7 +344,7 @@ void Simulation::saveState(const std::string& filename)
     cells.generateMeshForRendering(V, F, C, false);
     for (int i = 0; i < V.rows(); i++)
     {
-        out << "v " << V.row(i) << std::endl;
+        out << "v " << std::setprecision(12) << V.row(i) << std::endl;
     }
     for (int i = 0; i < F.rows(); i++)
     {
@@ -353,7 +360,9 @@ void Simulation::reset()
     u.setZero();
     if (cells.use_ipc_contact)
     {
-        cells.computeIPCRestData();
+        // cells.computeIPCRestData();
+        for (int i = 0; i < cells.basal_vtx_start; i++)
+            cells.ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
     }
 }
 
@@ -475,6 +484,9 @@ bool Simulation::staticSolve()
         std::cout << "============================================================================" << std::endl;
 
     }
+    std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
+            << residual_norm << " |ddu|: " << dq_norm  
+            << " |g_init|: " << residual_norm_init << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
@@ -1092,5 +1104,16 @@ void Simulation::loadEdgeWeights(const std::string& filename, VectorXT& weights)
     while (in >> w)
         weights_std_vec.push_back(w);
     weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
+    in.close();
+}
+
+void Simulation::loadVector(const std::string& filename, VectorXT& vector)
+{
+    std::ifstream in(filename);
+    int n_entry;
+    in >> n_entry;
+    vector.resize(n_entry);
+    for (int i = 0; i < n_entry; i++)
+        in >> vector[i];
     in.close();
 }

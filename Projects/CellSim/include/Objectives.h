@@ -20,7 +20,12 @@ class Simulation;
 
 enum Optimizer
 {
-    GradientDescent, GaussNewton, MMA, Newton, SGN
+    GradientDescent, GaussNewton, MMA, Newton, SGN, PSGN, PGN, SQP, SSQP
+};
+
+enum PenaltyType
+{
+    LogBarrier, Qubic, Quadratic
 };
 
 enum LinearSolverType
@@ -67,6 +72,10 @@ public:
     VectorXT equilibrium_prev;
     bool match_centroid = false;
     bool running_diff_test = false;
+    bool use_penalty = false;
+    T penalty_weight = 1e4;
+    PenaltyType penalty_type = Qubic;
+
     struct TargetData
     {
         int cell_idx;
@@ -191,12 +200,13 @@ public:
     SpatialHash hash;
     MatrixXT cell_trajectories;
     int frame = 0;
-    bool use_log_barrier = false;
-    T barrier_distance = 1e-5;
-    T barrier_weight = 1e3;
+    
+    T barrier_distance = 1e-3;
+    T barrier_weight = 1e6;
     bool add_min_act = false;
     T w_min_act = 1.0;
 
+    Vector<T, 2> bound;
     
 
 public:
@@ -230,6 +240,8 @@ public:
     void loadTarget(const std::string& filename);
     void loadWeightedTarget(const std::string& filename);
     void loadWeightedCellTarget(const std::string& filename);
+
+    void checkData();
 
     void initializeTargetFromMap(const std::string& filename, int _frame);
     T maximumStepSize(const VectorXT& dp);

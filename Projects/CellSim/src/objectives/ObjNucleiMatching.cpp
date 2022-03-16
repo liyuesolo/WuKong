@@ -1,5 +1,4 @@
 #include <igl/mosek/mosek_quadprog.h>
-// #include <mosek.h>
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
 #include "../../include/DataIO.h"
@@ -30,11 +29,18 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
     
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
-
+    // std::ofstream out("data_points.obj");
+    // for (int i = 0; i < data_points.rows() / 3; i++)
+    // {
+    //     out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
+    // }
+    // out.close();
     if (success)
     {
+        int n_cells = simulation.cells.basal_face_start;
         std::ifstream in(filename);
         int data_point_idx, cell_idx, nw;
+        std::vector<bool> visited(n_cells, false);
         while (in >> data_point_idx >> cell_idx >> nw)
         {
             VectorXT w(nw); w.setZero();
@@ -52,11 +58,34 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
             T error = (current - target).norm();
             
             if (error < 1e-5)
+            {
                 weight_targets.push_back(TargetData(w, data_point_idx, cell_idx, target));
+                visited[cell_idx] = true;
+            }
             // else
             //     std::cout << error << std::endl;
         }
         in.close();
+        for (int i = 0; i < n_cells; i++)
+        {
+            if (visited[i] == false)
+            {
+                VectorXT positions;
+                std::vector<int> indices;
+                simulation.cells.getCellVtxAndIdx(i, positions, indices);
+                TV centroid = TV::Zero();
+                int n_pt = positions.rows() / 3;
+                for (int i = 0; i < n_pt; i++)
+                {
+                    centroid += positions.segment<3>(i * 3);
+                }
+                centroid /= T(n_pt);
+                VectorXT w = VectorXT::Constant(n_pt, 1.0/n_pt);
+                
+                weight_targets.push_back(TargetData(w, -1, i, centroid));
+            }
+        }
+        
     }
     
 }
@@ -69,6 +98,7 @@ void ObjNucleiTracking::loadWeightedTarget(const std::string& filename)
     {
         std::ifstream in(filename);
         int cell_idx, nw;
+        std::vector<bool> visited(simulation.cells.basal_face_start, false);
         while (in >> cell_idx >> nw)
         {
             // std::cout << cell_idx << std::endl;
@@ -93,13 +123,16 @@ void ObjNucleiTracking::loadTarget(const std::string& filename)
     simulation.cells.getVFCellIds(VF_cell_idx);
     std::ifstream in(filename);
     int idx; T x, y, z;
+    
     while(in >> idx >> x >> y >> z)
     {
+        TV perturb = 0.01 * TV::Random();
+        // std::cout << perturb.transpose() << std::endl;
         // if (std::find(VF_cell_idx.begin(), VF_cell_idx.end(), idx) != VF_cell_idx.end())
-            target_positions[idx] = TV(x, y, z);
+            target_positions[idx] = TV(x, y, z) + perturb;
     }
     in.close();
-}
+}         
 
 void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
 {
@@ -122,6 +155,7 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
     }
     else
     {
+
         iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
             const TV& target, const VectorXT& weights)
         {
@@ -132,12 +166,15 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
             for (int i = 0; i < indices.size(); i++)
                 for (int j = 0; j < indices.size(); j++)
                     for (int d = 0; d < 3; d++)
+                    {
                         d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + d, weights[i] * weights[j])); 
+                    }
         });
-        
-        if (!running_diff_test)
-            for (int i = 0; i < n_dof_sim; i++)
-                d2Odx2_entries.push_back(Entry(i, i, 1e-6));
+
+        // if (!running_diff_test)
+        //     for (int i = 0; i < n_dof_sim; i++)
+        //         d2Odx2_entries.push_back(Entry(i, i, 1.0));
+                // d2Odx2_entries.push_back(Entry(i, i, 1e-6));
     }
 }
 
@@ -259,6 +296,31 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
             energy += 0.5 * (current - target).dot(current - target);
         });
     }
+
+    if (use_penalty)
+    {
+        T penalty_energy = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            T d_hat_max = bound[1] - p_curr[i];
+            T d_hat_min = p_curr[i] - bound[0];
+            if (penalty_type == LogBarrier)
+            {
+                if (d_hat_max < barrier_distance)
+                    penalty_energy += penalty_weight * barrier<0>(d_hat_max, barrier_distance);
+                if (d_hat_min < barrier_distance)
+                    penalty_energy += penalty_weight * barrier<0>(d_hat_min, barrier_distance);
+            }    
+            else if (penalty_type == Qubic)
+            {
+                if (d_hat_max < barrier_distance)
+                    penalty_energy += penalty_weight * std::pow(d_hat_max, 3);
+                if (d_hat_min < barrier_distance)
+                    penalty_energy += penalty_weight * std::pow(d_hat_min, 3);
+            }
+        }
+        energy += penalty_energy;
+    }
  
     return energy;
 }
@@ -333,11 +395,47 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
         simulation.linearSolveNaive(d2edx2, dOdx, lambda);
     }
     
-    
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
-
-
     equilibrium_prev = simulation.u;
+
+    
+    if (use_penalty)
+    {
+        T penalty_energy = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            T d_hat_max = bound[1] - p_curr[i];
+            T d_hat_min = p_curr[i] - bound[0];
+            if (penalty_type == LogBarrier)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                    penalty_energy += penalty_weight * barrier<0>(d_hat_max, barrier_distance);
+                    dOdp[i] += penalty_weight * barrier<1>(d_hat_max, barrier_distance);
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    penalty_energy += penalty_weight * barrier<0>(d_hat_min, barrier_distance);
+                    dOdp[i] += penalty_weight * barrier<1>(d_hat_max, barrier_distance);
+                }
+            }    
+            else if (penalty_type == Qubic)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                    penalty_energy += penalty_weight * std::pow(d_hat_max, 3);
+                    dOdp[i] += penalty_weight * 3.0 * std::pow(d_hat_max, 2);
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    penalty_energy += penalty_weight * std::pow(d_hat_min, 3);
+                    dOdp[i] += penalty_weight * 3.0 * std::pow(d_hat_min, 2);
+                }
+            }
+        }
+        energy += penalty_energy;
+    }
+
     return dOdp.norm();
 }
 
@@ -407,6 +505,42 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
         }
     }
 
+    if (use_penalty)
+    {
+        T penalty_energy = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            T d_hat_max = bound[1] - p_curr[i];
+            T d_hat_min = p_curr[i] - bound[0];
+            if (penalty_type == LogBarrier)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
+                        penalty_weight * barrier<2>(d_hat_max, barrier_distance)));
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
+                        penalty_weight * barrier<2>(d_hat_min, barrier_distance)));
+                }
+            }    
+            else if (penalty_type == Qubic)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                     entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
+                        penalty_weight * 6.0 * d_hat_max));
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
+                        penalty_weight * 6.0 * d_hat_min));
+                }
+            }
+        }
+    }
+
     for (int i = 0; i < n_dof_sim; i++)
         entries.push_back(Entry(i, i, 1e-10));
     for (int i = 0; i < n_dof_design; i++)
@@ -440,9 +574,54 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     computed2Odx2(simulation.deformed, d2Odx2_entries);
     StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+    
+    
+    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
+    
+
+
+    if (use_penalty)
+    {
+        T penalty_energy = 0.0;
+        std::vector<Entry> d2Odp2_entries;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            T d_hat_max = bound[1] - p_curr[i];
+            T d_hat_min = p_curr[i] - bound[0];
+            if (penalty_type == LogBarrier)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                    d2Odp2_entries.push_back(Entry(i, i, 
+                        penalty_weight * barrier<2>(d_hat_max, barrier_distance)));
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    d2Odp2_entries.push_back(Entry(i, i, 
+                        penalty_weight * barrier<2>(d_hat_min, barrier_distance)));
+                }
+            }    
+            else if (penalty_type == Qubic)
+            {
+                if (d_hat_max < barrier_distance)
+                {
+                     d2Odp2_entries.push_back(Entry(i, i, 
+                        penalty_weight * 6.0 * d_hat_max));
+                }
+                if (d_hat_min < barrier_distance)
+                {
+                    d2Odp2_entries.push_back(Entry(i, i , 
+                        penalty_weight * 6.0 * d_hat_min));
+                }
+            }
+        }
+        StiffnessMatrix d2Odp2(n_dof_design, n_dof_design);
+        d2Odp2.setFromTriplets(d2Odp2_entries.begin(), d2Odp2_entries.end());
+        H += d2Odp2;
+    }
+
 
     // Timer tt(true);
-    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
     // tt.stop();
     // std::cout << "multiplication: " << tt.elapsed_sec() << std::endl;
     
@@ -453,16 +632,19 @@ T ObjNucleiTracking::maximumStepSize(const VectorXT& dp)
     VectorXT p_curr;
     getDesignParameters(p_curr);
     T step_size = 1.0;
-    if (!use_log_barrier)
-        return step_size;
-    while (true)
+    if (use_penalty && penalty_type == LogBarrier)
     {
-        VectorXT forward = p_curr + step_size * dp;
-        if (forward.minCoeff() < 0)
-            step_size *= 0.8;
-        else
-            return step_size;
+        while (true)
+        {
+            VectorXT forward = p_curr + step_size * dp;
+            if (forward.minCoeff() < bound[0] || forward.maxCoeff() > bound[1])
+                step_size *= 0.8;
+            else
+                return step_size;
+        }
     }
+    else
+        return step_size;
     
 }
 
@@ -489,7 +671,8 @@ bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)
         TV pos = frame_data.segment<3>(i * 3);
         TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
         updated = R2 * R * updated;
-        frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
+        // frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
+        frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
     }
     
     return true;
@@ -599,6 +782,26 @@ void ObjNucleiTracking::updateTarget()
     // out.close();
 }
 
+void ObjNucleiTracking::checkData()
+{
+    VectorXT cell_centroids;
+    simulation.cells.getAllCellCentroids(cell_centroids);
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+    std::ofstream out("data_points.obj");
+    for (int i = 0; i < data_points.rows() / 3; i++)
+    {
+        out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+    out.open("cell_centroid.obj");
+    for (int i = 0; i < cell_centroids.rows() / 3; i++)
+    {
+        out << "v " << cell_centroids.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+}
+
 void ObjNucleiTracking::computeCellTargetFromDatapoints()
 {
     VectorXT data_points;
@@ -619,8 +822,7 @@ void ObjNucleiTracking::computeCellTargetFromDatapoints()
         int n_cells = cell_centroids.rows() / 3;
 
         std::vector<T> errors(cell_centroids.rows() / 3, -1.0);
-    
-        
+
         std::vector<TargetData> target_data(n_cells, TargetData());
 
         for (int i = 0; i < n_data_pts; i++)

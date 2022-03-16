@@ -122,6 +122,8 @@ public:
     void loadEdgeWeights(const std::string& filename, VectorXT& weights);
     void saveState(const std::string& filename);
 
+    void loadVector(const std::string& filename, VectorXT& vector);
+
 public:
     Simulation() {}
     ~Simulation() {}

@@ -9,6 +9,17 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
+#include <unordered_set>
+// #include "IpTNLP.hpp"
+#include <cassert>
+#include <iostream>
+
+// #include "IpOptInterface.h"
+// #include "IpIpoptCalculatedQuantities.hpp"
+// #include "IpIpoptData.hpp"
+// #include "IpTNLPAdapter.hpp"
+// #include "IpOrigIpoptNLP.hpp"
+// #include <IpIpoptApplication.hpp>
 
 #include "../../../Solver/MMASolver.h"
 
@@ -37,18 +48,25 @@ public:
 public:
     int n_dof_design;
     int n_dof_sim;
-
+    bool project = true;
+    
     bool fd_dfdp;
     Vector<T, 2> design_parameter_bound;
 
     Simulation& simulation;
     Objectives& objective;
 
+    // std::unordered_set<int> binding_set;
+
     VectorXT design_parameters;
 
     MMASolver mma_solver;
     
+    // nlopt_opt opt;
+    
     void initialize();
+
+    void optimizeNLOPT();
 
     void setSimulationEnergyWeights();
 
@@ -68,12 +86,16 @@ public:
 
     void dxFromdpAdjoint();
 
+    void sampleEnergyWithSearchAndGradientDirection(const VectorXT& search_direction);
+
     // Data generation
     void generateNucleiDataSingleFrame(const std::string& filename);
 
     // Derivative tests
     void diffTestdfdp();
     void diffTestdxdp();
+
+    void checkStatesAlongGradient();
 
 private:
     void savedxdp(const VectorXT& dx, 

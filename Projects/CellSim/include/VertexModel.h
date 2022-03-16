@@ -749,6 +749,8 @@ public:
     void sampleBoundingSurface(Eigen::MatrixXd& V);
     void splitCellsForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool a_bit = false);
+    void splitYolkForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool a_bit = false);
 
     void appendCylinderOnContractingEdges(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C);

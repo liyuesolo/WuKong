@@ -57,8 +57,13 @@ protected:
     Eigen::MatrixXi F;
     Eigen::MatrixXd C;
 
+    Eigen::MatrixXd svd_U, svd_V; 
+    Eigen::VectorXd svd_Sigma;
+
 public:
+    virtual void loadSVDData(const std::string& filename);
     virtual void loadDisplacementVectors(const std::string& filename);
+
     virtual void updateScreen(igl::opengl::glfw::Viewer& viewer);
     virtual void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
@@ -89,11 +94,14 @@ private:
     bool show_edge_weights = false;
     bool show_target = true;
     bool show_target_current = true;
-    Eigen::MatrixXd svd_V;
+    // Eigen::MatrixXd svd_V;
     bool show_edge_weights_opt = false;
     VectorXT edge_weights;
     float threshold = 1.0;
     bool show_edges = true;
+
+    bool show_undeformed = false;
+    VectorXT color;
 public:
 
     void runOptimization();
@@ -105,7 +113,8 @@ public:
     void setMenu(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
 
-    
+    void appendRestShapeShifted(Eigen::MatrixXd& _V, 
+        Eigen::MatrixXi& _F, Eigen::MatrixXd& _C, const TV& shift);
 private:
     void loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& dp);
     void loaddpAndAppendCylinder(const std::string& filename, 
