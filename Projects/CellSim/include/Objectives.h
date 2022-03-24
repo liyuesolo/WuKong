@@ -75,7 +75,7 @@ public:
     bool use_penalty = false;
     T penalty_weight = 1e4;
     PenaltyType penalty_type = Qubic;
-
+    bool perturb = true;
     struct TargetData
     {
         int cell_idx;
@@ -91,6 +91,9 @@ public:
 
     std::vector<TargetData> weight_targets;
     std::unordered_map<int, TV> target_positions;
+    VectorXT target_obj_weights;
+
+    virtual void setTargetObjWeights() {}
 
     virtual T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true) {}
@@ -240,6 +243,8 @@ public:
     void loadTarget(const std::string& filename);
     void loadWeightedTarget(const std::string& filename);
     void loadWeightedCellTarget(const std::string& filename);
+
+    void setTargetObjWeights();
 
     void checkData();
 

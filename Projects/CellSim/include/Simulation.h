@@ -89,6 +89,7 @@ public:
     bool impliciteUpdate(VectorXT& _u);
 
     void computeLinearModes();
+    bool fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector);
 
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
     bool linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorXT& x);

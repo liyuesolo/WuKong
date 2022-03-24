@@ -6,6 +6,7 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../include/LinearSolver.h"
+#include <LBFGSB.h>
 
 void SensitivityAnalysis::setSimulationEnergyWeights()
 {
@@ -106,7 +107,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
 
     // mma 
     T mma_step_size = 1.0 * simulation.cells.unit;
-    T lower_bound = 0, upper_bound = 10.0 * simulation.cells.unit;
+    // T lower_bound = 0, upper_bound = 10.0 * simulation.cells.unit;
+    T lower_bound = 0.001, upper_bound = 5.5 * simulation.cells.unit;
 
     VectorXT min_p = VectorXT::Ones(n_dof_design) * lower_bound;
     VectorXT max_p = VectorXT::Ones(n_dof_design) * upper_bound;
@@ -121,7 +123,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             std::cout << "########### " << method << " ###########" << std::endl;
             objective.getDesignParameters(design_parameters);
             std::cout << "initial value max: " << design_parameters.maxCoeff() << " min: " << design_parameters.minCoeff() <<std::endl;
-            g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */true);   
+            g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */true); 
+            initial_gradient_norm = g_norm;  
         }
         else
         {
@@ -166,7 +169,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         }
         
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
-            << " obj: " << E0 << std::endl;
+            << " |g_init| " << initial_gradient_norm << " obj: " << E0 << std::endl;
 
         dp = dOdp;
 
@@ -189,10 +192,49 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             gn_timer.start();
             MatrixXT H_GN;
             objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
+
+            auto saveEigenVectors = [&]()
+            {
+                int n_eigen = 20;
+                Spectra::DenseSymMatProd<T> op(H_GN);
+                Spectra::SymEigsSolver<T, Spectra::LARGEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, n_eigen, H_GN.rows());
+
+                eigs.init();
+
+                int nconv = eigs.compute();
+
+                if (eigs.info() == Spectra::SUCCESSFUL)
+                {
+                    Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+                    Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+                    std::cout << "GaussNewton Hessian eigen values: " << eigen_values.tail<5>().transpose() << std::endl;
+                    // std::ofstream out("hessian_vectors.txt");
+                    // out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+                    // for (int i = 0; i < eigen_vectors.cols(); i++)
+                    //     out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+                    // out << std::endl;
+                    // for (int i = 0; i < eigen_vectors.rows(); i++)
+                    // {
+                    //     // for (int j = 0; j < eigen_vectors.cols(); j++)
+                    //     for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                    //         out << eigen_vectors(i, j) << " ";
+                    //     out << std::endl;
+                    // }       
+                    // out << std::endl;
+                    // out.close();
+                }
+                // std::exit(0);
+            };
+
             H_GN.diagonal().array() += 1e-6;
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
-            VectorXT Sigma = svd.singularValues();
-            std::cout << Sigma.tail<5>().transpose() << std::endl;
+            // saveEigenVectors();
+
+
+            // Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            // VectorXT Sigma = svd.singularValues();
+            // std::cout << Sigma.tail<5>().transpose() << std::endl;
+
+
 
             StiffnessMatrix Q = H_GN.sparseView();
             
@@ -433,7 +475,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         }
         // std::cout << "here" << std::endl;
         VectorXT search_direction = -dp;
-        T alpha = objective.maximumStepSize(search_direction);
+        T alpha = 1.0;//objective.maximumStepSize(search_direction);
         
         std::cout << "[" << method << "]\t|dp|: " << alpha * search_direction.norm() << std::endl;
 
@@ -446,21 +488,21 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         // }
 
         std::cout << "[" << method << "]\t starting alpha: " << alpha << std::endl;
-        for (int ls_cnt = 0; ls_cnt < 20; ls_cnt++)
+        int ls_cnt = 0;
+        while (true)
         {
-
             VectorXT p_ls = design_parameters + alpha * search_direction;
             if (optimizer == PGN || optimizer == PSGN || optimizer == SQP)
                 p_ls = p_ls.cwiseMax(lower_bound).cwiseMin(upper_bound);
             T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
-            std::cout << "[" << method << "]\tE1: " << E1 << std::endl;
+            std::cout << "[" << method << "]\tE1: " << E1 << " E0: " << E0 << std::endl;
             // std::getchar();
             if (E1 < E0 || ls_cnt > 20)
             {
                 if (ls_cnt > 20)
                 {
-                    sampleEnergyWithSearchAndGradientDirection(search_direction);
-                    std::getchar();
+                    // sampleEnergyWithSearchAndGradientDirection(search_direction);
+                    // std::getchar();
                 }
                 std::cout << "[" << method << "]\tfinal |dp|: " << (p_ls - design_parameters).norm() << " # ls " << ls_cnt << std::endl;
                 design_parameters = p_ls;
@@ -470,6 +512,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             {
                 alpha *= 0.5;
             }
+            ls_cnt++;
         }
     }
     else if (optimizer == MMA)
@@ -502,16 +545,57 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     std::ofstream out(filename);
     out << design_parameters << std::endl;
     out.close();
-    if (g_norm < tol_g)
+    if (g_norm < tol_g || step > max_num_iter)
         return true;
     return false;
 }
 
-void SensitivityAnalysis::optimizeNLOPT()
+void SensitivityAnalysis::optimizeLBFGSB()
 {
+    using namespace LBFGSpp;
+    int cnt = 0;
+    auto computeObjAndGradient = [&](const VectorXT& x, VectorXT& grad)
+    {
+        T energy = 0.0;
+        objective.updateDesignParameters(x);
+        objective.gradient(x, grad, energy, true);
+
+        // StiffnessMatrix mat_SGN;
+        // objective.hessianSGN(x, mat_SGN, /*simulate = */false);
+        
+        // VectorXT rhs_SGN(n_dof_design + n_dof_sim * 2);
+        // rhs_SGN.setZero();
+        // rhs_SGN.segment(n_dof_sim, n_dof_design) = -grad;
+        // VectorXT delta;
+        
+        
+        // PardisoLDLTSolver solver(mat_SGN, /*use_default=*/false);
+        // solver.setPositiveNegativeEigenValueNumber(n_dof_sim + n_dof_design, n_dof_sim);
+        // solver.setRegularizationIndices(n_dof_sim, n_dof_design);
+
+        // solver.solve(rhs_SGN, delta);
+        
+        // grad = -delta.segment(n_dof_sim, n_dof_design);
+
+        objective.saveState("output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".obj");
+        std::string filename = "output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".txt";
+        std::ofstream out(filename);
+        out << x << std::endl;
+        out.close();
+        std::cout << "[L-BFGS-G] iter " << cnt << " |g|: " << grad.norm() << " obj: " << energy << std::endl;
+        cnt++;
+        return energy;
+    };
     
+    LBFGSBParam<T> param;
+    LBFGSBSolver<T> solver(param);
 
+    T lower_bound = 0, upper_bound = 10.0 * simulation.cells.unit;
+    VectorXT lb = VectorXT::Constant(n_dof_design, lower_bound);
+    VectorXT ub = VectorXT::Constant(n_dof_design, upper_bound);
 
+    T fx;
+    int niter = solver.minimize(computeObjAndGradient, design_parameters, fx, lb, ub);
 }
 
 void SensitivityAnalysis::optimizeMMA()
@@ -934,12 +1018,14 @@ void SensitivityAnalysis::savedxdp(const VectorXT& dx,
 
 void SensitivityAnalysis::checkStatesAlongGradient()
 {
+    // simulation.newton_tol = 1e-8;
+    objective.perturb = false;
     T E0;
     VectorXT dOdp, dp;
     VectorXT ew;
-    simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_25.txt", ew);
+    simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_9.txt", ew);
     simulation.cells.edge_weights = ew;
-    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_25.obj");
+    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_9.obj");
     
     objective.getDesignParameters(design_parameters);
     VectorXT u = simulation.u;
@@ -950,8 +1036,30 @@ void SensitivityAnalysis::checkStatesAlongGradient()
     T g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */false);
     std::cout << "|g|: " << g_norm << " E0: " << E0 << std::endl;
     
-    H_GN.diagonal().array() += 1e-6;
+    // std::vector<int> proj_entries;
+    // bool iecs = true;
+    // T eps = 0;
+    // for (int i = 0; i < n_dof_design; i++)
+    // {
+    //     if (design_parameters[i] < lower_bound || design_parameters[i] > upper_bound)
+    //         iecs = false;
+        
+    //     if (design_parameters[i] < lower_bound + eps)
+    //         proj_entries.push_back(i);
+    //     if (design_parameters[i] > upper_bound - eps)
+    //         proj_entries.push_back(i);
+    // }
+    // VectorXT projected_gradient = dOdp;
+    // for (int idx : proj_entries)
+    // {
+    //     projected_gradient[idx] = 0;
+    // }
 
+    // std::cout << iecs << " " << proj_entries.size() << " " << projected_gradient.norm() << std::endl;
+    // std::exit(0);
+
+    // H_GN.diagonal().array() += 1e-6;
+    H_GN.diagonal().array() += 1e-6;
     StiffnessMatrix Q = H_GN.sparseView();
     
     StiffnessMatrix A;
@@ -964,6 +1072,8 @@ void SensitivityAnalysis::checkStatesAlongGradient()
     VectorXT ux(n_dof_design); 
     ux.setConstant(upper_bound);
     ux -= design_parameters;
+
+    // std::cout << ux.minCoeff() << " " << ux.maxCoeff() << " " << lx.minCoeff() << " " << lx.maxCoeff() << std::endl;
     
 
     igl::mosek::MosekData mosek_data;
@@ -992,33 +1102,60 @@ void SensitivityAnalysis::checkStatesAlongGradient()
     }
     std::cout << "\t[SQP] dL/ddp " <<  (error).norm() << " " << std::endl;
     
-    int n_steps = 25;
-    T alpha = 0.125;
-    for (int i = 0; i < n_steps; i++)
-    {
-        std::cout << "step " << i << std::endl;
-        VectorXT delta = alpha * dp;
-        VectorXT p_ls = design_parameters + delta;
-        std::cout << "\t[SQP] |dp| " <<  delta.norm() << " max "  << delta.maxCoeff() 
-            << " min: " << delta.minCoeff() << " " << std::endl;
-        T ei = objective.value(p_ls, true, true);
-        simulation.saveState("output/cells/debug/" + std::to_string(i) + ".obj");
-        std::cout << ei << std::endl;
-        alpha *= 0.5;
-    }
+    // int n_steps = 25;
+    // T alpha = 1.0;
+    // for (int i = 0; i < n_steps; i++)
+    // {
+    //     std::cout << "step " << i << std::endl;
+    //     VectorXT delta = alpha * dp;
+    //     VectorXT p_ls = design_parameters + delta;
+    //     // std::cout << "\t[SQP] |dp| " <<  delta.norm() << " max "  << delta.maxCoeff() 
+    //     //     << " min: " << delta.minCoeff() << " " << std::endl;
+    //     T ei = objective.value(p_ls, true, true);
+    //     simulation.saveState("output/cells/debug/ls_" + std::to_string(i) + ".obj");
+    //     std::cout << ei << std::endl;
+    //     std::string filename = "output/cells/debug/ls_" + std::to_string(i) + ".txt";
+    //     std::ofstream out(filename);
+    //     out << p_ls << std::endl;
+    //     out.close();
+    //     alpha *= 0.5;
+    // }
+    // std::exit(0);
 
-    T step_size = 1e-6;
+
+    T step_size = 1e-4;
     int step = 100; 
+
+    // T step_size = 1e-5;
+    // int step = 100000;
     std::vector<T> energies;
     std::vector<T> steps;
     // for (T xi = -T(step/2) * step_size; xi < T(step/2) * step_size; xi+=step_size)
+    // for (T xi = 0.0002; xi < T(step/2) * step_size; xi+=step_size)
     for (T xi = 0; xi < T(step/2) * step_size; xi+=step_size)
     {
         T Ei = objective.value(design_parameters + xi * dp, true, true);
-        std::cout << Ei << std::endl;
+        simulation.checkHessianPD(false);
         energies.push_back(Ei);
         steps.push_back(xi);
-        std::getchar();
+        T min_edge_length = 1e10;
+        simulation.cells.iterateApicalEdgeSerial([&](Edge& e)
+        {
+            TV vi = simulation.deformed.segment<3>(e[0] * 3);
+            TV vj = simulation.deformed.segment<3>(e[1] * 3);
+            T edge_length = (vj - vi).norm();
+            if (edge_length < min_edge_length)
+                min_edge_length = edge_length;
+        });
+        simulation.saveState("output/cells/debug/" + std::to_string(energies.size() - 1) + ".obj");
+        std::string filename = "output/cells/debug/" + std::to_string(energies.size() - 1) + ".txt";
+        std::ofstream out(filename);
+        out << (design_parameters + xi * dp) << std::endl;
+        out.close();
+        std::cout << "[debug]: " << xi  << " " << Ei << " step " << energies.size() - 1 << " " << min_edge_length << std::endl;
+        // std::getchar();
+        // if (xi > 0.0004)
+        //     break;
     }
     for (T e : energies)
     {

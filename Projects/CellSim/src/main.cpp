@@ -77,9 +77,15 @@ int main()
     simulation.initializeCells();
     simulation.cells.tet_vol_barrier_w = 1e-22;
     simulation.newton_tol = 1e-5;
+    simulation.max_newton_iter = 2000;
+    // simulation.cells.use_ipc_contact = false;
+
     // obj.initializeTarget();
     obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
     obj.match_centroid = true;
+    sa.max_num_iter = 100;
+    // obj.setTargetObjWeights();
     
     // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     // obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sss.txt");
@@ -119,12 +125,13 @@ int main()
         simulation.cells.tet_vol_barrier_w = 1e-22;
         // simulation.cells.edge_weights.setConstant(0.05);
         // simulation.cells.checkTotalHessian();
-        // VectorXT ew;
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_214.txt", ew);
-        // simulation.cells.edge_weights = ew;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_214.obj");
+        VectorXT ew;
+        simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/debug/7.txt", ew);
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_5.txt", ew);
+        simulation.cells.edge_weights = ew;
+        simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/debug/7.obj");
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_5.obj");
 
-        
         viewer.launch();
     };
 
@@ -132,6 +139,8 @@ int main()
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
+        // sa.optimizeLBFGSB();
+        // return;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/current_mesh.obj");
         // sa.setSimulationEnergyWeights();
         // sa.optimizePerEdgeWeigths();
@@ -158,7 +167,7 @@ int main()
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
-        sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+        sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
     };
 
     auto generateWeights = [&]()

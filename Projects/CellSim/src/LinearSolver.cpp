@@ -135,6 +135,7 @@ void PardisoLLTSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
         // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
+            std::cout << "A is indefinite" << std::endl;
             // K = H + alpha * I;        
             // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
             // {

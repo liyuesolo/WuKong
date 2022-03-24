@@ -14,24 +14,54 @@
 
 #define FOREVER 30000
 
-void Simulation::checkHessianPD(bool save_txt)
+bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector)
 {
-    int nmodes = 15;
+    int nmodes = 10;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-    if (woodbury)
+    buildSystemMatrix(u, d2edx2);
+    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+
+        //0 cannot cannot be used as a shift
+    T shift = -1e-4;
+    Spectra::SymEigsShiftSolver<T, 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+        eigs(&op, nmodes, 2 * nmodes, shift);
+
+    eigs.init();
+
+    int nconv = eigs.compute();
+
+    if (eigs.info() == Spectra::SUCCESSFUL)
     {
-        MatrixXT UV;
-        buildSystemMatrixWoodbury(u, d2edx2, UV);
-        Eigen::MatrixXd UVT  = UV * UV.transpose();
-        UVT += d2edx2;
-        d2edx2 = UVT.sparseView();
+        // std::cout << "Spectra successful" << std::endl;
+        Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+        Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+        int last_col = eigen_values.rows() - 1;
+        // std::cout << eigen_values.transpose() << std::endl;
+        if (eigen_values[last_col] < 0.0)
+        {
+            negative_eigen_vector = eigen_vectors.col(last_col);
+            negative_eigen_value = eigen_values[last_col]; 
+            return true;
+        }   
+        return false;
     }
     else
-    {   
-        buildSystemMatrix(u, d2edx2);
+    {
+        std::cout << "Spectra failed" << std::endl;
+        return false;
     }
-    bool use_Spectra = false;
+}
+
+void Simulation::checkHessianPD(bool save_txt)
+{
+    int nmodes = 10;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    buildSystemMatrix(u, d2edx2);
+    bool use_Spectra = true;
 
     if (use_Spectra)
     {
@@ -53,7 +83,7 @@ void Simulation::checkHessianPD(bool save_txt)
         {
             Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
             Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-            std::cout << eigen_values << std::endl;
+            std::cout << eigen_values.transpose() << std::endl;
             if (save_txt)
             {
                 std::ofstream out("cell_eigen_vectors.txt");
@@ -344,7 +374,7 @@ void Simulation::saveState(const std::string& filename)
     cells.generateMeshForRendering(V, F, C, false);
     for (int i = 0; i < V.rows(); i++)
     {
-        out << "v " << std::setprecision(12) << V.row(i) << std::endl;
+        out << "v " << std::setprecision(14) << V.row(i) << std::endl;
     }
     for (int i = 0; i < F.rows(); i++)
     {
@@ -740,7 +770,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 
 bool Simulation::linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorXT& x)
 {
-    Eigen::PardisoLU<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
     solver.analyzePattern(A);
     solver.factorize(A);
     x = solver.solve(b);

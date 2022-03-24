@@ -117,6 +117,61 @@ void ObjNucleiTracking::loadWeightedTarget(const std::string& filename)
     }
 }
 
+
+void ObjNucleiTracking::setTargetObjWeights()
+{
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::vector<int> cell_list;
+    for (int i = 0; i < simulation.cells.basal_face_start; i++)
+        cell_list.push_back(i);
+
+    int n_cell_total = simulation.cells.basal_face_start;
+
+    int n_target_cell = std::floor(n_cell_total/5.0);
+
+    std::cout << n_target_cell << "/" << n_cell_total << std::endl;
+
+    std::shuffle(cell_list.begin(), cell_list.end(), g);
+  
+    // std::copy(cell_list.begin(), cell_list.begin() + n_target_cell, std::ostream_iterator<int>(std::cout, " "));
+
+    // target_obj_weights.setConstant(1e-5);
+    target_obj_weights.setConstant(0);
+
+    // std::vector<int> selected = {46, 1, 114, 118, 54, 240, 32, 73, 23, 31};
+    std::vector<int> selected = {46, 1, 114, 118, 54,  32, 73, 23, 31};
+    // std::vector<int> selected = {114, 118};
+    std::vector<int> VF_cell_idx;
+    simulation.cells.getVFCellIds(VF_cell_idx);
+    // selected.push_back(VF_cell_idx[0]);
+    // selected.push_back(VF_cell_idx[4]);
+    for (int idx : selected)
+         target_obj_weights[idx] = 1.0;
+
+    // for (int i = 0; i < n_target_cell; i++)
+    //     target_obj_weights[cell_list[i]] = 1.0;
+
+    // VectorXT cell_centroids;
+    // simulation.cells.getAllCellCentroids(cell_centroids);
+    // TV min_corner, max_corner;
+    // simulation.cells.computeBoundingBox(min_corner, max_corner);
+    // T spacing = 0.01 * (max_corner - min_corner).norm();
+
+    // SpatialHash centroid_hash;
+    // centroid_hash.build(spacing, cell_centroids);
+
+    // for (int i = 0; i < n_target_cell; i++)
+    // {
+    //     TV centroid = cell_centroids.segment<3>(cell_list[i] * 3);
+    //     std::vector<int> neighbors;
+    //     centroid_hash.getOneRingNeighbors(centroid, neighbors);
+    //     target_obj_weights[cell_list[i]] = 1.0;
+    //     for (int idx : neighbors)
+    //         target_obj_weights[idx] = 0.0;
+    // }
+}
+
 void ObjNucleiTracking::loadTarget(const std::string& filename)
 {
     std::vector<int> VF_cell_idx;
@@ -127,11 +182,15 @@ void ObjNucleiTracking::loadTarget(const std::string& filename)
     while(in >> idx >> x >> y >> z)
     {
         TV perturb = 0.01 * TV::Random();
+        // perturb.setZero();
         // std::cout << perturb.transpose() << std::endl;
         // if (std::find(VF_cell_idx.begin(), VF_cell_idx.end(), idx) != VF_cell_idx.end())
             target_positions[idx] = TV(x, y, z) + perturb;
     }
     in.close();
+
+    target_obj_weights = VectorXT::Ones(simulation.cells.basal_face_start);
+
 }         
 
 void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
@@ -150,7 +209,7 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
             for (int idx_i : cell_vtx_list)
                 for (int idx_j : cell_vtx_list)
                     for (int d = 0; d < 3; d++)
-                        d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff));
+                        d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff  * target_obj_weights[cell_idx]));
         });
     }
     else
@@ -167,7 +226,7 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
                 for (int j = 0; j < indices.size(); j++)
                     for (int d = 0; d < 3; d++)
                     {
-                        d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + d, weights[i] * weights[j])); 
+                        d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + d, weights[i] * weights[j] * target_obj_weights[cell_idx])); 
                     }
         });
 
@@ -267,7 +326,25 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
         simulation.reset();
         if (use_prev_equil)
             simulation.u = equilibrium_prev;
-        simulation.staticSolve();
+        while (true)
+        {
+            simulation.staticSolve();
+            if (!perturb)
+                break;
+            VectorXT negative_eigen_vector;
+            T negative_eigen_value;
+            bool has_neg_ev = simulation.fetchNegativeEigenVectorIfAny(negative_eigen_value,
+                negative_eigen_vector);
+            if (has_neg_ev)
+            {
+                std::cout << "unstable state for the forward problem" << std::endl;
+                std::cout << "nodge it along the negative eigen vector" << std::endl;
+                // simulation.u += -negative_eigen_value * negative_eigen_vector;
+                simulation.u += negative_eigen_vector;
+            }
+            else
+                break;
+        }
     }
 
     T energy = 0.0;
@@ -278,7 +355,7 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
             VtxList face_vtx_list = simulation.cells.faces[cell_idx];
             TV centroid;
             simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
         });
     }
     else
@@ -331,7 +408,26 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     if (simulate)
     {
         simulation.reset();
-        simulation.staticSolve();
+        // simulation.staticSolve();
+        while (true)
+        {
+            simulation.staticSolve();
+            if (!perturb)
+                break;
+            VectorXT negative_eigen_vector;
+            T negative_eigen_value;
+            bool has_neg_ev = simulation.fetchNegativeEigenVectorIfAny(negative_eigen_value,
+                negative_eigen_vector);
+            if (has_neg_ev)
+            {
+                std::cout << "unstable state for the forward problem" << std::endl;
+                std::cout << "nodge it along the negative eigen vector" << std::endl;
+                // simulation.u += -negative_eigen_value * negative_eigen_vector;
+                simulation.u += negative_eigen_vector;
+            }
+            else
+                break;
+        }
     }
     
     energy = 0.0;
@@ -349,11 +445,11 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
                 cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
             TV centroid;
             simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];;
             T coeff = cell_vtx_list.size();
             for (int idx : cell_vtx_list)
             {
-                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff  * target_obj_weights[cell_idx];;
             }
         });
     }
@@ -382,18 +478,21 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     VectorXT lambda;
     // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
-    if (simulation.woodbury)
-    {
-        MatrixXT UV;
-        simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
-        PardisoLLTSolver solver(d2edx2, UV);
-        solver.solve(dOdx, lambda);
-    }
-    else
-    {   
-        simulation.buildSystemMatrix(simulation.u, d2edx2);
-        simulation.linearSolveNaive(d2edx2, dOdx, lambda);
-    }
+    // if (simulation.woodbury)
+    // {
+    //     MatrixXT UV;
+    //     simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
+    //     PardisoLLTSolver solver(d2edx2, UV);
+    //     solver.solve(dOdx, lambda);
+    // }
+    // else
+    // {   
+    //     simulation.buildSystemMatrix(simulation.u, d2edx2);
+    //     simulation.linearSolveNaive(d2edx2, dOdx, lambda);
+    // }
+
+    simulation.buildSystemMatrix(simulation.u, d2edx2);
+    simulation.linearSolveNaive(d2edx2, dOdx, lambda);
     
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
     equilibrium_prev = simulation.u;

@@ -44,12 +44,15 @@ public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
+    using Edge = Vector<int, 2>;
 
 public:
     int n_dof_design;
     int n_dof_sim;
     bool project = true;
-    
+
+    int max_num_iter = 500;
+
     bool fd_dfdp;
     Vector<T, 2> design_parameter_bound;
 
@@ -60,13 +63,15 @@ public:
 
     VectorXT design_parameters;
 
+    T initial_gradient_norm = 1e10;
+
     MMASolver mma_solver;
     
     // nlopt_opt opt;
     
     void initialize();
 
-    void optimizeNLOPT();
+    void optimizeLBFGSB();
 
     void setSimulationEnergyWeights();
 

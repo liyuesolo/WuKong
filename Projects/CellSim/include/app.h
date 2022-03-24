@@ -38,7 +38,7 @@ protected:
     bool compute_energy = false;
     double t = 0.0;
     int compute_energy_cnt = 0;
-
+    bool use_debug_color = false;
     int static_solve_step = 0;
 
     int opt_step = 0;
@@ -99,7 +99,9 @@ private:
     VectorXT edge_weights;
     float threshold = 1.0;
     bool show_edges = true;
-
+    bool load_opt_state = false;
+    bool load_debug_state = false;
+    bool load_ls_state = false;
     bool show_undeformed = false;
     VectorXT color;
 public:
@@ -115,6 +117,7 @@ public:
 
     void appendRestShapeShifted(Eigen::MatrixXd& _V, 
         Eigen::MatrixXi& _F, Eigen::MatrixXd& _C, const TV& shift);
+        
 private:
     void loaddxdp(const std::string& filename, VectorXT& dx, VectorXT& dp);
     void loaddpAndAppendCylinder(const std::string& filename, 
