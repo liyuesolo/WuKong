@@ -539,15 +539,15 @@ void Objectives::diffTestGradient()
     getDesignParameters(p);
     updateDesignParameters(p);
     T _dummy;
-    gradient(p, dOdp, _dummy);
+    gradient(p, dOdp, _dummy, false);
 
     for(int _dof_i = 0; _dof_i < n_dof_design; _dof_i++)
     {
         int dof_i = _dof_i;
         p[dof_i] += epsilon;
-        T E1 = value(p);
+        T E1 = value(p, true, true);
         p[dof_i] -= 2.0 * epsilon;
-        T E0 = value(p);
+        T E0 = value(p, true, true);
         p[dof_i] += epsilon;
         T fd = (E1 - E0) / (2.0 *epsilon);
         std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
@@ -563,7 +563,7 @@ void Objectives::diffTestGradientScale()
     VectorXT p;
     getDesignParameters(p);
     T E0;
-    gradient(p, dOdp, E0);
+    gradient(p, dOdp, E0, false);
     VectorXT dp(n_dof_design);
     dp.setRandom();
     dp *= 1.0 / dp.norm();
@@ -572,7 +572,7 @@ void Objectives::diffTestGradientScale()
     
     for (int i = 0; i < 10; i++)
     {
-        T E1 = value(p + dp);
+        T E1 = value(p + dp, true, true);
         T dE = E1 - E0;
         
         dE -= dOdp.dot(dp);
@@ -647,14 +647,15 @@ void Objectives::diffTestdOdx()
         x(dof_i) += epsilon;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         gradient_FD(dof_i) = (E0 - E1) / (2.0 *epsilon);
-        // if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
-            // continue;
-        // if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
-        //     continue;
+        if( gradient_FD(dof_i) == 0 && dOdx(dof_i) == 0)
+            continue;
+        if (std::abs( gradient_FD(dof_i) - dOdx(dof_i)) < 1e-3 * std::abs(dOdx(dof_i)))
+            continue;
         std::cout << " dof " << dof_i << " " << gradient_FD(dof_i) << " " << dOdx(dof_i) << std::endl;
-        std::getchar();
+        // std::getchar();
         cnt++;   
     }
+    std::cout << "FD test passed" << std::endl;
 }
 void Objectives::diffTestd2Odx2Scale()
 {

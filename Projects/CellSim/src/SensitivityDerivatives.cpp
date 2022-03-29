@@ -216,12 +216,33 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
     // MatrixXT dfdp(num_nodes * 3, edge_weights.rows());
     // dfdp.setZero();
     int cnt = 0;
+    std::vector<int> dirichlet_idx;
+    for (auto data : dirichlet_data)
+    {
+        dirichlet_idx.push_back(data.first);
+    }
+
+    auto maskDirichletDof = [&](Vector<T, 6>& vec, int node_i, int node_j)
+    {
+        for (int d = 0; d < 3; d++)
+        {
+            bool find_node_i = std::find(dirichlet_idx.begin(), dirichlet_idx.end(), node_i * 3 + d) != dirichlet_idx.end();
+            bool find_node_j = std::find(dirichlet_idx.begin(), dirichlet_idx.end(), node_j * 3 + d) != dirichlet_idx.end();
+            if (find_node_i) vec[d] = 0;
+            if (find_node_j) vec[3 + d] = 0;
+
+            if (find_node_i || find_node_j)
+                std::cout << "project dfdp" << std::endl;
+        }    
+    };
+    
     iterateApicalEdgeSerial([&](Edge& e){
         TV vi = deformed.segment<3>(e[0] * 3);
         TV vj = deformed.segment<3>(e[1] * 3);
         Vector<T, 6> dedx;
         computeEdgeSquaredNormGradient(vi, vj, dedx);
         dedx *= -1.0;
+        maskDirichletDof(dedx, e[0], e[1]);
         dOdp[cnt] += lambda.segment<3>(e[0] * 3).dot(dedx.segment<3>(0));
         dOdp[cnt] += lambda.segment<3>(e[1] * 3).dot(dedx.segment<3>(3));
         // dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);

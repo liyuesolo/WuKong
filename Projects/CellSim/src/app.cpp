@@ -271,14 +271,16 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
         case 'n':
             load_obj_iter_cnt++;
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
-            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
         case 'l':
             load_obj_iter_cnt--;
             load_obj_iter_cnt = std::max(0, load_obj_iter_cnt);
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
-            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
         }
@@ -374,8 +376,8 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
             if (load_opt_state)
             {
-                simulation.loadDeformedState("output/cells/opt/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
-                simulation.loadEdgeWeights("output/cells/opt/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".txt", edge_weights);
+                simulation.loadDeformedState("output/cells/15/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+                simulation.loadEdgeWeights("output/cells/15/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".txt", edge_weights);
                 updateScreen(viewer);
                 return true;
             }
@@ -395,8 +397,8 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
             if (load_opt_state)
             {
-                simulation.loadDeformedState("output/cells/opt/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
-                simulation.loadEdgeWeights("output/cells/opt/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".txt", edge_weights);
+                simulation.loadDeformedState("output/cells/15/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+                simulation.loadEdgeWeights("output/cells/15/SQP_iter_" + std::to_string(load_obj_iter_cnt) + ".txt", edge_weights);
                 updateScreen(viewer);
                 return true;
             }
@@ -733,8 +735,8 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
                 load_debug_state = !load_opt_state;
                 if (load_opt_state)
                 {
-                    simulation.loadDeformedState("output/cells/opt/SQP_iter_" + std::to_string(0) + ".obj");
-                    simulation.loadEdgeWeights("output/cells/opt/SQP_iter_" + std::to_string(0) + ".txt", edge_weights);
+                    simulation.loadDeformedState("output/cells/15/SQP_iter_" + std::to_string(0) + ".obj");
+                    simulation.loadEdgeWeights("output/cells/15/SQP_iter_" + std::to_string(0) + ".txt", edge_weights);
                 }
                 updateScreen(viewer);
             }

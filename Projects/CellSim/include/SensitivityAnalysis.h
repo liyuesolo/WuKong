@@ -51,7 +51,10 @@ public:
     int n_dof_sim;
     bool project = true;
 
+    std::string data_folder = "";
     int max_num_iter = 500;
+    bool resume = false;
+    bool save_results = true;
 
     bool fd_dfdp;
     Vector<T, 2> design_parameter_bound;

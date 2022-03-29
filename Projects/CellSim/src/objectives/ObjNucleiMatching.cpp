@@ -1,6 +1,10 @@
 #include <igl/mosek/mosek_quadprog.h>
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../../include/DataIO.h"
 #include "../../include/LinearSolver.h"
 #include "../../include/eiquadprog.h"
@@ -128,7 +132,7 @@ void ObjNucleiTracking::setTargetObjWeights()
 
     int n_cell_total = simulation.cells.basal_face_start;
 
-    int n_target_cell = std::floor(n_cell_total/5.0);
+    int n_target_cell = std::floor(n_cell_total/2.0);
 
     std::cout << n_target_cell << "/" << n_cell_total << std::endl;
 
@@ -146,11 +150,11 @@ void ObjNucleiTracking::setTargetObjWeights()
     simulation.cells.getVFCellIds(VF_cell_idx);
     // selected.push_back(VF_cell_idx[0]);
     // selected.push_back(VF_cell_idx[4]);
-    for (int idx : selected)
-         target_obj_weights[idx] = 1.0;
+    // for (int idx : selected)
+        //  target_obj_weights[idx] = 1.0;
 
-    // for (int i = 0; i < n_target_cell; i++)
-    //     target_obj_weights[cell_list[i]] = 1.0;
+    for (int i = 0; i < n_target_cell; i++)
+        target_obj_weights[cell_list[i]] = 1.0;
 
     // VectorXT cell_centroids;
     // simulation.cells.getAllCellCentroids(cell_centroids);
@@ -241,17 +245,15 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
 {
     Ox = 0.0;
     simulation.deformed = x;
+    
     if (match_centroid)
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
         {
             VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
             TV centroid;
             simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos);
+            Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
         });
     }
     else
@@ -291,7 +293,7 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
             T coeff = cell_vtx_list.size();
             for (int idx : cell_vtx_list)
             {
-                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff;
+                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff * target_obj_weights[cell_idx];
             }
         });
     }
@@ -398,6 +400,47 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
         }
         energy += penalty_energy;
     }
+
+    if (add_Hessian_PD_term)
+    {
+        T hessian_pd_energy = 0.0;
+        VectorXT hessian_pd_grad(n_dof_design);
+        hessian_pd_grad.setZero();
+        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+        simulation.buildSystemMatrix(simulation.u, d2edx2);
+
+        int nmodes = 10;
+        
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+
+        //0 cannot cannot be used as a shift
+        T shift = -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+            Spectra::LARGEST_MAGN, 
+            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            // Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values.transpose() << std::endl;
+        }
+        
+        VectorXT Hx = d2edx2 * simulation.deformed;
+        T d = simulation.deformed.transpose() * Hx;
+
+        std::cout << "energy xTHx " << d << std::endl;
+        if (d < barrier_distance)
+        {
+            hessian_pd_energy += 0.5 * barrier_weight * barrier<0>(d, barrier_distance);   
+        }
+        // energy += hessian_pd_energy;
+    }
  
     return energy;
 }
@@ -438,7 +481,6 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
         {
-            
             VtxList face_vtx_list = simulation.cells.faces[cell_idx];
             VtxList cell_vtx_list = face_vtx_list;
             for (int idx : face_vtx_list)
@@ -449,7 +491,7 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
             T coeff = cell_vtx_list.size();
             for (int idx : cell_vtx_list)
             {
-                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff  * target_obj_weights[cell_idx];;
+                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff  * target_obj_weights[cell_idx];
             }
         });
     }
@@ -476,24 +518,31 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     }
     
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-    VectorXT lambda;
-    // here d2e/dx2 is -df/dx, negative sign is cancelled with -df/dp
-    // if (simulation.woodbury)
-    // {
-    //     MatrixXT UV;
-    //     simulation.buildSystemMatrixWoodbury(simulation.u, d2edx2, UV);
-    //     PardisoLLTSolver solver(d2edx2, UV);
-    //     solver.solve(dOdx, lambda);
-    // }
-    // else
-    // {   
-    //     simulation.buildSystemMatrix(simulation.u, d2edx2);
-    //     simulation.linearSolveNaive(d2edx2, dOdx, lambda);
-    // }
-
     simulation.buildSystemMatrix(simulation.u, d2edx2);
-    simulation.linearSolveNaive(d2edx2, dOdx, lambda);
+    // std::ofstream out("d2edx2.txt");
+    // out << d2edx2 << std::endl;
+    // out.close();
+
+    simulation.cells.iterateDirichletDoF([&](int offset, T target)
+    {
+        dOdx[offset] = 0;
+    });
     
+    VectorXT lambda;
+    simulation.linearSolveNaive(d2edx2, dOdx, lambda);
+
+    std::cout << (d2edx2 * lambda - dOdx).norm() / dOdx.norm() << std::endl;
+
+    // Eigen::SparseLU<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    // std::cout << " |gradient| build hessian" << std::endl;
+    // solver.analyzePattern(d2edx2);
+    // std::cout << " |gradient| analyzePattern" << std::endl;
+    // solver.factorize(d2edx2);
+    // std::cout << " |gradient| factorize" << std::endl;
+    // std::cout << int(solver.info() == Eigen::NumericalIssue) << std::endl;
+    // lambda = solver.solve(dOdx);
+
+    // std::cout << " |gradient| linear solve" << std::endl;
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
     equilibrium_prev = simulation.u;
 
@@ -533,6 +582,31 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
             }
         }
         energy += penalty_energy;
+    }
+
+    if (add_Hessian_PD_term)
+    {
+        T hessian_pd_energy = 0.0;
+        VectorXT hessian_pd_grad(n_dof_design);
+        hessian_pd_grad.setZero();
+        
+        
+
+        VectorXT Hx = d2edx2 * simulation.u;
+        T d = simulation.u.transpose() * Hx;
+
+        std::cout << "xTHx " << d << " " << std::endl;
+        if (d < barrier_distance)
+        {
+            MatrixXT dxdp;
+            simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+
+            hessian_pd_energy += 0.5 * barrier_weight * barrier<0>(d, barrier_distance);
+            hessian_pd_grad += barrier_weight * barrier<1>(d, barrier_distance) * dxdp.transpose() * Hx;
+        }
+        
+        // energy += hessian_pd_energy;
+        // dOdp += hessian_pd_grad;
     }
 
     return dOdp.norm();
@@ -673,12 +747,12 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     computed2Odx2(simulation.deformed, d2Odx2_entries);
     StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+    simulation.cells.projectDirichletDoFMatrix(d2Odx2_matrix, simulation.cells.dirichlet_data);
     
+    MatrixXT dxdpTHdxdp = dxdp.transpose() * d2Odx2_matrix * dxdp;
     
-    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
+    H = dxdpTHdxdp;
     
-
-
     if (use_penalty)
     {
         T penalty_energy = 0.0;
@@ -719,7 +793,23 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
         H += d2Odp2;
     }
 
+    if (add_Hessian_PD_term)
+    {
+        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+        simulation.buildSystemMatrix(simulation.u, d2edx2);
+        VectorXT Hx = d2edx2 * simulation.deformed;
+        T d = simulation.deformed.transpose() * Hx;
 
+        std::cout << "xTHx " << d << std::endl;
+        
+        if (d < barrier_distance)
+        {
+            MatrixXT dxdp;
+            simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+            // H += barrier_weight * barrier<2>(d, barrier_distance) * dxdpTHdxdp; 
+        }
+        
+    }
     // Timer tt(true);
     // tt.stop();
     // std::cout << "multiplication: " << tt.elapsed_sec() << std::endl;

@@ -159,9 +159,10 @@ void Simulation::initializeCells()
     cells.use_alm_on_cell_volume = false;
 
     std::string sphere_file;
-    cells.scene_type = 1;
+    cells.scene_type = 2;
 
     if (cells.scene_type == 1 || cells.scene_type == 2)
+    {
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
@@ -170,11 +171,19 @@ void Simulation::initializeCells()
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_486.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";
-        
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";   
+        cells.vertexModelFromMesh(sphere_file); 
+    }
     else if(cells.scene_type == 0)
+    {
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
-    cells.vertexModelFromMesh(sphere_file);
+        cells.vertexModelFromMesh(sphere_file);
+    }
+    else if (cells.scene_type == 3)
+    {
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_61.obj";   
+        cells.vertexModelFromMesh(sphere_file); 
+    }
     // cells.addTestPrism(6);
     // cells.addTestPrismGrid(10, 10);
     

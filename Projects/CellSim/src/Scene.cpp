@@ -558,6 +558,11 @@ void VertexModel::sdfFromHighResDualMesh(const std::string& filename)
     sdf.initializedMeshData(vertices, indices, vtx_normals, 1e-3);
 }
 
+void VertexModel::constructAnnulusScene()
+{
+
+}
+
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
     Eigen::MatrixXd V, N;
@@ -636,6 +641,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // T cell_height = 0.5 * e0_norm; //drosophila 1k
     // T cell_height = 0.8 * e0_norm; //drosophila 476
     T cell_height = 0.7 * e0_norm; // drosophila 120
+    if (scene_type == 3)
+        cell_height = 0.2 * e0_norm;
 
     tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
         TV apex = deformed.segment<3>(i * 3);
@@ -763,6 +770,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
     // Gamma = 0.5;
     Gamma = 1.0;
+    // if (scene_type == 3)
+    //     Gamma = 20.0;
     if (woodbury)
     {
         if (contract_apical_face)
@@ -770,9 +779,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             if (use_cell_centroid)
-                // Gamma = 0.5;//worked for sphere
-                // Gamma = 0.5 * unit * 10.0;//drosophila 4k
-                Gamma = 0.5 * unit * 10.0;
+            {
+                Gamma = 0.5 * unit * 10.0; 
+            }
             else
                 Gamma = 1.0; // used for fixed tet subdiv
         }
@@ -928,6 +937,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
         bound_coeff = 1e1 * unit;
+        // bound_coeff = 1e1 * unit;
         T normal_offset = 1e-3;// * unit;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;

@@ -76,6 +76,7 @@ public:
     T penalty_weight = 1e4;
     PenaltyType penalty_type = Qubic;
     bool perturb = true;
+    VectorXT p_prev;
     struct TargetData
     {
         int cell_idx;
@@ -209,10 +210,16 @@ public:
     bool add_min_act = false;
     T w_min_act = 1.0;
 
+    bool add_Hessian_PD_term = false;
     Vector<T, 2> bound;
+    
     
 
 public:
+
+    T simHessianPDEnergy(const VectorXT& p_curr);
+    void simHessianPDGradient(const VectorXT& p_curr, T& energy, VectorXT& grad);
+    void simHessianPDHessian(const VectorXT& p_curr, StiffnessMatrix& hess);
     
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true);

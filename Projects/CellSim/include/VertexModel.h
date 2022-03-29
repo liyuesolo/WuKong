@@ -739,6 +739,7 @@ public:
     void saveIPCData(const std::string& folder, int iter = 0, bool save_edges = false);
     void saveCellMesh(int iter = 0);
     void approximateMembraneThickness();
+    void constructAnnulusScene();
 
 
     //Visualization.cpp

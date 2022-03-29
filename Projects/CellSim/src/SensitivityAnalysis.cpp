@@ -12,11 +12,13 @@ void SensitivityAnalysis::setSimulationEnergyWeights()
 {
     auto& cell_model = simulation.cells;
 
-    cell_model.add_yolk_volume = false;
-    cell_model.use_sphere_radius_bound = true;
-    cell_model.add_perivitelline_liquid_volume = false;
-    cell_model.woodbury = false;
-    // cell_model.B = 1e4;
+    // cell_model.add_yolk_volume = false;
+    // cell_model.use_sphere_radius_bound = true;
+    // cell_model.add_perivitelline_liquid_volume = false;
+    // cell_model.woodbury = false;
+    cell_model.B *= 0.1;
+    // cell_model.By *= 0.1;
+    // cell_model.Bp *= 0.1;
     // cell_model.bound_coeff = 0.1;
 }
 
@@ -35,12 +37,14 @@ void SensitivityAnalysis::initialize()
     // simulation.cells.edge_weights.setConstant(0.05);
     VectorXT delta = simulation.cells.edge_weights * 0.1;
     // simulation.cells.edge_weights += delta;
-    simulation.cells.edge_weights.setConstant(0.05);
+    // simulation.cells.edge_weights.setConstant(0.05);
     // std::ifstream in("/home/yueli/Documents/ETH/WuKong/output/cells/opt/load.txt");
     // for (int i = 0; i < simulation.cells.edge_weights.rows(); i++)
     //     in >> simulation.cells.edge_weights[i];
     // in.close();
     objective.getDesignParameters(design_parameters);
+    objective.p_prev = VectorXT::Zero(n_dof_design);
+
     std::cout << "# dof sim: " << n_dof_sim << " # dof design: " << n_dof_design << std::endl;
 }
 
@@ -118,21 +122,19 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         optimizer == PSGN || optimizer == PGN || 
         optimizer == SQP || optimizer == SSQP)
     {
-        if (step == 0)
+        if (step == 0 && !resume)
         {
             std::cout << "########### " << method << " ###########" << std::endl;
             objective.getDesignParameters(design_parameters);
             std::cout << "initial value max: " << design_parameters.maxCoeff() << " min: " << design_parameters.minCoeff() <<std::endl;
             g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */true); 
-            initial_gradient_norm = g_norm;  
         }
         else
         {
             g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */false);
         }
-        g_norm = dOdp.norm();
-
-
+        
+        
         // std::vector<int> projected_entries;
         std::unordered_set<int> binding_set;
         auto getProjectingEntries =[&](VectorXT& g)
@@ -167,6 +169,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             //     free_set_mask[idx] = 0.0;
             // search_direction = search_direction.array() * free_set_mask.array();
         }
+
+        if (step == 0)
+            initial_gradient_norm = g_norm;  
         
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
             << " |g_init| " << initial_gradient_norm << " obj: " << E0 << std::endl;
@@ -225,8 +230,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 }
                 // std::exit(0);
             };
-
-            H_GN.diagonal().array() += 1e-6;
+            
+            // H_GN.diagonal().array() += 1e-6;
             // saveEigenVectors();
 
 
@@ -488,8 +493,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         // }
 
         std::cout << "[" << method << "]\t starting alpha: " << alpha << std::endl;
-        int ls_cnt = 0;
-        while (true)
+        int ls_max = 15;
+        bool use_gradient = false;
+        for (int ls_cnt = 0; ls_cnt < ls_max; ls_cnt++)
         {
             VectorXT p_ls = design_parameters + alpha * search_direction;
             if (optimizer == PGN || optimizer == PSGN || optimizer == SQP)
@@ -497,13 +503,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
             std::cout << "[" << method << "]\tE1: " << E1 << " E0: " << E0 << std::endl;
             // std::getchar();
-            if (E1 < E0 || ls_cnt > 20)
+            if (E1 < E0)
             {
-                if (ls_cnt > 20)
-                {
-                    // sampleEnergyWithSearchAndGradientDirection(search_direction);
-                    // std::getchar();
-                }
                 std::cout << "[" << method << "]\tfinal |dp|: " << (p_ls - design_parameters).norm() << " # ls " << ls_cnt << std::endl;
                 design_parameters = p_ls;
                 break;
@@ -512,7 +513,11 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             {
                 alpha *= 0.5;
             }
-            ls_cnt++;
+            // if (ls_cnt == ls_max - 1 && !use_gradient)
+            // {
+            //     ls_cnt = 0;
+            //     search_direction = -dOdp;
+            // }
         }
     }
     else if (optimizer == MMA)
@@ -539,12 +544,16 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     // std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
     //         << " max: " << dOdp.maxCoeff() << " min: " << dOdp.minCoeff()
     //         << " obj: " << E0 << std::endl;
-    objective.saveState("output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".obj");
-    objective.updateDesignParameters(design_parameters);
-    std::string filename = "output/cells/opt/" + method + "_iter_" + std::to_string(step) + ".txt";
-    std::ofstream out(filename);
-    out << design_parameters << std::endl;
-    out.close();
+    if (save_results)
+    {
+        objective.saveState(data_folder + "/" + method + "_iter_" + std::to_string(step) + ".obj");
+        objective.updateDesignParameters(design_parameters);
+        objective.p_prev = design_parameters;
+        std::string filename = data_folder + "/" + method + "_iter_" + std::to_string(step) + ".txt";
+        std::ofstream out(filename);
+        out << design_parameters << std::endl;
+        out.close();
+    }
     if (g_norm < tol_g || step > max_num_iter)
         return true;
     return false;
@@ -1018,48 +1027,64 @@ void SensitivityAnalysis::savedxdp(const VectorXT& dx,
 
 void SensitivityAnalysis::checkStatesAlongGradient()
 {
-    // simulation.newton_tol = 1e-8;
+    simulation.newton_tol = 1e-9;
     objective.perturb = false;
     T E0;
     VectorXT dOdp, dp;
     VectorXT ew;
-    simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_9.txt", ew);
+    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/25/SQP_iter_280.obj");
+    simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/25/SQP_iter_280.txt", ew);
+    // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/23/200.obj");
+    // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/23/200.txt", ew);
     simulation.cells.edge_weights = ew;
-    simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_9.obj");
+
+    objective.diffTestdOdxScale();
+    objective.diffTestGradientScale();
+    objective.diffTestGradient();
     
+    VectorXT edge_contracting_force = VectorXT::Zero(n_dof_sim);
+    simulation.cells.addPerEdgeForceEntries(edge_contracting_force);
+
+    std::cout << std::setprecision(12) << ew.norm() << std::endl;
+    // std::cout << edge_contracting_force.norm() << std::endl;
+    // std::exit(0);
+
     objective.getDesignParameters(design_parameters);
     VectorXT u = simulation.u;
-    T lower_bound = 0, upper_bound = 10.0 * simulation.cells.unit;
-    simulation.saveState("output/cells/debug/start.obj");
+    T lower_bound = 0.001, upper_bound = 5.5 * simulation.cells.unit;
+    if (save_results)
+        simulation.saveState(data_folder + "/start.obj");
     MatrixXT H_GN;
     objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
     T g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */false);
-    std::cout << "|g|: " << g_norm << " E0: " << E0 << std::endl;
     
-    // std::vector<int> proj_entries;
-    // bool iecs = true;
-    // T eps = 0;
-    // for (int i = 0; i < n_dof_design; i++)
-    // {
-    //     if (design_parameters[i] < lower_bound || design_parameters[i] > upper_bound)
-    //         iecs = false;
+    std::vector<int> proj_entries;
+    bool iecs = true;
+    T eps = 1e-5;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        if (design_parameters[i] < lower_bound || design_parameters[i] > upper_bound)
+            iecs = false;
         
-    //     if (design_parameters[i] < lower_bound + eps)
-    //         proj_entries.push_back(i);
-    //     if (design_parameters[i] > upper_bound - eps)
-    //         proj_entries.push_back(i);
-    // }
-    // VectorXT projected_gradient = dOdp;
-    // for (int idx : proj_entries)
-    // {
-    //     projected_gradient[idx] = 0;
-    // }
+        if (design_parameters[i] < lower_bound + eps)
+            proj_entries.push_back(i);
+        if (design_parameters[i] > upper_bound - eps)
+            proj_entries.push_back(i);
+    }
+    VectorXT projected_gradient = dOdp;
+    for (int idx : proj_entries)
+    {
+        projected_gradient[idx] = 0;
+    }
+    g_norm = projected_gradient.norm();
+
+    std::cout << "|g|: " << g_norm << " E0: " << E0 << std::endl;
 
     // std::cout << iecs << " " << proj_entries.size() << " " << projected_gradient.norm() << std::endl;
     // std::exit(0);
 
     // H_GN.diagonal().array() += 1e-6;
-    H_GN.diagonal().array() += 1e-6;
+    // H_GN.diagonal().array() += 1e-6;
     StiffnessMatrix Q = H_GN.sparseView();
     
     StiffnessMatrix A;
@@ -1101,6 +1126,7 @@ void SensitivityAnalysis::checkStatesAlongGradient()
         error[idx] = 0;
     }
     std::cout << "\t[SQP] dL/ddp " <<  (error).norm() << " " << std::endl;
+    std::cout << dp.norm() << std::endl;
     
     // int n_steps = 25;
     // T alpha = 1.0;
@@ -1123,8 +1149,8 @@ void SensitivityAnalysis::checkStatesAlongGradient()
     // std::exit(0);
 
 
-    T step_size = 1e-4;
-    int step = 100; 
+    T step_size = 5e-5;
+    int step = 200; 
 
     // T step_size = 1e-5;
     // int step = 100000;
@@ -1147,12 +1173,15 @@ void SensitivityAnalysis::checkStatesAlongGradient()
             if (edge_length < min_edge_length)
                 min_edge_length = edge_length;
         });
-        simulation.saveState("output/cells/debug/" + std::to_string(energies.size() - 1) + ".obj");
-        std::string filename = "output/cells/debug/" + std::to_string(energies.size() - 1) + ".txt";
-        std::ofstream out(filename);
-        out << (design_parameters + xi * dp) << std::endl;
-        out.close();
-        std::cout << "[debug]: " << xi  << " " << Ei << " step " << energies.size() - 1 << " " << min_edge_length << std::endl;
+        if (save_results)
+        {
+            simulation.saveState(data_folder + "/" + std::to_string(energies.size() - 1) + ".obj");
+            std::string filename = data_folder + "/"  + std::to_string(energies.size() - 1) + ".txt";
+            std::ofstream out(filename);
+            out << (design_parameters + xi * dp) << std::endl;
+            out.close();
+        }
+        std::cout << "[debug]: " << xi  << " obj: " << Ei << " step " << energies.size() - 1 << " " << min_edge_length << std::endl;
         // std::getchar();
         // if (xi > 0.0004)
         //     break;
