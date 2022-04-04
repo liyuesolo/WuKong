@@ -76,7 +76,10 @@ public:
     T penalty_weight = 1e4;
     PenaltyType penalty_type = Qubic;
     bool perturb = true;
-    VectorXT p_prev;
+    bool add_reg = false;
+    T reg_w = 1e-6;
+    VectorXT rest_configuration;
+    VectorXT prev_params;
     struct TargetData
     {
         int cell_idx;
@@ -90,6 +93,7 @@ public:
         TargetData() : data_point_idx(-1), cell_idx(-1) {}
     };
 
+    Vector<T, 2> bound;
     std::vector<TargetData> weight_targets;
     std::unordered_map<int, TV> target_positions;
     VectorXT target_obj_weights;
@@ -140,8 +144,8 @@ public:
 public:
     Objectives(Simulation& _simulation) : simulation(_simulation) 
     {
-        equilibrium_prev.resize(simulation.num_nodes * 3);
-        equilibrium_prev.setZero();
+        // equilibrium_prev.resize(simulation.num_nodes * 3);
+        // equilibrium_prev.setZero();
     }
     ~Objectives() {}
 };

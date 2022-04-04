@@ -237,7 +237,11 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
         // if (!running_diff_test)
         //     for (int i = 0; i < n_dof_sim; i++)
         //         d2Odx2_entries.push_back(Entry(i, i, 1.0));
-                // d2Odx2_entries.push_back(Entry(i, i, 1e-6));
+    }
+    if (add_reg)
+    {
+        for (int i = 0; i < n_dof_sim; i++)
+            d2Odx2_entries.push_back(Entry(i, i, reg_w));
     }
 }
 
@@ -272,6 +276,13 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
             Ox += 0.5 * (current - target).dot(current - target);
         });
     }
+
+    // if (add_reg)
+    // {
+    //     T reg_term = 0.5 * reg_w * (simulation.deformed - rest_configuration).dot(simulation.deformed - rest_configuration);
+    //     std::cout << "\t regularization term: " << reg_term << std::endl;
+    //     Ox += reg_term;
+    // }
 }
 
 void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
@@ -316,6 +327,10 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
             }
         });
     }
+    // if (add_reg)
+    // {
+    //     dOdx += reg_w * (simulation.deformed - rest_configuration);
+    // }
 }
 
 
@@ -341,8 +356,9 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
             {
                 std::cout << "unstable state for the forward problem" << std::endl;
                 std::cout << "nodge it along the negative eigen vector" << std::endl;
-                // simulation.u += -negative_eigen_value * negative_eigen_vector;
-                simulation.u += negative_eigen_vector;
+                VectorXT nodge_direction = negative_eigen_vector;
+                T step_size = simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
+                simulation.u += step_size * nodge_direction;
             }
             else
                 break;
@@ -350,98 +366,15 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
     }
 
     T energy = 0.0;
-    if (match_centroid)
+    computeOx(simulation.deformed, energy);
+    
+    if (add_reg)
     {
-        iterateTargets([&](int cell_idx, TV& target_pos)
-        {
-            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-            TV centroid;
-            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
-        });
-    }
-    else
-    {
-        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
-            const TV& target, const VectorXT& weights)
-        {
-            VectorXT positions;
-            VtxList indices;
-            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
-            int n_pt = weights.rows();
-            TV current = TV::Zero();
-            for (int i = 0; i < n_pt; i++)
-                current += weights[i] * positions.segment<3>(i * 3);
-            energy += 0.5 * (current - target).dot(current - target);
-        });
+        T reg_term = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
+        std::cout << "\t reg term: " << reg_term << std::endl;
+        energy += reg_term;
     }
 
-    if (use_penalty)
-    {
-        T penalty_energy = 0.0;
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            T d_hat_max = bound[1] - p_curr[i];
-            T d_hat_min = p_curr[i] - bound[0];
-            if (penalty_type == LogBarrier)
-            {
-                if (d_hat_max < barrier_distance)
-                    penalty_energy += penalty_weight * barrier<0>(d_hat_max, barrier_distance);
-                if (d_hat_min < barrier_distance)
-                    penalty_energy += penalty_weight * barrier<0>(d_hat_min, barrier_distance);
-            }    
-            else if (penalty_type == Qubic)
-            {
-                if (d_hat_max < barrier_distance)
-                    penalty_energy += penalty_weight * std::pow(d_hat_max, 3);
-                if (d_hat_min < barrier_distance)
-                    penalty_energy += penalty_weight * std::pow(d_hat_min, 3);
-            }
-        }
-        energy += penalty_energy;
-    }
-
-    if (add_Hessian_PD_term)
-    {
-        T hessian_pd_energy = 0.0;
-        VectorXT hessian_pd_grad(n_dof_design);
-        hessian_pd_grad.setZero();
-        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-        simulation.buildSystemMatrix(simulation.u, d2edx2);
-
-        int nmodes = 10;
-        
-        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
-
-        //0 cannot cannot be used as a shift
-        T shift = -1e-4;
-        Spectra::SymEigsShiftSolver<T, 
-            Spectra::LARGEST_MAGN, 
-            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
-            eigs(&op, nmodes, 2 * nmodes, shift);
-
-        eigs.init();
-
-        int nconv = eigs.compute();
-
-        if (eigs.info() == Spectra::SUCCESSFUL)
-        {
-            // Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-            std::cout << eigen_values.transpose() << std::endl;
-        }
-        
-        VectorXT Hx = d2edx2 * simulation.deformed;
-        T d = simulation.deformed.transpose() * Hx;
-
-        std::cout << "energy xTHx " << d << std::endl;
-        if (d < barrier_distance)
-        {
-            hessian_pd_energy += 0.5 * barrier_weight * barrier<0>(d, barrier_distance);   
-        }
-        // energy += hessian_pd_energy;
-    }
- 
     return energy;
 }
 
@@ -465,8 +398,9 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
             {
                 std::cout << "unstable state for the forward problem" << std::endl;
                 std::cout << "nodge it along the negative eigen vector" << std::endl;
-                // simulation.u += -negative_eigen_value * negative_eigen_vector;
-                simulation.u += negative_eigen_vector;
+                VectorXT nodge_direction = negative_eigen_vector;
+                T step_size = simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
+                simulation.u += step_size * nodge_direction;
             }
             else
                 break;
@@ -474,139 +408,51 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     }
     
     energy = 0.0;
-    VectorXT dOdx(n_dof_sim);
-    dOdx.setZero();
+    VectorXT dOdx;
 
-    if (match_centroid)
-    {
-        iterateTargets([&](int cell_idx, TV& target_pos)
-        {
-            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
-            VtxList cell_vtx_list = face_vtx_list;
-            for (int idx : face_vtx_list)
-                cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
-            TV centroid;
-            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            energy += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];;
-            T coeff = cell_vtx_list.size();
-            for (int idx : cell_vtx_list)
-            {
-                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff  * target_obj_weights[cell_idx];
-            }
-        });
-    }
-    else
-    {
-        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
-            const TV& target, const VectorXT& weights)
-        {
-            VectorXT positions;
-            VtxList indices;
-            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
-
-            int n_pt = weights.rows();
-            TV current = TV::Zero();
-            for (int i = 0; i < n_pt; i++)
-                current += weights[i] * positions.segment<3>(i * 3);
-            energy += 0.5 * (current - target).dot(current - target);
-
-            for (int i = 0; i < indices.size(); i++)
-            {
-                dOdx.segment<3>(indices[i] * 3) += (current - target) * weights[i];
-            }
-        });
-    }
+    computeOx(simulation.deformed, energy);
+    computedOdx(simulation.deformed, dOdx);
     
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     simulation.buildSystemMatrix(simulation.u, d2edx2);
-    // std::ofstream out("d2edx2.txt");
-    // out << d2edx2 << std::endl;
-    // out.close();
-
+    
     simulation.cells.iterateDirichletDoF([&](int offset, T target)
     {
         dOdx[offset] = 0;
     });
     
     VectorXT lambda;
-    simulation.linearSolveNaive(d2edx2, dOdx, lambda);
-
-    std::cout << (d2edx2 * lambda - dOdx).norm() / dOdx.norm() << std::endl;
-
-    // Eigen::SparseLU<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
-    // std::cout << " |gradient| build hessian" << std::endl;
-    // solver.analyzePattern(d2edx2);
-    // std::cout << " |gradient| analyzePattern" << std::endl;
-    // solver.factorize(d2edx2);
-    // std::cout << " |gradient| factorize" << std::endl;
-    // std::cout << int(solver.info() == Eigen::NumericalIssue) << std::endl;
-    // lambda = solver.solve(dOdx);
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2);
+    T alpha = 1.0;
+    for (int i = 0; i < 50; i++)
+    {
+        solver.factorize(d2edx2);
+        if (solver.info() == Eigen::NumericalIssue)
+        { 
+            std::cout << "simulation Hessian indefinite" << std::endl;
+            d2edx2.diagonal().array() += alpha;
+            alpha *= 10;
+            continue;
+        }
+    }
+    lambda = solver.solve(dOdx);
 
     // std::cout << " |gradient| linear solve" << std::endl;
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
     equilibrium_prev = simulation.u;
 
-    
-    if (use_penalty)
+    // MatrixXT dxdp;
+    // simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+    // VectorXT dOdp_SA = dOdx.transpose() * dxdp;
+
+    // std::cout << (dOdp_SA - dOdp).norm() << std::endl;
+    // std::exit(0);
+    if (add_reg)
     {
-        T penalty_energy = 0.0;
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            T d_hat_max = bound[1] - p_curr[i];
-            T d_hat_min = p_curr[i] - bound[0];
-            if (penalty_type == LogBarrier)
-            {
-                if (d_hat_max < barrier_distance)
-                {
-                    penalty_energy += penalty_weight * barrier<0>(d_hat_max, barrier_distance);
-                    dOdp[i] += penalty_weight * barrier<1>(d_hat_max, barrier_distance);
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    penalty_energy += penalty_weight * barrier<0>(d_hat_min, barrier_distance);
-                    dOdp[i] += penalty_weight * barrier<1>(d_hat_max, barrier_distance);
-                }
-            }    
-            else if (penalty_type == Qubic)
-            {
-                if (d_hat_max < barrier_distance)
-                {
-                    penalty_energy += penalty_weight * std::pow(d_hat_max, 3);
-                    dOdp[i] += penalty_weight * 3.0 * std::pow(d_hat_max, 2);
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    penalty_energy += penalty_weight * std::pow(d_hat_min, 3);
-                    dOdp[i] += penalty_weight * 3.0 * std::pow(d_hat_min, 2);
-                }
-            }
-        }
-        energy += penalty_energy;
-    }
-
-    if (add_Hessian_PD_term)
-    {
-        T hessian_pd_energy = 0.0;
-        VectorXT hessian_pd_grad(n_dof_design);
-        hessian_pd_grad.setZero();
-        
-        
-
-        VectorXT Hx = d2edx2 * simulation.u;
-        T d = simulation.u.transpose() * Hx;
-
-        std::cout << "xTHx " << d << " " << std::endl;
-        if (d < barrier_distance)
-        {
-            MatrixXT dxdp;
-            simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
-
-            hessian_pd_energy += 0.5 * barrier_weight * barrier<0>(d, barrier_distance);
-            hessian_pd_grad += barrier_weight * barrier<1>(d, barrier_distance) * dxdp.transpose() * Hx;
-        }
-        
-        // energy += hessian_pd_energy;
-        // dOdp += hessian_pd_grad;
+        T reg_term = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
+        energy += reg_term;
+        dOdp += reg_w * (p_curr - prev_params);
     }
 
     return dOdp.norm();
@@ -735,6 +581,7 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
 void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate)
 {
     updateDesignParameters(p_curr);
+    
     if (simulate)
     {
         simulation.reset();
@@ -742,77 +589,57 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     }
     
     MatrixXT dxdp;
+    
     simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
+    
     std::vector<Entry> d2Odx2_entries;
     computed2Odx2(simulation.deformed, d2Odx2_entries);
     StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
     simulation.cells.projectDirichletDoFMatrix(d2Odx2_matrix, simulation.cells.dirichlet_data);
     
+    MatrixXT d2Odx2_dense = d2Odx2_matrix;
+    // std::cout << d2Odx2_dense.minCoeff() << " " << d2Odx2_dense.maxCoeff() << std::endl;
+    
     MatrixXT dxdpTHdxdp = dxdp.transpose() * d2Odx2_matrix * dxdp;
+    // MatrixXT dxdpTHdxdp = dxdp.transpose() * dxdp;
     
+    // Eigen::JacobiSVD<Eigen::MatrixXd> svd(d2Odx2_dense, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    // MatrixXT U = svd.matrixU();
+	// VectorXT Sigma = svd.singularValues();
+	// MatrixXT V = svd.matrixV();
+    // std::cout << "d2Odx2_dense singular value last 5: " << Sigma.tail<5>().transpose() << std::endl;
+    // std::cout << d2Odx2_dense.diagonal().transpose() << std::endl;
+    
+    // std::ofstream out("cell_d2odx_singular_vectors.txt");
+    // out << U.rows() << " " << U.cols() << std::endl;
+    // for (int i = 0; i < n_dof_design; i++)
+    //     out << Sigma[i] << " ";
+    // out << std::endl;
+    // for (int i = 0; i < n_dof_sim; i++)
+    // {
+    //     for (int j = 0; j < n_dof_design; j++)
+    //         out << U(i, j) << " ";
+    //     out << std::endl;
+    // }
+    // out << V.rows() << " " << V.cols() << std::endl;
+    // for (int i = 0; i < n_dof_design; i++)
+    // {
+    //     for (int j = 0; j < n_dof_design; j++)
+    //         out << V(i, j) << " ";
+    //     out << std::endl;
+    // }
+    // out << std::endl;
+    // out.close();
+   
+    // simulation.saveState("d2odx2_check.obj");
+    // std::exit(0);
     H = dxdpTHdxdp;
-    
-    if (use_penalty)
-    {
-        T penalty_energy = 0.0;
-        std::vector<Entry> d2Odp2_entries;
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            T d_hat_max = bound[1] - p_curr[i];
-            T d_hat_min = p_curr[i] - bound[0];
-            if (penalty_type == LogBarrier)
-            {
-                if (d_hat_max < barrier_distance)
-                {
-                    d2Odp2_entries.push_back(Entry(i, i, 
-                        penalty_weight * barrier<2>(d_hat_max, barrier_distance)));
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    d2Odp2_entries.push_back(Entry(i, i, 
-                        penalty_weight * barrier<2>(d_hat_min, barrier_distance)));
-                }
-            }    
-            else if (penalty_type == Qubic)
-            {
-                if (d_hat_max < barrier_distance)
-                {
-                     d2Odp2_entries.push_back(Entry(i, i, 
-                        penalty_weight * 6.0 * d_hat_max));
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    d2Odp2_entries.push_back(Entry(i, i , 
-                        penalty_weight * 6.0 * d_hat_min));
-                }
-            }
-        }
-        StiffnessMatrix d2Odp2(n_dof_design, n_dof_design);
-        d2Odp2.setFromTriplets(d2Odp2_entries.begin(), d2Odp2_entries.end());
-        H += d2Odp2;
-    }
 
-    if (add_Hessian_PD_term)
+    if (add_reg)
     {
-        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-        simulation.buildSystemMatrix(simulation.u, d2edx2);
-        VectorXT Hx = d2edx2 * simulation.deformed;
-        T d = simulation.deformed.transpose() * Hx;
-
-        std::cout << "xTHx " << d << std::endl;
-        
-        if (d < barrier_distance)
-        {
-            MatrixXT dxdp;
-            simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
-            // H += barrier_weight * barrier<2>(d, barrier_distance) * dxdpTHdxdp; 
-        }
-        
+        H.diagonal().array() += reg_w;
     }
-    // Timer tt(true);
-    // tt.stop();
-    // std::cout << "multiplication: " << tt.elapsed_sec() << std::endl;
     
 }
 
@@ -1064,7 +891,8 @@ void ObjNucleiTracking::computeCellTargetFromDatapoints()
 
             VectorXT w;
             igl::mosek::MosekData mosek_data;
-            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w);
+            std::vector<VectorXT> lagrange_multipliers;
+            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w, lagrange_multipliers);
             T error = (C * w - pi).norm();
             
             // std::cout << error << " " << w.transpose() << " " << w.sum() << std::endl;
@@ -1148,7 +976,8 @@ void ObjNucleiTracking::computeKernelWeights()
 
             VectorXT w;
             igl::mosek::MosekData mosek_data;
-            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w);
+            std::vector<VectorXT> lagrange_multipliers;
+            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w, lagrange_multipliers);
             
             // std::cout << w.transpose() << std::endl;
             // std::cout << "weights sum: " <<  w.sum() << std::endl;

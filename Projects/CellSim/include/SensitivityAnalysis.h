@@ -54,6 +54,7 @@ public:
     std::string data_folder = "";
     int max_num_iter = 500;
     bool resume = false;
+    bool add_reg = false;
     bool save_results = true;
 
     bool fd_dfdp;
@@ -72,9 +73,13 @@ public:
     
     // nlopt_opt opt;
     
+    void saveDesignParameters(const std::string& filename, const VectorXT& params);
+
     void initialize();
 
     void optimizeLBFGSB();
+
+    int optimizeIPOPT();
 
     void setSimulationEnergyWeights();
 
@@ -105,6 +110,7 @@ public:
 
     void checkStatesAlongGradient();
 
+    void mosekQPTest();
 private:
     void savedxdp(const VectorXT& dx, 
         const VectorXT& dp, const std::string& filename);
@@ -112,6 +118,7 @@ private:
     void optimizeGaussNewton();
     void optimizeGradientDescent();
     void optimizeMMA();
+
 
 public:
     SensitivityAnalysis(Simulation& _simulation, Objectives& _objective) : 

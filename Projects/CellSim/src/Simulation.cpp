@@ -383,7 +383,7 @@ void Simulation::saveState(const std::string& filename)
     cells.generateMeshForRendering(V, F, C, false);
     for (int i = 0; i < V.rows(); i++)
     {
-        out << "v " << std::setprecision(14) << V.row(i) << std::endl;
+        out << "v " << std::setprecision(20) << V.row(i) << std::endl;
     }
     for (int i = 0; i < F.rows(); i++)
     {
@@ -477,7 +477,7 @@ bool Simulation::staticSolve()
         // t.stop();
         // std::cout << "newton single step costs " << t.elapsed_sec() << "s" << std::endl;
 
-        if(cnt == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-8)
+        if(cnt == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
             break;
         cnt++;
     }

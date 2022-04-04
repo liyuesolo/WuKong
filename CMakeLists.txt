@@ -8,7 +8,7 @@ project(WuKong CXX)
 
 message(STATUS "${CMAKE_BUILD_TYPE} Build")
 
-set(CMAKE_BUILD_TYPE Release)
+# set(CMAKE_BUILD_TYPE Release) 
 
 set(VERSION_MAJOR 0)
 set(VERSION_MINOR 1)
@@ -21,7 +21,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0 -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 # set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wconversion -Wshadow -Wpedantic -fsanitize=undefined,address")
 
 # libigl
@@ -38,7 +38,19 @@ option(LIBIGL_WITH_MOSEK             "Use MOSEK"          ON)
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (SuiteSparse REQUIRED)
 find_package (OpenMP REQUIRED)
-find_package(LIBIGL REQUIRED)
+find_package (LIBIGL REQUIRED)
+# find_package (IPOPT REQUIRED)
+# if(IPOPT_FOUND)
+#   message("IPOPT Found!")
+#   message("ipopt include dirs:" ${IPOPT_INCLUDE_DIRS})
+#   message("ipopt libraries:"  ${IPOPT_LIBRARIES})
+#   add_definitions("-DUSE_IPOPT")
+#   include_directories(${IPOPT_INCLUDE_DIRS})
+# else()
+#   message("IPOPT Not Found! install by \n sudo apt-get install coinor-libipopt-dev")
+# endif()
+
+
 find_package(CGAL REQUIRED COMPONENTS Core)
 
 add_subdirectory(Deps)

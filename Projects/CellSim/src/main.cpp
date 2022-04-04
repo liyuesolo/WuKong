@@ -20,14 +20,20 @@ using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
 using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
-Simulation simulation;
-ObjNucleiTracking obj(simulation);
-ObjFindInit obj_find_init(simulation);
-SensitivityAnalysis sa(simulation, obj);
 // SensitivityAnalysis sa(simulation, obj_find_init);
+
 
 int main(int argc, char** argv)
 {
+    
+    Simulation simulation;
+    std::cout << "initialize sim class data" << std::endl;
+    ObjNucleiTracking obj(simulation);
+    std::cout << "initialize obj class data" << std::endl;
+    // ObjFindInit obj_find_init(simulation);
+    SensitivityAnalysis sa(simulation, obj);
+    std::cout << "initialize sa class data" << std::endl;
+    
     // Eigen::MatrixXd VD;
     // Eigen::MatrixXi FD;
     // igl::readOBJ("/home/yueli/Downloads/drosophila.obj", VD, FD);
@@ -75,15 +81,18 @@ int main(int argc, char** argv)
     
     
     simulation.initializeCells();
+    std::cout << "initializeCells" << std::endl;
     simulation.cells.tet_vol_barrier_w = 1e-22;
-    simulation.newton_tol = 1e-8;
+    simulation.newton_tol = 1e-5;
     simulation.max_newton_iter = 2000;
     // simulation.cells.use_ipc_contact = false;
 
     // obj.initializeTarget();
-    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+    obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
+    std::cout << "loadTarget" << std::endl;
+    
     // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/low_res_dense.txt");
-    obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
+    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
     obj.match_centroid = true;
     sa.max_num_iter = 2000;
     // obj.setTargetObjWeights();
@@ -101,12 +110,16 @@ int main(int argc, char** argv)
     // obj.add_Hessian_PD_term = true;
     obj.barrier_distance = 1e-3;
     obj.barrier_weight = 1e6;
-
-
+    obj.add_reg = true;
+    obj.reg_w = 1e-3;
+    // obj.reg_w = 1.0;
+    sa.add_reg = false;
     obj.bound << 0, 50;
     // obj.setOptimizer(MMA);
+    // obj.setOptimizer(GradientDescent);
     // obj.setOptimizer(GaussNewton);
     obj.setOptimizer(SQP);
+    // obj.setOptimizer(SGN);
     // obj.use_log_barrier = true;
     // obj.updateTarget();
     // obj.initializeTargetFromMap("idx_map.txt", 30);
@@ -132,12 +145,12 @@ int main(int argc, char** argv)
         // simulation.cells.edge_weights.setConstant(0.05);
         // simulation.cells.checkTotalHessian();
         // VectorXT ew;
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/debug/7.txt", ew);
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/45/SQP_iter_165.txt", ew);
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_5.txt", ew);
         // simulation.cells.edge_weights = ew;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/debug/7.obj");
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/45/SQP_iter_165.obj");
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_5.obj");
-
+        // simulation.checkHessianPD(false);
         viewer.launch();
     };
 
@@ -145,11 +158,18 @@ int main(int argc, char** argv)
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
+        // obj.diffTestd2Odx2();
+        // sa.optimizeIPOPT();
         // sa.save_results = false;
-        // sa.save_results = true;
+        sa.save_results = true;
         // sa.resume = true;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_27.obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_27.txt", sa.design_parameters);
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/60/SQP_iter_1210.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/60/SQP_iter_1210.txt", sa.design_parameters);
+        
+        // simulation.loadDeformedState("d2odx2_check.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/45/SQP_iter_161.txt", sa.design_parameters);
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_28.txt", sa.design_parameters);
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_28.obj");
         // sa.optimizeLBFGSB();
         // return;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/current_mesh.obj");
@@ -166,7 +186,7 @@ int main(int argc, char** argv)
         // sa.eigenAnalysisOnSensitivityMatrix();
         // sa.dxFromdpAdjoint();
         // sa.objective.diffTestd2Odx2();
-        sa.checkStatesAlongGradient();
+        // sa.checkStatesAlongGradient();
         // sa.objective.diffTestHessianScale();
         // sa.objective.diffTestGradientScale();
         // sa.objective.diffTestGradient();
@@ -179,7 +199,9 @@ int main(int argc, char** argv)
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
         // sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
-        sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/low_res_dense.txt");
+        // sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/low_res_dense.txt");
+        // simulation.staticSolve();
+        // simulation.saveState("target_x.obj");
     };
 
     auto generateWeights = [&]()
@@ -200,6 +222,8 @@ int main(int argc, char** argv)
         sa.data_folder = argv[1];
         runSA();
     }
+
+    
     
     // registerMesh();
     // exit(0);

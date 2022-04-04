@@ -230,9 +230,6 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
             bool find_node_j = std::find(dirichlet_idx.begin(), dirichlet_idx.end(), node_j * 3 + d) != dirichlet_idx.end();
             if (find_node_i) vec[d] = 0;
             if (find_node_j) vec[3 + d] = 0;
-
-            if (find_node_i || find_node_j)
-                std::cout << "project dfdp" << std::endl;
         }    
     };
     
@@ -241,6 +238,7 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
         TV vj = deformed.segment<3>(e[1] * 3);
         Vector<T, 6> dedx;
         computeEdgeSquaredNormGradient(vi, vj, dedx);
+        
         dedx *= -1.0;
         maskDirichletDof(dedx, e[0], e[1]);
         dOdp[cnt] += lambda.segment<3>(e[0] * 3).dot(dedx.segment<3>(0));
@@ -249,55 +247,76 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
         // dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
         cnt++;
     });
+    
+    T epsilon = 1e-6;
+    auto edgeForce = [&](VectorXT& force)
+    {
+        cnt = 0;
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            addForceEntry<6>(force, {e[0], e[1]}, -dedx * edge_weights[cnt++]);
+        });
+    };
 
+    auto testdfdp = [&]()
+    {
+        MatrixXT dfdp(num_nodes * 3, edge_weights.rows());
+        dfdp.setZero();
+        int _cnt =  0;
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            
+            dedx *= -1.0;
+            maskDirichletDof(dedx, e[0], e[1]);
+            dfdp.col(_cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+            dfdp.col(_cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+            _cnt++;
+        });
+        int n_edge = cnt;
+        MatrixXT dfdp_fd(num_nodes * 3, n_edge);
+        for (int i = 0; i < n_edge; i++)
+        {
+            VectorXT f0 = VectorXT::Zero(num_nodes * 3); 
+            VectorXT f1 = f0;
+            edge_weights[i] += epsilon;
+            edgeForce(f1); 
+            edge_weights[i] -= 2.0 * epsilon;
+            edgeForce(f0);
+            edge_weights[i] += epsilon;
+            dfdp_fd.col(i) = (f1 - f0) / (2.0 * epsilon);
+        }
+
+        for (int i = 0; i < num_nodes * 3; i++)
+        {
+            for (int j = 0; j < cnt; j++)
+            {
+                if (std::abs(dfdp_fd(i ,j)) < 1e-6 && std::abs(dfdp(i, j)) < 1e-6)
+                    continue;
+                if (std::abs(dfdp_fd(i ,j) - dfdp(i, j)) < 1e-3 * std::abs(dfdp_fd(i ,j)))
+                    continue;
+                std::cout << " " << dfdp_fd(i ,j) << " " << dfdp(i, j) << std::endl;
+                std::getchar();
+            }
+            
+        }
+        std::exit(0);
+    };
+    // testdfdp();
     // VectorXT dOdp2 = lambda.transpose() * dfdp;
     // std::cout << (dOdp2 - dOdp).norm() << std::endl;
     // std::getchar();
-    return;
-    // int n_edge = cnt;
+    
     // std::cout << "dfdp" << std::endl;
 
 
-    // T epsilon = 1e-6;
-    // auto edgeForce = [&](VectorXT& force)
-    // {
-    //     cnt = 0;
-    //     iterateApicalEdgeSerial([&](Edge& e){
-    //         TV vi = deformed.segment<3>(e[0] * 3);
-    //         TV vj = deformed.segment<3>(e[1] * 3);
-    //         Vector<T, 6> dedx;
-    //         computeEdgeSquaredNormGradient(vi, vj, dedx);
-    //         addForceEntry<6>(force, {e[0], e[1]}, -dedx * edge_weights[cnt++]);
-    //     });
-    // };
 
-    // MatrixXT dfdp_fd(num_nodes * 3, n_edge);
-    // for (int i = 0; i < n_edge; i++)
-    // {
-    //     VectorXT f0 = VectorXT::Zero(num_nodes * 3); 
-    //     VectorXT f1 = f0;
-    //     edge_weights[i] += epsilon;
-    //     edgeForce(f1); 
-    //     edge_weights[i] -= 2.0 * epsilon;
-    //     edgeForce(f0);
-    //     edge_weights[i] += epsilon;
-    //     dfdp_fd.col(i) = (f1 - f0) / (2.0 * epsilon);
-    // }
-
-    // for (int i = 0; i < num_nodes * 3; i++)
-    // {
-    //     for (int j = 0; j < cnt; j++)
-    //     {
-    //         if (std::abs(dfdp_fd(i ,j)) < 1e-6 && std::abs(dfdp(i, j)) < 1e-6)
-    //             continue;
-    //         if (std::abs(dfdp_fd(i ,j) - dfdp(i, j)) < 1e-3 * std::abs(dfdp_fd(i ,j)))
-    //             continue;
-    //         std::cout << " " << dfdp_fd(i ,j) << " " << dfdp(i, j) << std::endl;
-    //         std::getchar();
-    //     }
-        
-    // }
-    // std::exit(0);
+    
 }
 
 void VertexModel::dfdpWeights(MatrixXT& dfdp)

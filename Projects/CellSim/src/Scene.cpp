@@ -955,7 +955,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
         // sdfFromHighResDualMesh("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj");
         // std::cout << "total volume " << total_volume << std::endl;
-        total_volume = computeInitialApicalVolumeWithOffset(vtx_normals.segment(0, num_nodes * 3), normal_offset);
+        
+        VectorXT vtx_normal_all = vtx_normals.segment(0, basal_vtx_start * 3);
+        vtx_normal_all.conservativeResize(num_nodes * 3);
+        total_volume = computeInitialApicalVolumeWithOffset(vtx_normal_all, normal_offset);
         deformed = undeformed;
         // std::cout << "perivitelline_vol_init " << perivitelline_vol_init << std::endl;
         perivitelline_vol_init = total_volume - computeTotalVolumeFromApicalSurface();

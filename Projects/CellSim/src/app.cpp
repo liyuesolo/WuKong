@@ -227,7 +227,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             return true;
         case '0':
             check_modes = true;
-            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_svd_vectors.txt");
+            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_d2odx_singular_vectors.txt");
             // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/dxdp.txt");
             modes = 0;
             std::cout << "modes " << modes << std::endl;
@@ -354,7 +354,7 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
             check_modes = true;
             // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/dxdp_eigen_vectors.txt");
             // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_edge_weights_svd_vectors.txt");
-            loadSVDData("cell_edge_weights_svd_vectors.txt");
+            loadSVDData("cell_d2odx_singular_vectors.txt");
             color.resize(svd_V.cols());
             color.setZero();
             modes = 0;

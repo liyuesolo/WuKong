@@ -21,7 +21,23 @@ target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/
 
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/nanoflann/include)
 target_include_directories(CellSim PUBLIC ../../Libs/spectra/include)
+target_include_directories(CellSim PUBLIC ../../Libs/lbfgs)
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/mosek/9.2/tools/platform/linux64x86/h)
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
+
+find_package (IPOPT REQUIRED)
+if(IPOPT_FOUND)
+  message("IPOPT Found!")
+  message("ipopt include dirs:" ${IPOPT_INCLUDE_DIRS})
+  message("ipopt libraries:"  ${IPOPT_LIBRARIES})
+  add_definitions("-DUSE_IPOPT")
+  include_directories(${IPOPT_INCLUDE_DIRS})
+  if(IPOPT_FOUND)
+    target_link_libraries(CellSim ${IPOPT_LIBRARIES})
+  endif()
+else()
+  message("IPOPT Not Found! install by \n sudo apt-get install coinor-libipopt-dev")
+endif()
+
 
 target_link_libraries(CellSim ${DEPS})
