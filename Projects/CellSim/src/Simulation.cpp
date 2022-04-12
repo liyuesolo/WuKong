@@ -6,13 +6,31 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../include/Simulation.h"
 #include "../../../Solver/CHOLMODSolver.hpp"
-
+#include "../include/redsvd.h"
 #include <igl/readOBJ.h>
 
 #include <iomanip>
 #include <ipc/ipc.hpp>
 
 #define FOREVER 30000
+
+void Simulation::computeEigenValueSpectraSparse(StiffnessMatrix& A, int nmodes, VectorXT& modes, T shift)
+{
+    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(A);
+
+    Spectra::SymEigsShiftSolver<T, 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+        eigs(&op, nmodes, 2 * nmodes, shift);
+
+    eigs.init();
+
+    int nconv = eigs.compute();
+
+    Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+    int n_entries = eigen_values.rows();
+    modes = eigen_values.segment(n_entries - nmodes - 1, nmodes).transpose();
+}
 
 bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector)
 {
@@ -146,6 +164,10 @@ void Simulation::checkHessianPD(bool save_txt)
             out.close();
         }
     }
+    // MatrixXT dense_hessian = d2edx2;
+    // RedSVD::RedSVD<StiffnessMatrix> svd(d2edx2);
+    // std::cout << "singular values " << svd.singularValues().tail<5>().transpose() << std::endl;
+
 }
 
 void Simulation::computeLinearModes()
@@ -425,6 +447,7 @@ void Simulation::initializeDynamicsData(T _dt, T total_time)
 
 bool Simulation::staticSolve()
 {
+    
     // cells.saveHexTetsStep(0);
     // std::exit(0);
     VectorXT cell_volume_initial;
@@ -526,9 +549,86 @@ bool Simulation::staticSolve()
     std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
             << residual_norm << " |ddu|: " << dq_norm  
             << " |g_init|: " << residual_norm_init << std::endl;
+    // checkHessianPD(false);
+
+    VectorXT cell_volume_final;
+    cells.computeVolumeAllCells(cell_volume_final);
+    int compressed_cell_cnt = 0;
+    T compression = 0.0;
+    for (int i = 0; i < cell_volume_final.rows(); i++)
+    {
+        if (cell_volume_final[i] < cell_volume_initial[i])
+        {
+            compressed_cell_cnt++;
+            compression += cell_volume_final[i] - cell_volume_initial[i];
+        }
+    }
+    std::cout << compressed_cell_cnt << "/" << cells.basal_face_start << " cells are compressed. avg compression: " << compression / T(compressed_cell_cnt) << std::endl;
+
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
+}
+
+void Simulation::checkInfoForSA()
+{
+    VectorXT cell_hessian_evs;
+    cells.computeCellVolumeHessianEigenValues(cell_hessian_evs);
+    std::cout << cell_hessian_evs.sum() / T(cell_hessian_evs.rows()) << std::endl;
+    std::vector<int> indices;
+    for (int i = 0; i < cell_hessian_evs.rows(); i++)
+    {
+        indices.push_back(i);    
+    }
+    std::sort(indices.begin(), indices.end(), [&cell_hessian_evs](int a, int b){ return cell_hessian_evs[a] < cell_hessian_evs[b]; } );
+
+    for (int i = 0; i < cell_hessian_evs.rows(); i++)
+    {
+        std::cout << "cell: " << indices[i] << " " << cell_hessian_evs[indices[i]] << " ";
+        // VectorXT positions; 
+        // std::vector<int> vtx_idx;
+        // cells.getCellVtxAndIdx(indices[i], positions, vtx_idx);
+        // cells.saveSingleCellEdges("cell" + std::to_string(indices[i]) + ".obj", vtx_idx, positions);
+    }
+    std::cout << std::endl;
+    std::vector<Entry> yolk_hessian_entries;
+    MatrixXT UV;
+    woodbury = false;
+    cells.addYolkVolumePreservationHessianEntries(yolk_hessian_entries, UV, false);
+    woodbury = true;
+    StiffnessMatrix global_hessian_yolk(num_nodes * 3, num_nodes * 3);
+    global_hessian_yolk.setFromTriplets(yolk_hessian_entries.begin(), yolk_hessian_entries.end());
+    cells.projectDirichletDoFMatrix(global_hessian_yolk, cells.dirichlet_data);
+    MatrixXT yolk_hessian_dense = global_hessian_yolk.block(num_nodes * 3 - cells.basal_vtx_start * 3 - 1, 
+        num_nodes * 3 - cells.basal_vtx_start * 3 - 1, 
+        cells.basal_vtx_start * 3, cells.basal_vtx_start * 3);
+    
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(yolk_hessian_dense, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    VectorXT Sigma = svd.singularValues();
+    std::cout << "yolk term singular values: " << Sigma.tail<10>().transpose() << std::endl;
+    
+    Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+    eigen_solver.compute(yolk_hessian_dense, /* computeEigenvectors = */ false);
+    auto eigen_values = eigen_solver.eigenvalues();
+    std::vector<T> ev_all(yolk_hessian_dense.cols());
+    for (int i = 0; i < yolk_hessian_dense.cols(); i++)
+    {
+        ev_all[i] = eigen_values[i].real();
+    }
+    
+    std::vector<int> sort_idx;
+    for (int i = 0; i < yolk_hessian_dense.cols(); i++)
+    {
+        sort_idx.push_back(i);    
+    }
+    std::sort(sort_idx.begin(), sort_idx.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
+    std::cout << "yolk term eigen values: " << std::endl;
+    for (int i = 0; i < 10; i++)
+        std::cout << ev_all[sort_idx[i]] << " ";
+    std::cout << std::endl;
+    // VectorXT modes;
+    // computeEigenValueSpectraSparse(sparse_mat, 20, modes, -1);
+    // std::cout << modes << std::endl;
 }
 
 

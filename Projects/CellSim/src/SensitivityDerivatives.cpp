@@ -156,6 +156,18 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     // }
 }
 
+void VertexModel::computededp(VectorXT& dedp)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        T edge_length_squared = computeEdgeSquaredNorm(vi, vj);
+        dedp[cnt] = edge_length_squared;
+        cnt++;
+    });
+}
+
 void VertexModel::dOdpFromdxdpEdgeWeights(const VectorXT& dOdu, VectorXT& dOdp)
 {
     MatrixXT dfdp(num_nodes * 3, edge_weights.rows());
@@ -313,10 +325,7 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
     // std::getchar();
     
     // std::cout << "dfdp" << std::endl;
-
-
-
-    
+   
 }
 
 void VertexModel::dfdpWeights(MatrixXT& dfdp)

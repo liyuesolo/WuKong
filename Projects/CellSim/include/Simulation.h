@@ -28,6 +28,7 @@ public:
 
     using CellModel = VertexModel;
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    using Entry = Eigen::Triplet<T>;
     typedef int StorageIndex;
     using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
 
@@ -110,7 +111,7 @@ public:
     T computeTotalEnergy(const VectorXT& _u, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual);
     T lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max = 15, bool wolfe_condition = false);
-
+    void checkInfoForSA();
     void sampleEnergyWithSearchAndGradientDirection(
         const VectorXT& _u,  
         const VectorXT& search_direction,
@@ -118,7 +119,7 @@ public:
     );
 
     void checkHessianPD(bool save_txt = false);
-
+    void computeEigenValueSpectraSparse(StiffnessMatrix& A, int nmodes, VectorXT& modes, T shift = 1e-4);
     void loadDeformedState(const std::string& filename);
     void loadEdgeWeights(const std::string& filename, VectorXT& weights);
     void saveState(const std::string& filename);

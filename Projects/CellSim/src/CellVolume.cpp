@@ -464,11 +464,143 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
     });
 }
 
+void VertexModel::computeCellVolumeHessianEigenValues(VectorXT& cell_hessian_evs)
+{
+    cell_hessian_evs.resize(basal_face_start);
+    VectorXT current_cell_volume;
+    computeVolumeAllCells(current_cell_volume);
+
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        // cell-wise volume preservation term
+        if (face_idx < basal_face_start)
+        {
+            VectorXT positions;
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + basal_vtx_start);
+
+            positionsFromIndices(positions, cell_vtx_list);
+            T V = current_cell_volume[face_idx];
+
+            if (face_vtx_list.size() == 5)
+            {
+                Matrix<T, 30, 30> d2Vdx2;
+                if (use_cell_centroid)
+                {
+                    computeVolume5PointsHessian(positions, d2Vdx2);
+                }
+                else 
+                    computePentaBasePrismVolumeHessian(positions, d2Vdx2);
+
+                Vector<T, 30> dVdx;
+                if (use_cell_centroid)
+                {
+                    computeVolume5PointsGradient(positions, dVdx);
+                }
+                else
+                    computePentaBasePrismVolumeGradient(positions, dVdx);
+                    
+                Matrix<T, 30, 30> hessian;
+                hessian.setZero();
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian += B * dVdx * dVdx.transpose();
+                    hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                }
+                VectorXT block_hessian_ev = computeHessianBlockEigenValues<30>(hessian).head<5>().transpose();
+                cell_hessian_evs[face_idx] = block_hessian_ev[0];
+            }
+            else if (face_vtx_list.size() == 6)
+            {
+                Matrix<T, 36, 36> d2Vdx2;
+                if (use_cell_centroid)
+                {
+                    computeVolume6PointsHessian(positions, d2Vdx2);
+                }
+                else
+                    computeHexBasePrismVolumeHessian(positions, d2Vdx2);
+
+                Vector<T, 36> dVdx;
+                if (use_cell_centroid)
+                {
+                    computeVolume6PointsGradient(positions, dVdx);
+                }
+                else
+                    computeHexBasePrismVolumeGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 36, 36> hessian;
+                hessian.setZero();
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {    
+                    hessian += B * dVdx * dVdx.transpose();
+                    hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                }
+                VectorXT block_hessian_ev = computeHessianBlockEigenValues<36>(hessian).head<5>().transpose();
+                cell_hessian_evs[face_idx] = block_hessian_ev[0];
+            }
+            else if (face_vtx_list.size() == 7)
+            {
+                Matrix<T, 42, 42> d2Vdx2;
+                if (use_cell_centroid)
+                    computeVolume7PointsHessian(positions, d2Vdx2);
+                
+                Vector<T, 42> dVdx;
+                if (use_cell_centroid)
+                    computeVolume7PointsGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 42, 42> hessian;
+
+                hessian.setZero();
+                hessian += B * dVdx * dVdx.transpose();
+                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                
+                VectorXT block_hessian_ev = computeHessianBlockEigenValues<42>(hessian).head<5>().transpose();
+                cell_hessian_evs[face_idx] = block_hessian_ev[0];
+                
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                Matrix<T, 48, 48> d2Vdx2;
+                if (use_cell_centroid)
+                    computeVolume8PointsHessian(positions, d2Vdx2);
+                
+                Vector<T, 48> dVdx;
+                if (use_cell_centroid)
+                    computeVolume8PointsGradient(positions, dVdx);
+                
+                // break it down here to avoid super long autodiff code
+                Matrix<T, 48, 48> hessian;
+                hessian.setZero();
+                
+                hessian += B * dVdx * dVdx.transpose();
+                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                
+                VectorXT block_hessian_ev = computeHessianBlockEigenValues<48>(hessian).head<5>().transpose();
+                cell_hessian_evs[face_idx] = block_hessian_ev[0];
+            }
+        }
+    });
+}
+
 void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& entries, bool projectPD)
 {
     VectorXT current_cell_volume;
     computeVolumeAllCells(current_cell_volume);
-
     iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
     {
         // cell-wise volume preservation term
@@ -533,9 +665,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 }
                 else
                     computePentaBasePrismVolumeGradient(positions, dVdx);
-                
-                // break it down here to avoid super long autodiff code
-                
+                    
                 Matrix<T, 30, 30> hessian;
                 hessian.setZero();
                 if (use_alm_on_cell_volume)
@@ -551,6 +681,10 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 }
                 if(projectPD)
                     projectBlockPD<30>(hessian);
+                // VectorXT block_hessian_ev = computeHessianBlockEigenValues<30>(hessian).head<5>().transpose();
+                // if (block_hessian_ev[0] < 1e-6)
+                //     std::cout << block_hessian_ev << std::endl;
+                
                 addHessianEntry<30>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 6)
@@ -587,6 +721,9 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 }
                 if(projectPD)
                     projectBlockPD<36>(hessian);
+                // VectorXT block_hessian_ev = computeHessianBlockEigenValues<36>(hessian).head<5>().transpose();
+                // if (block_hessian_ev[0] < 1e-6)
+                //     std::cout << block_hessian_ev << std::endl;
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 7)
@@ -608,8 +745,11 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 
                 if(projectPD)
                     projectBlockPD<42>(hessian);
-                
+                // VectorXT block_hessian_ev = computeHessianBlockEigenValues<42>(hessian).head<5>().transpose();
+                // if (block_hessian_ev[0] < 1e-6)
+                //     std::cout << block_hessian_ev << std::endl;
                 addHessianEntry<42>(entries, cell_vtx_list, hessian);
+                
             }
             else if (face_vtx_list.size() == 8)
             {
@@ -630,7 +770,9 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 
                 if(projectPD)
                     projectBlockPD<48>(hessian);
-
+                // VectorXT block_hessian_ev = computeHessianBlockEigenValues<48>(hessian).head<5>().transpose();
+                // if (block_hessian_ev[0] < 1e-6)
+                //     std::cout << block_hessian_ev << std::endl;
                 addHessianEntry<48>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 9)

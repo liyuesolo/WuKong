@@ -199,8 +199,15 @@ void VertexModel::computeCellInfo()
     {
         VectorXT current_cell_volume;
         computeVolumeAllCells(current_cell_volume);
+        int compressed_cell_cnt = 0;
+        for (int i = 0; i < current_cell_volume.rows(); i++)
+        {
+            if (current_cell_volume[i] < cell_volume_init[i])
+                compressed_cell_cnt++;
+        }
         std::cout << "\tcell vol sum: " << current_cell_volume.sum() << 
-        " initial: " << cell_volume_init.sum() << std::endl;
+        " initial: " << cell_volume_init.sum() << 
+        " " << compressed_cell_cnt << "/" << basal_face_start << " cells are compressed" << std::endl;
     }
 
     T yolk_vol_curr = computeYolkVolume();

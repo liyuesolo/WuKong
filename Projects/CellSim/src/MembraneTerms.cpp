@@ -3,6 +3,8 @@
 
 #include "../include/SDF.h"
 
+bool cubic = true;
+
 void VertexModel::addMembraneSDFBoundEnergy(T& energy)
 {
     T sdf_energy = 0.0;
@@ -11,10 +13,11 @@ void VertexModel::addMembraneSDFBoundEnergy(T& energy)
     {
         TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi) && !run_diff_test)
-        // if (sdf.inside(xi))
             continue;
-        
-        sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
+        if (cubic)
+            sdf_energy += bound_coeff * std::pow(sdf.value(xi), 3);
+        else
+            sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
         
     }
     energy += sdf_energy;
@@ -30,14 +33,15 @@ void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
         TV xi = deformed.segment<3>(i * 3);
 
         if (sdf.inside(xi) && !run_diff_test)
-        // if (sdf.inside(xi))
             continue;
         outside_cnt++;
         Vector<T, 3> dedx;
         sdf.gradient(xi, dedx);
-        
         T value = sdf.value(xi);
-        addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
+        if (cubic)
+            addForceEntry<3>(residual, {i}, -3.0 * bound_coeff * std::pow(value, 2) * dedx);
+        else
+            addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
         // std::cout << "force norm " << dedx.norm() << std::endl;
         // std::getchar();
     }
@@ -59,7 +63,12 @@ void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries,
         Vector<T, 3> dphidx;
         sdf.gradient(xi, dphidx);
         T value = sdf.value(xi);
-        Matrix<T, 3, 3> hessian = bound_coeff * (dphidx * dphidx.transpose() + value * d2phidx2);
+        Matrix<T, 3, 3> hessian;
+        if (cubic)       
+            hessian = bound_coeff * (6.0 * value * dphidx * dphidx.transpose() + 3.0 * value * value * d2phidx2);
+        else
+            hessian = bound_coeff * (dphidx * dphidx.transpose() + value * d2phidx2);
+        
         if (projectPD) 
             projectBlockPD<3>(hessian);
         addHessianEntry<3>(entries, {i}, hessian);    

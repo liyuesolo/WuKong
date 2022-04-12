@@ -283,6 +283,9 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
+        case 'c':
+            simulation.cells.computeCellInfo();
+            return true;
         }
     };
 
@@ -496,12 +499,13 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                    appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
     }
     if (show_target_current)
     {
-        TV color(0, 1, 0);
+        TV color(0, 1, 0);  
         if (sa.objective.match_centroid)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target){
@@ -518,16 +522,19 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                VectorXT positions;
-                std::vector<int> indices;
-                simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
-                int n_pt = weights.rows();
-                // std::cout << "n_pt: " <<  n_pt << " w sum " << weights.sum() << std::endl;
-                TV current = TV::Zero();
-                for (int i = 0; i < n_pt; i++)
-                    current += weights[i] * positions.segment<3>(i * 3);
-                // std::cout << current.transpose() << std::endl;
-                appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                {
+                    VectorXT positions;
+                    std::vector<int> indices;
+                    simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+                    int n_pt = weights.rows();
+                    // std::cout << "n_pt: " <<  n_pt << " w sum " << weights.sum() << std::endl;
+                    TV current = TV::Zero();
+                    for (int i = 0; i < n_pt; i++)
+                        current += weights[i] * positions.segment<3>(i * 3);
+                    // std::cout << current.transpose() << std::endl;
+                    appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                }
             });
         }
     }
@@ -551,14 +558,17 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                VectorXT positions;
-                std::vector<int> indices;
-                simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
-                int n_pt = weights.rows();
-                TV current = TV::Zero();
-                for (int i = 0; i < n_pt; i++)
-                    current += weights[i] * positions.segment<3>(i * 3);
-                appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                {
+                    VectorXT positions;
+                    std::vector<int> indices;
+                    simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+                    int n_pt = weights.rows();
+                    TV current = TV::Zero();
+                    for (int i = 0; i < n_pt; i++)
+                        current += weights[i] * positions.segment<3>(i * 3);
+                    appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                }
             });
         }
     }

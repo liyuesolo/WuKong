@@ -39,6 +39,7 @@ public:
     using TV = Vector<double, 3>;
     using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
+    using Edge = Vector<int, 2>;
 
     typedef int StorageIndex;
     using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
@@ -77,6 +78,10 @@ public:
     PenaltyType penalty_type = Qubic;
     bool perturb = true;
     bool add_reg = false;
+    
+    bool add_forward_potential = false;
+    T w_fp = 1e-3;
+
     T reg_w = 1e-6;
     VectorXT rest_configuration;
     VectorXT prev_params;
@@ -262,6 +267,8 @@ public:
     void initializeTargetFromMap(const std::string& filename, int _frame);
     T maximumStepSize(const VectorXT& dp);
 
+    void setFrame(int _frame) { frame = _frame; }
+    
 private:
     template<int order>
     T barrier(T d, T eps)

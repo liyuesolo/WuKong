@@ -626,6 +626,7 @@ public:
 
     // CellVolume.cpp
     void computeTetVolInitial();
+    void computeCellVolumeHessianEigenValues(VectorXT& cell_hessian_evs);
     void computeTetVolCurent(VectorXT& tet_vol_current);
     void computeVolumeAllCells(VectorXT& cell_volume_list);    
     void addCellVolumePreservationEnergy(T& energy);
@@ -706,7 +707,7 @@ public:
     void addInertialHessianEntries(std::vector<Entry>& entires);
 
     // Helpers.cpp
-    void getCellVtxAndIdx(int cell_idx, VectorXT& positions, VtxList& indices);
+    void getCellVtxAndIdx(int cell_idx, VectorXT& positions, VtxList& indices, bool rest_state = false);
     void getVFCellIds(VtxList& indices);
     void saveSingleCellEdges(const std::string& filename, 
         const VtxList& indices, const VectorXT& positions, bool save_tets = false) const;
@@ -788,6 +789,43 @@ public:
     void dxdpFromdxdpEdgeWeights(MatrixXT& dxdp);
     void multiplyDpWithDfdp(VectorXT& result, const VectorXT& dp);
     void dfdpWeightsFD(MatrixXT& dfdp);
+    void computededp(VectorXT& dedp);
+
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    {
+        std::vector<Entry> triplets;
+
+        for (int k=0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+        return triplets;
+    }
+    
+    template<int dim>
+    void addHessianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const Matrix<T, dim, dim>& hessian)
+    {
+        if (vtx_idx.size() * 3 != dim)
+            std::cout << "wrong hessian block size" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 3; k++)
+                    for (int l = 0; l < 3; l++)
+                    {
+                        if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
+                            triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
+                    }
+            }
+        }
+    }
+
 private:
 
     inline T computeTetVolume(const TV& a, const TV& b, const TV& c, const TV& d)
@@ -834,30 +872,7 @@ private:
         symMtr = eigenSolver.eigenvectors() * D * eigenSolver.eigenvectors().transpose();
     }
 
-    template<int dim>
-    void addHessianEntry(
-        std::vector<Entry>& triplets,
-        const std::vector<int>& vtx_idx, 
-        const Matrix<T, dim, dim>& hessian)
-    {
-        if (vtx_idx.size() * 3 != dim)
-            std::cout << "wrong hessian block size" << std::endl;
-
-        for (int i = 0; i < vtx_idx.size(); i++)
-        {
-            int dof_i = vtx_idx[i];
-            for (int j = 0; j < vtx_idx.size(); j++)
-            {
-                int dof_j = vtx_idx[j];
-                for (int k = 0; k < 3; k++)
-                    for (int l = 0; l < 3; l++)
-                    {
-                        if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
-                            triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
-                    }
-            }
-        }
-    }
+    
 
     template<int dim>
     void addHessianBlock(
@@ -902,16 +917,6 @@ private:
         {
             sub_vec.template segment<3>(i * 3) = _vector.segment<3>(vtx_idx[i] * 3);
         }
-    }
-
-    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
-    {
-        std::vector<Entry> triplets;
-
-        for (int k=0; k < A.outerSize(); ++k)
-            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
-                triplets.push_back(Entry(it.row(), it.col(), it.value()));
-        return triplets;
     }
 
     bool validFaceIdx(Region region, int idx)

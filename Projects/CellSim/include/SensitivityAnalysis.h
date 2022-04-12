@@ -10,16 +10,9 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 #include <unordered_set>
-// #include "IpTNLP.hpp"
 #include <cassert>
 #include <iostream>
 
-// #include "IpOptInterface.h"
-// #include "IpIpoptCalculatedQuantities.hpp"
-// #include "IpIpoptData.hpp"
-// #include "IpTNLPAdapter.hpp"
-// #include "IpOrigIpoptNLP.hpp"
-// #include <IpIpoptApplication.hpp>
 
 #include "../../../Solver/MMASolver.h"
 
@@ -55,6 +48,7 @@ public:
     int max_num_iter = 500;
     bool resume = false;
     bool add_reg = false;
+    T reg_w_H = 1e-6;
     bool save_results = true;
 
     bool fd_dfdp;

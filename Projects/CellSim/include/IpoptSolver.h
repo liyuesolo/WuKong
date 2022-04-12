@@ -165,7 +165,8 @@ public:
         T O;
         VectorXT dOdp;
         objective->gradient(p_curr, dOdp, O, true);
-
+        std::cout << "forward simulation hessian eigen values: ";
+        objective->simulation.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];

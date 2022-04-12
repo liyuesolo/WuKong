@@ -780,7 +780,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
             {
-                Gamma = 0.5 * unit * 10.0; 
+                Gamma = 0.5 * unit * 20.0; 
             }
             else
                 Gamma = 1.0; // used for fixed tet subdiv
@@ -901,8 +901,6 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     weights_all_edges = 0.0;
     weights_all_edges = 0.1 * Gamma;
 
-    
-
     // edge_weights[0] -= 1e-6;
 
     add_tet_vol_barrier = true;
@@ -936,8 +934,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e1 * unit;
-        // bound_coeff = 1e1 * unit;
+        // bound_coeff = 1e8 * unit;
+        bound_coeff = 1e8;
+        
         T normal_offset = 1e-3;// * unit;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;

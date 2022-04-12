@@ -212,13 +212,13 @@ void VertexModel::getVFCellIds(VtxList& indices)
     });
 }
 
-void VertexModel::getCellVtxAndIdx(int cell_idx, VectorXT& positions, VtxList& indices)
+void VertexModel::getCellVtxAndIdx(int cell_idx, VectorXT& positions, VtxList& indices, bool rest_state)
 {
     VtxList face_vtx_list = faces[cell_idx];
     indices = face_vtx_list;
     for (int idx : face_vtx_list)
         indices.push_back(idx + basal_vtx_start);
-    positionsFromIndices(positions, indices);
+    positionsFromIndices(positions, indices, rest_state);
 }
 
 void VertexModel::getAllCellCentroids(VectorXT& cell_centroids)

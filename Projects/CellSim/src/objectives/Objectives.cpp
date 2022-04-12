@@ -532,7 +532,7 @@ void Objectives::diffTestHessianScale()
 
 void Objectives::diffTestGradient()
 {
-    T epsilon = 1e-6;
+    T epsilon = 1e-4;
     VectorXT dOdp(n_dof_design);
     dOdp.setZero();
     VectorXT p;
@@ -572,7 +572,7 @@ void Objectives::diffTestGradientScale()
     VectorXT dp(n_dof_design);
     dp.setRandom();
     dp *= 1.0 / dp.norm();
-    dp *= 0.001;
+    // dp *= 0.001;
     T previous = 0.0;
     
     for (int i = 0; i < 10; i++)
