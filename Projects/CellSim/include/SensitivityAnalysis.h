@@ -66,7 +66,8 @@ public:
     MMASolver mma_solver;
     
     // nlopt_opt opt;
-    
+    void saveConfig();
+
     void saveDesignParameters(const std::string& filename, const VectorXT& params);
 
     void initialize();

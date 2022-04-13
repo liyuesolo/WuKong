@@ -6,7 +6,6 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../include/Simulation.h"
 #include "../../../Solver/CHOLMODSolver.hpp"
-#include "../include/redsvd.h"
 #include <igl/readOBJ.h>
 
 #include <iomanip>
@@ -164,9 +163,6 @@ void Simulation::checkHessianPD(bool save_txt)
             out.close();
         }
     }
-    // MatrixXT dense_hessian = d2edx2;
-    // RedSVD::RedSVD<StiffnessMatrix> svd(d2edx2);
-    // std::cout << "singular values " << svd.singularValues().tail<5>().transpose() << std::endl;
 
 }
 

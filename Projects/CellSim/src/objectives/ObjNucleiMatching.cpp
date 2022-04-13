@@ -31,17 +31,17 @@ void ObjNucleiTracking::initializeTarget()
 
 void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
 {
-    
+    target_filename = filename;
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
     
-    // std::ofstream out("data_points" + std::to_string(frame) + ".obj");
+    std::ofstream out("data_points" + std::to_string(frame) + ".obj");
 
-    // for (int i = 0; i < data_points.rows() / 3; i++)
-    // {
-    //     out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
-    // }
-    // out.close();
+    for (int i = 0; i < data_points.rows() / 3; i++)
+    {
+        out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
 
     if (success)
     {
@@ -93,7 +93,7 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
                 VectorXT w = VectorXT::Constant(n_pt, 1.0/n_pt);
                 
                 weight_targets.push_back(TargetData(w, -1, i, centroid));
-                // target_obj_weights[i] = 1e-4;
+                target_obj_weights[i] = 1e-4;
             }
             else
             {
@@ -187,20 +187,19 @@ void ObjNucleiTracking::setTargetObjWeights()
     // }
 }
 
-void ObjNucleiTracking::loadTarget(const std::string& filename)
+void ObjNucleiTracking::loadTarget(const std::string& filename, T perturbation)
 {
-    std::vector<int> VF_cell_idx;
-    simulation.cells.getVFCellIds(VF_cell_idx);
+    target_filename = filename;
+    target_perturbation = perturbation;
+    // std::vector<int> VF_cell_idx;
+    // simulation.cells.getVFCellIds(VF_cell_idx);
     std::ifstream in(filename);
     int idx; T x, y, z;
     
     while(in >> idx >> x >> y >> z)
     {
-        TV perturb = 0.01 * TV::Random();
-        // perturb.setZero();
-        // std::cout << perturb.transpose() << std::endl;
-        // if (std::find(VF_cell_idx.begin(), VF_cell_idx.end(), idx) != VF_cell_idx.end())
-            target_positions[idx] = TV(x, y, z) + perturb;
+        TV perturb = perturbation * TV::Random();
+        target_positions[idx] = TV(x, y, z) + perturb;
     }
     in.close();
 
@@ -211,6 +210,7 @@ void ObjNucleiTracking::loadTarget(const std::string& filename)
 void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
 {
     simulation.deformed = x;
+    int p = power / 2;
     if (match_centroid)
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
@@ -220,16 +220,42 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
             for (int idx : face_vtx_list)
                 cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
             
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+
+            TV x_minus_x = centroid - target_pos;
+            T xTx = x_minus_x.dot(x_minus_x);
+            
             T coeff = cell_vtx_list.size();
+            TM dcdx = TM::Identity() / coeff;
+            TM d2Odc2;
+            TM tensor_term = TM::Zero(); // c is linear in x
+            TM local_hessian;
+            if (power > 2)
+            {
+                d2Odc2 = 2.0 * p * std::pow(xTx, p - 1) * TM::Identity();
+                d2Odc2 += 2.0 * p * (p - 1) * std::pow(xTx, p - 2) * 2.0 * x_minus_x * x_minus_x.transpose();
+                d2Odc2 *= target_obj_weights[cell_idx];
+            }
+            else
+            {
+                d2Odc2 = TM::Identity() * 2.0 * target_obj_weights[cell_idx];
+            }
+            
+            local_hessian = dcdx.transpose() * d2Odc2 * dcdx + tensor_term;
+            
+
             for (int idx_i : cell_vtx_list)
                 for (int idx_j : cell_vtx_list)
                     for (int d = 0; d < 3; d++)
-                        d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + d, 1.0 / coeff / coeff  * target_obj_weights[cell_idx]));
+                        for (int dd = 0; dd < 3; dd++)
+                            d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + dd, local_hessian(d, dd)));
+                        
+                    
         });
     }
     else
     {
-
         iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
             const TV& target, const VectorXT& weights)
         {
@@ -237,14 +263,46 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
             VtxList indices;
             simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
 
+            TV current = TV::Zero();
+            int n_pt = weights.rows();
+
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+
+            TV x_minus_x = current - target;
+            T xTx = x_minus_x.dot(x_minus_x);          
+
             for (int i = 0; i < indices.size(); i++)
                 for (int j = 0; j < indices.size(); j++)
-                    for (int d = 0; d < 3; d++)
+                {
+                    TM dcdx0 = TM::Identity() * weights[i];
+                    TM dcdx1 = TM::Identity() * weights[j];
+
+                    TM tensor_term = TM::Zero(); // c is linear in x
+                    TM local_hessian;
+
+                    TM d2Odc2;
+                    if (power == 2)
+                        d2Odc2 = TM::Identity() * 2.0 * target_obj_weights[cell_idx];
+                    else
                     {
-                        d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, 
-                            indices[j] * 3 + d, 
-                            weights[i] * weights[j] * target_obj_weights[cell_idx])); 
+                        d2Odc2 = 2.0 * p * std::pow(xTx, p - 1) * TM::Identity();
+                        d2Odc2 += 2.0 * p * (p - 1) * std::pow(xTx, p - 2) * 2.0 * x_minus_x * x_minus_x.transpose();
+                        d2Odc2 *= target_obj_weights[cell_idx];
                     }
+                    
+                    local_hessian = dcdx0.transpose() * d2Odc2 * dcdx1 + tensor_term;
+
+                    for (int d = 0; d < 3; d++)
+                        for (int dd = 0; dd < 3; dd++)
+                            d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + dd, local_hessian(d, dd)));
+                }
+                    // for (int d = 0; d < 3; d++)
+                    // {
+                    //     d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, 
+                    //         indices[j] * 3 + d, 
+                    //         weights[i] * weights[j] * target_obj_weights[cell_idx])); 
+                    // }
         });
 
         // if (!running_diff_test)
@@ -289,7 +347,7 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
 {
     Ox = 0.0;
     simulation.deformed = x;
-    
+    int p = power / 2;
     if (match_centroid)
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
@@ -297,7 +355,9 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
             VtxList face_vtx_list = simulation.cells.faces[cell_idx];
             TV centroid;
             simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
+            // Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
+            T xTx = (centroid - target_pos).dot(centroid - target_pos);
+            Ox += std::pow(xTx, p) * target_obj_weights[cell_idx];
         });
     }
     else
@@ -313,7 +373,9 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
             TV current = TV::Zero();
             for (int i = 0; i < n_pt; i++)
                 current += weights[i] * positions.segment<3>(i * 3);
-            Ox += 0.5 * (current - target).dot(current - target) * target_obj_weights[cell_idx];
+            // Ox += 0.5 * (current - target).dot(current - target) * target_obj_weights[cell_idx];
+            T xTx = (current - target).dot(current - target);
+            Ox += std::pow(xTx, p) * target_obj_weights[cell_idx];
         });
     }
 
@@ -336,7 +398,7 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
     simulation.deformed = x;
     dOdx.resize(n_dof_sim);
     dOdx.setZero();
-
+    int p = power / 2;
     if (match_centroid)
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
@@ -347,10 +409,13 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
                 cell_vtx_list.push_back(idx + simulation.cells.basal_vtx_start);
             TV centroid;
             simulation.cells.computeCellCentroid(face_vtx_list, centroid);
-            T coeff = cell_vtx_list.size();
+            T dcdx = 1.0 / cell_vtx_list.size();
+            TV x_minus_x = centroid - target_pos;
+            T xTx = x_minus_x.dot(x_minus_x);
             for (int idx : cell_vtx_list)
             {
-                dOdx.segment<3>(idx * 3) += (centroid - target_pos) / coeff * target_obj_weights[cell_idx];
+                TV dOdc = p * std::pow(xTx, p - 1) * 2.0 * x_minus_x;
+                dOdx.segment<3>(idx * 3) += dOdc * dcdx * target_obj_weights[cell_idx];
             }
         });
     }
@@ -367,9 +432,14 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
             TV current = TV::Zero();
             for (int i = 0; i < n_pt; i++)
                 current += weights[i] * positions.segment<3>(i * 3);
+
+            TV x_minus_x = current - target;
+            T xTx = x_minus_x.dot(x_minus_x);
+            TV dOdc = power / 2 * std::pow(xTx, power / 2 - 1) * 2.0 * x_minus_x;
             for (int i = 0; i < indices.size(); i++)
             {
-                dOdx.segment<3>(indices[i] * 3) += (current - target) * weights[i] * target_obj_weights[cell_idx];
+                T dcdx = weights[i];
+                dOdx.segment<3>(indices[i] * 3) += dOdc * dcdx * target_obj_weights[cell_idx];
             }
         });
     }
@@ -907,7 +977,7 @@ void ObjNucleiTracking::computeCellTargetFromDatapoints()
     if (success)
     {
         std::string base_dir = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
-        std::ofstream out(base_dir + "sss.txt");
+        std::ofstream out(base_dir + "weighted_targets.txt");
         VectorXT cell_centroids;
         simulation.cells.getAllCellCentroids(cell_centroids);
         TV min_corner, max_corner;
@@ -978,7 +1048,7 @@ void ObjNucleiTracking::computeCellTargetFromDatapoints()
             
             // std::cout << error << " " << w.transpose() << " " << w.sum() << std::endl;
         
-            if (error > 1e-5)
+            if (error > 1e-6)
                 continue;
 
             if (errors[min_cell_idx] != -1)

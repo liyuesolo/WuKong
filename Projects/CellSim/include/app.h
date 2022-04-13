@@ -133,4 +133,17 @@ public:
 };
 
 
+class DataViewerApp
+{
+public:
+    using TV = Vector<double, 3>;
+    using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
+    using IV = Vector<int, 3>;
+
+public:
+    void loadRawData();
+    void setViewer(igl::opengl::glfw::Viewer& viewer,
+        igl::opengl::glfw::imgui::ImGuiMenu& menu);
+};
+
 #endif

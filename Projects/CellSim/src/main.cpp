@@ -74,7 +74,6 @@ int main(int argc, char** argv)
         VectorXT frame0 = cell_trajectories.col(0);
         GeometryHelper::registerPointCloudAToB(frame0, cell_centroids_all, rigid_icp_result);
     };
-
     
     
     simulation.initializeCells();
@@ -86,60 +85,69 @@ int main(int argc, char** argv)
     simulation.cells.add_perivitelline_liquid_volume = false;
     simulation.cells.Bp = 0.0;
     
-
-    obj.initializeTarget();
-    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test.txt");
-    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/low_res_dense.txt");
-    // obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
-    obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_inv.txt");
-    obj.match_centroid = true;
     sa.max_num_iter = 2000;
-    // obj.setTargetObjWeights();
-    
-    // obj.setFrame(40);
-    // obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
-    // obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sss.txt");
-    // obj.match_centroid = false;
-    
-    obj.use_penalty = false;
-    obj.penalty_type = Qubic;
-    if (obj.penalty_type == Qubic)
-        obj.barrier_distance = 0.5;
-    obj.penalty_weight = 1e6;
 
-    // obj.add_Hessian_PD_term = true;
-    obj.barrier_distance = 1e-3;
-    obj.barrier_weight = 1e6;
 
-    obj.add_forward_potential = false;
-    // obj.w_fp = 0.01;
-    obj.w_fp = 1e-3;
-    obj.add_reg = false;
-    obj.reg_w = 1e-5;
-    sa.add_reg = true;
-    // obj.reg_w = 1e-2;
-    // obj.reg_w = 1.0;
-    // sa.add_reg = true;
-    // obj.bound << 0, 50;
-    // obj.setOptimizer(MMA);
-    // obj.setOptimizer(GradientDescent);
-    // obj.setOptimizer(GaussNewton);
-    obj.setOptimizer(SQP);
-    // obj.perturb = false;
-    // obj.setOptimizer(SGN);
-    // obj.use_log_barrier = true;
-    // obj.updateTarget();
-    // obj.initializeTargetFromMap("idx_map.txt", 30);
+    int test_case = 1;
 
-    // obj_find_init.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
-    // obj_find_init.updateTarget();
-    
+    if (test_case == 0)
+    {
+        obj.loadTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_wo_inv.txt");
+        obj.match_centroid = true;
+        obj.add_forward_potential = true;
+
+        obj.w_fp = 1e-3;
+        obj.add_reg = false;
+        obj.reg_w = 1e-5;
+        sa.add_reg = true;
+        sa.reg_w_H = 1e-6;
+        simulation.cells.edge_weights.setConstant(0.1);
+        obj.setOptimizer(SQP);
+
+    }
+    else if (test_case == 1) // match invaginated target
+    {
+        std::string filename = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/nuclei_single_frame_dense_test_inv.txt";
+        obj.loadTarget(filename, 0.1);
+        obj.match_centroid = true;
+        obj.add_forward_potential = true;
+        obj.power = 2;
+        obj.w_fp = 1e-1;
+        obj.add_reg = false;
+        obj.reg_w = 1e-5;
+        sa.add_reg = true;
+        sa.reg_w_H = 1e-6;
+
+        // simulation.cells.edge_weights.setConstant(0.1);
+        
+        obj.setOptimizer(SQP);
+    }
+    else if (test_case == 2)
+    {
+        obj.setFrame(40);
+        obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+        // obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sss.txt");
+        obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/weighted_targets.txt");
+        
+        obj.match_centroid = false;
+        simulation.cells.edge_weights.setConstant(0.1);
+        obj.add_forward_potential = true;
+        obj.w_fp = 1e-3;
+        obj.add_reg = false;
+        sa.add_reg = true;
+        sa.reg_w_H = 1e-6;
+        obj.setOptimizer(SQP);
+    }
+    else if (test_case == 3)
+    {
+
+    }
+
     
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-    viewer.plugins.push_back(&menu);
-    
+    viewer.plugins.push_back(&menu);    
 
     auto runSim = [&]()
     {
@@ -187,28 +195,10 @@ int main(int argc, char** argv)
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/45/SQP_iter_161.txt", sa.design_parameters);
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_28.txt", sa.design_parameters);
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt_dense_ub25/SQP_iter_28.obj");
-        // sa.optimizeLBFGSB();
-        // return;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/current_mesh.obj");
-        // sa.setSimulationEnergyWeights();
-        // sa.optimizePerEdgeWeigths();
-        // diff_sim_app.runOptimization();
-        // sa.initialize();
-        // VectorXT ew;
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_25.txt", ew);
-        // simulation.cells.edge_weights = ew;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_25.obj");
-        // sa.objective.getDesignParameters(sa.design_parameters);
-        // sa.svdOnSensitivityMatrix();
-        // sa.eigenAnalysisOnSensitivityMatrix();
-        // sa.dxFromdpAdjoint();
-        // sa.objective.diffTestd2Odx2();
         // sa.checkStatesAlongGradient();
-        // sa.objective.diffTestHessianScale();
-        // sa.objective.diffTestGradientScale();
-        // sa.objective.diffTestGradient();
         diff_sim_app.setViewer(viewer, menu);
         viewer.launch();
+
     };
 
     auto generateNucleiGT = [&]()
@@ -224,9 +214,16 @@ int main(int argc, char** argv)
 
     auto generateWeights = [&]()
     {
+        simulation.cells.edge_weights.setConstant(0.1);
+        simulation.staticSolve();
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
         // obj.computeKernelWeights();
         obj.computeCellTargetFromDatapoints();
+    };
+
+    auto visualizeData = [&]()
+    {
+
     };
 
     if (argc == 1)
@@ -234,10 +231,12 @@ int main(int argc, char** argv)
         runSA();
         // runSim();
         // generateNucleiGT();
+        // generateWeights();
     }
     else if (argc > 1)
     {
         sa.data_folder = argv[1];
+        sa.saveConfig();
         runSA();
     }
 

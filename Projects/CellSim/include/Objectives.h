@@ -78,11 +78,12 @@ public:
     PenaltyType penalty_type = Qubic;
     bool perturb = true;
     bool add_reg = false;
-    
+    int power = 2;
     bool add_forward_potential = false;
     T w_fp = 1e-3;
-
+    std::string target_filename;
     T reg_w = 1e-6;
+    T target_perturbation = 0.0;
     VectorXT rest_configuration;
     VectorXT prev_params;
     struct TargetData
@@ -256,7 +257,7 @@ public:
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
     void updateTarget();
 
-    void loadTarget(const std::string& filename);
+    void loadTarget(const std::string& filename, T perturbation = 0.0);
     void loadWeightedTarget(const std::string& filename);
     void loadWeightedCellTarget(const std::string& filename);
 
@@ -268,6 +269,7 @@ public:
     T maximumStepSize(const VectorXT& dp);
 
     void setFrame(int _frame) { frame = _frame; }
+    
     
 private:
     template<int order>

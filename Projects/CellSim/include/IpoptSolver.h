@@ -171,7 +171,20 @@ public:
         {
             grad_f[i] = dOdp[i];
         });
-        std::cout << "[ipopt] |g|: " << dOdp.norm() << std::endl;
+
+        T epsilon = 1e-5;
+        VectorXT feasible_point_gradients = dOdp;
+        for (int i = 0; i < variable_num; i++)
+        {
+            if (x[i] < objective->bound[0] + epsilon && dOdp[i] >= 0)
+                feasible_point_gradients[i] = 0.0;
+            if (x[i] > objective->bound[1] - epsilon && dOdp[i] <= 0)
+                feasible_point_gradients[i] = 0.0;
+        }
+        
+        T g_norm_proj = feasible_point_gradients.norm();
+        
+        std::cout << "[ipopt] |g|: " << g_norm_proj << std::endl;
         return true;
     }
 

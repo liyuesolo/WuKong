@@ -1,5 +1,6 @@
 #include <igl/colormap.h>
 #include "../include/app.h"
+#include "../include/DataIO.h"
 
 
 void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
@@ -1076,4 +1077,13 @@ void SimulationApp::appendSphereToPosition(const TV& position, T radius, const T
     V.block(n_vtx_prev, 0, v_sphere.rows(), 3) = v_sphere;
     F.block(n_face_prev, 0, f_sphere.rows(), 3) = f_sphere;
     C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
+}
+
+
+void DataViewerApp::loadRawData()
+{
+    DataIO data_io;
+    data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
+            "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
+            "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
 }

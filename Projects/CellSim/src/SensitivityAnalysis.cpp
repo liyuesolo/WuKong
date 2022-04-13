@@ -36,16 +36,9 @@ void SensitivityAnalysis::initialize()
     objective.bound[0] = 1e-5;
     objective.bound[1] = 12.0 * simulation.cells.unit;
     objective.equilibrium_prev = VectorXT::Zero(simulation.deformed.rows());
-    // simulation.cells.edge_weights.setRandom();
-    // simulation.cells.edge_weights /= simulation.cells.edge_weights.norm();
-    // simulation.cells.edge_weights.setConstant(0.05);
-    VectorXT delta = simulation.cells.edge_weights * 0.1;
-    // simulation.cells.edge_weights += delta;
+
     simulation.cells.edge_weights.setConstant(0.1);
-    // std::ifstream in("/home/yueli/Documents/ETH/WuKong/output/cells/opt/load.txt");
-    // for (int i = 0; i < simulation.cells.edge_weights.rows(); i++)
-    //     in >> simulation.cells.edge_weights[i];
-    // in.close();
+    
     objective.getDesignParameters(design_parameters);
     objective.prev_params = design_parameters;
     
@@ -1265,4 +1258,20 @@ int SensitivityAnalysis::optimizeIPOPT()
                     << "*** The problem FAILED!" << std::endl;
     }
     return (int)status;
+}
+
+void SensitivityAnalysis::saveConfig()
+{
+    std::ofstream out(data_folder + "/config.txt");
+    out << "objective.add_forward_potential\t" << objective.add_forward_potential << std::endl;
+    out << "objective.w_fp\t" << objective.w_fp << std::endl;
+    out << "objective.add_reg\t" << objective.add_reg << std::endl;
+    out << "objective.reg_w\t" << objective.reg_w << std::endl;
+    out << "objective.match_centroid\t" << objective.match_centroid << std::endl;
+    out << "objective.target_filename\t" << objective.target_filename << std::endl;
+    out << "objective.target_perturbation\t" << objective.target_perturbation << std::endl;
+    out << "objective.power\t" << objective.power << std::endl;
+    out << "sa.add_reg\t" << add_reg << std::endl;
+    out << "sa.reg_w_H\t" << reg_w_H << std::endl;
+    out.close();
 }
