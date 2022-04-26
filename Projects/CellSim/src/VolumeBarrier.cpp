@@ -165,7 +165,7 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
     int cnt = 0;
     while (true)
     {
-        if (cnt > 100)
+        if (cnt > 60)
         {
             std::cout << "unable to find inversion free state " << std::endl;
             saveCellMesh(-1);

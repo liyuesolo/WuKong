@@ -81,14 +81,15 @@ int main(int argc, char** argv)
     simulation.cells.tet_vol_barrier_w = 1e-22;
     simulation.newton_tol = 1e-6;
     simulation.max_newton_iter = 2000;
-
+    
+    simulation.cells.bound_coeff = 1e6;
     simulation.cells.add_perivitelline_liquid_volume = false;
     simulation.cells.Bp = 0.0;
     
     sa.max_num_iter = 2000;
 
 
-    int test_case = 1;
+    int test_case = 2;
 
     if (test_case == 0)
     {
@@ -124,19 +125,37 @@ int main(int argc, char** argv)
     }
     else if (test_case == 2)
     {
-        obj.setFrame(40);
+        obj.setFrame(30);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
         // obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sss.txt");
-        obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/weighted_targets.txt");
+        // obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/weighted_targets.txt");
+        obj.loadWeightedCellTarget("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/weighted_dense_targets.txt");
         
         obj.match_centroid = false;
         simulation.cells.edge_weights.setConstant(0.1);
         obj.add_forward_potential = true;
-        obj.w_fp = 1e-3;
+        obj.power = 2;
+        obj.w_fp = 1e-2;
+        if (obj.power == 4)
+        {
+            obj.w_fp = 1e-4;
+            // obj.w_data = 1e4;
+        }
         obj.add_reg = false;
-        sa.add_reg = true;
+        obj.reg_w = 1e-5;
+        sa.add_reg = !obj.add_reg;
         sa.reg_w_H = 1e-6;
-        obj.setOptimizer(SQP);
+        obj.use_penalty = true;
+        obj.penalty_type = Qubic;
+        obj.penalty_weight = 1e3;
+        obj.wrapper_type = 0;
+
+        if (obj.use_penalty)
+            obj.wrapper_type = 0;
+
+        obj.setOptimizer(SGN);
+
+        
     }
     else if (test_case == 3)
     {
@@ -147,17 +166,23 @@ int main(int argc, char** argv)
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-    viewer.plugins.push_back(&menu);    
+    viewer.plugins.push_back(&menu);
 
     auto runSim = [&]()
     {
         SimulationApp sim_app(simulation);
+        int iter = 70;
+        int exp_id = 407;
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SGN_iter_"+std::to_string(iter)+".obj");
+        simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SGN_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
+        // simulation.newton_tol = 1e-8;
+        
         sim_app.setViewer(viewer, menu);
         simulation.verbose = true;
         simulation.save_mesh = false;
         simulation.cells.print_force_norm = true;
         
-        simulation.cells.edge_weights.setConstant(0.01);
+        // simulation.cells.edge_weights.setConstant(0.01);
         // simulation.cells.B *= 10.0;
         // simulation.cells.By *= 10.0;
         // simulation.cells.add_perivitelline_liquid_volume = false;
@@ -172,6 +197,7 @@ int main(int argc, char** argv)
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/115/SQP_iter_12.obj");
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/opt/SQP_iter_5.obj");
         // simulation.checkHessianPD(false);
+
         viewer.launch();
     };
 
@@ -179,17 +205,22 @@ int main(int argc, char** argv)
     {
         DiffSimApp diff_sim_app(simulation, sa);
         sa.initialize();
+        // sa.optimizeLBFGS();
         // simulation.loadDeformedState("current_mesh.obj");
         // obj.diffTestd2Odx2Scale();
+        
+        // obj.diffTestPartialOPartialpScale();
         // obj.diffTestdOdxScale();
         // obj.diffTestd2Odx2();
-        
-        // sa.optimizeIPOPT();
+        // obj.diffTestPartialOPartialp();
+        // obj.diffTestPartialOPartialpScale();
+        sa.optimizeIPOPT();
         // sa.save_results = false;
         sa.save_results = true;
         // sa.resume = true;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/60/SQP_iter_1210.obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/60/SQP_iter_1210.txt", sa.design_parameters);
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/380/SGN_iter_65.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/380/SGN_iter_65.txt", sa.design_parameters);
+        // simulation.newton_tol = 1e-8;
         
         // simulation.loadDeformedState("d2odx2_check.obj");
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/45/SQP_iter_161.txt", sa.design_parameters);
@@ -214,22 +245,35 @@ int main(int argc, char** argv)
 
     auto generateWeights = [&]()
     {
+        obj.setFrame(0);
         simulation.cells.edge_weights.setConstant(0.1);
+        simulation.verbose = false;
+        simulation.save_mesh = false;
+        simulation.cells.print_force_norm = false;
         simulation.staticSolve();
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
         // obj.computeKernelWeights();
-        obj.computeCellTargetFromDatapoints();
+        // obj.computeCellTargetFromDatapoints();
+        obj.computeCellTargetsFromDatapoints();
     };
 
     auto visualizeData = [&]()
+    {
+        DataViewerApp data_viewer_app(simulation);
+        data_viewer_app.setViewer(viewer, menu);
+        viewer.launch();
+    };
+
+    auto runSequentialTracking = [&]()
     {
 
     };
 
     if (argc == 1)
     {
-        runSA();
-        // runSim();
+        // visualizeData();
+        // runSA();
+        runSim();
         // generateNucleiGT();
         // generateWeights();
     }
@@ -238,6 +282,7 @@ int main(int argc, char** argv)
         sa.data_folder = argv[1];
         sa.saveConfig();
         runSA();
+        // sa.runTracking(0, 40, /*load weights = */false, /*weigts_file = */"");
     }
 
     

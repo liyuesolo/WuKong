@@ -55,7 +55,7 @@ public:
     Vector<T, 2> design_parameter_bound;
 
     Simulation& simulation;
-    Objectives& objective;
+    ObjNucleiTracking& objective;
 
     // std::unordered_set<int> binding_set;
 
@@ -73,8 +73,15 @@ public:
     void initialize();
 
     void optimizeLBFGSB();
+    void optimizeLBFGS();
 
     int optimizeIPOPT();
+
+    void optimizeSQP();
+    void optimizeSGN();
+
+    void runTracking(int start_frame, int end_frame, 
+        bool load_weights = false, const std::string& filename = "");
 
     void setSimulationEnergyWeights();
 
@@ -116,7 +123,7 @@ private:
 
 
 public:
-    SensitivityAnalysis(Simulation& _simulation, Objectives& _objective) : 
+    SensitivityAnalysis(Simulation& _simulation, ObjNucleiTracking& _objective) : 
         simulation(_simulation), objective(_objective) {}
     ~SensitivityAnalysis() { }
 };

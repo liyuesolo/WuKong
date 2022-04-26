@@ -640,7 +640,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
     // T cell_height = 0.5 * e0_norm; //drosophila 1k
     // T cell_height = 0.8 * e0_norm; //drosophila 476
-    T cell_height = 0.7 * e0_norm; // drosophila 120
+    T cell_height = 0.7 * e0_norm; // drosophila 120 and 241
     if (scene_type == 3)
         cell_height = 0.2 * e0_norm;
 
@@ -934,8 +934,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        // bound_coeff = 1e8 * unit;
-        bound_coeff = 1e8;
+        bound_coeff = 1e8 * unit;
+        // bound_coeff = 1e6;
         
         T normal_offset = 1e-3;// * unit;
         // T normal_offset = -1e-2;

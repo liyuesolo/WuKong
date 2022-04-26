@@ -30,7 +30,7 @@
 
 #include "VecMatDef.h"
 // class Simulation;
-class Objectives;
+class ObjNucleiTracking;
 
 class IpoptSolver : public Ipopt::TNLP 
 {
@@ -49,7 +49,7 @@ public:
     using Edge = Vector<int, 2>;
 
 
-    Objectives* objective;
+    ObjNucleiTracking& objective;
 
     int variable_num = 0;
     int count = 0;
@@ -58,10 +58,10 @@ public:
     std::string data_folder;
 
     /** default constructor */
-    IpoptSolver(Objectives* _objective, const std::string& _data_folder)
+    IpoptSolver(ObjNucleiTracking& _objective, const std::string& _data_folder)
         : objective(_objective), data_folder(_data_folder)
     {
-        variable_num = objective->n_dof_design;
+        variable_num = objective.n_dof_design;
         primals = new double[variable_num];
         std::cout << "[ipopt]: #variable: " << variable_num << std::endl;
     }
@@ -101,10 +101,17 @@ public:
         Ipopt::Number* g_u)
     {
         std::cout << "[ipopt] get bounds" << std::endl;
+        std::cout << "lower bound: " << objective.bound[0] 
+            << " upper bound: " << objective.bound[1] << std::endl;
 
-        tbb::parallel_for(0, variable_num, [&](int i) {
-            x_l[i] = objective->bound[0];
-            x_u[i] = objective->bound[1];
+        // tbb::parallel_for(0, n, [&](int i) {
+        //     x_l[i] = objective.bound[0];
+        //     x_u[i] = objective.bound[1];
+        // });
+
+        tbb::parallel_for(0, n, [&](int i) {
+            x_l[i] = -1e19;
+            x_u[i] = 1e19;
         });
 
         return true;
@@ -127,8 +134,8 @@ public:
         assert(init_lambda == false);
 
         VectorXT p_curr;
-        objective->getDesignParameters(p_curr);
-        for (int i = 0; i < variable_num; ++i) 
+        objective.getDesignParameters(p_curr);
+        for (int i = 0; i < n; ++i) 
             x[i] = p_curr[i];
 
         return true;
@@ -145,8 +152,8 @@ public:
         for (int i = 0; i < variable_num; i++)
             p_curr[i] = x[i];
 
-        // T E = objective->value(p_curr, true, true);
-        T E = objective->value(p_curr, true, false);
+        // T E = objective.value(p_curr, true, true);
+        T E = objective.value(p_curr, true, false);
         std::cout << "[ipopt] eval_f: " << E << std::endl;
         obj_value = (Ipopt::Number)E;
         return true;
@@ -158,15 +165,15 @@ public:
         bool new_x,
         Ipopt::Number* grad_f)
     {
-        // std::cout << "[ipopt] eval_grad" << std::endl;
+        std::cout << "[ipopt] eval_grad" << std::endl;
         VectorXT p_curr(variable_num);
         for (int i = 0; i < variable_num; i++)
             p_curr[i] = x[i];
         T O;
         VectorXT dOdp;
-        objective->gradient(p_curr, dOdp, O, true);
+        objective.gradient(p_curr, dOdp, O, true);
         std::cout << "forward simulation hessian eigen values: ";
-        objective->simulation.checkHessianPD(false);
+        objective.simulation.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];
@@ -174,13 +181,13 @@ public:
 
         T epsilon = 1e-5;
         VectorXT feasible_point_gradients = dOdp;
-        for (int i = 0; i < variable_num; i++)
-        {
-            if (x[i] < objective->bound[0] + epsilon && dOdp[i] >= 0)
-                feasible_point_gradients[i] = 0.0;
-            if (x[i] > objective->bound[1] - epsilon && dOdp[i] <= 0)
-                feasible_point_gradients[i] = 0.0;
-        }
+        // for (int i = 0; i < variable_num; i++)
+        // {
+        //     if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
+        //         feasible_point_gradients[i] = 0.0;
+        //     if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
+        //         feasible_point_gradients[i] = 0.0;
+        // }
         
         T g_norm_proj = feasible_point_gradients.norm();
         
@@ -255,9 +262,15 @@ public:
         VectorXT p_curr(n);
         for (int i = 0; i < n; i++)
             p_curr[i] = x[i];
-        objective->updateDesignParameters(p_curr);
-        objective->saveDesignParameters("p_ipopt.txt", p_curr);
-        objective->saveState("x_ipopt.obj");
+        objective.updateDesignParameters(p_curr);
+        VectorXT p_wrap = p_curr;
+        for (int i = 0; i < n; i++)
+        {
+            p_wrap[i] = objective.wrapper<0>(p_curr[i]);
+        }
+        
+        objective.saveDesignParameters(data_folder + "/p_ipopt.txt", p_wrap);
+        objective.saveState(data_folder + "/x_ipopt.obj");
 
         // here is where we would store the solution to variables, or write to a file, etc
         // so we could use the solution.
@@ -324,9 +337,9 @@ public:
                     for (int i = 0; i < variable_num; i++)
                         p_curr[i] = primals[i];
 
-                    T E = objective->value(p_curr, true, false);
-                    objective->saveState(data_folder + "/" + std::to_string(count) + ".obj");
-                    objective->saveDesignParameters(data_folder + "/" + std::to_string(count) + ".txt", p_curr);
+                    T E = objective.value(p_curr, true, false);
+                    objective.saveState(data_folder + "/" + std::to_string(count) + ".obj");
+                    objective.saveDesignParameters(data_folder + "/" + std::to_string(count) + ".txt", p_curr);
                     min_objective = obj_value;   
                     std::cout << "[ipopt]\t real obj: " << E << std::endl; 
                     count++;

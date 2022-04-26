@@ -26,7 +26,7 @@ T ObjFindInit::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
     return energy;
 }
 
-T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate)
+T ObjFindInit::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
     

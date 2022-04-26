@@ -1,6 +1,6 @@
 #include <igl/colormap.h>
 #include "../include/app.h"
-#include "../include/DataIO.h"
+
 
 
 void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
@@ -205,7 +205,8 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             if (finished)
             {
                 viewer.core().is_animating = false;
-                simulation.checkHessianPD(true);
+                simulation.checkHessianPD(false);
+                
             }
             else 
                 static_solve_step++;
@@ -490,23 +491,34 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     if (show_target)
     {
         TV color(1, 0, 0);
+        std::vector<TV> target_positions_std_vec;
         if (sa.objective.match_centroid)
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
             {
                 if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
-                    appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
+                    target_positions_std_vec.push_back(target + shift);
+                    // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
         else
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
                 if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
-                    appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
+                    target_positions_std_vec.push_back(target + shift);
+                    // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
+        int n_sphere = target_positions_std_vec.size();
+        VectorXT target_positions(n_sphere * 3);
+        tbb::parallel_for(0, n_sphere, [&](int i){
+            target_positions.segment<3>(i * 3) = target_positions_std_vec[i];
+        });
+        appendSphereToPositionVector(target_positions, 0.4 * sphere_radius, color, V, F, C);
+
     }
     if (show_target_current)
     {
         TV color(0, 1, 0);  
+        std::vector<TV> positions_std_vec;
         if (sa.objective.match_centroid)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target){
@@ -514,7 +526,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                 if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
-                    appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                    // appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                    positions_std_vec.push_back(current + shift);
                 }
             });
         }
@@ -534,14 +547,22 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                     for (int i = 0; i < n_pt; i++)
                         current += weights[i] * positions.segment<3>(i * 3);
                     // std::cout << current.transpose() << std::endl;
-                    appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                    // appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
+                    positions_std_vec.push_back(current + shift);
                 }
             });
         }
+        int n_sphere = positions_std_vec.size();
+        VectorXT positions(n_sphere * 3);
+        tbb::parallel_for(0, n_sphere, [&](int i){
+            positions.segment<3>(i * 3) = positions_std_vec[i];
+        });
+        appendSphereToPositionVector(positions, 0.4 * sphere_radius, color, V, F, C);
     }
     if (show_target && show_target_current)
     {
         TV color(0, 1, 1);
+        std::vector<std::pair<TV, TV>> end_points;
         if (sa.objective.match_centroid)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
@@ -550,7 +571,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                 if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
-                    appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                    // appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                    end_points.push_back(std::make_pair(current + shift, target + shift));
                 }
             });
         }
@@ -568,22 +590,27 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                     TV current = TV::Zero();
                     for (int i = 0; i < n_pt; i++)
                         current += weights[i] * positions.segment<3>(i * 3);
-                    appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                    // appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
+                    end_points.push_back(std::make_pair(current + shift, target + shift));
                 }
             });
         }
+        appendCylindersToEdges(end_points, color, sphere_radius * 0.15, V, F, C);
     }
     if (show_edges)
     {
         TV color(1, 1, 0);
         int cnt = 0;
+        std::vector<std::pair<TV, TV>> end_points;
         simulation.cells.iterateEdgeSerial([&](Edge& edge)
         {
             TV from = simulation.deformed.segment<3>(edge[0] * 3);
             TV to = simulation.deformed.segment<3>(edge[1] * 3);
-            appendCylinderToEdge(from + shift, to + shift, color, 0.005, V, F, C);
+            end_points.push_back(std::make_pair(from + shift, to + shift));
+            // appendCylinderToEdge(from + shift, to + shift, color, 0.005, V, F, C);
             cnt++;
         });
+        appendCylindersToEdges(end_points, color, 0.005, V, F, C);
     }
     if (show_edge_weights_opt && edge_weights.rows() != 0 && !show_undeformed)
     {
@@ -920,6 +947,65 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
     }   
 }
 
+
+void SimulationApp::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
+        const TV& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(radius * std::cos(theta * T(i)), 
+        0.0, radius * std::sin(theta*T(i)));
+
+    int offset_v = n_div * 2;
+    int offset_f = n_div * 2;
+
+    int n_row_V = _V.rows();
+    int n_row_F = _F.rows();
+
+    int n_edge = edge_pairs.size();
+
+    _V.conservativeResize(n_row_V + offset_v * n_edge, 3);
+    _F.conservativeResize(n_row_F + offset_f * n_edge, 3);
+    _C.conservativeResize(n_row_F + offset_f * n_edge, 3);
+
+    tbb::parallel_for(0, n_edge, [&](int ei)
+    {
+        TV axis_world = edge_pairs[ei].second - edge_pairs[ei].first;
+        TV axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                _V(n_row_V + ei * offset_v + i, d) = points[i * 3 + d];
+                _V(n_row_V + ei * offset_v + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    _V(n_row_V + ei * offset_v + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            _V.row(n_row_V + ei * offset_v + i) = (_V.row(n_row_V + ei * offset_v + i) * R).transpose() + edge_pairs[ei].first;
+            _V.row(n_row_V + ei * offset_v + i + n_div) = (_V.row(n_row_V + ei * offset_v + i + n_div) * R).transpose() + edge_pairs[ei].first;
+
+            _F.row(n_row_F + ei * offset_f + i*2 ) = IV(n_row_V + ei * offset_v + i, 
+                                    n_row_V + ei * offset_v + i+n_div, 
+                                    n_row_V + ei * offset_v + (i+1)%(n_div));
+
+            _F.row(n_row_F + ei * offset_f + i*2 + 1) = IV(n_row_V + ei * offset_v + (i+1)%(n_div), 
+                                        n_row_V + ei * offset_v + i+n_div, 
+                                        n_row_V + + ei * offset_v + (i+1)%(n_div) + n_div);
+
+            _C.row(n_row_F + ei * offset_f + i*2 ) = color;
+            _C.row(n_row_F + ei * offset_f + i*2 + 1) = color;
+        }
+    });
+}
+
 void SimulationApp::appendCylinderToEdge(const TV& vtx_from, const TV& vtx_to, const TV& color,
         T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
 {
@@ -1079,11 +1165,150 @@ void SimulationApp::appendSphereToPosition(const TV& position, T radius, const T
     C.block(n_face_prev, 0, f_sphere.rows(), 3) = c_sphere;
 }
 
+void SimulationApp::appendSphereToPositionVector(const VectorXT& position, T radius, const TV& color,
+    Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    int n_pt = position.rows() / 3;
+
+    Eigen::MatrixXd v_sphere;
+    Eigen::MatrixXi f_sphere;
+
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere162.obj", v_sphere, f_sphere);
+    
+    Eigen::MatrixXd c_sphere(f_sphere.rows(), f_sphere.cols());
+    
+    v_sphere = v_sphere * radius;
+
+    int n_vtx_prev = V.rows();
+    int n_face_prev = F.rows();
+
+    V.conservativeResize(V.rows() + v_sphere.rows() * n_pt, 3);
+    F.conservativeResize(F.rows() + f_sphere.rows() * n_pt, 3);
+    C.conservativeResize(C.rows() + f_sphere.rows() * n_pt, 3);
+
+    tbb::parallel_for(0, n_pt, [&](int i)
+    {
+        Eigen::MatrixXd v_sphere_i = v_sphere;
+        Eigen::MatrixXi f_sphere_i = f_sphere;
+        Eigen::MatrixXd c_sphere_i = c_sphere;
+
+        tbb::parallel_for(0, (int)v_sphere.rows(), [&](int row_idx){
+            v_sphere_i.row(row_idx) += position.segment<3>(i * 3);
+        });
+
+
+        int offset_v = n_vtx_prev + i * v_sphere.rows();
+        int offset_f = n_face_prev + i * f_sphere.rows();
+
+        tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+            f_sphere_i.row(row_idx) += Eigen::Vector3i(offset_v, offset_v, offset_v);
+        });
+
+        tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+            c_sphere_i.row(row_idx) = color;
+        });
+
+        V.block(offset_v, 0, v_sphere.rows(), 3) = v_sphere_i;
+        F.block(offset_f, 0, f_sphere.rows(), 3) = f_sphere_i;
+        C.block(offset_f, 0, f_sphere.rows(), 3) = c_sphere_i;
+    });
+}
+
 
 void DataViewerApp::loadRawData()
 {
-    DataIO data_io;
+    
     data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
             "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
             "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
+}
+
+void DataViewerApp::loadFilteredData()
+{
+    std::string filename = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat";
+    data_io.loadTrajectories(filename, cell_trajectories);
+}
+
+void DataViewerApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
+{
+    viewer.data().clear();
+    VectorXT frame_data;
+    loadFrameData(frame_cnt, frame_data);
+    V.resize(0, 0); F.resize(0, 0); C.resize(0, 0);
+    TV color = TV(0, 1, 0);
+    appendSphereToPositionVector(frame_data, 0.025, color, V, F, C);
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);   
+}
+
+void DataViewerApp::loadFrameData(int frame, VectorXT& frame_data)
+{
+    frame_data = cell_trajectories.col(frame);
+    
+    int n_pt = frame_data.rows() / 3;
+    Matrix<T, 3, 3> R;
+    R << 0.960277, -0.201389, 0.229468, 0.2908, 0.871897, -0.519003, -0.112462, 0.558021, 0.887263;
+    Matrix<T, 3, 3> R2 = Eigen::AngleAxis<T>(0.20 * M_PI + 0.5 * M_PI, TV(-1.0, 0.0, 0.0)).toRotationMatrix();
+
+    for (int i = 0; i < n_pt; i++)
+    {
+        TV pos = frame_data.segment<3>(i * 3);
+        TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
+        updated = R2 * R * updated;
+        // frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
+        frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+    }
+}
+
+void DataViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
+        igl::opengl::glfw::imgui::ImGuiMenu& menu)
+{
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("RawData", &raw_data))
+            {
+                if (raw_data)
+                    loadRawData();
+                else
+                    loadFilteredData();
+                updateScreen(viewer);
+            }
+        }
+    };
+
+    viewer.callback_key_pressed = 
+        [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
+    {
+        switch(key)
+        {
+        default: 
+            return false;
+        case 'n':
+            frame_cnt++;
+            std::cout << "frame " << frame_cnt << std::endl;
+            updateScreen(viewer);
+            return false;
+        case 'l':
+            frame_cnt--;
+            std::cout << "frame " << frame_cnt << std::endl;
+            updateScreen(viewer);
+            return false;
+        }
+    };
+
+    loadFilteredData();
+
+    updateScreen(viewer);
+
+    viewer.core().background_color.setOnes();
+    viewer.data().set_face_based(true);
+    viewer.data().shininess = 1.0;
+    viewer.data().point_size = 10.0;
+
+    viewer.data().set_mesh(V, F);     
+    viewer.data().set_colors(C);
+
+    viewer.core().align_camera_center(V);
 }

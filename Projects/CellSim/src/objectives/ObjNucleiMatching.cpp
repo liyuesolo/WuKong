@@ -35,27 +35,32 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
     
-    std::ofstream out("data_points" + std::to_string(frame) + ".obj");
+    // std::ofstream out("data_points" + std::to_string(frame) + ".obj");
 
-    for (int i = 0; i < data_points.rows() / 3; i++)
-    {
-        out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
-    }
-    out.close();
+    // for (int i = 0; i < data_points.rows() / 3; i++)
+    // {
+    //     out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
+    // }
+    // out.close();
+    
+    // set in DataIO::loadTrajectories()
+    TV invalid_point = TV::Constant(-1e10);
 
     if (success)
     {
         int n_cells = simulation.cells.basal_face_start;
         std::ifstream in(filename);
         int data_point_idx, cell_idx, nw;
-        std::vector<bool> visited(n_cells, false);
+        std::vector<int> visited(n_cells, 0);
         while (in >> data_point_idx >> cell_idx >> nw)
         {
+
             VectorXT w(nw); w.setZero();
             for (int j = 0; j < nw; j++)
                 in >> w[j];
             TV target = data_points.segment<3>(data_point_idx * 3);
-
+            if ((target - invalid_point).norm() < 1e-6)
+                continue;
             VectorXT positions;
             std::vector<int> indices;
             simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
@@ -65,11 +70,15 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
                 current += w[i] * positions.segment<3>(i * 3);
             T error = (current - target).norm();
             
-            if (error < 0.5)
-            {
-                weight_targets.push_back(TargetData(w, data_point_idx, cell_idx, target));
-                visited[cell_idx] = true;
-            }
+            weight_targets.push_back(TargetData(w, data_point_idx, cell_idx, target));
+            visited[cell_idx]++;
+            // if (error > 0.5)
+            // {
+            //     std::cout << "target: " << target.transpose() << " data id: " 
+            //         << data_point_idx << " cell id: " << cell_idx << " w "
+            //         << w.transpose() << std::endl;
+            //     std::getchar();
+            // }
             // else
             //     std::cout << error << std::endl;
         }
@@ -78,31 +87,11 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
         target_obj_weights.setZero();
         for (int i = 0; i < n_cells; i++)
         {
-            if (visited[i] == false)
-            {
-                VectorXT positions;
-                std::vector<int> indices;
-                simulation.cells.getCellVtxAndIdx(i, positions, indices);
-                TV centroid = TV::Zero();
-                int n_pt = positions.rows() / 3;
-                for (int i = 0; i < n_pt; i++)
-                {
-                    centroid += positions.segment<3>(i * 3);
-                }
-                centroid /= T(n_pt);
-                VectorXT w = VectorXT::Constant(n_pt, 1.0/n_pt);
-                
-                weight_targets.push_back(TargetData(w, -1, i, centroid));
-                target_obj_weights[i] = 1e-4;
-            }
-            else
-            {
-                target_obj_weights[i] = 1.0;
-            }
+            target_obj_weights[i] = 1.0 / visited[i];
         }
         
     }
-    
+    target_obj_weights *= w_data;
 }
 
 void ObjNucleiTracking::loadWeightedTarget(const std::string& filename)
@@ -204,7 +193,7 @@ void ObjNucleiTracking::loadTarget(const std::string& filename, T perturbation)
     in.close();
 
     target_obj_weights = VectorXT::Ones(simulation.cells.basal_face_start);
-
+    target_obj_weights *= w_data;
 }         
 
 void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
@@ -297,17 +286,7 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
                         for (int dd = 0; dd < 3; dd++)
                             d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, indices[j] * 3 + dd, local_hessian(d, dd)));
                 }
-                    // for (int d = 0; d < 3; d++)
-                    // {
-                    //     d2Odx2_entries.push_back(Entry(indices[i] * 3 + d, 
-                    //         indices[j] * 3 + d, 
-                    //         weights[i] * weights[j] * target_obj_weights[cell_idx])); 
-                    // }
         });
-
-        // if (!running_diff_test)
-        //     for (int i = 0; i < n_dof_sim; i++)
-        //         d2Odx2_entries.push_back(Entry(i, i, 1.0));
     }
     if (add_forward_potential)
     {
@@ -318,29 +297,60 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
         sim_H *= w_fp;
         std::vector<Entry> sim_potential_H_entries = simulation.cells.entriesFromSparseMatrix(sim_H);
         d2Odx2_entries.insert(d2Odx2_entries.end(), sim_potential_H_entries.begin(), sim_potential_H_entries.end());
-
-        // int cnt = 0;
-        // simulation.cells.iterateApicalEdgeSerial([&](Edge& e){
-        //     TV vi = simulation.cells.deformed.segment<3>(e[0] * 3);
-        //     TV vj = simulation.cells.deformed.segment<3>(e[1] * 3);
-        //     Matrix<T, 6, 6> hessian;
-        //     computeEdgeSquaredNormHessian(vi, vj, hessian);
-        //     hessian *= simulation.cells.edge_weights[cnt++];
-        //     simulation.cells.addHessianEntry<6>(d2Odx2_entries, {e[0], e[1]}, w_fp * hessian);
-        // });
-
-        // std::vector<Entry> sim_H_entries;
-        // simulation.cells.addCellVolumePreservationHessianEntries(sim_H_entries);
-        // MatrixXT dummy;
-        // simulation.woodbury = false;
-        // simulation.cells.addYolkVolumePreservationHessianEntries(sim_H_entries, dummy);
-        // simulation.woodbury = true;
-        // StiffnessMatrix sim_H(n_dof_sim, n_dof_sim);
-        // sim_H.setFromTriplets(sim_H_entries.begin(), sim_H_entries.end());
-        // sim_H *= w_fp;
-        // std::vector<Entry> sim_potential_H_entries = simulation.cells.entriesFromSparseMatrix(sim_H);
-        // d2Odx2_entries.insert(d2Odx2_entries.end(), sim_potential_H_entries.begin(), sim_potential_H_entries.end());
     }
+}
+
+void ObjNucleiTracking::computeEnergyAllTerms(const VectorXT& p_curr, std::vector<T>& energies,
+        bool simulate, bool use_prev_equil)
+{
+    T e_matching = 0.0, e_sim = 0.0, e_reg = 0.0;
+    
+    int p = power / 2;
+    if (match_centroid)
+    {
+        iterateTargets([&](int cell_idx, TV& target_pos)
+        {
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            // Ox += 0.5 * (centroid - target_pos).dot(centroid - target_pos) * target_obj_weights[cell_idx];
+            T xTx = (centroid - target_pos).dot(centroid - target_pos);
+            e_matching += std::pow(xTx, p) * target_obj_weights[cell_idx];
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            // Ox += 0.5 * (current - target).dot(current - target) * target_obj_weights[cell_idx];
+            T xTx = (current - target).dot(current - target);
+            
+            e_matching += std::pow(xTx, p) * target_obj_weights[cell_idx];
+        });
+    }
+
+    if (add_forward_potential)
+    {
+        VectorXT dx = simulation.deformed - simulation.undeformed;
+        T simulation_potential = simulation.computeTotalEnergy(dx);
+        simulation_potential *= w_fp;
+        e_sim += simulation_potential;
+    }
+
+    if (add_reg)
+    {
+        e_reg = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
+    }
+    energies = { e_matching, e_sim, e_reg };
 }
 
 void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
@@ -348,6 +358,8 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
     Ox = 0.0;
     simulation.deformed = x;
     int p = power / 2;
+    T min_dis = 1e10, max_dis = -1e10, avg_dis = 0;
+    int cnt = 0;
     if (match_centroid)
     {
         iterateTargets([&](int cell_idx, TV& target_pos)
@@ -375,21 +387,28 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
                 current += weights[i] * positions.segment<3>(i * 3);
             // Ox += 0.5 * (current - target).dot(current - target) * target_obj_weights[cell_idx];
             T xTx = (current - target).dot(current - target);
+            
+            T dis = (current - target).norm();
+            if (dis > max_dis) max_dis = dis;
+            if (dis < min_dis) min_dis = dis;
+            avg_dis += dis;
+            cnt++;
             Ox += std::pow(xTx, p) * target_obj_weights[cell_idx];
         });
+        avg_dis /= T(cnt);
     }
-
+    // std::cout << "======================================" << std::endl;
+    // std::cout << "min dis " << min_dis << " max_dis " << max_dis << " avg_dis " << avg_dis << std::endl;
+    // std::cout << "min dis power" << std::pow(min_dis, power) << " max_dis power " 
+    //     << std::pow(max_dis, power) << " avg_dis power " << std::pow(avg_dis, power) << std::endl;
+    // std::cout << "======================================" << std::endl;
     if (add_forward_potential)
     {
-        // T simulation_potential = 0.0;
-        // simulation.cells.addPerEdgeEnergy(simulation_potential);
-        // simulation.cells.addCellVolumePreservationEnergy(simulation_potential);
-        // simulation.cells.addYolkVolumePreservationEnergy(simulation_potential);
         VectorXT dx = simulation.deformed - simulation.undeformed;
         T simulation_potential = simulation.computeTotalEnergy(dx);
         simulation_potential *= w_fp;
         Ox += simulation_potential;
-        std::cout << "constracting energy: " << simulation_potential << std::endl;
+        // std::cout << "constracting energy: " << simulation_potential << std::endl;
     }
 }
 
@@ -448,22 +467,107 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
     {
         
         VectorXT cell_forces(n_dof_sim); cell_forces.setZero();
-        // simulation.cells.addPerEdgeForceEntries(cell_forces);
-        // simulation.cells.addCellVolumePreservationForceEntries(cell_forces);
-        // simulation.cells.addYolkVolumePreservationForceEntries(cell_forces);
         VectorXT dx = simulation.deformed - simulation.undeformed;
         simulation.computeResidual(dx, cell_forces);
         dOdx -= w_fp * cell_forces;
-
-        // std::cout << "&&&&&&f: " << dOdx[0] << " " << contracting_force[0] << " " << contracting_force.norm() << std::endl;
     }
 }
 
+void ObjNucleiTracking::computeOp(const VectorXT& p_curr, T& Op)
+{
+    Op = 0.0;
+
+    if (add_reg)
+    {
+        T reg_term = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
+        Op += reg_term;
+    }
+
+    if (use_penalty)
+    {
+        T penalty_term = 0.0;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (penalty_type == Qubic)
+            {
+                if (p_curr[i] < bound[0] && mask[0])
+                    penalty_term += penalty_weight * std::pow(-(p_curr[i] - bound[0]), 3);
+                if (p_curr[i] > bound[1] && mask[1])
+                    penalty_term += penalty_weight * std::pow(p_curr[i] - bound[1], 3);
+            }
+        }
+        Op += penalty_term;
+    }
+}
+
+void ObjNucleiTracking::computedOdp(const VectorXT& p_curr, VectorXT& dOdp)
+{
+    dOdp = VectorXT::Zero(n_dof_design);
+    if (add_reg)
+    {
+        dOdp += reg_w * (p_curr - prev_params);
+    }
+
+    if (use_penalty)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (penalty_type == Qubic)
+            {
+                if (p_curr[i] < bound[0] && mask[0])
+                {
+                    dOdp[i] += -penalty_weight * 3.0 * std::pow(-(p_curr[i] - bound[0]), 2);
+                }
+                if (p_curr[i] > bound[1] && mask[1])
+                {
+                    dOdp[i] += penalty_weight * 3.0 * std::pow((p_curr[i] - bound[1]), 2);
+                }
+            }
+        }
+    }
+}
+
+void ObjNucleiTracking::computed2Odp2(const VectorXT& p_curr, std::vector<Entry>& d2Odp2_entries)
+{
+    if (add_reg)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            d2Odp2_entries.push_back(Entry(i, i, reg_w));
+        }
+    }
+    
+    if (use_penalty)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (penalty_type == Qubic)
+            {
+                if (p_curr[i] < bound[0] && mask[0])
+                {
+                    T vi = -(p_curr[i] - bound[0]);
+                    d2Odp2_entries.push_back(Entry(i, i, penalty_weight * 6.0 * vi));
+                }
+                if (p_curr[i] > bound[1] && mask[1])
+                {
+                    T vi = (p_curr[i] - bound[1]);
+                    d2Odp2_entries.push_back(Entry(i, i, penalty_weight * 6.0 * vi));
+                }
+            }
+        }
+    }
+}
 
 T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     // simulation.loadDeformedState("current_mesh.obj");
-    updateDesignParameters(p_curr);
+    VectorXT p_wrap = p_curr;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        p_wrap[i] = wrapper<0>(p_curr[i]);
+    }
+
+    updateDesignParameters(p_wrap);
     if (simulate)
     {
         simulation.reset();
@@ -484,7 +588,7 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
                 std::cout << "unstable state for the forward problem" << std::endl;
                 std::cout << "nodge it along the negative eigen vector" << std::endl;
                 VectorXT nodge_direction = negative_eigen_vector;
-                T step_size = simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
+                T step_size = 0.1 * simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
                 simulation.u += step_size * nodge_direction;
             }
             else
@@ -495,25 +599,28 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
     T energy = 0.0;
     computeOx(simulation.deformed, energy);
     
-    if (add_reg)
-    {
-        T reg_term = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
-        std::cout << "\t reg term: " << reg_term << std::endl;
-        energy += reg_term;
-    }
-
+    T Op; computeOp(p_wrap, Op);
+    energy += Op;
 
     return energy;
 }
 
-T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate)
+
+T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate, bool use_prev_equil)
 {
     // simulation.loadDeformedState("current_mesh.obj");
-    updateDesignParameters(p_curr);
+    VectorXT p_wrap = p_curr;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        p_wrap[i] = wrapper<0>(p_curr[i]);
+    }
+    
+    updateDesignParameters(p_wrap);
     if (simulate)
     {
         simulation.reset();
-        // simulation.staticSolve();
+        if (use_prev_equil)
+            simulation.u = equilibrium_prev;
         while (true)
         {
             // simulation.loadDeformedState("current_mesh.obj");
@@ -529,7 +636,7 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
                 std::cout << "unstable state for the forward problem" << std::endl;
                 std::cout << "nodge it along the negative eigen vector" << std::endl;
                 VectorXT nodge_direction = negative_eigen_vector;
-                T step_size = simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
+                T step_size = 0.1 * simulation.cells.computeLineSearchInitStepsize(simulation.u, nodge_direction, false);
                 simulation.u += step_size * nodge_direction;
             }
             else
@@ -572,8 +679,9 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     
     // std::cout << " |gradient| linear solve " << (d2edx2 * lambda - dOdx).norm() / dOdx.norm() << std::endl;
     simulation.cells.dOdpEdgeWeightsFromLambda(lambda, dOdp);
-    
-    // \partial O \partial p
+    // std::cout << "|dOdp matching|: " << dOdp.norm();
+    // VectorXT dOdp_tmp = dOdp;
+    // \partial O \partial p for the edge contracting force
     {
         if (add_forward_potential)
         {
@@ -584,21 +692,20 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     }
 
     // std::exit(0);
-    equilibrium_prev = simulation.u;
+    if (!use_prev_equil)
+        equilibrium_prev = simulation.u;
 
-    // MatrixXT dxdp;
-    // simulation.cells.dxdpFromdxdpEdgeWeights(dxdp);
-    // VectorXT dOdp_SA = dOdx.transpose() * dxdp;
+    VectorXT partialO_partialp;
+    computedOdp(p_wrap, partialO_partialp);
 
-    // std::cout << (dOdp_SA - dOdp).norm() << std::endl;
-    // std::exit(0);
-    if (add_reg)
+    T Op; computeOp(p_wrap, Op);
+    dOdp += partialO_partialp;
+    energy += Op;
+    for (int i = 0; i < n_dof_design; i++)
     {
-        T reg_term = 0.5 * reg_w * (p_curr - prev_params).dot(p_curr - prev_params);
-        energy += reg_term;
-        dOdp += reg_w * (p_curr - prev_params);
+        dOdp[i] *= wrapper<1>(p_curr[i]);
     }
-
+    
     return dOdp.norm();
 }
 
@@ -620,10 +727,73 @@ void ObjNucleiTracking::getSimulationAndDesignDoF(int& _sim_dof, int& _design_do
     n_dof_design = _design_dof;
 }
 
+void ObjNucleiTracking::SGNforQP(const VectorXT& p_curr, StiffnessMatrix& objective_hessian, 
+        StiffnessMatrix& constraint_jacobian)
+{
+    updateDesignParameters(p_curr);
+    
+    int nx = n_dof_sim;
+
+    StiffnessMatrix dfdx(n_dof_sim, n_dof_sim);
+    simulation.buildSystemMatrix(simulation.u, dfdx);
+    dfdx *= -1.0;
+    StiffnessMatrix dfdp;
+    simulation.cells.dfdpWeightsSparse(dfdp);
+
+    std::vector<Entry> entries_constraint;
+    for (int i = 0; i < dfdx.outerSize(); i++)
+    {
+        for (StiffnessMatrix::InnerIterator it(dfdx, i); it; ++it)
+        {
+            entries_constraint.push_back(Entry(it.row(), it.col(), it.value()));
+        }
+    }
+    
+    for (int i = 0; i < dfdp.outerSize(); i++)
+    {
+        for (StiffnessMatrix::InnerIterator it(dfdp, i); it; ++it)
+        {
+            entries_constraint.push_back(Entry(it.row(), it.col() + nx, it.value()));
+        }
+    }
+    constraint_jacobian.resize(n_dof_sim, n_dof_design + n_dof_sim);
+    constraint_jacobian.setFromTriplets(entries_constraint.begin(), entries_constraint.end());
+
+    objective_hessian.resize(n_dof_design + n_dof_sim, n_dof_design + n_dof_sim);
+    std::vector<Entry> hessian_entries;
+    computed2Odx2(simulation.deformed, hessian_entries);
+    
+    for (int i = 0; i < n_dof_sim; i++)
+        hessian_entries.push_back(Entry(i, i, 1e-8));
+
+    if (add_reg)
+    {
+        for (int i = 0; i < n_dof_design; i++)
+            hessian_entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, reg_w));
+    }
+
+    for (int i = 0; i < dfdp.outerSize(); i++)
+    {
+        for (StiffnessMatrix::InnerIterator it(dfdp, i); it; ++it)
+        {
+            hessian_entries.push_back(Entry(it.row(), it.col() + nx, -w_fp * it.value()));
+            hessian_entries.push_back(Entry(it.col() + nx, it.row(), -w_fp * it.value()));
+        }
+    }
+
+    objective_hessian.setFromTriplets(hessian_entries.begin(), hessian_entries.end());
+}
+
 void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr, 
     StiffnessMatrix& H, bool simulate)
 {
-    updateDesignParameters(p_curr);
+    VectorXT p_wrap = p_curr;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        p_wrap[i] = wrapper<0>(p_curr[i]);
+    }
+
+    updateDesignParameters(p_wrap);
     if (simulate)
     {
         simulation.reset();
@@ -639,6 +809,7 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
 
     StiffnessMatrix dfdp;
     simulation.cells.dfdpWeightsSparse(dfdp);
+    
 
     StiffnessMatrix d2Odx2_mat(n_dof_sim, n_dof_sim);
     d2Odx2_mat.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
@@ -663,46 +834,24 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
     {
         for (StiffnessMatrix::InnerIterator it(dfdp, i); it; ++it)
         {
-            entries.push_back(Entry(it.col() + nx, it.row() + nxnp, it.value()));
-            entries.push_back(Entry(it.row() + nxnp, it.col() + nx, it.value()));
-        }
-    }
+            entries.push_back(Entry(it.col() + nx, it.row() + nxnp, it.value() * wrapper<1>(p_curr[it.col()])));
+            entries.push_back(Entry(it.row() + nxnp, it.col() + nx, it.value() * wrapper<1>(p_curr[it.col()])));
 
-    if (use_penalty)
-    {
-        T penalty_energy = 0.0;
-        for (int i = 0; i < n_dof_design; i++)
-        {
-            T d_hat_max = bound[1] - p_curr[i];
-            T d_hat_min = p_curr[i] - bound[0];
-            if (penalty_type == LogBarrier)
+            if (add_forward_potential)
             {
-                if (d_hat_max < barrier_distance)
-                {
-                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
-                        penalty_weight * barrier<2>(d_hat_max, barrier_distance)));
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
-                        penalty_weight * barrier<2>(d_hat_min, barrier_distance)));
-                }
-            }    
-            else if (penalty_type == Qubic)
-            {
-                if (d_hat_max < barrier_distance)
-                {
-                     entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
-                        penalty_weight * 6.0 * d_hat_max));
-                }
-                if (d_hat_min < barrier_distance)
-                {
-                    entries.push_back(Entry(i + n_dof_sim, i + n_dof_sim, 
-                        penalty_weight * 6.0 * d_hat_min));
-                }
+                entries.push_back(Entry(it.row(), it.col() + nx, -w_fp * it.value() * wrapper<1>(p_curr[it.col()])));
+                entries.push_back(Entry(it.col() + nx, it.row(), -w_fp * it.value() * wrapper<1>(p_curr[it.col()])));
             }
         }
     }
+
+    std::vector<Entry> d2Odp2_entries;
+    computed2Odp2(p_wrap, d2Odp2_entries);
+
+    for (auto entry : d2Odp2_entries)
+        entries.push_back(Entry(entry.row() + n_dof_sim, 
+                                entry.col() + n_dof_sim, 
+                                entry.value() * wrapper<2>(p_curr[entry.row()])));
 
     for (int i = 0; i < n_dof_sim; i++)
         entries.push_back(Entry(i, i, 1e-10));
@@ -711,12 +860,6 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
     for (int i = 0; i < n_dof_sim; i++)
         entries.push_back(Entry(i + n_dof_sim + n_dof_design, i + n_dof_sim + n_dof_design, -1e-10));
     
-    // for (int i = 0; i < nxnp; i++)
-    //     entries.push_back(Entry(i, i, 1e-4));
-    // for (int i = nx; i < nxnp; i++)
-    //     entries.push_back(Entry(i, i, 1e-8));
-    // for (int i = nxnp; i < nxnp + n_dof_sim; i++)
-    //     entries.push_back(Entry(i, i, -1e-6));
     
     H.setFromTriplets(entries.begin(), entries.end());
     H.makeCompressed();
@@ -747,70 +890,45 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     
     MatrixXT dxdpTHdxdp = dxdp.transpose() * d2Odx2_matrix * dxdp;
 
-    // StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-    // simulation.buildSystemMatrix(simulation.u, d2edx2);
-    // T scaling_weight = 1e-1;
-    // MatrixXT dxdpTHdxdp = dxdp.transpose() * (d2Odx2_matrix - scaling_weight * d2edx2) * dxdp;
-    
-    // MatrixXT dxdpTHdxdp = dxdp.transpose() * dxdp;
-    
-    // Eigen::JacobiSVD<Eigen::MatrixXd> svd(d2Odx2_dense, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    // MatrixXT U = svd.matrixU();
-	// VectorXT Sigma = svd.singularValues();
-	// MatrixXT V = svd.matrixV();
-    // std::cout << "d2Odx2_dense singular value last 5: " << Sigma.tail<5>().transpose() << std::endl;
-    // std::cout << d2Odx2_dense.diagonal().transpose() << std::endl;
-    
-    // std::ofstream out("cell_d2odx_singular_vectors.txt");
-    // out << U.rows() << " " << U.cols() << std::endl;
-    // for (int i = 0; i < n_dof_design; i++)
-    //     out << Sigma[i] << " ";
-    // out << std::endl;
-    // for (int i = 0; i < n_dof_sim; i++)
-    // {
-    //     for (int j = 0; j < n_dof_design; j++)
-    //         out << U(i, j) << " ";
-    //     out << std::endl;
-    // }
-    // out << V.rows() << " " << V.cols() << std::endl;
-    // for (int i = 0; i < n_dof_design; i++)
-    // {
-    //     for (int j = 0; j < n_dof_design; j++)
-    //         out << V(i, j) << " ";
-    //     out << std::endl;
-    // }
-    // out << std::endl;
-    // out.close();
-   
-    // simulation.saveState("d2odx2_check.obj");
-    // std::exit(0);
     H = dxdpTHdxdp;
 
-    if (add_reg)
+    // 2 dx/dp^T d2O/dxdp
+    if (add_forward_potential)
     {
-        H.diagonal().array() += reg_w;
+        MatrixXT dfdp;
+        simulation.cells.dfdpWeightsDense(dfdp);
+        dfdp *= -w_fp;
+        H += dxdp.transpose() * dfdp + dfdp.transpose() * dxdp;
     }
-    
+
+    std::vector<Entry> d2Odp2_entries;
+    computed2Odp2(p_curr, d2Odp2_entries);
+
+    for (auto entry : d2Odp2_entries)
+        H(entry.row(), entry.col()) += entry.value();
 }
 
 T ObjNucleiTracking::maximumStepSize(const VectorXT& dp)
 {
-    VectorXT p_curr;
+    return 1.0;
+    VectorXT p_curr, p_wrap;
     getDesignParameters(p_curr);
+    
     T step_size = 1.0;
-    if (use_penalty && penalty_type == LogBarrier)
+    while (true)
     {
-        while (true)
+        VectorXT forward = p_curr + step_size * dp;
+        p_wrap = forward;
+        for (int i = 0; i < n_dof_design; i++)
         {
-            VectorXT forward = p_curr + step_size * dp;
-            if (forward.minCoeff() < bound[0] || forward.maxCoeff() > bound[1])
-                step_size *= 0.8;
-            else
-                return step_size;
+            p_wrap[i] = wrapper<0>(forward[i]);
         }
+        std::cout << "p_wrap min: " << p_wrap.minCoeff() << " max: " << p_wrap.maxCoeff() << std::endl;
+        if (p_wrap.maxCoeff() > p_curr.maxCoeff() + bound[1])
+            step_size *= 0.5;
+        else
+            return step_size;
     }
-    else
-        return step_size;
     
 }
 
@@ -827,7 +945,7 @@ bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)
         return false;
     }
     frame_data = cell_trajectories.col(frame);
-    std::cout << "fetching frame: " << frame << std::endl;
+    
     int n_pt = frame_data.rows() / 3;
     Matrix<T, 3, 3> R;
     R << 0.960277, -0.201389, 0.229468, 0.2908, 0.871897, -0.519003, -0.112462, 0.558021, 0.887263;
@@ -836,10 +954,13 @@ bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)
     for (int i = 0; i < n_pt; i++)
     {
         TV pos = frame_data.segment<3>(i * 3);
-        TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
-        updated = R2 * R * updated;
-        // frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
-        frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+        if ((pos - TV(-1e10, -1e10, -1e10)).norm() > 1e-8)
+        {
+            TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
+            updated = R2 * R * updated;
+            // frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
+            frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+        }
     }
     
     return true;
@@ -967,6 +1088,102 @@ void ObjNucleiTracking::checkData()
         out << "v " << cell_centroids.segment<3>(i * 3).transpose() << std::endl;
     }
     out.close();
+}
+
+void ObjNucleiTracking::computeCellTargetsFromDatapoints()
+{
+    VectorXT data_points;
+    bool success = getTargetTrajectoryFrame(data_points);
+
+    if (success)
+    {
+        std::string base_dir = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
+        std::ofstream out(base_dir + "weighted_dense_targets.txt");
+        VectorXT cell_centroids;
+        simulation.cells.getAllCellCentroids(cell_centroids);
+        TV min_corner, max_corner;
+        simulation.cells.computeBoundingBox(min_corner, max_corner);
+        T spacing = 0.05 * (max_corner - min_corner).norm();
+        hash.build(spacing, cell_centroids);
+        int n_data_pts = data_points.size();
+        
+        int n_cells = cell_centroids.rows() / 3;
+
+        std::vector<TargetData> target_data;
+
+        for (int i = 0; i < n_data_pts; i++)
+        {
+            TV pi = data_points.segment<3>(i * 3);
+            std::vector<int> neighbors;
+            hash.getOneRingNeighbors(pi, neighbors);
+
+            T min_dis = 1e10;
+            int min_cell_idx = -1;
+            for (int neighbor : neighbors)
+            {
+                TV centroid = cell_centroids.segment<3>(neighbor * 3);
+                T dis = (centroid - pi).norm();
+                if (dis < min_dis)
+                {
+                    min_cell_idx = neighbor;
+                    min_dis = dis;
+                }
+            }
+            if (min_cell_idx == -1)
+                continue;
+
+            VectorXT positions;
+            std::vector<int> indices;
+            simulation.cells.getCellVtxAndIdx(min_cell_idx, positions, indices);
+            
+            int nw = positions.rows() / 3;
+            
+            MatrixXT C(3, nw);
+            for (int i = 0; i < nw; i++)
+                C.col(i) = positions.segment<3>(i * 3);
+            
+            StiffnessMatrix Q = (C.transpose() * C).sparseView();
+            VectorXT c = -C.transpose() * pi;
+            StiffnessMatrix A(1, nw);
+            for (int i = 0; i < nw; i++)
+                A.insert(0, i) = 1.0;
+
+            VectorXT lc(1); lc[0] = 1.0;
+            VectorXT uc(1); uc[0] = 1.0;
+
+            VectorXT lx(nw); 
+            lx.setConstant(1e-4);
+            VectorXT ux(nw); 
+            ux.setConstant(10);
+
+            VectorXT w;
+            igl::mosek::MosekData mosek_data;
+            std::vector<VectorXT> lagrange_multipliers;
+            igl::mosek::mosek_quadprog(Q, c, 0, A, lc, uc, lx, ux, mosek_data, w, lagrange_multipliers);
+            T error = (C * w - pi).norm();
+            
+            VectorXT dLdp = c + Q * w;
+            dLdp -= lagrange_multipliers[0].transpose() * A;
+            dLdp += lagrange_multipliers[1].transpose() * A;
+            dLdp -= lagrange_multipliers[2];
+            dLdp += lagrange_multipliers[3];
+            if (dLdp.norm() > 1e-6 || error > 1e-6)
+                continue;
+                
+            target_data.push_back(TargetData(w, i, min_cell_idx));
+        }
+
+        for (auto data : target_data)
+        {
+            if (data.data_point_idx != -1)
+            {
+                out << data.data_point_idx << " " << data.cell_idx << " " << data.weights.rows() << " " << data.weights.transpose() << std::endl;
+            }
+        }
+
+        out.close();
+    }
+
 }
 
 void ObjNucleiTracking::computeCellTargetFromDatapoints()

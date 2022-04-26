@@ -10,9 +10,11 @@
 
 #include "Simulation.h"
 #include "SensitivityAnalysis.h"
+#include "../include/DataIO.h"
 
 class Simulation;
 class SensitivityAnalysis;
+class DataIO;
 
 class SimulationApp
 {
@@ -20,6 +22,8 @@ public:
     using TV = Vector<double, 3>;
     using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
     using IV = Vector<int, 3>;
+    using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
 protected:
     Simulation& simulation;
 
@@ -76,7 +80,14 @@ public:
         const TV& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     
+    virtual void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
+        const TV& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
     virtual void appendSphereToPosition(const TV& position, T radius, const TV& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
+    virtual void appendSphereToPositionVector(const VectorXT& position, T radius, const TV& color,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     
 public:
@@ -133,17 +144,25 @@ public:
 };
 
 
-class DataViewerApp
+class DataViewerApp : public SimulationApp
 {
 public:
-    using TV = Vector<double, 3>;
-    using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
-    using IV = Vector<int, 3>;
-
+    DataIO data_io;
+    MatrixXT cell_trajectories;
+    bool raw_data = false;
+    int frame_cnt = 0;
 public:
     void loadRawData();
+    
+    void loadFilteredData();
+    void loadFrameData(int frame, VectorXT& frame_data);
+
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
+    void updateScreen(igl::opengl::glfw::Viewer& viewer);
+
+    DataViewerApp(Simulation& _simulation) : SimulationApp(_simulation) {}
+    ~DataViewerApp() {}
 };
 
 #endif

@@ -33,14 +33,24 @@ void Simulation::computeEigenValueSpectraSparse(StiffnessMatrix& A, int nmodes, 
 
 bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector)
 {
-    int nmodes = 10;
+    int nmodes = 20;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
+    
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2); 
+    solver.factorize(d2edx2);
+    
+    if (solver.info() != Eigen::NumericalIssue)
+    {
+        return false;
+    }
+
     Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
 
         //0 cannot cannot be used as a shift
-    T shift = -1e-4;
+    T shift = -10;
     Spectra::SymEigsShiftSolver<T, 
         Spectra::LARGEST_MAGN, 
         Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
@@ -74,19 +84,29 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
 
 void Simulation::checkHessianPD(bool save_txt)
 {
-    int nmodes = 10;
+    int nmodes = 20;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
     bool use_Spectra = true;
 
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2); 
+    solver.factorize(d2edx2);
+    bool indefinite = false;
+    if (solver.info() == Eigen::NumericalIssue)
+    {
+        std::cout << "!!!indefinite matrix!!!" << std::endl;
+        indefinite = true;
+    }
+    
     if (use_Spectra)
     {
 
         Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
 
         //0 cannot cannot be used as a shift
-        T shift = -1e-4;
+        T shift = indefinite ? -1e2 : -1e-4;
         Spectra::SymEigsShiftSolver<T, 
             Spectra::LARGEST_MAGN, 
             Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
@@ -187,8 +207,8 @@ void Simulation::initializeCells()
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_486.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_463.obj";
         sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";   
         cells.vertexModelFromMesh(sphere_file); 
     }

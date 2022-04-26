@@ -17,15 +17,16 @@ class Simulation;
 #include "SpatialHash.h"
 
 #include "VecMatDef.h"
+#include "SoftPenalty.h"
 
 enum Optimizer
 {
-    GradientDescent, GaussNewton, MMA, Newton, SGN, PSGN, PGN, SQP, SSQP
+    GradientDescent, GaussNewton, MMA, Newton, SGN, SQP, SSQP
 };
 
 enum PenaltyType
 {
-    LogBarrier, Qubic, Quadratic
+    LogBarrier, Qubic, Quadratic, BLEND
 };
 
 enum LinearSolverType
@@ -81,6 +82,7 @@ public:
     int power = 2;
     bool add_forward_potential = false;
     T w_fp = 1e-3;
+    T w_data = 1.0;
     std::string target_filename;
     T reg_w = 1e-6;
     T target_perturbation = 0.0;
@@ -100,6 +102,7 @@ public:
     };
 
     Vector<T, 2> bound;
+    Vector<bool, 2> mask;
     std::vector<TargetData> weight_targets;
     std::unordered_map<int, TV> target_positions;
     VectorXT target_obj_weights;
@@ -107,7 +110,7 @@ public:
     virtual void setTargetObjWeights() {}
 
     virtual T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false) {}
-    virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true) {}
+    virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false) {}
     virtual void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
     
     virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H,
@@ -124,6 +127,10 @@ public:
     virtual void computeOx(const VectorXT& x, T& Ox) {}
     virtual void computedOdx(const VectorXT& x, VectorXT& dOdx) {}
     virtual void computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries) {}
+
+    virtual void computeOp(const VectorXT& p_curr, T& Op) {}
+    virtual void computedOdp(const VectorXT& p_curr, VectorXT& dOdx) {}
+    virtual void computed2Odp2(const VectorXT& p_curr, std::vector<Entry>& d2Odx2_entries) {}
 
     virtual void updateDesignParameters(const VectorXT& design_parameters) {}
     virtual void getDesignParameters(VectorXT& design_parameters) {}
@@ -146,6 +153,9 @@ public:
     void diffTestdOdxScale();
     void diffTestd2Odx2();
     void diffTestd2Odx2Scale();
+    void diffTestPartialOPartialpScale();
+    void diffTestPartialOPartialp();
+    void diffTestPartial2OPartialp2();
 
 public:
     Objectives(Simulation& _simulation) : simulation(_simulation) 
@@ -223,8 +233,8 @@ public:
     bool add_Hessian_PD_term = false;
     Vector<T, 2> bound;
     
+    int wrapper_type = 0;
     
-
 public:
 
     T simHessianPDEnergy(const VectorXT& p_curr);
@@ -232,8 +242,14 @@ public:
     void simHessianPDHessian(const VectorXT& p_curr, StiffnessMatrix& hess);
     
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
-    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true);
+    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
     void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false);
+
+    void computeEnergyAllTerms(const VectorXT& p_curr, std::vector<T>& energies,
+        bool simulate = true, bool use_prev_equil = false);
+
+    void SGNforQP(const VectorXT& p_curr, StiffnessMatrix& objective_hessian, 
+        StiffnessMatrix& constraint_jacobian);
     
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H,
         bool simulate = false);
@@ -247,8 +263,13 @@ public:
     void computedOdx(const VectorXT& x, VectorXT& _dOdx);
     void computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries);
 
+    void computeOp(const VectorXT& p_curr, T& Op);
+    void computedOdp(const VectorXT& p_curr, VectorXT& dOdp);
+    void computed2Odp2(const VectorXT& p_curr, std::vector<Entry>& d2Odp2_entries);
+
     void computeKernelWeights();
     void computeCellTargetFromDatapoints();
+    void computeCellTargetsFromDatapoints();
 
     void initializeTarget();
 
@@ -270,6 +291,56 @@ public:
 
     void setFrame(int _frame) { frame = _frame; }
     
+    template <int order>
+    T soft_barrier(T p)
+    {
+        return 1.0;
+    }
+
+    template <int order>
+    T wrapper(T p)
+    {
+        T b = bound[1] / 2.0;
+        T a = -2.2;
+        T c = 0.05;
+
+        if constexpr (order == 0)
+        {
+            if (wrapper_type == 0)
+                return p;
+            else if (wrapper_type == 1)
+                return p * p; 
+            else if (wrapper_type == 2)
+                return b + b * std::tanh(c * p + a);
+        }
+        else if constexpr (order == 1)
+        {
+            if (wrapper_type == 0)
+                return 1.0;
+            else if (wrapper_type == 1)
+                return 2.0 * p; 
+            else if (wrapper_type == 2)
+                return c * b * (1.0 - std::pow(std::tanh(c * p + a), 2));
+        }
+        else if constexpr (order == 2)
+        {
+            if (wrapper_type == 0)
+                return 1.0;
+            else if (wrapper_type == 1)
+                return 2.0;
+            else if (wrapper_type == 2)
+                return -2.0 * c * c * b * std::tanh(c * p + a) * (1.0 - std::pow(std::tanh(c * p + a), 2));
+        }
+
+    }
+
+    void testWrapperDerivatives()
+    {
+        T p = 0.2;
+        T eps = 1e-5;
+        std::cout << (wrapper<0>(p + eps) - wrapper<0>(p)) / eps << " " << wrapper<1>(p) << std::endl;
+        std::cout << (wrapper<1>(p + eps) - wrapper<1>(p)) / eps << " " << wrapper<2>(p) << std::endl;
+    }
     
 private:
     template<int order>
@@ -284,6 +355,10 @@ private:
         else
             return 1 / (d * d) + (2 / (d * eps) - 2 * std::log(d / eps) - 3) / (eps * eps);
     }
+
+    
+    
+
 public: 
     ObjNucleiTracking(Simulation& _simulation) : Objectives(_simulation) 
     {
@@ -304,7 +379,7 @@ public:
     SpatialHash hash;
 public:
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
-    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true);
+    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
     void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
     
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, 

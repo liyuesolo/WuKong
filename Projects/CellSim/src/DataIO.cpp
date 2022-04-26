@@ -229,6 +229,7 @@ void DataIO::loadTrajectories(const std::string& filename, MatrixXT& trajectorie
     // }
 
     trajectories.resize(n_nucleus * 3, n_frames);
+    trajectories.setConstant(-1e10);
     tbb::parallel_for(0, n_frames, [&](int frame){
         for (int i = 0; i < n_nucleus; i++)
         {

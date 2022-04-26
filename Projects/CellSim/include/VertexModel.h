@@ -782,6 +782,7 @@ public:
     // SensitivityDerivatives.cpp
     void dfdpWeights(MatrixXT& dfdp);
     void dfdpWeightsSparse(StiffnessMatrix& dfdp);
+    void dfdpWeightsDense(MatrixXT& dfdp);
     void edgeWeightsSGNMatrix(StiffnessMatrix& mat_SGN, std::vector<Entry>& d2Odx2_entries);
 
     void dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dOdp);

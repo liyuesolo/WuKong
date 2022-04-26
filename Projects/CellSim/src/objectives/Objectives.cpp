@@ -530,6 +530,44 @@ void Objectives::diffTestHessianScale()
     }
 }
 
+void Objectives::diffTestPartial2OPartialp2()
+{
+    VectorXT p;
+    getDesignParameters(p);
+    p.setConstant(-10);
+    StiffnessMatrix A(n_dof_design, n_dof_design);
+    std::vector<Entry> hessian_entries;
+    computed2Odp2(p, hessian_entries);
+    A.setFromTriplets(hessian_entries.begin(), hessian_entries.end());
+    
+    VectorXT dp(n_dof_design);
+    dp.setRandom();
+    dp *= 1.0 / dp.norm();
+    
+    VectorXT f0(n_dof_design);
+    f0.setZero();
+    T E0, E1;
+    computedOdp(p, f0);
+
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        
+        VectorXT f1(n_dof_design);
+        f1.setZero();
+        computedOdp(p + dp, f1);
+
+        T df_norm = (f0 + (A * dp) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dp *= 0.5;
+    }
+}
+
 void Objectives::diffTestGradient()
 {
     T epsilon = 1e-4;
@@ -556,7 +594,73 @@ void Objectives::diffTestGradient()
         std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
         std::getchar();
     }
+}
+
+void Objectives::diffTestPartialOPartialp()
+{
+    T epsilon = 1e-6;
+    VectorXT dOdp(n_dof_design);
+    dOdp.setZero();
+    VectorXT p;
+    getDesignParameters(p);
     
+    p.setConstant(bound[1]);
+    T _dummy;
+    computedOdp(p, dOdp);
+
+    for(int _dof_i = 0; _dof_i < n_dof_design; _dof_i++)
+    {
+        int dof_i = _dof_i;
+        p[dof_i] += epsilon;
+        T E1; computeOp(p, E1);
+        p[dof_i] -= 2.0 * epsilon;
+        T E0; computeOp(p, E0);
+        p[dof_i] += epsilon;
+        T fd = (E1 - E0) / (2.0 *epsilon);
+        std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
+        std::getchar();
+    }
+}
+
+void Objectives::diffTestPartialOPartialpScale()
+{
+    std::cout << "###################### CHECK partial O partial p SCALE ######################" << std::endl; 
+    VectorXT dOdp(n_dof_design);
+    VectorXT p;
+    getDesignParameters(p);
+    p.setConstant(-2);
+    penalty_weight = 1;
+    T E0;
+    computeOp(p, E0);
+    computedOdp(p, dOdp);
+    VectorXT dp(n_dof_design);
+    dp.setRandom();
+    dp *= 1.0 / dp.norm();
+    // std::cout << dp.minCoeff() << " " << dp.maxCoeff() << std::endl;
+    // dp *= 0.001;
+    T previous = 0.0;
+    
+    for (int i = 0; i < 10; i++)
+    {
+        // T E1 = value(p + dp, true, true);
+        // VectorXT p1 = (p + dp).cwiseMax(bound[0]).cwiseMin(bound[1]);
+        // dp = p1 - p;
+        T E1;
+        computeOp(p + dp, E1);
+        T dE = E1 - E0;
+        
+        dE -= dOdp.dot(dp);
+        // std::cout << "dE " << dE << std::endl;
+        // std::cout << E1 << " " << E0 << std::endl;
+        if (i > 0)
+        {
+            // std::cout << "scale" << std::endl;
+            std::cout << (previous/dE) << std::endl;
+            // std::getchar();
+        }
+        previous = dE;
+        dp *= 0.5;
+    }
 }
 
 void Objectives::diffTestGradientScale()
@@ -665,6 +769,9 @@ void Objectives::diffTestdOdx()
     }
     std::cout << "FD test passed" << std::endl;
 }
+
+
+
 void Objectives::diffTestd2Odx2Scale()
 {
     std::cout << "###################### CHECK dOdx SCALE ######################" << std::endl; 

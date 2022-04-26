@@ -3,6 +3,10 @@
 #include "../include/autodiff/EdgeEnergy.h"
 
 #include <Eigen/PardisoSupport>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 
 void VertexModel::edgeWeightsSGNMatrix(StiffnessMatrix& mat_SGN, std::vector<Entry>& d2Odx2_entries)
 {
@@ -86,6 +90,28 @@ void VertexModel::dfdpWeightsSparse(StiffnessMatrix& dfdp)
 }
 
 
+void VertexModel::dfdpWeightsDense(MatrixXT& dfdp)
+{
+    dfdp.resize(num_nodes * 3, edge_weights.rows());
+    dfdp.setZero();
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Vector<T, 6> dedx;
+        computeEdgeSquaredNormGradient(vi, vj, dedx);
+        dedx *= -1.0;
+        dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+        dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+        cnt++;
+    });
+
+    for (int i = 0; i < cnt; i++)
+        for (auto data : dirichlet_data)
+            dfdp(data.first, i) = 0;
+}
+
+
 void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
 {
     MatrixXT dfdp(num_nodes * 3, edge_weights.rows());
@@ -118,6 +144,72 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     {
         dxdp.col(i) = solver.solve(dfdp.col(i));
     }
+
+    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dfdp(dfdp, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    
+
+    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dfdp(dfdp, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    // std::cout << "dimension: " << svd_dfdp.matrixU().rows() << " " << svd_dfdp.matrixU().cols() << " "<< svd_dfdp.matrixV().rows() << " "<< svd_dfdp.matrixV().cols() << std::endl;
+    // std::cout << "np: " << edge_weights.rows() << std::endl;
+    // std::cout << "dfdp singular values " << svd_dfdp.singularValues().rows() << std::endl;
+    // std::cout << svd_dfdp.singularValues().transpose() << std::endl;
+
+    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dxdp(dxdp, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    // std::cout << "dxdp singular values " << svd_dxdp.singularValues().rows() <<  std::endl;
+    // std::cout << svd_dxdp.singularValues().transpose() << std::endl;
+
+    // MatrixXT dfdpTdfdp = dfdp.transpose() * dfdp;
+    // MatrixXT dxdpTdxdp = dxdp.transpose() * dxdp;
+
+    // Spectra::DenseSymMatProd<T> op(dfdpTdfdp);
+    // Spectra::SymEigsSolver<T, Spectra::SMALLEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, 20, dfdpTdfdp.cols());
+    // eigs.init();
+
+    // int nconv = eigs.compute();
+    // Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+    // Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+    // std::cout << "dfdpTdfdp eigen values: " << eigen_values.tail<20>().transpose() << std::endl;
+    
+    // T residual = 0.0;
+    // for (int i = 0; i < eigen_values.rows(); i++)
+    // {
+    //     residual += (dfdpTdfdp * eigen_vectors.col(i) - eigen_values[i] * eigen_vectors.col(i)).norm();
+    // }
+    
+    // std::cout << "(A-lambdaI)vectors: " << residual << std::endl;
+
+    // Spectra::DenseSymMatProd<T> op2(dxdpTdxdp);
+    // Spectra::SymEigsSolver<T, Spectra::SMALLEST_ALGE, Spectra::DenseSymMatProd<T> > eigs2(&op2, 20, dxdpTdxdp.cols());
+    // eigs2.init();
+
+    // int nconv2 = eigs2.compute();
+    // Eigen::VectorXd eigen_values2 = eigs2.eigenvalues().real();
+    // Eigen::MatrixXd eigen_vectors2 = eigs2.eigenvectors().real();
+    // std::cout << "dxdpTdxdp eigen values: " << eigen_values2.tail<20>().transpose() << std::endl;
+    
+    // residual = 0.0;
+    // for (int i = 0; i < eigen_values2.rows(); i++)
+    // {
+    //     residual += (dxdpTdxdp * eigen_vectors2.col(i) - eigen_values2[i] * eigen_vectors2.col(i)).norm();
+    // }
+
+    // std::cout << "(A-lambdaI)vectors: " << residual << std::endl;
+
+    // Spectra::SparseSymShiftSolve<T, Eigen::Upper> op3(d2edx2);
+
+    // Spectra::SymEigsShiftSolver<T, 
+    //     Spectra::LARGEST_MAGN, 
+    //     Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+    //     eigs3(&op3, 20, 40, -1e-4);
+
+    // eigs3.init();
+
+    // int nconv3 = eigs3.compute();
+
+    // Eigen::VectorXd eigen_values3 = eigs3.eigenvalues().real();
+    // std::cout << "Hessian eigen values: " << eigen_values3.tail<20>().transpose() << std::endl;
+    // std::exit(0);
+
     // ttt.stop();
     // std::cout << "dxdp " << ttt.elapsed_sec() << std::endl;
 

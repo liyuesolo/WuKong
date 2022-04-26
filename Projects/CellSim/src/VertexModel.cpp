@@ -222,8 +222,9 @@ void VertexModel::computeCellInfo()
     bool _print = print_force_norm;
     print_force_norm = false;
     computeResidual(u, residual);
+    T total_energy = computeTotalEnergy(u);
     print_force_norm = _print;
-    std::cout << "\t |g_norm|: " << residual.norm() << std::endl;
+    std::cout << "\t |g_norm|: " << residual.norm() << " total energy: " << total_energy << std::endl;
 
     bool all_inside = true;
     int inside_cnt = 0;
