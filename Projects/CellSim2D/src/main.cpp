@@ -13,11 +13,15 @@ int main(int argc, char** argv)
 {
     using TV3 = Vector<T, 3>;
     using TV = Vector<T, 2>;
+    using Edge = Vector<int, 2>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 
     VertexModel2D vertex_model;
     Objective objective(vertex_model);
     SensitivityAnalysis sa(vertex_model, objective);
+
+    vertex_model.verbose = true;
+
 
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
@@ -30,6 +34,13 @@ int main(int argc, char** argv)
     bool show_target = true;
     bool show_target_current = true;
     int static_solve_step = 0;
+    bool invaginated_test = true;
+    bool show_cell_tri = false;
+    bool show_yolk_tri = false;
+    bool show_contracting_edges = true;
+    bool check_derivatives = false;
+
+    std::string data_folder = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim2D/data/";
 
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
@@ -42,6 +53,41 @@ int main(int argc, char** argv)
         vertex_model.generateMeshForRendering(V, F, C, show_current, show_rest);
         TV3 shift(0, 0, 0);
         T sphere_radius = 0.02;
+        TV v0 = vertex_model.deformed.segment<2>(0);
+        TV v1 = vertex_model.deformed.segment<2>(2);
+        
+        T edge_length_ref = (v1 - v0).norm();
+        
+        if (show_cell_tri)
+        {
+
+        }
+        if (show_yolk_tri)
+        {
+            TV3 color(0, 0, 0);
+            std::vector<std::pair<TV, TV>> end_points;
+            for (int i = vertex_model.basal_vtx_start; i < vertex_model.num_nodes; i++)
+            {
+                TV vi = vertex_model.deformed.segment<2>(i * 2);
+                end_points.push_back(std::make_pair(vi, vertex_model.mesh_centroid));
+            }
+            vertex_model.appendCylindersToEdges(end_points, color, sphere_radius * 0.05, V, F, C);
+        }
+        if (show_contracting_edges)
+        {
+            TV3 color(1, 0, 0);
+            std::vector<std::pair<TV, TV>> end_points;
+            vertex_model.iterateApicalEdgeSerial([&](Edge& edge, int edge_id)
+            {
+                if (vertex_model.apical_edge_contracting_weights[edge_id] > 1e-6)
+                {
+                    TV vi = vertex_model.deformed.segment<2>(edge[0] * 2);
+                    TV vj = vertex_model.deformed.segment<2>(edge[1] * 2);
+                    end_points.push_back(std::make_pair(vi, vj));
+                }
+            });
+            vertex_model.appendCylindersToEdges(end_points, color, edge_length_ref * 0.12, V, F, C);
+        }
         if (inverse && show_target)
         {
             TV3 color(1, 0, 0);
@@ -59,7 +105,7 @@ int main(int argc, char** argv)
             tbb::parallel_for(0, n_sphere, [&](int i){
                 target_positions.segment<3>(i * 3) = target_positions_std_vec[i];
             });
-            vertex_model.appendSphereToPositionVector(target_positions, sphere_radius, color, V, F, C);
+            vertex_model.appendSphereToPositionVector(target_positions, edge_length_ref * 0.2, color, V, F, C);
         }
         if (inverse && show_target_current)
         {
@@ -80,7 +126,7 @@ int main(int argc, char** argv)
             tbb::parallel_for(0, n_sphere, [&](int i){
                 target_positions.segment<3>(i * 3) = target_positions_std_vec[i];
             });
-            vertex_model.appendSphereToPositionVector(target_positions, sphere_radius, color, V, F, C);
+            vertex_model.appendSphereToPositionVector(target_positions, edge_length_ref * 0.2, color, V, F, C);
         }
         if (inverse && show_target && show_target_current)
         {
@@ -96,7 +142,7 @@ int main(int argc, char** argv)
                 });
             }
             
-            vertex_model.appendCylindersToEdges(end_points, color, sphere_radius * 0.15, V, F, C);
+            vertex_model.appendCylindersToEdges(end_points, color, edge_length_ref * 0.05, V, F, C);
         }
         viewer.data().set_mesh(V, F);
         viewer.data().set_colors(C); 
@@ -115,6 +161,22 @@ int main(int argc, char** argv)
             {
                 forward = !inverse;
                 updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("Verbose", &vertex_model.verbose))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("SaveStates", &vertex_model.save_mesh))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("CheckDerivatives", &check_derivatives))
+            {
+                if (check_derivatives)
+                {
+                    vertex_model.checkTotalGradientScale();
+                    vertex_model.checkTotalHessianScale();
+                }
             }
         }
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
@@ -138,6 +200,18 @@ int main(int argc, char** argv)
                     updateScreen(viewer);
                 }
             }
+            if (ImGui::Checkbox("ShowYolkTrianlge", &show_yolk_tri))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowCellTrianlge", &show_cell_tri))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowConEdges", &show_contracting_edges))
+            {
+                updateScreen(viewer);
+            }
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
@@ -151,20 +225,43 @@ int main(int argc, char** argv)
         }
         if (ImGui::Button("SaveCentroids", ImVec2(-1,0)))
         {   
-            vertex_model.saveCellCentroidsToFile("2D_test_targets.txt");
+            vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense.txt");
         }
         if (ImGui::Button("LoadTargets", ImVec2(-1,0)))
         {   
-            objective.loadTarget("2D_test_targets.txt", 0.05);
+            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.05);
             objective.match_centroid = true;
-            objective.add_forward_potential = true;
+            objective.add_forward_potential = false;
+            objective.w_fp = 1e-2;
+            objective.use_penalty = false;
+            objective.penalty_type = Qubic;
+            objective.penalty_weight = 1e2;
+            if (objective.use_penalty)
+                objective.optimizer = SGN;
+            else    
+                objective.optimizer = SQP;
+
+            objective.add_reg = false;
+            sa.initialize();
+            updateScreen(viewer);
+        }
+        if (ImGui::Button("LoadInvTargets", ImVec2(-1,0)))
+        {   
+            objective.loadTarget(data_folder + "2D_test_inv_targets.txt", 0.05);
+            objective.match_centroid = true;
+            objective.add_forward_potential = false;
             objective.w_fp = 1e-2;
             objective.use_penalty = true;
             objective.penalty_type = Qubic;
             objective.penalty_weight = 1e2;
-            objective.optimizer = SGN;
+            if (objective.use_penalty)
+                objective.optimizer = SGN;
+            else    
+                objective.optimizer = SQP;
+
             objective.add_reg = false;
             sa.initialize();
+            updateScreen(viewer);
         }
     };
 
@@ -194,6 +291,8 @@ int main(int argc, char** argv)
             if (finished)
             {
                 viewer.core().is_animating = false;
+                vertex_model.checkHessianPD(false);
+                vertex_model.checkFinalState();
             }
             else 
                 static_solve_step++;
@@ -203,7 +302,14 @@ int main(int argc, char** argv)
     };
 
     vertex_model.initializeScene();
-    
+    VectorXT delta = VectorXT::Random(vertex_model.apical_edge_contracting_weights.rows());
+    delta.array() += delta.minCoeff();
+    delta /= delta.norm(); 
+    delta *= 10.0;
+    // vertex_model.apical_edge_contracting_weights.setConstant(0.1);
+    // vertex_model.apical_edge_contracting_weights = delta;
+    // vertex_model.loadEdgeWeights("trouble.txt", vertex_model.apical_edge_contracting_weights);
+    // vertex_model.apical_edge_contracting_weights += delta;
     // vertex_model.checkTotalGradientScale();
     // vertex_model.checkTotalHessianScale();
 

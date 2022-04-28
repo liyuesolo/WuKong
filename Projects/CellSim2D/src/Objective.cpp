@@ -35,7 +35,26 @@ T Objective::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
         vertex_model.reset();
         if (use_prev_equil)
             vertex_model.u = equilibrium_prev;
-        vertex_model.staticSolve();
+        while (true)
+        {
+            vertex_model.staticSolve();
+            if (!perturb)
+                break;
+            VectorXT negative_eigen_vector;
+            T negative_eigen_value;
+            bool has_neg_ev = vertex_model.fetchNegativeEigenVectorIfAny(negative_eigen_value,
+                negative_eigen_vector);
+            if (has_neg_ev)
+            {
+                std::cout << "unstable state for the forward problem" << std::endl;
+                std::cout << "nodge it along the negative eigen vector" << std::endl;
+                VectorXT nodge_direction = negative_eigen_vector;
+                T step_size = 1e-3;
+                vertex_model.u += step_size * nodge_direction;
+            }
+            else
+                break;
+        }
     }
     
     T energy = 0.0;
@@ -63,7 +82,26 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
         vertex_model.reset();
         if (use_prev_equil)
             vertex_model.u = equilibrium_prev;
-        vertex_model.staticSolve();
+        while (true)
+        {
+            vertex_model.staticSolve();
+            if (!perturb)
+                break;
+            VectorXT negative_eigen_vector;
+            T negative_eigen_value;
+            bool has_neg_ev = vertex_model.fetchNegativeEigenVectorIfAny(negative_eigen_value,
+                negative_eigen_vector);
+            if (has_neg_ev)
+            {
+                std::cout << "unstable state for the forward problem" << std::endl;
+                std::cout << "nodge it along the negative eigen vector" << std::endl;
+                VectorXT nodge_direction = negative_eigen_vector;
+                T step_size = 1e-3;
+                vertex_model.u += step_size * nodge_direction;
+            }
+            else
+                break;
+        }
     }
     
     energy = 0.0;
@@ -74,7 +112,7 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
     
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     vertex_model.buildSystemMatrix(vertex_model.u, d2edx2);
-    
+
     vertex_model.iterateDirichletDoF([&](int offset, T target)
     {
         dOdx[offset] = 0;
@@ -122,6 +160,43 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
     dOdp += partialO_partialp;
     energy += Op;
     return dOdp.norm();
+}
+
+void Objective::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate)
+{
+    updateDesignParameters(p_curr);
+    
+    MatrixXT dxdp;
+    
+    vertex_model.dxdpFromdxdpEdgeWeights(dxdp);
+    
+    std::vector<Entry> d2Odx2_entries;
+    computed2Odx2(vertex_model.deformed, d2Odx2_entries);
+    StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
+    d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+    vertex_model.projectDirichletDoFMatrix(d2Odx2_matrix, vertex_model.dirichlet_data);
+    
+    // MatrixXT d2Odx2_dense = d2Odx2_matrix;
+    // std::cout << d2Odx2_dense.minCoeff() << " " << d2Odx2_dense.maxCoeff() << std::endl;
+    
+    MatrixXT dxdpTHdxdp = dxdp.transpose() * d2Odx2_matrix * dxdp;
+
+    H = dxdpTHdxdp;
+
+    // 2 dx/dp^T d2O/dxdp
+    if (add_forward_potential)
+    {
+        MatrixXT dfdp;
+        vertex_model.dfdpWeightsDense(dfdp);
+        dfdp *= -w_fp;
+        H += dxdp.transpose() * dfdp + dfdp.transpose() * dxdp;
+    }
+
+    std::vector<Entry> d2Odp2_entries;
+    computed2Odp2(p_curr, d2Odp2_entries);
+
+    for (auto entry : d2Odp2_entries)
+        H(entry.row(), entry.col()) += entry.value();
 }
 
 void Objective::hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate)
@@ -375,5 +450,63 @@ void Objective::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entr
         sim_H *= w_fp;
         // std::vector<Entry> sim_potential_H_entries = vertex_model.entriesFromSparseMatrix(sim_H);
         // d2Odx2_entries.insert(d2Odx2_entries.end(), sim_potential_H_entries.begin(), sim_potential_H_entries.end());
+    }
+}
+
+void Objective::diffTestGradientScale()
+{
+    std::cout << "###################### CHECK GRADIENT SCALE ######################" << std::endl;   
+    VectorXT dOdp(n_dof_design);
+    VectorXT p;
+    getDesignParameters(p);
+    T E0;
+    // gradient(p, dOdp, E0, false);
+    gradient(p, dOdp, E0);
+    // std::cout << dOdp.minCoeff() << " " << dOdp.maxCoeff() << std::endl;
+    VectorXT dp(n_dof_design);
+    dp.setRandom();
+    dp *= 1.0 / dp.norm();
+    // dp *= 0.001;
+    T previous = 0.0;
+    
+    for (int i = 0; i < 10; i++)
+    {
+        T E1 = value(p + dp);
+        T dE = E1 - E0;
+        
+        dE -= dOdp.dot(dp);
+        // std::cout << "dE " << dE << std::endl;
+        if (i > 0)
+        {
+            // std::cout << "scale" << std::endl;
+            std::cout << (previous/dE) << std::endl;
+            // std::getchar();
+        }
+        previous = dE;
+        dp *= 0.5;
+    }
+}
+
+void Objective::diffTestGradient()
+{
+    T epsilon = 1e-5;
+    VectorXT dOdp(n_dof_design);
+    dOdp.setZero();
+    VectorXT p;
+    getDesignParameters(p);
+    T _dummy;
+    gradient(p, dOdp, _dummy, true, false);
+
+    for(int _dof_i = 0; _dof_i < n_dof_design; _dof_i++)
+    {
+        int dof_i = _dof_i;
+        p[dof_i] += epsilon;
+        T E1 = value(p);
+        p[dof_i] -= 2.0 * epsilon;
+        T E0 = value(p);
+        p[dof_i] += epsilon;
+        T fd = (E1 - E0) / (2.0 *epsilon);
+        std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
+        std::getchar();
     }
 }

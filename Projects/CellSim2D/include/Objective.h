@@ -79,6 +79,7 @@ public:
 
     void loadTarget(const std::string& filename, T perturbation);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
+
     void computeOx(const VectorXT& x, T& Ox);
     void computedOdx(const VectorXT& x, VectorXT& dOdx);
     void computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries);
@@ -89,9 +90,14 @@ public:
 
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
+    
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = false);
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false);
+
+    void diffTestGradientScale();
+    void diffTestGradient();
 
     Objective(VertexModel2D& _vertex_model) : vertex_model(_vertex_model) {}
     ~Objective() {}

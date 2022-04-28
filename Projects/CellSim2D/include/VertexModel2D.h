@@ -53,21 +53,31 @@ public:
     T w_eb = 1.0;
     T w_el = 1.0;
     T radius = 1.0;
-    T w_a = 1e6;
-    T w_mb = 1e6;
-    T w_yolk = 1e6;
+    T w_a = 1e4;
+    T w_mb = 1e4;
+    T w_yolk = 1e4;
     T yolk_area_rest = 0;
     int n_cells = 0;
+    T barrier_weight = 1e-22;
 
     TV mesh_centroid = TV::Zero();
 
     T newton_tol = 1e-6;
     int max_newton_iter = 2000;
+    bool save_mesh = false;
 
     bool verbose = false;
     bool run_diff_test = false;
 
     std::unordered_map<int, T> dirichlet_data;
+
+    std::string data_folder = "/home/yueli/Documents/ETH/WuKong/output/cells2d/";
+
+    bool use_ipc = true;
+    Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXi ipc_edges, ipc_faces;
+    T ipc_barrier_distance = 1e-3;
+    T ipc_barrier_weight = 1e4;
 
 private:
     bool validEdgeIdx(Region region, int idx)
@@ -111,7 +121,7 @@ public:
     template <typename OP>
     void iterateLateralEdgeSerial(const OP& f)
     {
-        for (int i = lateral_edge_start; i < edges.size(); i++)
+        for (int i = lateral_edge_start; i < int(edges.size()); i++)
         {
             f(edges[i], i);
         }
@@ -215,8 +225,19 @@ public:
         }
     }
 
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    {
+        std::vector<Entry> triplets;
+
+        for (int k=0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+        return triplets;
+    }
+
 public:
     void saveCellCentroidsToFile(const std::string& filename);
+    void saveStates(const std::string& filename);
     void computeAllCellCentroids(VectorXT& cell_centroids);
     void initializeScene();
 
@@ -238,11 +259,13 @@ public:
         const std::unordered_map<int, T>& data);
     bool advanceOneStep(int step);
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    T computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du);
 
     void addEdgeEnergy(Region region, T w, T& energy);
     void addEdgeForceEntries(Region region, T w, VectorXT& residual);
     void addEdgeHessianEntries(Region region, T w, std::vector<Entry>& entries);
 
+    T computeCellArea(int cell_idx, bool rest = false);
     void addAreaPreservationEnergy(T w, T& energy);
     void addAreaPreservationForceEntries(T w, VectorXT& residual);
     void addAreaPreservationHessianEntries(T w, std::vector<Entry>& entries);
@@ -250,6 +273,11 @@ public:
     void addMembraneBoundTerm(T w, T& energy);
     void addMembraneBoundForceEntries(T w, VectorXT& residual);
     void addMembraneBoundHessianEntries(T w, std::vector<Entry>& entries);
+
+    T computeAreaInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+    void addAreaBarrierEnergy(T w, T& energy);
+    void addAreaBarrierForceEntries(T w, VectorXT& residual);
+    void addAreaBarrierHessianEntries(T w, std::vector<Entry>& entries);
 
     T computeYolkArea();
     void addYolkPreservationEnergy(T w, T& energy);
@@ -261,6 +289,13 @@ public:
     void addContractingForceEntries(VectorXT& residual);
     void addContractingHessianEntries(std::vector<Entry>& entries);
 
+    void buildIPCRestData();
+    void addIPCEnergy(T& energy);
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries);
+    void updateIPCVertices(const VectorXT& _u);
+    T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+
     void checkTotalGradient(bool perturb = false);
     void checkTotalHessian(bool perturb = false);
 
@@ -268,17 +303,26 @@ public:
     void checkTotalGradientScale(bool perturb = false);
 
     void positionsFromIndices(VectorXT& positions, const VtxList& indices, bool rest_state = false);
-    void computeCellCentroid(int cell_idx, TV& centroid);
+    void computeCellCentroid(int cell_idx, TV& centroid, bool rest = false);
 
     void reset();
     bool staticSolve();
 
     void getCellVtxIndices(VtxList& indices, int cell_idx);
+    void loadEdgeWeights(const std::string& filename, VectorXT& weights);
 
+    // For sensitvitity analysis
     void dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dOdp);
     void computededp(VectorXT& dedp);
     void dfdpWeightsSparse(StiffnessMatrix& dfdp);
+    void dxdpFromdxdpEdgeWeights(MatrixXT& dxdp);
+    void dfdpWeightsDense(MatrixXT& dfdp);
 
+    bool fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector);
+    void checkHessianPD(bool save_txt = false);
+
+    void checkFunctionPerIteration(int step);
+    void checkFinalState();
     VertexModel2D() {}
     ~VertexModel2D() {}
 };

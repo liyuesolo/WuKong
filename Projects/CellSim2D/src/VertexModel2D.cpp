@@ -1,5 +1,11 @@
 #include <Eigen/PardisoSupport>
 #include <igl/readOBJ.h>
+#include <iomanip>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
+
 #include "../include/VertexModel2D.h"
 #include "../include/autodiff/EdgeEnergy.h"
 #include "../include/autodiff/AreaEnergy.h"
@@ -9,7 +15,7 @@ void VertexModel2D::initializeScene()
 {
     T r = 1.0;
     radius = r + 1e-3;
-    int n_div = 20;
+    int n_div = 100;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 2);
     for(int i = 0; i < n_div; i++)
@@ -26,7 +32,7 @@ void VertexModel2D::initializeScene()
     }
     basal_edge_start = edges.size();
 
-    T edge_length = 0.8 * (points.segment<2>(0) - points.segment<2>(2)).norm();
+    T edge_length = 1.0 * (points.segment<2>(0) - points.segment<2>(2)).norm();
     
     undeformed.conservativeResize(n_pt * 2 * 2);
 
@@ -59,13 +65,23 @@ void VertexModel2D::initializeScene()
         dirichlet_data[i] = 0;
     }
     
-    // w_ea = 0;
-    // w_eb = 0;
-    w_el = 10.0 * w_ea;
-    // w_mb = 0;
+    w_ea = 1.0;
+    w_eb = 0.5;
+    // w_el = 2.0 * w_ea;
+    w_el = 4.0;
+    w_a = 1e6;
 
     yolk_area_rest = computeYolkArea();
     configContractingWeights();
+    
+    use_ipc = true;
+
+    if (use_ipc)
+    {
+        ipc_barrier_weight = 1e3;
+        ipc_barrier_distance = 1e-2;
+        buildIPCRestData();
+    }
 }
 
 void VertexModel2D::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -80,7 +96,13 @@ void VertexModel2D::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi
         TV vj = deformed.segment<2>(edges[i][1] * 2);
         edge_pairs.push_back(std::make_pair(vi, vj));
     }
-    appendCylindersToEdges(edge_pairs, TV3(0, 0.3, 1), 0.02, V, F, C);
+
+    TV v0 = deformed.segment<2>(edges[0][0] * 2);
+    TV v1 = deformed.segment<2>(edges[0][1] * 2);
+    
+    T edge_length = (v1 - v0).norm();
+
+    appendCylindersToEdges(edge_pairs, TV3(0, 0.3, 1), 0.1 * edge_length, V, F, C);
 }
 
 void VertexModel2D::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
@@ -171,6 +193,11 @@ void VertexModel2D::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
     addContractingHessianEntries(entries);
 
+    addAreaBarrierHessianEntries(barrier_weight, entries);
+
+    if (use_ipc)
+        addIPCHessianEntries(entries);
+
     K.resize(num_nodes * 2, num_nodes * 2);
     K.setFromTriplets(entries.begin(), entries.end());
     if (!run_diff_test)
@@ -206,7 +233,7 @@ T VertexModel2D::computeTotalEnergy(const VectorXT& _u)
     deformed = undeformed + projected;
 
     T edge_term = 0.0, area_term = 0.0, mem_term = 0.0,
-        yolk_term = 0.0, contracting_term = 0.0;
+        yolk_term = 0.0, contracting_term = 0.0, area_barrier_term = 0.0;
 
     addEdgeEnergy(Apical, w_ea, edge_term);
     addEdgeEnergy(Basal, w_eb, edge_term);
@@ -224,6 +251,16 @@ T VertexModel2D::computeTotalEnergy(const VectorXT& _u)
     
     addContractingEnergy(contracting_term);
     energy += contracting_term;
+
+    addAreaBarrierEnergy(barrier_weight, area_barrier_term);
+    energy += area_barrier_term;
+
+    if (use_ipc)
+    {
+        T ipc_energy = 0.0;
+        addIPCEnergy(ipc_energy);
+        energy += ipc_energy;
+    }
 
     return energy;
 }
@@ -246,13 +283,46 @@ T VertexModel2D::computeResidual(const VectorXT& _u,  VectorXT& residual)
     addEdgeForceEntries(Basal, w_eb, residual);
     addEdgeForceEntries(Lateral, w_el, residual);
 
+    if (verbose)
+        std::cout << "edge force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
+
     addAreaPreservationForceEntries(w_a, residual);
+
+    if (verbose)
+        std::cout << "area force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
 
     addMembraneBoundForceEntries(w_mb, residual);
 
+    if (verbose)
+        std::cout << "mem force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
+
     addYolkPreservationForceEntries(w_yolk, residual);
 
+    if (verbose)
+        std::cout << "yolk force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
+
     addContractingForceEntries(residual);
+
+    if (verbose)
+        std::cout << "contract force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
+    
+    addAreaBarrierForceEntries(barrier_weight, residual);
+    if (verbose)
+        std::cout << "barrier force norm: " << (residual - residual_temp).norm() << std::endl;
+    residual_temp = residual;
+
+    if (use_ipc)
+    {
+        addIPCForceEntries(residual);
+        if (verbose)
+            std::cout << "ipc force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -261,6 +331,116 @@ T VertexModel2D::computeResidual(const VectorXT& _u,  VectorXT& residual)
         });
 
     return residual.norm();
+}
+
+void VertexModel2D::loadEdgeWeights(const std::string& filename, VectorXT& weights)
+{
+    std::ifstream in(filename);
+    std::vector<T> weights_std_vec;
+    T w;
+    while (in >> w)
+        weights_std_vec.push_back(w);
+    weights = Eigen::Map<VectorXT>(weights_std_vec.data(), weights_std_vec.size());
+    in.close();
+}
+
+T VertexModel2D::computeAreaInversionFreeStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    T step_size = 1.0;
+    int cnt = 0;
+    
+    auto unsignedArea = [&](TV& a, TV& b, TV& c)->T
+    {
+        TV3 v0(a[0], a[1], 0.0);
+        TV3 v1(b[0], b[1], 0.0);
+        TV3 v2(c[0], c[1], 0.0);
+
+        return 0.5 * (v1 - v0).cross(v2 - v0)[2];
+    };
+
+    auto computeCellSubArea = [&]()
+    {
+        std::vector<Vector<T, 4>> cell_sub_area;
+        iterateCellSerial([&](VtxList& indices, int cell_idx)
+        {
+            VectorXT positions;
+            positionsFromIndices(positions, indices);
+            int n_pt = indices.size();
+            TV centroid;
+            computeCellCentroid(cell_idx, centroid);
+            Vector<T, 4> sub_area;
+            for (int i = 0; i < n_pt; i++)
+            {
+                int j = (i + 1) % n_pt;
+                TV r0 = positions.segment<2>(i * 2);
+                TV r1 = positions.segment<2>(j * 2);
+                T area = unsignedArea(r0, r1, centroid);
+                sub_area[i] = area;
+            }
+            cell_sub_area.push_back(sub_area);
+        });
+        for (auto sub_area : cell_sub_area)
+        {
+            std::cout << sub_area.transpose() << std::endl;
+        }
+        
+    };
+    // computeCellSubArea();
+    while (true)
+    {
+        deformed = undeformed + _u + step_size * du;
+        bool constraint_violated = false;
+        if (cnt > 60)
+        {
+            std::cout << "unable to find inversion free state " << std::endl;
+            std::exit(0);
+        }
+        iterateCellSerial([&](VtxList& indices, int cell_idx)
+        {
+            if (constraint_violated)
+                return;
+            VectorXT positions;
+            positionsFromIndices(positions, indices);
+            int n_pt = indices.size();
+            TV centroid;
+            computeCellCentroid(cell_idx, centroid);
+            for (int i = 0; i < n_pt; i++)
+            {
+                int j = (i + 1) % n_pt;
+                TV r0 = positions.segment<2>(i * 2);
+                TV r1 = positions.segment<2>(j * 2);
+                T area = unsignedArea(r0, r1, centroid);
+                // std::cout << computeSignedTriangleArea(r0, r1, centroid) << std::endl;
+                // std::cout << "area " << area << std::endl;
+                if (area < 1e-9)
+                {
+                    constraint_violated = true;
+                    break;
+                }
+            }
+        });
+
+        if (constraint_violated)
+        {
+            step_size *= 0.8;
+            cnt++;
+        }
+        else
+            return step_size;
+    }
+}
+
+T VertexModel2D::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    T step_size = 1.0;
+    step_size = std::min(computeAreaInversionFreeStepsize(_u, du), step_size);
+    
+    if (use_ipc)
+        step_size = std::min(computeCollisionFreeStepsize(_u, du), step_size);
+
+    if (verbose)
+        std::cout << "step size: " << step_size << std::endl;
+    return step_size;
 }
 
 T VertexModel2D::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max)
@@ -275,7 +455,7 @@ T VertexModel2D::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max)
     bool success = linearSolve(K, residual, du); 
 
     T norm = du.norm();
-    T alpha = 1.0;
+    T alpha = computeLineSearchInitStepsize(_u, du);
     T E0 = computeTotalEnergy(_u);
     
     int cnt = 1.0;
@@ -289,6 +469,13 @@ T VertexModel2D::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max)
             _u = u_ls;
             if (verbose)
                 std::cout << "\tls " << cnt << std::endl;
+            if (cnt == ls_max)
+            {
+                // checkTotalGradientScale();
+                // checkTotalHessianScale();
+                // checkTotalHessian();
+                // std::getchar();
+            }
             break;
         }
         alpha *= 0.5;
@@ -302,6 +489,9 @@ bool VertexModel2D::advanceOneStep(int step)
 {
     VectorXT residual(deformed.rows());
     residual.setZero();
+    
+    if (use_ipc)
+        updateIPCVertices(u);
 
     T residual_norm = computeResidual(u, residual);
     std::cout << "[Newton] iter " << step << "/" << max_newton_iter << " |g|: " << residual_norm << std::endl;
@@ -309,9 +499,13 @@ bool VertexModel2D::advanceOneStep(int step)
         return true;
 
     T dq_norm = lineSearchNewton(u, residual);
-
+    // checkFunctionPerIteration(step);
+    if (save_mesh)
+        saveStates(data_folder + "iter_" + std::to_string(step) + ".obj");
     if(step == max_newton_iter || dq_norm > 1e10)
+    {
         return true;
+    }
     
     return false;    
 }
@@ -485,6 +679,42 @@ void VertexModel2D::positionsFromIndices(VectorXT& positions, const VtxList& ind
     }
 }
 
+T VertexModel2D::computeCellArea(int cell_idx, bool rest)
+{
+    VtxList indices;
+    getCellVtxIndices(indices, cell_idx);
+    VectorXT positions;
+    positionsFromIndices(positions, indices, rest);
+    T area = 0.0;
+    TV centroid;
+    computeCellCentroid(cell_idx, centroid, rest);
+    for (int i = 0; i < indices.size(); i++)
+    {
+        int j = (i + 1) % indices.size();
+        TV vi = positions.segment<2>(i * 2);
+        TV vj = positions.segment<2>(j * 2);
+        T ai;
+        computeTriangleArea(vi, vj, centroid, ai);
+        area += ai;
+    }
+    return area;
+}
+
+void VertexModel2D::checkFinalState()
+{
+    T total_area = computeYolkArea();
+    std::cout << "initial yolk area: " << yolk_area_rest << " final yolk area: " << total_area << std::endl;
+    
+    VectorXT cell_areas_final(n_cells), cell_areas_init(n_cells);
+
+    iterateCellParallel([&](VtxList& indices, int cell_idx)
+    {
+        cell_areas_final[cell_idx] = computeCellArea(cell_idx);
+        cell_areas_init[cell_idx] = computeCellArea(cell_idx, /*rest_state = */ true);
+    });
+    std::cout << "initial cell area: " << cell_areas_init.sum() << " final cell area: " << cell_areas_final.sum() << std::endl;
+}
+
 void VertexModel2D::addAreaPreservationEnergy(T w, T& energy)
 {
     iterateCellSerial([&](VtxList& indices, int cell_idx)
@@ -580,9 +810,11 @@ T VertexModel2D::computeYolkArea()
         TV vi = deformed.segment<2>(basal_vtx_start * 2 + i * 2);
         TV vj = deformed.segment<2>(basal_vtx_start * 2 + j * 2);
 
-        TV3 vi_3D = TV3::Zero(), vj_3D = TV3::Zero();
-        vi_3D.segment<2>(0) = vi; vj_3D.segment<2>(0) = vj;
-        T area = 0.5 * (vj_3D - center_3D).cross(vi_3D - center_3D).norm();
+        // TV3 vi_3D = TV3::Zero(), vj_3D = TV3::Zero();
+        // vi_3D.segment<2>(0) = vi; vj_3D.segment<2>(0) = vj;
+        // T area = 0.5 * (vj_3D - center_3D).cross(vi_3D - center_3D).norm();
+        T area;
+        computeSignedTriangleArea(vi, vj, mesh_centroid, area);
         total_area += area;
     }
     return total_area;
@@ -606,7 +838,8 @@ void VertexModel2D::addYolkPreservationForceEntries(T w, VectorXT& residual)
         TV vj = deformed.segment<2>(basal_vtx_start * 2 + j * 2);
 
         Vector<T, 4> dedx;
-        computeTriangleAreaGradient(vi, vj, mesh_centroid   , dedx);
+        // computeTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
+        computeSignedTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
         addForceEntry<4>(residual, {basal_vtx_start + i, basal_vtx_start + j}, -de_dsum * dedx);
     }
 }
@@ -625,12 +858,14 @@ void VertexModel2D::addYolkPreservationHessianEntries(T w, std::vector<Entry>& e
         TV vj = deformed.segment<2>(basal_vtx_start * 2 + j * 2);
 
         Vector<T, 4> dedx;
-        computeTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
+        // computeTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
+        computeSignedTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
         
         addForceEntry<4>(dAdx_full, {basal_vtx_start + i, basal_vtx_start + j}, dedx);
 
         Matrix<T, 4, 4> d2edx2;
-        computeTriangleAreaHessian(vi, vj, mesh_centroid, d2edx2);
+        computeSignedTriangleAreaHessian(vi, vj, mesh_centroid, d2edx2);
+        // computeTriangleAreaHessian(vi, vj, mesh_centroid, d2edx2);
 
         Matrix<T, 4, 4> hessian = de_dsum * d2edx2;
         addHessianEntry(entries, {basal_vtx_start + i, basal_vtx_start + j}, hessian);
@@ -662,7 +897,7 @@ void VertexModel2D::configContractingWeights()
     {
         TV vi = deformed.segment<2>(e[0] * 2);
         TV vj = deformed.segment<2>(e[1] * 2);
-        if (vi[1] > 0.8 * radius)
+        if (vi[1] > 0.9 * radius)
         {
             apical_edge_contracting_weights[cnt] = 5.0;
         }
@@ -720,12 +955,12 @@ void VertexModel2D::getCellVtxIndices(VtxList& indices, int cell_idx)
     indices.push_back(edges[cell_idx][0] + basal_vtx_start);
 }
 
-void VertexModel2D::computeCellCentroid(int cell_idx, TV& centroid)
+void VertexModel2D::computeCellCentroid(int cell_idx, TV& centroid, bool rest)
 {
     VtxList edge_vtx_list;
     getCellVtxIndices(edge_vtx_list, cell_idx);
     VectorXT positions;
-    positionsFromIndices(positions, edge_vtx_list);
+    positionsFromIndices(positions, edge_vtx_list, rest);
     centroid = TV::Zero();
     for (int i = 0; i < edge_vtx_list.size(); i++)
     {
@@ -769,6 +1004,19 @@ void VertexModel2D::reset()
     u.setZero();
 }
 
+void VertexModel2D::checkFunctionPerIteration(int step)
+{
+    VectorXT edge_length(edges.size());
+    for (int i = 0; i < edges.size(); i++)
+    {
+        TV vi = deformed.segment<2>(edges[i][0] * 2);
+        TV vj = deformed.segment<2>(edges[i][1] * 2);
+        edge_length[i] = (vj - vi).norm();
+    }
+    std::cout << "min edge length " << edge_length.minCoeff() << std::endl;
+    std::getchar();
+}
+
 bool VertexModel2D::staticSolve()
 {
     int cnt = 0;
@@ -785,7 +1033,8 @@ bool VertexModel2D::staticSolve()
         
         if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
-            
+
+
         if (residual_norm < newton_tol)
             break;
 
@@ -884,6 +1133,61 @@ void VertexModel2D::dfdpWeightsSparse(StiffnessMatrix& dfdp)
             dfdp.coeffRef(data.first, i) = 0;
 }
 
+void VertexModel2D::dfdpWeightsDense(MatrixXT& dfdp)
+{
+    dfdp.resize(num_nodes * 2, apical_edge_contracting_weights.rows());
+    dfdp.setZero();
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e, int edge_idx){
+        TV vi = deformed.segment<2>(e[0] * 2);
+        TV vj = deformed.segment<2>(e[1] * 2);
+        Vector<T, 4> dedx;
+        computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+        dedx *= -1.0;
+        dfdp.col(cnt).segment<2>(e[0] * 2) += dedx.segment<2>(0);
+        dfdp.col(cnt).segment<2>(e[1] * 2) += dedx.segment<2>(2);
+        cnt++;
+    });
+
+    for (int i = 0; i < cnt; i++)
+        for (auto data : dirichlet_data)
+            dfdp(data.first, i) = 0;
+}
+
+void VertexModel2D::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
+{
+    MatrixXT dfdp(num_nodes * 2, apical_edge_contracting_weights.rows());
+    dfdp.setZero();
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e, int edge_idx){
+        TV vi = deformed.segment<2>(e[0] * 2);
+        TV vj = deformed.segment<2>(e[1] * 2);
+        Vector<T, 4> dedx;
+        computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+        dedx *= -1.0;
+        dfdp.col(cnt).segment<2>(e[0] * 2) += dedx.segment<2>(0);
+        dfdp.col(cnt).segment<2>(e[1] * 2) += dedx.segment<2>(2);
+        cnt++;
+    });
+
+    for (int i = 0; i < cnt; i++)
+        for (auto data : dirichlet_data)
+            dfdp(data.first, i) = 0;
+    
+    dxdp.resize(num_nodes * 2, apical_edge_contracting_weights.rows());
+    dxdp.setZero();
+    StiffnessMatrix d2edx2(num_nodes*2, num_nodes*2);
+    buildSystemMatrix(u, d2edx2);
+    // Timer ttt(true);
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2);
+    solver.factorize(d2edx2);
+    for (int i = 0; i < cnt; i++)
+    {
+        dxdp.col(i) = solver.solve(dfdp.col(i));
+    }
+}
+
 void VertexModel2D::appendSphereToPositionVector(const VectorXT& position, T radius, const TV3& color,
     Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {
@@ -931,4 +1235,168 @@ void VertexModel2D::appendSphereToPositionVector(const VectorXT& position, T rad
         F.block(offset_f, 0, f_sphere.rows(), 3) = f_sphere_i;
         C.block(offset_f, 0, f_sphere.rows(), 3) = c_sphere_i;
     });
+}
+
+void VertexModel2D::checkHessianPD(bool save_txt)
+{
+    int nmodes = 10;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    buildSystemMatrix(u, d2edx2);
+    bool use_Spectra = true;
+
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2); 
+    solver.factorize(d2edx2);
+    bool indefinite = false;
+    if (solver.info() == Eigen::NumericalIssue)
+    {
+        std::cout << "!!!indefinite matrix!!!" << std::endl;
+        indefinite = true;
+    }
+
+    if (use_Spectra)
+    {
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+
+        //0 cannot cannot be used as a shift
+        T shift = indefinite ? -1e2 : -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+            Spectra::LARGEST_MAGN, 
+            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values.transpose() << std::endl;
+            if (save_txt)
+            {
+                std::ofstream out("cell_eigen_vectors_2d.txt");
+                out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+                for (int i = 0; i < eigen_vectors.cols(); i++)
+                    out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+                out << std::endl;
+                for (int i = 0; i < eigen_vectors.rows(); i++)
+                {
+                    // for (int j = 0; j < eigen_vectors.cols(); j++)
+                    for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                        out << eigen_vectors(i, j) << " ";
+                    out << std::endl;
+                }       
+                out << std::endl;
+                out.close();
+            }
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+}
+
+bool VertexModel2D::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector)
+{
+    int nmodes = 20;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    buildSystemMatrix(u, d2edx2);
+    
+    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.analyzePattern(d2edx2); 
+    solver.factorize(d2edx2);
+    
+    if (solver.info() != Eigen::NumericalIssue)
+    {
+        return false;
+    }
+
+    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+
+        //0 cannot cannot be used as a shift
+    T shift = -10;
+    Spectra::SymEigsShiftSolver<T, 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+        eigs(&op, nmodes, 2 * nmodes, shift);
+
+    eigs.init();
+
+    int nconv = eigs.compute();
+
+    if (eigs.info() == Spectra::SUCCESSFUL)
+    {
+        // std::cout << "Spectra successful" << std::endl;
+        Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+        Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+        int last_col = eigen_values.rows() - 1;
+        // std::cout << eigen_values.transpose() << std::endl;
+        if (eigen_values[last_col] < 0.0)
+        {
+            negative_eigen_vector = eigen_vectors.col(last_col);
+            negative_eigen_value = eigen_values[last_col]; 
+            return true;
+        }   
+        return false;
+    }
+    else
+    {
+        std::cout << "Spectra failed" << std::endl;
+        return false;
+    }
+}
+
+void VertexModel2D::addAreaBarrierEnergy(T w, T& energy)
+{
+    iterateCellSerial([&](VtxList& indices, int cell_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, indices);
+        T ei;
+        computeAreaBarrier4Points(w, positions, ei);
+        energy += ei;
+    });
+}
+
+void VertexModel2D::addAreaBarrierForceEntries(T w, VectorXT& residual)
+{
+    iterateCellSerial([&](VtxList& indices, int cell_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, indices);
+        Vector<T, 8> dedx;
+        computeAreaBarrier4PointsGradient(w, positions, dedx);
+        addForceEntry<8>(residual, indices, -dedx);
+    });
+}
+
+void VertexModel2D::addAreaBarrierHessianEntries(T w, std::vector<Entry>& entries)
+{
+    iterateCellSerial([&](VtxList& indices, int cell_idx)
+    {
+        VectorXT positions;
+        positionsFromIndices(positions, indices);
+        Matrix<T, 8, 8> hessian;
+        computeAreaBarrier4PointsHessian(w, positions, hessian);
+        addHessianEntry<8>(entries, indices, hessian);
+    });
+}
+
+void VertexModel2D::saveStates(const std::string& filename)
+{
+    std::ofstream out(filename);
+    for (int i = 0; i < num_nodes; i++)
+    {
+        out << std::setprecision(20) << "v " << deformed.segment<2>(i * 2).transpose() << " 0" << std::endl;
+    }
+    for (Edge& e : edges)
+    {
+        out << "l " << (e + IV::Ones()).transpose() << std::endl;
+    }
+    out.close();
 }

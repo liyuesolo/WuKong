@@ -46,8 +46,8 @@ public:
     int n_dof_sim;
 
     bool resume = false;
-    bool save_results = true;
-    std::string data_folder = "";
+    bool save_results = false;
+    std::string data_folder = ".";
 
     T initial_gradient_norm = 0.0;
     T tol_g = 1e-6;

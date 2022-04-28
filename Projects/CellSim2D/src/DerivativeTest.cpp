@@ -148,7 +148,6 @@ void VertexModel2D::checkTotalHessianScale(bool perturb)
 {
 
     run_diff_test = true;
-    
     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
 
     VectorXT du(num_nodes * 2);
