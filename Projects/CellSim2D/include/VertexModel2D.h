@@ -56,6 +56,8 @@ public:
     T w_a = 1e4;
     T w_mb = 1e4;
     T w_yolk = 1e4;
+    T w_c = 5.0;
+    
     T yolk_area_rest = 0;
     int n_cells = 0;
     T barrier_weight = 1e-22;

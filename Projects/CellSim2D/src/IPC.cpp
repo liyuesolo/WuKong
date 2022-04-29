@@ -7,7 +7,7 @@ void VertexModel2D::buildIPCRestData()
     ipc_vertices.resize(num_nodes, 2);
     for (int i = 0; i < num_nodes; i++)
     {
-        ipc_vertices.row(i) = deformed.segment<2>(i * 2);
+        ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
     }
     for (int i = 0; i < edges.size(); i++)
     {

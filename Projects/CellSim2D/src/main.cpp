@@ -22,7 +22,6 @@ int main(int argc, char** argv)
 
     vertex_model.verbose = true;
 
-
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
 
@@ -213,10 +212,15 @@ int main(int argc, char** argv)
                 updateScreen(viewer);
             }
         }
+        if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
+        {
+            vertex_model.reset();
+            vertex_model.staticSolve();
+            updateScreen(viewer);
+        }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
-            vertex_model.deformed = vertex_model.undeformed;
-            vertex_model.u.setZero();
+            vertex_model.reset();
             updateScreen(viewer);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
@@ -229,7 +233,8 @@ int main(int argc, char** argv)
         }
         if (ImGui::Button("LoadTargets", ImVec2(-1,0)))
         {   
-            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.05);
+            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.1);
+            inverse = true; forward = false;
             objective.match_centroid = true;
             objective.add_forward_potential = false;
             objective.w_fp = 1e-2;
@@ -247,9 +252,9 @@ int main(int argc, char** argv)
         }
         if (ImGui::Button("LoadInvTargets", ImVec2(-1,0)))
         {   
-            objective.loadTarget(data_folder + "2D_test_inv_targets.txt", 0.05);
+            objective.loadTarget(data_folder + "2D_test_inv_targets.txt", 0.0);
             objective.match_centroid = true;
-            objective.add_forward_potential = false;
+            objective.add_forward_potential = true;
             objective.w_fp = 1e-2;
             objective.use_penalty = true;
             objective.penalty_type = Qubic;
@@ -290,6 +295,11 @@ int main(int argc, char** argv)
                 finished = sa.optimizeOneStep(static_solve_step, objective.optimizer);
             if (finished)
             {
+                if (forward)
+                    std::cout << "FORWARD SIMULATION CONVERGES" << std::endl;
+                if (inverse)
+                    std::cout << "INVERSE OPTIMIZATION CONVERGES" << std::endl;
+
                 viewer.core().is_animating = false;
                 vertex_model.checkHessianPD(false);
                 vertex_model.checkFinalState();
@@ -308,7 +318,7 @@ int main(int argc, char** argv)
     delta *= 10.0;
     // vertex_model.apical_edge_contracting_weights.setConstant(0.1);
     // vertex_model.apical_edge_contracting_weights = delta;
-    // vertex_model.loadEdgeWeights("trouble.txt", vertex_model.apical_edge_contracting_weights);
+    // vertex_model.loadEdgeWeights("troubled_weights.txt", vertex_model.apical_edge_contracting_weights);
     // vertex_model.apical_edge_contracting_weights += delta;
     // vertex_model.checkTotalGradientScale();
     // vertex_model.checkTotalHessianScale();

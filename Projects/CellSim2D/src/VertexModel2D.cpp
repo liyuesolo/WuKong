@@ -15,7 +15,7 @@ void VertexModel2D::initializeScene()
 {
     T r = 1.0;
     radius = r + 1e-3;
-    int n_div = 100;
+    int n_div = 50;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 2);
     for(int i = 0; i < n_div; i++)
@@ -65,11 +65,26 @@ void VertexModel2D::initializeScene()
         dirichlet_data[i] = 0;
     }
     
-    w_ea = 1.0;
-    w_eb = 0.5;
-    // w_el = 2.0 * w_ea;
-    w_el = 4.0;
-    w_a = 1e6;
+    // mild buckling n_div == 50
+    int scene = 1;
+    if (scene == 0)
+    {
+        w_ea = 0.5;
+        w_eb = 0.2;
+        w_el = 4.0;
+        w_c = 5.0;
+    }
+    else if (scene == 1)
+    {
+        w_ea = 0.5;
+        w_eb = 0.2;
+        w_el = 4.0;
+        w_c = 10.0;
+    }
+    
+    w_a = 1e7;
+    w_mb = 1e5;
+    w_yolk = 1e5;
 
     yolk_area_rest = computeYolkArea();
     configContractingWeights();
@@ -757,7 +772,7 @@ void VertexModel2D::addAreaPreservationHessianEntries(T w, std::vector<Entry>& e
 
 void VertexModel2D::addMembraneBoundTerm(T w, T& energy)
 {
-    for (int i = 0; i < basal_vtx_start; i++)
+    for (int i = 0; i < num_nodes; i++)
     {
         TV xi = deformed.segment<2>(i * 2);
         T dis = (xi - mesh_centroid).norm();
@@ -772,7 +787,7 @@ void VertexModel2D::addMembraneBoundTerm(T w, T& energy)
 
 void VertexModel2D::addMembraneBoundForceEntries(T w, VectorXT& residual)
 {
-    for (int i = 0; i < basal_vtx_start; i++)
+    for (int i = 0; i < num_nodes; i++)
     {
         TV xi = deformed.segment<2>(i * 2);
         T dis = (xi - mesh_centroid).norm();
@@ -786,7 +801,7 @@ void VertexModel2D::addMembraneBoundForceEntries(T w, VectorXT& residual)
 
 void VertexModel2D::addMembraneBoundHessianEntries(T w, std::vector<Entry>& entries)
 {
-    for (int i = 0; i < basal_vtx_start; i++)
+    for (int i = 0; i < num_nodes; i++)
     {
         TV xi = deformed.segment<2>(i * 2);
         T dis = (xi - mesh_centroid).norm();
@@ -897,9 +912,9 @@ void VertexModel2D::configContractingWeights()
     {
         TV vi = deformed.segment<2>(e[0] * 2);
         TV vj = deformed.segment<2>(e[1] * 2);
-        if (vi[1] > 0.9 * radius)
+        if (vi[1] > 0.95 * radius && vj[1] > 0.95 * radius)
         {
-            apical_edge_contracting_weights[cnt] = 5.0;
+            apical_edge_contracting_weights[cnt] = w_c;
         }
         cnt++;
     });
@@ -1002,6 +1017,13 @@ void VertexModel2D::reset()
 {
     deformed = undeformed;
     u.setZero();
+    if (use_ipc)
+    {
+        for (int i = 0; i < num_nodes; i++)
+        {
+            ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+        }
+    }
 }
 
 void VertexModel2D::checkFunctionPerIteration(int step)
@@ -1027,6 +1049,9 @@ bool VertexModel2D::staticSolve()
         VectorXT residual(deformed.rows());
         residual.setZero();
         
+        if (use_ipc)
+            updateIPCVertices(u);
+        
         residual_norm = computeResidual(u, residual);
         if (cnt == 0)
             residual_norm_init = residual_norm;
@@ -1038,7 +1063,7 @@ bool VertexModel2D::staticSolve()
         if (residual_norm < newton_tol)
             break;
 
-        dq_norm = lineSearchNewton(u, residual, 20);
+        dq_norm = lineSearchNewton(u, residual);
 
         if(cnt == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
             break;
@@ -1051,6 +1076,15 @@ bool VertexModel2D::staticSolve()
     });
 
     deformed = undeformed + u;
+
+    // if (cnt == max_newton_iter)
+    // {
+    //     std::ofstream out("troubled_weights.txt");
+    //     out << std::setprecision(20) << apical_edge_contracting_weights << std::endl;
+    //     out.close();
+    //     std::cout << "NEWTON REACHED MAX ITERATION" << std::endl;
+    //     std::exit(0);
+    // }
 
     std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
             << residual_norm << " |ddu|: " << dq_norm  
@@ -1253,6 +1287,8 @@ void VertexModel2D::checkHessianPD(bool save_txt)
     {
         std::cout << "!!!indefinite matrix!!!" << std::endl;
         indefinite = true;
+        // saveStates("indefinite_state.obj");
+        // std::exit(0);
     }
 
     if (use_Spectra)
@@ -1302,8 +1338,13 @@ void VertexModel2D::checkHessianPD(bool save_txt)
 
 bool VertexModel2D::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT& negative_eigen_vector)
 {
-    int nmodes = 20;
     int n_dof_sim = deformed.rows();
+    VectorXT residual(n_dof_sim); residual.setZero();
+    computeResidual(u, residual);
+    if (residual.norm() > newton_tol)
+        return false;
+    int nmodes = 10;
+    
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
     

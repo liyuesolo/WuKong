@@ -51,6 +51,7 @@ T Objective::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
                 VectorXT nodge_direction = negative_eigen_vector;
                 T step_size = 1e-3;
                 vertex_model.u += step_size * nodge_direction;
+                // std::getchar();
             }
             else
                 break;
@@ -97,7 +98,7 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
                 std::cout << "nodge it along the negative eigen vector" << std::endl;
                 VectorXT nodge_direction = negative_eigen_vector;
                 T step_size = 1e-3;
-                vertex_model.u += step_size * nodge_direction;
+                vertex_model.u += step_size * nodge_direction;   
             }
             else
                 break;

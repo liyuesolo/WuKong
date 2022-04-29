@@ -12,6 +12,7 @@ void SensitivityAnalysis::initialize()
     objective.mask[0] = true;
     objective.mask[1] = false;
     objective.equilibrium_prev = VectorXT::Zero(vertex_model.deformed.rows());
+    
     std::cout << "n_dof_sim " <<  n_dof_sim << " n_dof_design: " << n_dof_design << std::endl;
 }   
 
@@ -142,7 +143,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 dLdp += lagrange_multipliers[3];
                 std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
                 std::cout << "dot(search_dir, -gradient) " << dot_search_grad << std::endl;
-                if (dot_search_grad < 0.01)
+                // if (dot_search_grad < 0.01)
+                if (dot_search_grad < 1e-3)
                 {
                     H_GN.diagonal().array() += reg_alpha;
                     reg_alpha *= 10.0;
@@ -194,7 +196,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         {
             VectorXT p_ls = design_parameters + alpha * search_direction;
             // saveDesignParameters(data_folder + "/trouble.txt", p_ls);
-            // std::getchar();
+            
             T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
             
             std::cout << "[" << method << "]\t ls " << ls_cnt << " E1: " << E1 << " E0: " << E0 << std::endl;
