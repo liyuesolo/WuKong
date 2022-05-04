@@ -62,6 +62,8 @@ public:
     
     void initialize();
 
+    void checkStateAlongDirection();
+
     SensitivityAnalysis(VertexModel2D& _vertex_model, Objective& _objective) : 
         vertex_model(_vertex_model), objective(_objective) {}
     ~SensitivityAnalysis() { }

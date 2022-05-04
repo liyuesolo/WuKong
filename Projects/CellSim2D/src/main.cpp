@@ -9,12 +9,14 @@
 #include "../include/Objective.h"
 #include "../include/SensitivityAnalysis.h"
 
+
 int main(int argc, char** argv)
 {
     using TV3 = Vector<T, 3>;
     using TV = Vector<T, 2>;
     using Edge = Vector<int, 2>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using VtxList = std::vector<int>;
 
     VertexModel2D vertex_model;
     Objective objective(vertex_model);
@@ -24,6 +26,9 @@ int main(int argc, char** argv)
 
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
+
+    Eigen::MatrixXd evectors;
+    Eigen::VectorXd evalues;
 
     bool show_current = true;
     bool show_rest = false;
@@ -38,13 +43,37 @@ int main(int argc, char** argv)
     bool show_yolk_tri = false;
     bool show_contracting_edges = true;
     bool check_derivatives = false;
+    int modes = 0;
+    double t = 0.0;
 
     std::string data_folder = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim2D/data/";
+
+    if (argc > 1)
+    {
+        sa.data_folder = argv[1];
+        sa.save_results = true;
+    }
 
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
 
     viewer.plugins.push_back(&menu);
+
+    auto loadDisplacementVectors = [&](const std::string& filename)
+    {
+        std::ifstream in(filename);
+        int row, col;
+        in >> row >> col;
+        evectors.resize(row, col);
+        evalues.resize(col);
+        double entry;
+        for (int i = 0; i < col; i++)
+            in >> evalues[i];
+        for (int i = 0; i < row; i++)
+            for (int j = 0; j < col; j++)
+                in >> evectors(i, j);
+        in.close();
+    };
     
     auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
     {
@@ -59,7 +88,18 @@ int main(int argc, char** argv)
         
         if (show_cell_tri)
         {
-
+            TV3 color(0, 0, 0);
+            std::vector<std::pair<TV, TV>> end_points;
+            vertex_model.iterateCellSerial([&](VtxList& indices, int cell_idx){
+                TV centroid;
+                vertex_model.computeCellCentroid(cell_idx, centroid);
+                for (int i = 0; i < indices.size(); i++)
+                {
+                    TV vi = vertex_model.deformed.segment<2>(indices[i] * 2);
+                    end_points.push_back(std::make_pair(vi, centroid));
+                }
+            });
+            vertex_model.appendCylindersToEdges(end_points, color, sphere_radius * 0.05, V, F, C);
         }
         if (show_yolk_tri)
         {
@@ -173,8 +213,15 @@ int main(int argc, char** argv)
             {
                 if (check_derivatives)
                 {
-                    vertex_model.checkTotalGradientScale();
-                    vertex_model.checkTotalHessianScale();
+                    if (forward)
+                    {
+                        vertex_model.checkTotalGradientScale();
+                        vertex_model.checkTotalHessianScale();
+                    }
+                    if (inverse)
+                    {
+                        objective.diffTestGradientScale();
+                    }
                 }
             }
         }
@@ -233,18 +280,25 @@ int main(int argc, char** argv)
         }
         if (ImGui::Button("LoadTargets", ImVec2(-1,0)))
         {   
-            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.1);
+            T perturbance = 0.25;
+            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.25);
+            // objective.optimizeForStableTarget(perturbance);
             inverse = true; forward = false;
             objective.match_centroid = true;
-            objective.add_forward_potential = false;
+            objective.add_forward_potential = true;
             objective.w_fp = 1e-2;
+            objective.contracting_term_only = false;
             objective.use_penalty = false;
             objective.penalty_type = Qubic;
-            objective.penalty_weight = 1e2;
+            objective.penalty_weight = 1e3;
             if (objective.use_penalty)
                 objective.optimizer = SGN;
-            else    
+            else
+            {
                 objective.optimizer = SQP;
+                sa.add_reg = true;
+                sa.reg_w_H = 1e-6;
+            }
 
             objective.add_reg = false;
             sa.initialize();
@@ -256,13 +310,18 @@ int main(int argc, char** argv)
             objective.match_centroid = true;
             objective.add_forward_potential = true;
             objective.w_fp = 1e-2;
-            objective.use_penalty = true;
+            objective.use_penalty = false;
             objective.penalty_type = Qubic;
             objective.penalty_weight = 1e2;
             if (objective.use_penalty)
                 objective.optimizer = SGN;
-            else    
+            else
+            {
                 objective.optimizer = SQP;
+                sa.add_reg = true;
+                sa.reg_w_H = 1e-4;
+            }
+                
 
             objective.add_reg = false;
             sa.initialize();
@@ -279,9 +338,29 @@ int main(int argc, char** argv)
         default: 
             return false;
         case ' ':
-            viewer.core().is_animating = true;
+            viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case '1':
+            check_modes = true;
+            vertex_model.checkHessianPD(true);
+            loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/cell_eigen_vectors_2d.txt");
+            // std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
+            return true;
+        case 'a':
+            viewer.core().is_animating = !viewer.core().is_animating;
             return true;
         }
+    };
+
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && check_modes)
+        {
+            vertex_model.deformed = vertex_model.undeformed + vertex_model.u + 0.1 * evectors.col(modes) * std::sin(t);
+            t += 0.05;
+            updateScreen(viewer);
+        }
+        return false;
     };
 
     viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
@@ -296,9 +375,9 @@ int main(int argc, char** argv)
             if (finished)
             {
                 if (forward)
-                    std::cout << "FORWARD SIMULATION CONVERGES" << std::endl;
+                    std::cout << "***FORWARD SIMULATION CONVERGES***" << std::endl;
                 if (inverse)
-                    std::cout << "INVERSE OPTIMIZATION CONVERGES" << std::endl;
+                    std::cout << "***INVERSE OPTIMIZATION CONVERGES***" << std::endl;
 
                 viewer.core().is_animating = false;
                 vertex_model.checkHessianPD(false);
@@ -312,13 +391,22 @@ int main(int argc, char** argv)
     };
 
     vertex_model.initializeScene();
+    vertex_model.newton_tol = 1e-8;
     VectorXT delta = VectorXT::Random(vertex_model.apical_edge_contracting_weights.rows());
     delta.array() += delta.minCoeff();
     delta /= delta.norm(); 
     delta *= 10.0;
-    // vertex_model.apical_edge_contracting_weights.setConstant(0.1);
+    T init_val = 5;
+    // vertex_model.apical_edge_contracting_weights.setConstant(init_val);
     // vertex_model.apical_edge_contracting_weights = delta;
-    // vertex_model.loadEdgeWeights("troubled_weights.txt", vertex_model.apical_edge_contracting_weights);
+    std::string result_folder = "/home/yueli/Documents/ETH/WuKong/output/cells/437/";
+    int iter = 16;
+    // vertex_model.loadEdgeWeights(result_folder + "SQP_iter_" + std::to_string(iter) + ".txt", vertex_model.apical_edge_contracting_weights);
+    
+    // vertex_model.loadStates(result_folder + "SQP_iter_" + std::to_string(iter) + ".obj");
+    
+    // std::cout << vertex_model.u.transpose() << std::endl;
+    // vertex_model.deformed = vertex_model.undeformed + vertex_model.u;
     // vertex_model.apical_edge_contracting_weights += delta;
     // vertex_model.checkTotalGradientScale();
     // vertex_model.checkTotalHessianScale();

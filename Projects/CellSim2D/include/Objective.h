@@ -33,6 +33,7 @@ public:
     using TM = Matrix<double, 2, 2>;
     using IV = Vector<int, 2>;
     using Edge = Vector<int, 2>;
+    using VtxList = std::vector<int>;
 
     typedef int StorageIndex;
     using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
@@ -66,7 +67,9 @@ public:
     std::string target_filename;
     T target_perturbation = 0;
     T reg_w = 1e-6;
-
+    bool add_l1_reg = false;
+    T w_l1 = 0.01;
+    bool contracting_term_only = false;
     VectorXT prev_params;
 
 public:
@@ -77,6 +80,11 @@ public:
         } 
     }
 
+    void optimizeForStableTarget(T perturbation);
+
+    void computeEnergySubTerms(std::vector<T>& energy_terms);
+    
+    void saveState(const std::string& filename);
     void loadTarget(const std::string& filename, T perturbation);
     void getSimulationAndDesignDoF(int& _sim_dof, int& _design_dof);
 

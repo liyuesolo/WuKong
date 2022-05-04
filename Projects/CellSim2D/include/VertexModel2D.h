@@ -14,7 +14,7 @@
 
 enum Region
 {
-    Apical, Basal, Lateral, ALL
+    Apical, Basal, Lateral, ALL, INNER
 };
 
 class VertexModel2D
@@ -41,8 +41,10 @@ public:
 
 public:
     VectorXT undeformed, deformed, u;
+    VectorXT u0;
     std::vector<Edge> edges;
-    
+    std::vector<Edge> inner_edges;
+
     VectorXT apical_edge_contracting_weights;
     int basal_vtx_start = 0;
     int basal_edge_start = 0;
@@ -52,6 +54,7 @@ public:
     T w_ea = 1.0;
     T w_eb = 1.0;
     T w_el = 1.0;
+    T w_ei = 1.0;
     T radius = 1.0;
     T w_a = 1e4;
     T w_mb = 1e4;
@@ -76,10 +79,13 @@ public:
     std::string data_folder = "/home/yueli/Documents/ETH/WuKong/output/cells2d/";
 
     bool use_ipc = true;
+    bool add_ipc_friction = false;
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges, ipc_faces;
     T ipc_barrier_distance = 1e-3;
     T ipc_barrier_weight = 1e4;
+
+    bool add_inner_edges = false;
 
 private:
     bool validEdgeIdx(Region region, int idx)
@@ -240,6 +246,8 @@ public:
 public:
     void saveCellCentroidsToFile(const std::string& filename);
     void saveStates(const std::string& filename);
+    void loadStates(const std::string& filename);
+    
     void computeAllCellCentroids(VectorXT& cell_centroids);
     void initializeScene();
 

@@ -4,6 +4,7 @@
 void VertexModel2D::checkTotalGradient(bool perturb)
 {
     run_diff_test = true;
+    
     VectorXT du(num_nodes * 2);
     du.setRandom();
     du *= 1.0 / du.norm();
@@ -49,10 +50,6 @@ void VertexModel2D::checkTotalGradient(bool perturb)
 
 void VertexModel2D::checkTotalHessian(bool perturb)
 {
-    
-    run_diff_test = true;
-    
-
     std::cout << "======================== CHECK HESSIAN ========================" << std::endl;
     run_diff_test = true;
     T epsilon = 1e-7;
@@ -104,7 +101,6 @@ void VertexModel2D::checkTotalGradientScale(bool perturb)
 {
     
     run_diff_test = true;
-    
     std::cout << "======================== CHECK GRADIENT 2nd Scale ========================" << std::endl;
     T epsilon = 1e-7;
     VectorXT du(num_nodes * 2);

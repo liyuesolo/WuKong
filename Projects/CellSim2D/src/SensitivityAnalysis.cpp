@@ -14,7 +14,162 @@ void SensitivityAnalysis::initialize()
     objective.equilibrium_prev = VectorXT::Zero(vertex_model.deformed.rows());
     
     std::cout << "n_dof_sim " <<  n_dof_sim << " n_dof_design: " << n_dof_design << std::endl;
-}   
+}
+
+void SensitivityAnalysis::checkStateAlongDirection()
+{
+    
+    objective.perturb = false;
+    T E0;
+    VectorXT dOdp, dp;
+
+    vertex_model.loadStates("/home/yueli/Documents/ETH/WuKong/output/cells/437/SQP_iter_18.obj");
+    vertex_model.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/437/SQP_iter_18.txt", vertex_model.apical_edge_contracting_weights);
+
+    objective.getDesignParameters(design_parameters);
+    VectorXT u = vertex_model.u;
+    T lower_bound = objective.bound[0], upper_bound = objective.bound[1];
+    if (save_results)
+        vertex_model.saveStates(data_folder + "/start.obj");
+    MatrixXT H_GN;
+    objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
+    T g_norm = objective.gradient(design_parameters, dOdp, E0, /*simulate = */false);
+    vertex_model.checkHessianPD(false);
+
+    std::vector<int> proj_entries;
+    bool iecs = true;
+    T eps = 1e-5;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        if (design_parameters[i] < lower_bound || design_parameters[i] > upper_bound)
+            iecs = false;
+        
+        if (design_parameters[i] < lower_bound + eps && dOdp[i] >= 0.0)
+            proj_entries.push_back(i);
+        if (design_parameters[i] > upper_bound - eps && dOdp[i] <= 0.0)
+            proj_entries.push_back(i);
+    }
+    VectorXT projected_gradient = dOdp;
+    for (int idx : proj_entries)
+    {
+        projected_gradient[idx] = 0;
+    }
+    g_norm = projected_gradient.norm();
+
+    std::cout << "|g|: " << g_norm << " E0: " << E0 << std::endl;
+
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
+	
+	VectorXT Sigma = svd.singularValues();
+	std::cout << "H_GN smallest 5 singular values: " << Sigma.tail<5>().transpose() << std::endl;
+    std::cout << "H_GN largest 5 singular values: " << Sigma.head<5>().transpose() << std::endl;
+    // std::exit(0);
+    
+    StiffnessMatrix Q = H_GN.sparseView();
+    
+    StiffnessMatrix A;
+    VectorXT lc;
+    VectorXT uc;
+    VectorXT lx(n_dof_design); 
+    lx.setConstant(lower_bound);
+    lx -= design_parameters;
+    
+    VectorXT ux(n_dof_design); 
+    ux.setConstant(upper_bound);
+    ux -= design_parameters;
+
+    igl::mosek::MosekData mosek_data;
+    std::vector<VectorXT> lagrange_multipliers;
+    bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, dp, lagrange_multipliers);
+
+    VectorXT qp_gradient = H_GN * dp + dOdp;
+            
+    std::vector<int> cons_entries;
+    bool inequality_constraint_satisfied = true;
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        if (dp[i] < lx[i] || dp[i] > ux[i])
+            inequality_constraint_satisfied = false;
+        
+        if (dp[i] < lx[i] + 1e-5 && qp_gradient[i] >= 0.0)
+            cons_entries.push_back(i);
+        if (dp[i] > ux[i] - 1e-5 && qp_gradient[i] <= 0.0)
+            cons_entries.push_back(i);
+    }
+    std::cout << "\t[SQP] inequality_constraint_satisfied " << inequality_constraint_satisfied << std::endl;
+    // std::cout << cons_entries.size() << std::endl;
+    for (int idx : cons_entries)
+    {
+        qp_gradient[idx] = 0;
+    }
+    std::cout << "\t[SQP] dL/ddp hack: " <<  (qp_gradient).norm() << " " << std::endl;
+    
+    VectorXT dLdp = dOdp + H_GN * dp;
+
+    dLdp -= lagrange_multipliers[2];
+    dLdp += lagrange_multipliers[3];
+    std::cout << "\t[SQP] |dL/ddp| LM: " << dLdp.norm() << std::endl;
+    std::cout << dp.norm() << std::endl;
+    std::cout << "search direction dot: " << -dp.normalized().dot(dOdp.normalized()) << std::endl;
+    int n_steps = 25;
+    T alpha = 1.0;
+
+    VectorXT walking_direction = dp.normalized();
+    // VectorXT walking_direction = -dOdp.normalized();
+    T step_size = 1e-6;
+    int step = 100; 
+
+    // T step_size = 1e-5;
+    // int step = 100000;
+    std::vector<T> energies;
+    std::vector<std::vector<T>> energies_all_terms;
+    std::vector<T> steps;
+    for (T xi = -T(step/2) * step_size; xi < T(step/2) * step_size; xi+=step_size + 1e-6)
+    // for (T xi = 0.0002; xi < T(step/2) * step_size; xi+=step_size)
+    // for (T xi = 0; xi < T(step/2) * step_size; xi+=step_size)
+    // for (T xi = -1.0 * 10e-3; xi < 1.0 * 10e-3; xi+=step_size)
+    {
+        T Ei = objective.value(design_parameters + xi * walking_direction, true, true);
+        vertex_model.checkHessianPD(false);
+        energies.push_back(Ei);
+        std::vector<T> energy_all_terms;
+        // objective.computeEnergyAllTerms(design_parameters + xi * walking_direction, energy_all_terms, true, true);
+        energies_all_terms.push_back(energy_all_terms);
+        steps.push_back(xi);
+       
+        if (save_results)
+        {
+            vertex_model.saveStates(data_folder + "/" + std::to_string(energies.size() - 1) + ".obj");
+            std::string filename = data_folder + "/"  + std::to_string(energies.size() - 1) + ".txt";
+            VectorXT param = design_parameters + xi * walking_direction;
+            saveDesignParameters(filename, param);
+        }
+        std::cout << "[debug]: " << xi  << " obj: " << Ei << " step " << energies.size() - 1 << std::endl;
+        
+    }
+    for (T e : energies)
+    {
+        std::cout << std::setprecision(12) <<  e << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "energy all terms" << std::endl;
+    for (int j = 0; j < energies_all_terms[0].size(); j++)
+    {
+        std::cout << "term " << j << std::endl;
+        for (int i = 0; i < energies_all_terms.size(); i++)
+        {
+            std::cout << std::setprecision(12) <<  energies_all_terms[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+    for (T idx : steps)
+    {
+        std::cout << idx << " ";
+    }
+    std::cout << std::endl;
+    std::exit(0);
+}
 
 bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
 {
@@ -39,8 +194,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     T E0;
     VectorXT dOdp, dp;
     T g_norm = 1e6;
+    T rel_tol = 1e-4;
     T lower_bound = objective.bound[0], upper_bound = objective.bound[1];
-    
+    std::cout << "lower bound " << lower_bound << " upper bound " << upper_bound << std::endl;
     if (optimizer == GradientDescent || optimizer == GaussNewton || 
         optimizer == Newton || optimizer == SGN || 
         optimizer == SQP || optimizer == SSQP)
@@ -77,9 +233,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         std::cout << "forward simulation hessian eigen values: ";
         vertex_model.checkHessianPD(false);
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
-            << " |g_init| " << initial_gradient_norm << " tol " << 1e-3 * initial_gradient_norm << " obj: " << E0 << std::endl;
+            << " |g_init| " << initial_gradient_norm << " tol " << rel_tol * initial_gradient_norm << " obj: " << E0 << std::endl;
         
-        if ( g_norm < 1e-3 * initial_gradient_norm )
+        if ( g_norm < rel_tol * initial_gradient_norm )
             return true;
 
         dp = dOdp;
@@ -107,6 +263,9 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 else
                     break;
             }
+
+            if (add_reg)
+                H_GN.diagonal().array() += reg_w_H;
             
             T reg_alpha = 1e-6;
             StiffnessMatrix A;
@@ -144,7 +303,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
                 std::cout << "dot(search_dir, -gradient) " << dot_search_grad << std::endl;
                 // if (dot_search_grad < 0.01)
-                if (dot_search_grad < 1e-3)
+                if (dot_search_grad < 1e-6)
                 {
                     H_GN.diagonal().array() += reg_alpha;
                     reg_alpha *= 10.0;
@@ -188,7 +347,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         std::cout << "[" << method << "]\t|dp|: " << search_direction.norm() << std::endl;
 
         
-        if (search_direction.norm() < 1e-5)
+        if (search_direction.norm() < 1e-10)
             return true;
 
         int ls_max = 15;
@@ -207,13 +366,14 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 design_parameters = p_ls;
                 break;
             }
+            // if (ls_cnt == ls_max - 1)
+            //     std::getchar();
             alpha *= 0.5;
         }
     }
     if (save_results)
     {
-        // objective.saveState(data_folder + "/" + method + "_iter_" + std::to_string(step) + ".obj");
-        // objective.updateDesignParameters(design_parameters);
+        vertex_model.saveStates(data_folder + "/" + method + "_iter_" + std::to_string(step) + ".obj");
         std::string filename = data_folder + "/" + method + "_iter_" + std::to_string(step) + ".txt";
         saveDesignParameters(filename, design_parameters);
     }
