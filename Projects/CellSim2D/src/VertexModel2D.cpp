@@ -13,9 +13,11 @@
 
 void VertexModel2D::initializeScene()
 {
-    T r = 1.0;
-    radius = r + 1e-3;
-    int n_div = 100;
+    T unit = 1e-2;
+    // 80 cells 200 µm diameter, 35 µm height, 7.85 µm width
+    T r = 100 * unit; // 2 pi r = 200 
+    radius = r + 0.1 * unit;
+    int n_div = 80;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 2);
     for(int i = 0; i < n_div; i++)
@@ -32,7 +34,7 @@ void VertexModel2D::initializeScene()
     }
     basal_edge_start = edges.size();
 
-    T edge_length = 1.0 * (points.segment<2>(0) - points.segment<2>(2)).norm();
+    T edge_length = 35 * unit;
     
     undeformed.conservativeResize(n_pt * 2 * 2);
 
@@ -79,10 +81,10 @@ void VertexModel2D::initializeScene()
     }
     else if (scene == 1)
     {
-        w_ea = 0.5;
+        w_ea = 1.0;
         w_eb = 0.2;
         w_el = 4.0;
-        w_c = 10.0;
+        w_c = 20.0;
     }
     
     w_a = 1e7;
@@ -91,7 +93,7 @@ void VertexModel2D::initializeScene()
     // barrier_weight = 1e-30;
 
     yolk_area_rest = computeYolkArea();
-    configContractingWeights();
+    
     
     use_ipc = true;
     add_ipc_friction = false;
@@ -101,8 +103,24 @@ void VertexModel2D::initializeScene()
         ipc_barrier_distance = 1e-3;
         buildIPCRestData();
     }
-
+    has_rest_state = true;
+    if (has_rest_state)
+        computeRestLength();
     add_inner_edges = false;
+
+    configContractingWeights();
+}
+
+
+void VertexModel2D::computeRestLength()
+{
+    rest_edge_length.resize(edges.size());
+    for (int i = 0; i < edges.size(); i++)
+    {
+        TV vi = deformed.segment<2>(edges[i][0] * 2);
+        TV vj = deformed.segment<2>(edges[i][1] * 2);
+        rest_edge_length[i] = 1.0 * (vi - vj).norm();
+    }
 }
 
 void VertexModel2D::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -124,6 +142,68 @@ void VertexModel2D::generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi
     T edge_length = (v1 - v0).norm();
 
     appendCylindersToEdges(edge_pairs, TV3(0, 0.3, 1), 0.05 * edge_length, V, F, C);
+}
+
+void VertexModel2D::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
+        const std::vector<TV3>& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV3(radius * std::cos(theta * T(i)), 
+        0.0, radius * std::sin(theta*T(i)));
+
+    int offset_v = n_div * 2;
+    int offset_f = n_div * 2;
+
+    int n_row_V = _V.rows();
+    int n_row_F = _F.rows();
+
+    int n_edge = edge_pairs.size();
+
+    _V.conservativeResize(n_row_V + offset_v * n_edge, 3);
+    _F.conservativeResize(n_row_F + offset_f * n_edge, 3);
+    _C.conservativeResize(n_row_F + offset_f * n_edge, 3);
+
+    tbb::parallel_for(0, n_edge, [&](int ei)
+    {
+        
+        TV3 v0(edge_pairs[ei].first[0], edge_pairs[ei].first[1], 0);
+        TV3 v1(edge_pairs[ei].second[0], edge_pairs[ei].second[1], 0);
+
+        TV3 axis_world = v1 - v0;
+        TV3 axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                _V(n_row_V + ei * offset_v + i, d) = points[i * 3 + d];
+                _V(n_row_V + ei * offset_v + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    _V(n_row_V + ei * offset_v + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            _V.row(n_row_V + ei * offset_v + i) = (_V.row(n_row_V + ei * offset_v + i) * R).transpose() + v0;
+            _V.row(n_row_V + ei * offset_v + i + n_div) = (_V.row(n_row_V + ei * offset_v + i + n_div) * R).transpose() + v0;
+
+            _F.row(n_row_F + ei * offset_f + i*2 ) = IV3(n_row_V + ei * offset_v + i, 
+                                    n_row_V + ei * offset_v + i+n_div, 
+                                    n_row_V + ei * offset_v + (i+1)%(n_div));
+
+            _F.row(n_row_F + ei * offset_f + i*2 + 1) = IV3(n_row_V + ei * offset_v + (i+1)%(n_div), 
+                                        n_row_V + ei * offset_v + i+n_div, 
+                                        n_row_V + + ei * offset_v + (i+1)%(n_div) + n_div);
+
+            _C.row(n_row_F + ei * offset_f + i*2 ) = color[ei];
+            _C.row(n_row_F + ei * offset_f + i*2 + 1) = color[ei];
+        }
+    });
 }
 
 void VertexModel2D::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
@@ -221,6 +301,8 @@ void VertexModel2D::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
     if (add_inner_edges)
         addEdgeHessianEntries(INNER, w_ei, entries);
+    if (add_yolk_pressure)
+        addPressureHessianEntries(entries);
 
     K.resize(num_nodes * 2, num_nodes * 2);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -293,6 +375,13 @@ T VertexModel2D::computeTotalEnergy(const VectorXT& _u)
         energy += inner_edge_energy;
     }
 
+    if (add_yolk_pressure)
+    {
+        T pV = 0.0;
+        addPressureEnergy(pV);
+        energy += pV;
+    }
+
     return energy;
 }
 
@@ -357,6 +446,14 @@ T VertexModel2D::computeResidual(const VectorXT& _u,  VectorXT& residual)
         addIPCForceEntries(residual);
         if (verbose)
             std::cout << "ipc force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
+
+    if (add_yolk_pressure)
+    {
+        addPressureForceEntries(residual);
+        if (verbose)
+            std::cout << "pressure force norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
     }
 
@@ -599,6 +696,71 @@ bool VertexModel2D::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT
     return false;
 }
 
+void VertexModel2D::addContractingEnergy(T& energy)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
+        TV vi = deformed.segment<2>(e[0] * 2);
+        TV vj = deformed.segment<2>(e[1] * 2);
+        T ei;
+        // if (has_rest_state)
+        // {
+        //     computeEdgeSpringEnergy2D(contracting_weight, contracting_percentage * rest_edge_length[edge_id], vi, vj, ei);
+        //     energy += contracting_mask[cnt] * ei;
+        // }
+        // else
+        {
+            computeEdgeSquaredNorm2D(vi, vj, ei);
+            energy += apical_edge_contracting_weights[cnt] * ei;
+        }
+        cnt++;
+    });
+}
+
+void VertexModel2D::addContractingForceEntries(VectorXT& residual)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
+        TV vi = deformed.segment<2>(e[0] * 2);
+        TV vj = deformed.segment<2>(e[1] * 2);
+        Vector<T, 4> dedx;
+        // if (has_rest_state)
+        // {
+        //     computeEdgeSpringEnergy2DGradient(contracting_weight, contracting_percentage * rest_edge_length[edge_id], vi, vj, dedx);
+        //     dedx *= -contracting_mask[cnt];
+        // }
+        // else
+        {
+            computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+            dedx *= -apical_edge_contracting_weights[cnt];
+        }
+        addForceEntry<4>(residual, {e[0], e[1]}, dedx);
+        cnt++;
+    });
+}
+
+void VertexModel2D::addContractingHessianEntries(std::vector<Entry>& entries)
+{
+    int cnt = 0;
+    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
+        TV vi = deformed.segment<2>(e[0] * 2);
+        TV vj = deformed.segment<2>(e[1] * 2);
+        Matrix<T, 4, 4> hessian;
+        // if (has_rest_state)
+        // {
+        //     computeEdgeSpringEnergy2DHessian(contracting_weight, contracting_percentage * rest_edge_length[edge_id], vi, vj, hessian);
+        //     hessian *= contracting_mask[cnt];
+        // }
+        // else
+        {
+            computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
+            hessian *= apical_edge_contracting_weights[cnt];
+        }
+        addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
+        cnt++;
+    });
+}
+
 void VertexModel2D::addEdgeEnergy(Region region, T w, T& energy)
 {
     if (region == Apical)
@@ -607,8 +769,16 @@ void VertexModel2D::addEdgeEnergy(Region region, T w, T& energy)
             TV vi = deformed.segment<2>(edge[0] * 2);
             TV vj = deformed.segment<2>(edge[1] * 2);
             T ei;
-            computeEdgeSquaredNorm2D(vi, vj, ei);
-            energy += w * ei;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2D(w, rest_edge_length[edge_id], vi, vj, ei);
+                energy += ei;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2D(vi, vj, ei);
+                energy += w * ei;
+            }
         });
     }
     else if (region == Basal)
@@ -617,8 +787,16 @@ void VertexModel2D::addEdgeEnergy(Region region, T w, T& energy)
             TV vi = deformed.segment<2>(edge[0] * 2);
             TV vj = deformed.segment<2>(edge[1] * 2);
             T ei;
-            computeEdgeSquaredNorm2D(vi, vj, ei);
-            energy += w * ei;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2D(w, rest_edge_length[edge_id], vi, vj, ei);
+                energy += ei;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2D(vi, vj, ei);
+                energy += w * ei;
+            }
         });
     }
     else if (region == Lateral)
@@ -627,20 +805,17 @@ void VertexModel2D::addEdgeEnergy(Region region, T w, T& energy)
             TV vi = deformed.segment<2>(edge[0] * 2);
             TV vj = deformed.segment<2>(edge[1] * 2);
             T ei;
-            computeEdgeSquaredNorm2D(vi, vj, ei);
-            energy += w * ei;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2D(w, rest_edge_length[edge_id], vi, vj, ei);
+                energy += ei;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2D(vi, vj, ei);
+                energy += w * ei;
+            }
         });
-    }
-    else if (region == INNER)
-    {
-        for (Edge& edge : inner_edges)
-        {
-            TV vi = deformed.segment<2>(edge[0] * 2);
-            TV vj = deformed.segment<2>(edge[1] * 2);
-            T ei;
-            computeEdgeSquaredNorm2D(vi, vj, ei);
-            energy += w * ei;
-        }
     }
 }
 
@@ -652,8 +827,16 @@ void VertexModel2D::addEdgeForceEntries(Region region, T w, VectorXT& residual)
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Vector<T, 4> dedx;
-            computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
-            dedx *= -w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DGradient(w, rest_edge_length[edge_id], vi, vj, dedx);
+                dedx *= -1.0;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+                dedx *= -w;
+            }
             addForceEntry<4>(residual, {e[0], e[1]}, dedx);
         });
     }
@@ -663,8 +846,16 @@ void VertexModel2D::addEdgeForceEntries(Region region, T w, VectorXT& residual)
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Vector<T, 4> dedx;
-            computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
-            dedx *= -w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DGradient(w, rest_edge_length[edge_id], vi, vj, dedx);
+                dedx *= -1.0;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+                dedx *= -w;
+            }
             addForceEntry<4>(residual, {e[0], e[1]}, dedx);
         });
     }
@@ -674,22 +865,18 @@ void VertexModel2D::addEdgeForceEntries(Region region, T w, VectorXT& residual)
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Vector<T, 4> dedx;
-            computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
-            dedx *= -w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DGradient(w, rest_edge_length[edge_id], vi, vj, dedx);
+                dedx *= -1.0;
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
+                dedx *= -w;
+            }
             addForceEntry<4>(residual, {e[0], e[1]}, dedx);
         });
-    }
-    else if (region == INNER)
-    {
-        for (Edge& e : inner_edges)
-        {
-            TV vi = deformed.segment<2>(e[0] * 2);
-            TV vj = deformed.segment<2>(e[1] * 2);
-            Vector<T, 4> dedx;
-            computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
-            dedx *= -w;
-            addForceEntry<4>(residual, {e[0], e[1]}, dedx);
-        }
     }
 }
 
@@ -701,8 +888,15 @@ void VertexModel2D::addEdgeHessianEntries(Region region, T w, std::vector<Entry>
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Matrix<T, 4, 4> hessian;
-            computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
-            hessian *= w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DHessian(w, rest_edge_length[edge_id], vi, vj, hessian);
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
+                hessian *= w;
+            }
             addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
         });
     }
@@ -712,8 +906,15 @@ void VertexModel2D::addEdgeHessianEntries(Region region, T w, std::vector<Entry>
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Matrix<T, 4, 4> hessian;
-            computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
-            hessian *= w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DHessian(w, rest_edge_length[edge_id], vi, vj, hessian);
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
+                hessian *= w;
+            }
             addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
         });
     }
@@ -723,22 +924,17 @@ void VertexModel2D::addEdgeHessianEntries(Region region, T w, std::vector<Entry>
             TV vi = deformed.segment<2>(e[0] * 2);
             TV vj = deformed.segment<2>(e[1] * 2);
             Matrix<T, 4, 4> hessian;
-            computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
-            hessian *= w;
+            if (has_rest_state)
+            {
+                computeEdgeSpringEnergy2DHessian(w, rest_edge_length[edge_id], vi, vj, hessian);
+            }
+            else
+            {
+                computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
+                hessian *= w;
+            }
             addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
         });
-    }
-    else if (region == INNER)
-    {
-        for (Edge& e : inner_edges)
-        {
-            TV vi = deformed.segment<2>(e[0] * 2);
-            TV vj = deformed.segment<2>(e[1] * 2);
-            Matrix<T, 4, 4> hessian;
-            computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
-            hessian *= w;
-            addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
-        }
     }
 }
 
@@ -901,6 +1097,48 @@ T VertexModel2D::computeYolkArea()
     return total_area;
 }
 
+void VertexModel2D::addPressureEnergy(T& energy)
+{   
+    T total_area = computeYolkArea();
+    energy += -pressure * total_area;
+}
+
+void VertexModel2D::addPressureForceEntries(VectorXT& residual)
+{
+    T total_area = computeYolkArea();
+    int n_nodes_basal = num_nodes / 2;
+
+    for (int i = 0; i < n_nodes_basal; i++)
+    {
+        int j = (i + 1) % n_nodes_basal;
+        TV vi = deformed.segment<2>(basal_vtx_start * 2 + i * 2);
+        TV vj = deformed.segment<2>(basal_vtx_start * 2 + j * 2);
+
+        Vector<T, 4> dedx;
+        // computeTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
+        computeSignedTriangleAreaGradient(vi, vj, mesh_centroid, dedx);
+        addForceEntry<4>(residual, {basal_vtx_start + i, basal_vtx_start + j}, pressure * dedx);
+    }
+}
+
+void VertexModel2D::addPressureHessianEntries(std::vector<Entry>& entries)
+{
+    int n_nodes_basal = num_nodes / 2;
+
+    for (int i = 0; i < n_nodes_basal; i++)
+    {
+        int j = (i + 1) % n_nodes_basal;
+        TV vi = deformed.segment<2>(basal_vtx_start * 2 + i * 2);
+        TV vj = deformed.segment<2>(basal_vtx_start * 2 + j * 2);
+
+        Matrix<T, 4, 4> d2edx2;
+        computeSignedTriangleAreaHessian(vi, vj, mesh_centroid, d2edx2);
+
+        Matrix<T, 4, 4> hessian = -pressure * d2edx2;
+        addHessianEntry(entries, {basal_vtx_start + i, basal_vtx_start + j}, hessian);
+    }
+}
+
 void VertexModel2D::addYolkPreservationEnergy(T w, T& energy)
 {
     T total_area = computeYolkArea();
@@ -972,57 +1210,19 @@ void VertexModel2D::configContractingWeights()
 {
     apical_edge_contracting_weights.resize(basal_edge_start);
     apical_edge_contracting_weights.setZero();
+    contracting_mask = apical_edge_contracting_weights;
 
     int cnt = 0;
     iterateApicalEdgeSerial([&](Edge& e, int edge_id)
     {
         TV vi = deformed.segment<2>(e[0] * 2);
         TV vj = deformed.segment<2>(e[1] * 2);
+        // if (vi[1] > 0.85 * radius && vj[1] > 0.85 * radius)
         if (vi[1] > 0.95 * radius && vj[1] > 0.95 * radius)
         {
             apical_edge_contracting_weights[cnt] = w_c;
+            contracting_mask[cnt] = 1.0;
         }
-        cnt++;
-    });
-}
-
-void VertexModel2D::addContractingEnergy(T& energy)
-{
-    int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
-        TV vi = deformed.segment<2>(e[0] * 2);
-        TV vj = deformed.segment<2>(e[1] * 2);
-        T ei;
-        computeEdgeSquaredNorm2D(vi, vj, ei);
-        energy += apical_edge_contracting_weights[cnt] * ei;
-        cnt++;
-    });
-}
-
-void VertexModel2D::addContractingForceEntries(VectorXT& residual)
-{
-    int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
-        TV vi = deformed.segment<2>(e[0] * 2);
-        TV vj = deformed.segment<2>(e[1] * 2);
-        Vector<T, 4> dedx;
-        computeEdgeSquaredNorm2DGradient(vi, vj, dedx);
-        dedx *= -apical_edge_contracting_weights[cnt];
-        addForceEntry<4>(residual, {e[0], e[1]}, dedx);
-        cnt++;
-    });
-}
-
-void VertexModel2D::addContractingHessianEntries(std::vector<Entry>& entries)
-{
-    int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e, int edge_id){
-        TV vi = deformed.segment<2>(e[0] * 2);
-        TV vj = deformed.segment<2>(e[1] * 2);
-        Matrix<T, 4, 4> hessian;
-        computeEdgeSquaredNorm2DHessian(vi, vj, hessian);
-        hessian *= apical_edge_contracting_weights[cnt];
-        addHessianEntry<4>(entries, {e[0], e[1]}, hessian);
         cnt++;
     });
 }
@@ -1067,14 +1267,42 @@ void VertexModel2D::computeAllCellCentroids(VectorXT& cell_centroids)
     });
 }
 
-void VertexModel2D::saveCellCentroidsToFile(const std::string& filename)
+void VertexModel2D::saveCellCentroidsToFile(const std::string& filename, T perburbance)
 {
     std::ofstream out(filename);
     VectorXT cell_centroids;
     computeAllCellCentroids(cell_centroids);
+
+    TV c0 = cell_centroids.segment<2>(0), c1 = cell_centroids.segment<2>(2);
+    
+    T length = (c0 - c1).norm();
+
     for (int i = 0; i < n_cells; i++)
     {
-        out << i << " " << cell_centroids.segment<2>(i * 2).transpose() << std::endl;
+        TV random_dir = TV::Random().normalized();
+        TV perburbed = cell_centroids.segment<2>(i * 2) + perburbance * length * random_dir;
+        out << i << " " << perburbed.transpose() << std::endl;
+    }
+    out.close();
+}
+
+void VertexModel2D::savePerturbedCellCentroidsToFile(const std::string& filename, T perturbance, int n_pt_per_cell)
+{
+    std::ofstream out(filename);
+    VectorXT cell_centroids;
+    computeAllCellCentroids(cell_centroids);
+
+    TV c0 = cell_centroids.segment<2>(0), c1 = cell_centroids.segment<2>(2);
+    
+    T length = (c0 - c1).norm();
+    for (int i = 0; i < n_cells; i++)
+    {
+        for (int j = 0; j < n_pt_per_cell; j++)
+        {
+            TV random_dir = TV::Random().normalized();
+            TV perburbed = cell_centroids.segment<2>(i * 2) + perturbance * length * random_dir;
+            out << i << " " << perburbed.transpose() << std::endl;
+        }
     }
     out.close();
 }

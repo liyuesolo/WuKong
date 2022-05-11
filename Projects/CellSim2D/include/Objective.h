@@ -26,6 +26,22 @@ enum PenaltyType
     LogBarrier, Qubic, Quadratic, BLEND
 };
 
+struct TargetData
+{
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using TV = Vector<double, 2>;
+
+    int cell_idx;
+    int data_point_idx;
+    VectorXT weights;
+    TV target_pos;
+
+    TargetData(const VectorXT& _weights, int _idx, int _cell_idx) : data_point_idx(_idx), weights(_weights), cell_idx(_cell_idx) {}
+    TargetData(const VectorXT& _weights, int _idx, int _cell_idx, const TV& _target_pos) : 
+        data_point_idx(_idx), weights(_weights), cell_idx(_cell_idx), target_pos(_target_pos) {}
+    TargetData() : data_point_idx(-1), cell_idx(-1) {}
+};
+
 class Objective
 {
 public:
@@ -67,11 +83,18 @@ public:
     std::string target_filename;
     T target_perturbation = 0;
     T reg_w = 1e-6;
+
+    // Regularizors
+    bool add_spatial_regularizor = true;
+    T w_reg_spacial = 0.01;
+
     bool add_l1_reg = false;
     T w_l1 = 0.01;
     bool contracting_term_only = false;
     VectorXT prev_params;
 
+    std::vector<TargetData> weight_targets;
+    
 public:
     template <class OP>
     void iterateTargets(const OP& f) {
@@ -79,8 +102,21 @@ public:
             f(dirichlet.first, dirichlet.second);
         } 
     }
+    
+    template <class OP>
+    void iterateWeightedTargets(const OP& f) {
+        for (auto target_data: weight_targets){
+            f(target_data.cell_idx, target_data.data_point_idx, target_data.target_pos, target_data.weights);
+        } 
+    }
+
+    void loadWeightedCellTarget(const std::string& filename, const std::string& data_file);
+    void computeWeights(const std::string& filename, const std::string& data_file);
 
     void optimizeForStableTarget(T perturbation);
+    void optimizeStableTargetsWithSprings(const std::string& rest_data_file, 
+        const std::string& data_file, T perturbance = 0.0);
+    void optimizeStableTargetsWithSprings(T perturbance = 0.0);
 
     void computeEnergySubTerms(std::vector<T>& energy_terms);
     
@@ -106,9 +142,15 @@ public:
 
     void diffTestGradientScale();
     void diffTestGradient();
+    
+    void diffTestPartialOPartialPScale();
+    void diffTestPartial2OPartialP2Scale();
+    void diffTestPartial2OPartialP2();
 
     Objective(VertexModel2D& _vertex_model) : vertex_model(_vertex_model) {}
     ~Objective() {}
+private:
+    void load2DDataWithCellIdx(const std::string& filename, VectorXT& data);
 };
 
 

@@ -26,4 +26,18 @@ target_include_directories(CellSim2D PUBLIC /home/yueli/Documents/mosek/9.2/tool
 target_include_directories(CellSim2D PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
 
 
+find_package (IPOPT REQUIRED)
+if(IPOPT_FOUND)
+  message("IPOPT Found!")
+  message("ipopt include dirs:" ${IPOPT_INCLUDE_DIRS})
+  message("ipopt libraries:"  ${IPOPT_LIBRARIES})
+  add_definitions("-DUSE_IPOPT")
+  include_directories(${IPOPT_INCLUDE_DIRS})
+  if(IPOPT_FOUND)
+    target_link_libraries(CellSim2D ${IPOPT_LIBRARIES})
+  endif()
+else()
+  message("IPOPT Not Found! install by \n sudo apt-get install coinor-libipopt-dev")
+endif()
+
 target_link_libraries(CellSim2D ${DEPS})

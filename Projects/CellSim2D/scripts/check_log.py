@@ -44,7 +44,7 @@ def loadLogCheckConvergence(base_dir, solver):
 
 
 if __name__ == "__main__":
-    base_dir = "/home/yueli/Documents/ETH/WuKong/output/cells/437/"
+    base_dir = "/home/yueli/Documents/ETH/WuKong/output/cells/458/"
     # loadLogCheckConvergence(base_dir)
     # loadSQPLogCheckConvergence(base_dir)
     loadLogCheckConvergence(base_dir, "SQP")

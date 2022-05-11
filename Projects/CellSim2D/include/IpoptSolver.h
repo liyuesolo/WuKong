@@ -31,7 +31,7 @@
 
 #include "VecMatDef.h"
 // class Simulation;
-class Ojective;
+class Objective;
 
 class IpoptSolver : public Ipopt::TNLP 
 {
@@ -50,7 +50,7 @@ public:
     using Edge = Vector<int, 2>;
 
 
-    Ojective& objective;
+    Objective& objective;
 
     int variable_num = 0;
     int count = 0;
@@ -59,7 +59,7 @@ public:
     std::string data_folder;
 
     /** default constructor */
-    IpoptSolver(Ojective& _objective, const std::string& _data_folder)
+    IpoptSolver(Objective& _objective, const std::string& _data_folder)
         : objective(_objective), data_folder(_data_folder)
     {
         variable_num = objective.n_dof_design;
@@ -105,15 +105,15 @@ public:
         std::cout << "lower bound: " << objective.bound[0] 
             << " upper bound: " << objective.bound[1] << std::endl;
 
-        // tbb::parallel_for(0, n, [&](int i) {
-        //     x_l[i] = objective.bound[0];
-        //     x_u[i] = objective.bound[1];
-        // });
-
         tbb::parallel_for(0, n, [&](int i) {
-            x_l[i] = -1e19;
-            x_u[i] = 1e19;
+            x_l[i] = objective.bound[0];
+            x_u[i] = objective.bound[1];
         });
+
+        // tbb::parallel_for(0, n, [&](int i) {
+        //     x_l[i] = -1e19;
+        //     x_u[i] = 1e19;
+        // });
 
         return true;
     }
@@ -174,7 +174,7 @@ public:
         VectorXT dOdp;
         objective.gradient(p_curr, dOdp, O, true);
         std::cout << "forward simulation hessian eigen values: ";
-        objective.simulation.checkHessianPD(false);
+        objective.vertex_model.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];
@@ -182,13 +182,13 @@ public:
 
         T epsilon = 1e-5;
         VectorXT feasible_point_gradients = dOdp;
-        // for (int i = 0; i < variable_num; i++)
-        // {
-        //     if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
-        //         feasible_point_gradients[i] = 0.0;
-        //     if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
-        //         feasible_point_gradients[i] = 0.0;
-        // }
+        for (int i = 0; i < variable_num; i++)
+        {
+            if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
+                feasible_point_gradients[i] = 0.0;
+            if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
+                feasible_point_gradients[i] = 0.0;
+        }
         
         T g_norm_proj = feasible_point_gradients.norm();
         
@@ -264,7 +264,8 @@ public:
         for (int i = 0; i < n; i++)
             p_curr[i] = x[i];
         objective.updateDesignParameters(p_curr);
-        
+        objective.saveState(data_folder + "/" + std::to_string(count) + ".obj");
+        saveDesignParameters(data_folder + "/" + std::to_string(count) + ".txt", p_curr);
         // objective.saveDesignParameters(data_folder + "/p_ipopt.txt", p_curr);
         // objective.saveState(data_folder + "/x_ipopt.obj");
 

@@ -42,7 +42,9 @@ public:
 public:
     VectorXT undeformed, deformed, u;
     VectorXT u0;
+    VectorXT rest_edge_length;
     std::vector<Edge> edges;
+    VectorXT contracting_mask;
     std::vector<Edge> inner_edges;
 
     VectorXT apical_edge_contracting_weights;
@@ -73,6 +75,9 @@ public:
 
     bool verbose = false;
     bool run_diff_test = false;
+    bool has_rest_state = false;
+    T contracting_percentage = 0.001;
+    T contracting_weight = 100.0;
 
     std::unordered_map<int, T> dirichlet_data;
 
@@ -86,6 +91,8 @@ public:
     T ipc_barrier_weight = 1e4;
 
     bool add_inner_edges = false;
+    bool add_yolk_pressure = false;
+    T pressure = 1e3;
 
 private:
     bool validEdgeIdx(Region region, int idx)
@@ -244,10 +251,12 @@ public:
     }
 
 public:
-    void saveCellCentroidsToFile(const std::string& filename);
+    void saveCellCentroidsToFile(const std::string& filename, T perturbance = 0.0);
+    void savePerturbedCellCentroidsToFile(const std::string& filename, T perturbance = 0.0, int n_pt_per_cell = 1);
     void saveStates(const std::string& filename);
     void loadStates(const std::string& filename);
-    
+    void computeRestLength();
+
     void computeAllCellCentroids(VectorXT& cell_centroids);
     void initializeScene();
 
@@ -259,6 +268,9 @@ public:
     
     void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
         const TV3& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
+        const std::vector<TV3>& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
 
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
@@ -298,6 +310,10 @@ public:
     void addContractingEnergy(T& energy);
     void addContractingForceEntries(VectorXT& residual);
     void addContractingHessianEntries(std::vector<Entry>& entries);
+
+    void addPressureEnergy(T& energy);
+    void addPressureForceEntries(VectorXT& residual);
+    void addPressureHessianEntries(std::vector<Entry>& entries);
 
     void buildIPCRestData();
     void addIPCEnergy(T& energy);

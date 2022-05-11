@@ -2,13 +2,13 @@
 #include <Eigen/PardisoSupport>
 #include "../include/LinearSolver.h"
 #include "../include/SensitivityAnalysis.h"
-
+#include "../include/IpoptSolver.h"
 void SensitivityAnalysis::initialize()
 {
     vertex_model.verbose = false;
     objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
     objective.bound[0] = 1e-5;
-    objective.bound[1] = 10.0;
+    objective.bound[1] = vertex_model.w_c * 1.5;
     objective.mask[0] = true;
     objective.mask[1] = false;
     objective.equilibrium_prev = VectorXT::Zero(vertex_model.deformed.rows());
@@ -171,6 +171,63 @@ void SensitivityAnalysis::checkStateAlongDirection()
     std::exit(0);
 }
 
+bool SensitivityAnalysis::optimizeIPOPT()
+{
+    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+    
+    app->RethrowNonIpoptException(true);
+    
+
+    app->Options()->SetNumericValue("tol", 1e-5);
+    // app->Options()->SetStringValue("mu_strategy", "monotone");
+    app->Options()->SetStringValue("mu_strategy", "adaptive");
+
+    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
+    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    //        app->Options()->SetNumericValue("mu_max", 0.0001);
+    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
+    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
+    //        bound_relax_factor
+    //        app->Options()->SetStringValue("derivative_test", "first-order");
+    // The following overwrites the default name (ipopt.opt) of the
+    // options file
+    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
+    
+    // Initialize the IpoptApplication and process the options
+    
+    Ipopt::ApplicationReturnStatus status;
+    status = app->Initialize();
+    if (status != Ipopt::Solve_Succeeded) 
+    {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** Error during initialization!" << std::endl;
+        return (int)status;
+    }
+
+    // Ask Ipopt to solve the problem
+    std::cout << "Solving problem using IPOPT" << std::endl;
+    
+    // objective.bound[0] = 1e-5;
+    // objective.bound[1] = 12.0 * simulation.cells.unit;
+
+    Ipopt::SmartPtr<IpoptSolver> mynlp = new IpoptSolver(objective, data_folder);
+    
+    status = app->OptimizeTNLP(mynlp);
+
+    if (status == Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** The problem solved!" << std::endl;
+    }
+    else {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** The problem FAILED!" << std::endl;
+    }
+    return (int)status;
+}
+
 bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
 {
     std::string method;
@@ -195,6 +252,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     VectorXT dOdp, dp;
     T g_norm = 1e6;
     T rel_tol = 1e-4;
+    T abs_tol = 1e-6;
     T lower_bound = objective.bound[0], upper_bound = objective.bound[1];
     std::cout << "lower bound " << lower_bound << " upper bound " << upper_bound << std::endl;
     if (optimizer == GradientDescent || optimizer == GaussNewton || 
@@ -233,9 +291,12 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         std::cout << "forward simulation hessian eigen values: ";
         vertex_model.checkHessianPD(false);
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
-            << " |g_init| " << initial_gradient_norm << " tol " << rel_tol * initial_gradient_norm << " obj: " << E0 << std::endl;
+            << " |g_init| " << initial_gradient_norm 
+            << " tol rel: " << rel_tol * initial_gradient_norm 
+            << " tol abs: " << abs_tol 
+            << " obj: " << E0 << std::endl;
         
-        if ( g_norm < rel_tol * initial_gradient_norm )
+        if ( g_norm < rel_tol * initial_gradient_norm || g_norm < abs_tol)
             return true;
 
         dp = dOdp;
@@ -302,7 +363,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 dLdp += lagrange_multipliers[3];
                 std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
                 std::cout << "dot(search_dir, -gradient) " << dot_search_grad << std::endl;
-                // if (dot_search_grad < 0.01)
+                VectorXT updated_p = design_parameters + dp;
+                
                 if (dot_search_grad < 1e-6)
                 {
                     H_GN.diagonal().array() += reg_alpha;
@@ -357,7 +419,10 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             // saveDesignParameters(data_folder + "/trouble.txt", p_ls);
             
             T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
-            
+            if (save_ls_states)
+            {
+                vertex_model.saveStates(data_folder + "/" + method + "_iter_" + std::to_string(step) + "_ls_" + std::to_string(ls_cnt) + ".obj");
+            }
             std::cout << "[" << method << "]\t ls " << ls_cnt << " E1: " << E1 << " E0: " << E0 << std::endl;
             
             if (E1 < E0)

@@ -47,6 +47,7 @@ public:
 
     bool resume = false;
     bool save_results = false;
+    bool save_ls_states = false;
     std::string data_folder = ".";
 
     T initial_gradient_norm = 0.0;
@@ -58,6 +59,7 @@ public:
 
 public:
     bool optimizeOneStep(int step, Optimizer optimizer);
+    bool optimizeIPOPT();
     void saveDesignParameters(const std::string& filename, const VectorXT& params);
     
     void initialize();

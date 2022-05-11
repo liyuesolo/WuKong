@@ -114,18 +114,23 @@ int main(int argc, char** argv)
         }
         if (show_contracting_edges)
         {
-            TV3 color(1, 0, 0);
+            T max_weight = vertex_model.apical_edge_contracting_weights.maxCoeff();
+            T min_weight = vertex_model.apical_edge_contracting_weights.minCoeff();
+
+            std::vector<TV3> colors;
             std::vector<std::pair<TV, TV>> end_points;
             vertex_model.iterateApicalEdgeSerial([&](Edge& edge, int edge_id)
             {
-                if (vertex_model.apical_edge_contracting_weights[edge_id] > 1e-6)
+                // if (vertex_model.apical_edge_contracting_weights[edge_id] > 1e-6)
                 {
                     TV vi = vertex_model.deformed.segment<2>(edge[0] * 2);
                     TV vj = vertex_model.deformed.segment<2>(edge[1] * 2);
+                    T red = (vertex_model.apical_edge_contracting_weights[edge_id] - min_weight) / (max_weight - min_weight);
+                    colors.push_back(TV3(red, 0, 0));
                     end_points.push_back(std::make_pair(vi, vj));
                 }
             });
-            vertex_model.appendCylindersToEdges(end_points, color, edge_length_ref * 0.12, V, F, C);
+            vertex_model.appendCylindersToEdges(end_points, colors, edge_length_ref * 0.12, V, F, C);
         }
         if (inverse && show_target)
         {
@@ -138,7 +143,16 @@ int main(int argc, char** argv)
                     target_3d.segment<2>(0) = target;
                     target_positions_std_vec.push_back(target_3d + shift);
                 });
-            
+            else
+            {
+                sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                    const TV& target, const VectorXT& weights)
+                {
+                    TV3 target_3d = TV3::Zero();
+                    target_3d.segment<2>(0) = target;
+                    target_positions_std_vec.push_back(target_3d + shift);
+                });
+            }
             int n_sphere = target_positions_std_vec.size();
             VectorXT target_positions(n_sphere * 3); target_positions.setZero();
             tbb::parallel_for(0, n_sphere, [&](int i){
@@ -159,7 +173,24 @@ int main(int argc, char** argv)
                     target_3d.segment<2>(0) = centroid;
                     target_positions_std_vec.push_back(target_3d + shift);
                 });
-            
+            else
+            {
+                sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                    const TV& target, const VectorXT& weights)
+                {
+                    VectorXT positions;
+                    std::vector<int> indices;
+                    vertex_model.getCellVtxIndices(indices, cell_idx);
+                    vertex_model.positionsFromIndices(positions, indices);
+                    int n_pt = weights.rows();
+                    TV current = TV::Zero();
+                    for (int i = 0; i < n_pt; i++)
+                        current += weights[i] * positions.segment<2>(i * 2);
+                    TV3 current_3d = TV3::Zero();
+                    current_3d.segment<2>(0) = current;
+                    target_positions_std_vec.push_back(current_3d + shift);
+                });
+            }
             int n_sphere = target_positions_std_vec.size();
             VectorXT target_positions(n_sphere * 3); target_positions.setZero();
             tbb::parallel_for(0, n_sphere, [&](int i){
@@ -180,7 +211,23 @@ int main(int argc, char** argv)
                     end_points.push_back(std::make_pair(centroid, target));
                 });
             }
-            
+            else
+            {
+                sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+                    const TV& target, const VectorXT& weights)
+                {
+                    VectorXT positions;
+                    std::vector<int> indices;
+                    vertex_model.getCellVtxIndices(indices, cell_idx);
+                    vertex_model.positionsFromIndices(positions, indices);
+                    int n_pt = weights.rows();
+                    TV current = TV::Zero();
+                    for (int i = 0; i < n_pt; i++)
+                        current += weights[i] * positions.segment<2>(i * 2);
+                    
+                    end_points.push_back(std::make_pair(current, target));
+                });
+            }
             vertex_model.appendCylindersToEdges(end_points, color, edge_length_ref * 0.05, V, F, C);
         }
         viewer.data().set_mesh(V, F);
@@ -220,7 +267,9 @@ int main(int argc, char** argv)
                     }
                     if (inverse)
                     {
-                        objective.diffTestGradientScale();
+                        // objective.diffTestGradientScale();
+                        objective.diffTestPartialOPartialPScale();
+                        objective.diffTestPartial2OPartialP2();
                     }
                 }
             }
@@ -276,13 +325,58 @@ int main(int argc, char** argv)
         }
         if (ImGui::Button("SaveCentroids", ImVec2(-1,0)))
         {   
-            vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense.txt");
+            // vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense.txt");
+            vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense_spring.txt");
         }
+        // if (ImGui::Button("GenTestData", ImVec2(-1,0)))
+        // {
+        //     std::string perturb_frame1 = "0.8";
+        //     vertex_model.staticSolve();
+        //     vertex_model.savePerturbedCellCentroidsToFile(data_folder + 
+        //         "frame1_perturbed" + (perturb_frame1) + ".txt", 
+        //         0.8, 5);
+        //     vertex_model.reset();
+        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
+        //     vertex_model.staticSolve();
+        //     std::string perturb_frame0 = "0.3";
+        //     vertex_model.savePerturbedCellCentroidsToFile(data_folder + 
+        //         "frame0_perturbed" + (perturb_frame0) + ".txt", 
+        //         0.3, 5);
+        //     std::cout << "generating data finished" << std::endl;
+        // }
+        // if (ImGui::Button("GenUnperturbedData", ImVec2(-1,0)))
+        // {
+        //     vertex_model.staticSolve();
+        //     vertex_model.saveCellCentroidsToFile(data_folder + 
+        //         "frame1_unperturbed.txt", 0.0);
+        //     vertex_model.reset();
+        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
+        //     vertex_model.staticSolve();
+        //     vertex_model.saveCellCentroidsToFile(data_folder + 
+        //         "frame0_unperturbed.txt", 0.0);
+        //     std::cout << "generating data finished" << std::endl;
+        // }
+        // if (ImGui::Button("GenWeights", ImVec2(-1,0)))
+        // {
+        //     std::string perturb_frame0 = "0.3";
+        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
+        //     objective.computeWeights(data_folder + 
+        //         "frame0_weights" + (perturb_frame0) + ".txt", 
+        //         data_folder + 
+        //         "frame0_perturbed" + (perturb_frame0) + ".txt");
+        // }
         if (ImGui::Button("LoadTargets", ImVec2(-1,0)))
         {   
-            T perturbance = 0.25;
-            objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.25);
+            T perturbance = 0.4;
+            // objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.0);
             // objective.optimizeForStableTarget(perturbance);
+            objective.loadTarget(data_folder + "2D_test_targets_dense_spring.txt", 0.8);
+            // objective.optimizeForStableTarget(perturbance);
+            // objective.optimizeStableTargetsWithSprings(perturbance);
+            sa.save_ls_states = true;
+            objective.add_spatial_regularizor = false;
+            objective.w_reg_spacial = 1e-3;
+
             inverse = true; forward = false;
             objective.match_centroid = true;
             objective.add_forward_potential = true;
@@ -302,12 +396,22 @@ int main(int argc, char** argv)
 
             objective.add_reg = false;
             sa.initialize();
+            sa.optimizeIPOPT();
             updateScreen(viewer);
         }
-        if (ImGui::Button("LoadInvTargets", ImVec2(-1,0)))
+        if (ImGui::Button("TestWeighted", ImVec2(-1,0)))
         {   
-            objective.loadTarget(data_folder + "2D_test_inv_targets.txt", 0.0);
-            objective.match_centroid = true;
+            std::string perturb_frame0 = "0.3";
+            std::string perturb_frame1 = "0.8";
+            // objective.loadWeightedCellTarget(data_folder + "frame0_weights.txt", 
+            //     data_folder + "frame1_perturbed.txt");
+            objective.loadWeightedCellTarget(data_folder + 
+                "frame0_weights" + (perturb_frame0) + ".txt", 
+                data_folder + 
+                "frame1_perturbed" + (perturb_frame1) + ".txt");
+
+            inverse = true; forward = false;
+            objective.match_centroid = false;
             objective.add_forward_potential = true;
             objective.w_fp = 1e-2;
             objective.use_penalty = false;
@@ -319,15 +423,38 @@ int main(int argc, char** argv)
             {
                 objective.optimizer = SQP;
                 sa.add_reg = true;
-                sa.reg_w_H = 1e-4;
+                sa.reg_w_H = 1e-6;
             }
-                
-
             objective.add_reg = false;
             sa.initialize();
             updateScreen(viewer);
         }
+        if (ImGui::CollapsingHeader("LoadData", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            float w = ImGui::GetContentRegionAvailWidth();
+            float p = ImGui::GetStyle().FramePadding.x;
+            if (ImGui::Button("Weights", ImVec2((w-p)/2.f, 0)))
+            {
+                std::string fname = igl::file_dialog_open();
+                if (fname.length() != 0)
+                {
+                    vertex_model.loadEdgeWeights(fname, vertex_model.apical_edge_contracting_weights);
+                }
+            }
+            ImGui::SameLine(0, p);
+            if (ImGui::Button("State", ImVec2((w-p)/2.f, 0)))
+            {
+                std::string fname = igl::file_dialog_open();
+                if (fname.length() != 0)
+                {
+                    vertex_model.loadStates(fname);
+                }
+            }
+            updateScreen(viewer);
+        }
     };
+
+        
 
 
     viewer.callback_key_pressed = 
@@ -391,7 +518,7 @@ int main(int argc, char** argv)
     };
 
     vertex_model.initializeScene();
-    vertex_model.newton_tol = 1e-8;
+    vertex_model.newton_tol = 1e-6;
     VectorXT delta = VectorXT::Random(vertex_model.apical_edge_contracting_weights.rows());
     delta.array() += delta.minCoeff();
     delta /= delta.norm(); 
