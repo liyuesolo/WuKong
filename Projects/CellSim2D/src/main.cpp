@@ -256,6 +256,11 @@ int main(int argc, char** argv)
             {
                 updateScreen(viewer);
             }
+            if (ImGui::Checkbox("HasRestState", &vertex_model.has_rest_state))
+            {
+                if (vertex_model.has_rest_state)
+                    vertex_model.computeRestLength();
+            }
             if (ImGui::Checkbox("CheckDerivatives", &check_derivatives))
             {
                 if (check_derivatives)
@@ -466,6 +471,11 @@ int main(int argc, char** argv)
             return false;
         case ' ':
             viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case 's':
+            vertex_model.advanceOneStep(static_solve_step);
+            static_solve_step++;
+            updateScreen(viewer);
             return true;
         case '1':
             check_modes = true;

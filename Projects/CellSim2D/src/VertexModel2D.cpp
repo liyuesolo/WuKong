@@ -6,6 +6,8 @@
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
+#include "../include/IMLS.h"
+
 #include "../include/VertexModel2D.h"
 #include "../include/autodiff/EdgeEnergy.h"
 #include "../include/autodiff/AreaEnergy.h"
@@ -13,6 +15,7 @@
 
 void VertexModel2D::initializeScene()
 {
+    
     T unit = 1e-2;
     // 80 cells 200 µm diameter, 35 µm height, 7.85 µm width
     T r = 100 * unit; // 2 pi r = 200 
@@ -72,16 +75,17 @@ void VertexModel2D::initializeScene()
     
     // mild buckling n_div == 50
     int scene = 1;
-    if (scene == 0)
-    {
-        w_ea = 0.5;
-        w_eb = 0.2;
-        w_el = 4.0;
-        w_c = 5.0;
-    }
-    else if (scene == 1)
+    has_rest_state = true;
+    if (has_rest_state)
     {
         w_ea = 1.0;
+        w_eb = 0.2;
+        w_el = 4.0;
+        w_c = 20.0;
+    }
+    else
+    {
+        w_ea = 20.0;
         w_eb = 0.2;
         w_el = 4.0;
         w_c = 20.0;
@@ -90,7 +94,7 @@ void VertexModel2D::initializeScene()
     w_a = 1e7;
     w_mb = 1e5;
     w_yolk = 1e5;
-    // barrier_weight = 1e-30;
+    barrier_weight = 1e-22;
 
     yolk_area_rest = computeYolkArea();
     
@@ -103,7 +107,6 @@ void VertexModel2D::initializeScene()
         ipc_barrier_distance = 1e-3;
         buildIPCRestData();
     }
-    has_rest_state = true;
     if (has_rest_state)
         computeRestLength();
     add_inner_edges = false;
@@ -633,7 +636,7 @@ bool VertexModel2D::advanceOneStep(int step)
         return true;
 
     T dq_norm = lineSearchNewton(u, residual);
-    // checkFunctionPerIteration(step);
+    checkFunctionPerIteration(step);
     if (save_mesh)
         saveStates(data_folder + "iter_" + std::to_string(step) + ".obj");
     if(step == max_newton_iter || dq_norm > 1e10)
@@ -1000,7 +1003,8 @@ void VertexModel2D::addAreaPreservationEnergy(T w, T& energy)
         positionsFromIndices(positions, indices);
         positionsFromIndices(positions_rest, indices, true);
         T ei;
-        computeArea4PointsSquared2D(w, positions, positions_rest, ei);
+        // computeArea4PointsSquared2D(w, positions, positions_rest, ei);
+        computeArea4PointsLineIntegral(w, positions, positions_rest, ei);
         energy += ei;
     });
 }
@@ -1013,7 +1017,8 @@ void VertexModel2D::addAreaPreservationForceEntries(T w, VectorXT& residual)
         positionsFromIndices(positions, indices);
         positionsFromIndices(positions_rest, indices, true);
         Vector<T, 8> dedx;
-        computeArea4PointsSquared2DGradient(w, positions, positions_rest, dedx);
+        // computeArea4PointsSquared2DGradient(w, positions, positions_rest, dedx);
+        computeArea4PointsLineIntegralGradient(w, positions, positions_rest, dedx);
         dedx *= -1;
         addForceEntry<8>(residual, indices, dedx);
     });
@@ -1027,7 +1032,8 @@ void VertexModel2D::addAreaPreservationHessianEntries(T w, std::vector<Entry>& e
         positionsFromIndices(positions, indices);
         positionsFromIndices(positions_rest, indices, true);
         Matrix<T, 8, 8> hessian;
-        computeArea4PointsSquared2DHessian(w, positions, positions_rest, hessian);
+        // computeArea4PointsSquared2DHessian(w, positions, positions_rest, hessian);
+        computeArea4PointsLineIntegralHessian(w, positions, positions_rest, hessian);
         addHessianEntry<8>(entries, indices, hessian);
     });
 }
@@ -1330,7 +1336,7 @@ void VertexModel2D::checkFunctionPerIteration(int step)
         edge_length[i] = (vj - vi).norm();
     }
     std::cout << "min edge length " << edge_length.minCoeff() << std::endl;
-    std::getchar();
+    // std::getchar();
 }
 
 bool VertexModel2D::staticSolve()

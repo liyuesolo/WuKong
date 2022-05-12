@@ -9,6 +9,14 @@ void computeArea4PointsSquared2D(double stiffness, const Eigen::Matrix<double,8,
 void computeArea4PointsSquared2DGradient(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 1>& energygradient);
 void computeArea4PointsSquared2DHessian(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 8>& energyhessian);
 
+void computeArea4PointsSignedSquared2D(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, double& energy);
+void computeArea4PointsSignedSquared2DGradient(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 1>& energygradient);
+void computeArea4PointsSignedSquared2DHessian(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 8>& energyhessian);
+
+void computeArea4PointsLineIntegral(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, double& energy);
+void computeArea4PointsLineIntegralGradient(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 1>& energygradient);
+void computeArea4PointsLineIntegralHessian(double stiffness, const Eigen::Matrix<double,8,1> & face_vertices, const Eigen::Matrix<double,8,1> & face_vertices_rest, Eigen::Matrix<double, 8, 8>& energyhessian);
+
 void computeTriangleArea(const Eigen::Matrix<double,2,1> & vi, const Eigen::Matrix<double,2,1> & vj, const Eigen::Matrix<double,2,1> & center, double& energy);
 void computeTriangleAreaGradient(const Eigen::Matrix<double,2,1> & vi, const Eigen::Matrix<double,2,1> & vj, const Eigen::Matrix<double,2,1> & center, Eigen::Matrix<double, 4, 1>& energygradient);
 void computeTriangleAreaHessian(const Eigen::Matrix<double,2,1> & vi, const Eigen::Matrix<double,2,1> & vj, const Eigen::Matrix<double,2,1> & center, Eigen::Matrix<double, 4, 4>& energyhessian);

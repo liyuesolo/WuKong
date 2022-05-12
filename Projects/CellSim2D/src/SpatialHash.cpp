@@ -68,3 +68,4 @@ void SpatialHash<dim>::getOneRingNeighbors(const TV& point, std::vector<int>& ne
 }
 
 template class SpatialHash<2>;
+template class SpatialHash<3>;
