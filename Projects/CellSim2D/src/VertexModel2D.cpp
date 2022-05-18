@@ -1,6 +1,8 @@
 #include <Eigen/PardisoSupport>
 #include <igl/readOBJ.h>
 #include <iomanip>
+#include <random>
+#include <algorithm>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -26,14 +28,28 @@ void VertexModel2D::initializeScene()
     for(int i = 0; i < n_div; i++)
         points.segment<2>(i * 2) = TV(r * std::cos(theta * T(i)), 
                                         r * std::sin(theta*T(i)));
+    std::vector<int> indices;
+    for(int i = 0; i < n_div; i++)
+        indices.push_back(i);
+    std::random_device rd;
+    std::mt19937 g(rd());
+ 
+    // std::shuffle(indices.begin(), indices.end(), g);
+
     undeformed = points;
+    for(int i = 0; i < n_div; i++)
+    {
+        undeformed.segment<2>(indices[i] * 2) = points.segment<2>(i * 2);
+    }
+    
     // apical edges
     int n_pt = points.rows() / 2;
     basal_vtx_start = n_pt;
     for (int i = 0; i < n_pt; i++)
     {
         int j = (i + 1) % n_pt;
-        edges.push_back(Edge(i, j));
+        // edges.push_back(Edge(i, j));
+        edges.push_back(Edge(indices[i], indices[j])); 
     }
     basal_edge_start = edges.size();
 
@@ -43,7 +59,7 @@ void VertexModel2D::initializeScene()
 
     for (int i = 0; i < n_pt; i++)
     {
-        TV pt = points.segment<2>(i * 2);
+        TV pt = undeformed.segment<2>(i * 2);
         TV pt_inner = pt - pt.normalized() * edge_length;
         undeformed.segment<2>(basal_vtx_start * 2 + i * 2) = pt_inner;
     }
@@ -51,14 +67,16 @@ void VertexModel2D::initializeScene()
     for (int i = 0; i < n_pt; i++)
     {
         int j = (i + 1) % n_pt;
-        edges.push_back(Edge(i + basal_vtx_start, j + basal_vtx_start));
+        // edges.push_back(Edge(i + basal_vtx_start, j + basal_vtx_start));
+        edges.push_back(Edge(indices[i] + basal_vtx_start, indices[j] + basal_vtx_start));
         inner_edges.push_back(Edge(i, j + basal_vtx_start));
         inner_edges.push_back(Edge(j, i + basal_vtx_start));
     }
     lateral_edge_start = edges.size();
     for (int i = 0; i < n_pt; i++)
     {
-        edges.push_back(Edge(i, i + basal_vtx_start));
+        // edges.push_back(Edge(i, i + basal_vtx_start));
+        edges.push_back(Edge(indices[i], indices[i] + basal_vtx_start));
     }
 
     deformed = undeformed;
@@ -309,6 +327,11 @@ void VertexModel2D::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 
     K.resize(num_nodes * 2, num_nodes * 2);
     K.setFromTriplets(entries.begin(), entries.end());
+
+    // std::ofstream out("H2d.txt");
+    // out << K;
+    // out.close();
+    // std::exit(0);
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
     K.makeCompressed();

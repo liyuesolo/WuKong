@@ -254,7 +254,6 @@ void VertexModel::computeIPCRestData()
             }
         }
     });
-
     
     ipc_edges.resize(edges_vec.size(), 2);
     for (int i = 0; i < edges_vec.size(); i++)
@@ -267,6 +266,226 @@ void VertexModel::computeIPCRestData()
     if (has_ixn_in_rest_shape)
         std::cout << "[ALERT] ipc mesh has self-intersection in its rest shape" << std::endl;
 }
+
+// void VertexModel::computeIPCRestData()
+// {
+//     int n_ipc_vtx = add_basal_faces_ipc ? num_nodes : basal_vtx_start;
+//     int n_ipc_faces = add_basal_faces_ipc ? lateral_face_start : basal_face_start;
+//     ipc_vertices.resize(n_ipc_vtx, 3);
+//     for (int i = 0; i < n_ipc_vtx; i++)
+//         ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
+    
+//     int face_cnt = 0;
+//     iterateFaceSerial([&](VtxList& face_vtx_list, int i){
+//         if (i < n_ipc_faces)
+//         {
+//             if (face_vtx_list.size() == 4)
+//                 face_cnt += 2;
+//             else if (face_vtx_list.size() == 5)
+//                 face_cnt += 3;
+//             else if (face_vtx_list.size() == 6)
+//                 face_cnt += 4;
+//             else if (face_vtx_list.size() == 7)
+//                 face_cnt += 5;
+//             else if (face_vtx_list.size() == 8)
+//                 face_cnt += 6;
+//             else if (face_vtx_list.size() == 9)
+//                 face_cnt += 7;
+//             else
+//             {
+//                 std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+//             }
+//         }
+//     });
+    
+
+//     std::vector<Edge> edges_vec;
+//     ipc_faces.resize(face_cnt, 3);
+//     face_cnt = 0;
+//     auto appendEdges = [&](VtxList& face_vtx_list)
+//     {
+//         for (int ne = 0; ne < face_vtx_list.size(); ne++)
+//         {
+//             int ne_plus1 = (ne + 1) % face_vtx_list.size();
+//             edges_vec.push_back(Edge(face_vtx_list[ne], face_vtx_list[ne_plus1]));
+//         }
+//         if (face_vtx_list.size() == 4)
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[0]));
+//         else if (face_vtx_list.size() == 5)
+//         {
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
+//         }
+//         else if (face_vtx_list.size() == 6)
+//         {
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[3]));
+//             edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
+//         }
+//         else if (face_vtx_list.size() == 7)
+//         {
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[6]));
+//             edges_vec.push_back(Edge(face_vtx_list[6], face_vtx_list[3]));
+//             edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[5]));
+//         }
+//         else if (face_vtx_list.size() == 8)
+//         {
+//             edges_vec.push_back(Edge(face_vtx_list[0], face_vtx_list[2]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[7]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[4]));
+//             edges_vec.push_back(Edge(face_vtx_list[7], face_vtx_list[4]));
+//             edges_vec.push_back(Edge(face_vtx_list[7], face_vtx_list[5]));
+//         }
+//         else if (face_vtx_list.size() == 9)
+//         {
+//             edges_vec.push_back(Edge(face_vtx_list[1], face_vtx_list[8]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[8]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[7]));
+//             edges_vec.push_back(Edge(face_vtx_list[2], face_vtx_list[6]));
+//             edges_vec.push_back(Edge(face_vtx_list[3], face_vtx_list[6]));
+//             edges_vec.push_back(Edge(face_vtx_list[4], face_vtx_list[6]));
+//         }
+//     };
+
+//     iterateFaceSerial([&](VtxList& face_vtx_list, int i)
+//     {
+//         if (i < basal_face_start)
+//         {
+//             if (face_vtx_list.size() == 4)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
+//                 appendEdges(face_vtx_list);
+//             }
+//             else if (face_vtx_list.size() == 5)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[0]);
+//                 appendEdges(face_vtx_list);
+
+//             }
+//             else if (face_vtx_list.size() == 6)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[5]);
+//                 appendEdges(face_vtx_list);
+//             }
+//             else if (face_vtx_list.size() == 7)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[1], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[2], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[6]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[3], face_vtx_list[6]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[5]);
+//                 appendEdges(face_vtx_list);
+//             }
+//             else if (face_vtx_list.size() == 8)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[0], face_vtx_list[2], face_vtx_list[1]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[4], face_vtx_list[3]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[7], face_vtx_list[2], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[2], face_vtx_list[7]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[4], face_vtx_list[7]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[5], face_vtx_list[7]);
+//                 appendEdges(face_vtx_list);
+//             }
+//             else if (face_vtx_list.size() == 9)
+//             {
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[8], face_vtx_list[1], face_vtx_list[0]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[8], face_vtx_list[2], face_vtx_list[1]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[7], face_vtx_list[2], face_vtx_list[8]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[6], face_vtx_list[2], face_vtx_list[7]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[2], face_vtx_list[6]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[3], face_vtx_list[6]);
+//                 ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[4], face_vtx_list[6]);
+//                 appendEdges(face_vtx_list);
+//             }
+//             else
+//             {
+//                 std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+//             }
+//         }
+
+//         if (add_basal_faces_ipc)
+//         {
+//             if (i >= basal_face_start && i < lateral_face_start)
+//             {
+
+//                 if (face_vtx_list.size() == 4)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[1], face_vtx_list[2], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[3], face_vtx_list[0]);
+//                     appendEdges(face_vtx_list);
+//                 }
+//                 else if (face_vtx_list.size() == 5)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[1], face_vtx_list[2], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[3], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[4], face_vtx_list[0]);
+//                     appendEdges(face_vtx_list);
+
+//                 }
+//                 else if (face_vtx_list.size() == 6)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[1], face_vtx_list[2], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[3], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[5], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[4], face_vtx_list[5]);
+//                     appendEdges(face_vtx_list);
+//                 }
+//                 else if (face_vtx_list.size() == 7)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[1], face_vtx_list[2], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[6], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[3], face_vtx_list[6]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[5], face_vtx_list[6]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[4], face_vtx_list[5]);
+//                     appendEdges(face_vtx_list);
+//                 }
+//                 else if (face_vtx_list.size() == 8)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[0], face_vtx_list[1]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[2], face_vtx_list[3]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[7], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[4], face_vtx_list[7]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[5], face_vtx_list[7]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[5], face_vtx_list[6], face_vtx_list[7]);
+//                     appendEdges(face_vtx_list);
+//                 }
+//                 else if (face_vtx_list.size() == 9)
+//                 {
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[1], face_vtx_list[8], face_vtx_list[0]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[8], face_vtx_list[1]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[7], face_vtx_list[8]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[6], face_vtx_list[7]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[2], face_vtx_list[3], face_vtx_list[6]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[3], face_vtx_list[4], face_vtx_list[6]);
+//                     ipc_faces.row(face_cnt++) = IV(face_vtx_list[4], face_vtx_list[5], face_vtx_list[6]);
+//                     appendEdges(face_vtx_list);
+//                 }
+//                 else
+//                 {
+//                     std::cout << "Unknown polygon edges " << __FILE__ << std::endl;
+//                 }
+//             }
+//         }
+//     });
+    
+//     ipc_edges.resize(edges_vec.size(), 2);
+//     for (int i = 0; i < edges_vec.size(); i++)
+//         ipc_edges.row(i) = edges_vec[i];    
+    
+//     // saveIPCData("./", 0, true);
+
+//     bool has_ixn_in_rest_shape = ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces);
+    
+//     if (has_ixn_in_rest_shape)
+//         std::cout << "[ALERT] ipc mesh has self-intersection in its rest shape" << std::endl;
+// }
 
 void VertexModel::updateIPCVertices(const VectorXT& _u)
 {

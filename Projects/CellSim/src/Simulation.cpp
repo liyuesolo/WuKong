@@ -35,6 +35,11 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
 {
     int nmodes = 20;
     int n_dof_sim = deformed.rows();
+    VectorXT residual(n_dof_sim); residual.setZero();
+    computeResidual(u, residual);
+    if (residual.norm() > newton_tol)
+        return false;
+        
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
     
@@ -84,7 +89,7 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
 
 void Simulation::checkHessianPD(bool save_txt)
 {
-    int nmodes = 20;
+    int nmodes = 10;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
@@ -201,15 +206,19 @@ void Simulation::initializeCells()
 
     if (cells.scene_type == 1 || cells.scene_type == 2)
     {
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_2k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_6k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid2k.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid6k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
         // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_486.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_463.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";   
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k_remesh.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_6k_remesh.obj";
+        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_463_remesh.obj";
+        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";   
         cells.vertexModelFromMesh(sphere_file); 
     }
     else if(cells.scene_type == 0)
@@ -466,6 +475,7 @@ bool Simulation::staticSolve()
     
     // cells.saveHexTetsStep(0);
     // std::exit(0);
+    Timer sim_timer(true);
     VectorXT cell_volume_initial;
     cells.computeVolumeAllCells(cell_volume_initial);
     T yolk_volume_init = 0.0;
@@ -562,9 +572,11 @@ bool Simulation::staticSolve()
         std::cout << "============================================================================" << std::endl;
 
     }
+    sim_timer.stop();
     std::cout << "# of newton iter: " << cnt << " exited with |g|: " 
             << residual_norm << " |ddu|: " << dq_norm  
-            << " |g_init|: " << residual_norm_init << std::endl;
+            << " |g_init|: " << residual_norm_init
+            << " takes " << sim_timer.elapsed_sec() << "s" << std::endl;
     // checkHessianPD(false);
 
     VectorXT cell_volume_final;
@@ -789,10 +801,31 @@ bool Simulation::WoodburySolveNaive(StiffnessMatrix& A, const MatrixXT& UV,
 bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
+    MatrixXT UVT= UV.transpose();
     bool use_cholmod = true;
     Timer t(true);
 
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    solver.pardisoParameterArray()[6] = 0;
+    // solver.pardisoParameterArray()[59] = 1;
+    auto& iparm = solver.pardisoParameterArray();
+	iparm.setZero();
+	iparm[0] = 1; /// not default values, set everything
+	iparm[1] = 2; // ordering
+	iparm[7] = 2;
+	iparm[9] = 13; //pivot perturbation
+
+	iparm[10] = 2; //scaling diagonals/vectors   this can only be used in conjunction with iparm[12] = 1
+	iparm[12] = 1;
+
+	iparm[17] = -1;
+	iparm[18] = -1;
+	iparm[20] = 1; //https://software.intel.com/en-us/mkl-developer-reference-c-pardiso-iparm-parameter
+
+	iparm[23] = 1; // parallel solve
+	iparm[24] = 1; // parallel backsubst.
+	iparm[26] = 1; // check matrix
+	iparm[34] = 1; // 0 based indexing
 
     T alpha = 10e-6;
     solver.analyzePattern(K);
@@ -840,8 +873,8 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
             
             MatrixXT C(UV.cols(), UV.cols());
             C.setIdentity();
-            C += UV.transpose() * A_inv_U;
-            du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+            C += UVT * A_inv_U;
+            du = A_inv_g - A_inv_U * C.inverse() * UVT * A_inv_g;
         }
         
 
@@ -855,7 +888,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
         
-        bool solve_success = (K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        bool solve_success = true;//(K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
 
         if (!solve_success)
             invalid_residual_cnt++;
@@ -896,6 +929,27 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 bool Simulation::linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorXT& x)
 {
     Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.pardisoParameterArray()[6] = 0;
+    // solver.pardisoParameterArray()[59] = 1;
+    auto& iparm = solver.pardisoParameterArray();
+	iparm.setZero();
+	iparm[0] = 1; /// not default values, set everything
+	iparm[1] = 2; // ordering
+	iparm[7] = 2;
+	iparm[9] = 13; //pivot perturbation
+
+	iparm[10] = 2; //scaling diagonals/vectors   this can only be used in conjunction with iparm[12] = 1
+	iparm[12] = 1;
+
+	iparm[17] = -1;
+	iparm[18] = -1;
+	iparm[20] = 1; //https://software.intel.com/en-us/mkl-developer-reference-c-pardiso-iparm-parameter
+
+	iparm[23] = 1; // parallel solve
+	iparm[24] = 1; // parallel backsubst.
+	iparm[26] = 1; // check matrix
+	iparm[34] = 1; // 0 based indexing
+
     solver.analyzePattern(A);
     solver.factorize(A);
     x = solver.solve(b);
@@ -904,11 +958,34 @@ bool Simulation::linearSolveNaive(StiffnessMatrix& A, const VectorXT& b, VectorX
 bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
 {
     Timer timer(true);
+    
 #define USE_PARDISO
 
 
 #ifdef USE_PARDISO
     Eigen::PardisoLLT<StiffnessMatrix> solver;
+    solver.pardisoParameterArray()[6] = 0;
+    // solver.pardisoParameterArray()[59] = 1;
+    auto& iparm = solver.pardisoParameterArray();
+	iparm.setZero();
+	iparm[0] = 1; /// not default values, set everything
+	iparm[1] = 2; // ordering
+	iparm[7] = 2;
+	iparm[9] = 13; //pivot perturbation
+
+	iparm[10] = 2; //scaling diagonals/vectors   this can only be used in conjunction with iparm[12] = 1
+	iparm[12] = 1;
+
+	iparm[17] = -1;
+	iparm[18] = -1;
+	iparm[20] = 1; //https://software.intel.com/en-us/mkl-developer-reference-c-pardiso-iparm-parameter
+
+	iparm[23] = 1; // parallel solve
+	iparm[24] = 1; // parallel backsubst.
+	iparm[26] = 1; // check matrix
+	iparm[34] = 1; // 0 based indexing
+
+    // Eigen::PardisoLDLT<StiffnessMatrix> solver;
 #else
     Eigen::SimplicialLDLT<StiffnessMatrix> solver;
     // Eigen::CholmodSimplicialLLT<StiffnessMatrix> solver;
@@ -963,6 +1040,7 @@ bool Simulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& d
         bool positive_definte = num_negative_eigen_values == 0;
         bool search_dir_correct_sign = dot_dx_g > 1e-6;
         bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        // bool solve_success = true;
         // std::cout << "PD: " << positive_definte << " direction " 
         //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
@@ -1247,6 +1325,10 @@ void Simulation::loadDeformedState(const std::string& filename)
         deformed.segment<3>(i * 3) = V.row(i);
     }
     u = deformed - undeformed;
+    if (cells.use_ipc_contact)
+    {
+        cells.updateIPCVertices(u);
+    }
     if (verbose)
         cells.computeCellInfo();
 }

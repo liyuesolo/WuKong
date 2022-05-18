@@ -207,8 +207,8 @@ void Objective::optimizeStableTargetsWithSprings(T perturbance)
             T _rest_length) : 
             stiffness(_stiffness), x(_x), X(_X), 
             indices(_indices), rest_length(_rest_length) {}
-        T l0() { return (X.segment<2>(2) - X.segment<2>(0)).norm(); }
-        // T l0 () {return rest_length; }
+        // T l0() { return (X.segment<2>(2) - X.segment<2>(0)).norm(); }
+        T l0 () {return rest_length; }
         T l() { return (x.segment<2>(2) - x.segment<2>(0)).norm(); }
         void setx(const Vector<T, 4>& _x) { x = _x; }
         T energy() 
@@ -832,6 +832,10 @@ void Objective::updateDesignParameters(const VectorXT& design_parameters)
 T Objective::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
+    T offset = 0.2 * (bound[1] - bound[0]);
+    std::cout << p_curr.maxCoeff()<< " " << bound[1] + offset << " " << p_curr.minCoeff() << " " << bound[0] - offset << std::endl;
+    if (p_curr.maxCoeff() > bound[1] + offset || p_curr.minCoeff() < bound[0] - offset)
+        return 1e10;
     if (simulate)
     {
         vertex_model.reset();
@@ -961,6 +965,7 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
         {
             VectorXT dOdp_force(n_dof_design); dOdp_force.setZero();
             vertex_model.computededp(dOdp_force);
+            // std::cout << "dOdp: " << w_fp * dOdp_force.norm() << std::endl;
             dOdp += w_fp * dOdp_force;
         }
     }
@@ -973,17 +978,46 @@ T Objective::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool si
 
     VectorXT partialO_partialp;
     computedOdp(p_curr, partialO_partialp);
-
+    // std::cout << "pOpd: " << partialO_partialp.norm() << std::endl;
     T Op; computeOp(p_curr, Op);
     dOdp += partialO_partialp;
     energy += Op;
     return dOdp.norm();
 }
 
-void Objective::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate)
+void Objective::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
-    
+    if (simulate)
+    {
+        vertex_model.reset();
+        if (use_prev_equil)
+        {
+            vertex_model.u = equilibrium_prev;
+            vertex_model.u0 = equilibrium_prev;
+        }
+        while (true)
+        {
+            
+            vertex_model.staticSolve();
+            if (!perturb)
+                break;
+            VectorXT negative_eigen_vector;
+            T negative_eigen_value;
+            bool has_neg_ev = vertex_model.fetchNegativeEigenVectorIfAny(negative_eigen_value,
+                negative_eigen_vector);
+            if (has_neg_ev)
+            {
+                std::cout << "unstable state for the forward problem" << std::endl;
+                std::cout << "nodge it along the negative eigen vector" << std::endl;
+                VectorXT nodge_direction = negative_eigen_vector;
+                T step_size = 1e-2;
+                vertex_model.u += step_size * nodge_direction;   
+            }
+            else
+                break;
+        }
+    }
     MatrixXT dxdp;
     
     vertex_model.dxdpFromdxdpEdgeWeights(dxdp);
@@ -1434,13 +1468,16 @@ void Objective::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entr
 
 void Objective::diffTestGradientScale()
 {
+    vertex_model.staticSolve();
+    equilibrium_prev = vertex_model.u;
+    VectorXT init = equilibrium_prev;
     std::cout << "###################### CHECK GRADIENT SCALE ######################" << std::endl;   
     VectorXT dOdp(n_dof_design);
     VectorXT p;
     getDesignParameters(p);
     T E0;
     // gradient(p, dOdp, E0, false);
-    gradient(p, dOdp, E0);
+    gradient(p, dOdp, E0, true, true);
     // std::cout << dOdp.minCoeff() << " " << dOdp.maxCoeff() << std::endl;
     VectorXT dp(n_dof_design);
     dp.setRandom();
@@ -1450,7 +1487,8 @@ void Objective::diffTestGradientScale()
     
     for (int i = 0; i < 10; i++)
     {
-        T E1 = value(p + dp);
+        equilibrium_prev = init;
+        T E1 = value(p + dp, true, true);
         T dE = E1 - E0;
         
         dE -= dOdp.dot(dp);

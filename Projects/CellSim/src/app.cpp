@@ -205,8 +205,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
             if (finished)
             {
                 viewer.core().is_animating = false;
-                simulation.checkHessianPD(false);
-                
+                // simulation.checkHessianPD(false);
             }
             else 
                 static_solve_step++;
@@ -273,16 +272,16 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::gl
         case 'n':
             load_obj_iter_cnt++;
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
-            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
-            simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
+            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            // simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
         case 'l':
             load_obj_iter_cnt--;
             load_obj_iter_cnt = std::max(0, load_obj_iter_cnt);
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
-            // simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
-            simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
+            simulation.loadDeformedState("output/cells/cell/cell_mesh_iter_" + std::to_string(load_obj_iter_cnt) + ".obj");
+            // simulation.loadDeformedState("output/cells/debug_debug/" + std::to_string(load_obj_iter_cnt) + ".obj");
             updateScreen(viewer);
             return true;
         case 'c':
@@ -495,7 +494,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         if (sa.objective.match_centroid)
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                     target_positions_std_vec.push_back(target + shift);
                     // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
@@ -503,7 +502,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                     target_positions_std_vec.push_back(target + shift);
                     // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
@@ -523,7 +522,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target){
                 TV current;
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
                     // appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
@@ -536,7 +535,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                 {
                     VectorXT positions;
                     std::vector<int> indices;
@@ -561,18 +560,20 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     }
     if (show_target && show_target_current)
     {
-        TV color(0, 1, 1);
+        
         std::vector<std::pair<TV, TV>> end_points;
+        std::vector<TV> color;
         if (sa.objective.match_centroid)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
             {
                 TV current;
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
                     // appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
                     end_points.push_back(std::make_pair(current + shift, target + shift));
+                    color.push_back(TV(0, 1, 1));
                 }
             });
         }
@@ -581,7 +582,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
                 {
                     VectorXT positions;
                     std::vector<int> indices;
@@ -592,6 +593,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                         current += weights[i] * positions.segment<3>(i * 3);
                     // appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
                     end_points.push_back(std::make_pair(current + shift, target + shift));
+                    color.push_back(TV(0, 1, 1));
                 }
             });
         }
@@ -599,7 +601,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     }
     if (show_edges)
     {
-        TV color(1, 1, 0);
+        std::vector<TV> color;
         int cnt = 0;
         std::vector<std::pair<TV, TV>> end_points;
         simulation.cells.iterateEdgeSerial([&](Edge& edge)
@@ -608,6 +610,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             TV to = simulation.deformed.segment<3>(edge[1] * 3);
             end_points.push_back(std::make_pair(from + shift, to + shift));
             // appendCylinderToEdge(from + shift, to + shift, color, 0.005, V, F, C);
+            color.push_back(TV(0, 1, 1));
             cnt++;
         });
         appendCylindersToEdges(end_points, color, 0.005, V, F, C);
@@ -615,31 +618,35 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     if (show_edge_weights_opt && edge_weights.rows() != 0 && !show_undeformed)
     {
         VectorXT ewn = edge_weights.normalized();
-        Eigen::MatrixXd colors;
-        igl::colormap(igl::COLOR_MAP_TYPE_TURBO, edge_weights, false, colors);
+        std::vector<TV> colors;
         int cnt = 0;
-        
-        T max_w = sa.design_parameter_bound[1], min_w = sa.design_parameter_bound[0];
-        // T max_w = edge_weights.maxCoeff(), min_w = edge_weights.minCoeff();
+        // T max_w = sa.design_parameter_bound[1], min_w = sa.design_parameter_bound[0];
+        T max_w = edge_weights.maxCoeff(), min_w = edge_weights.minCoeff();
 
-        T epsilon = min_w + (max_w - min_w) * threshold;
-
+        // T epsilon = min_w + (max_w - min_w) * threshold;
+        T epsilon = max_w;
+        std::vector<std::pair<TV, TV>> end_points;
         simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
             TV from = simulation.deformed.segment<3>(edge[0] * 3);
             TV to = simulation.deformed.segment<3>(edge[1] * 3);
-            if (edge_weights[cnt] < epsilon)
-            {
-                TV color = (edge_weights[cnt] - min_w) / (epsilon - min_w) * TV::Ones();
-                if (use_debug_color)
-                    color.segment<2>(1).setZero();
-                appendCylinderToEdge(from, to, color, 0.01, V, F, C);
-            }
-            else
-                appendCylinderToEdge(from, to, TV(1, 1, 1), 0.01, V, F, C);
-            if (edge_weights[cnt] < max_w - 1e-3)
-                appendCylinderToEdge(from, to, TV(1, 1, 0), 0.01, V, F, C);
+            // if (edge_weights[cnt] < epsilon)
+            // {
+            //     TV color = (edge_weights[cnt] - min_w) / (epsilon - min_w) * TV::Ones();
+            //     if (use_debug_color)
+            //         color.segment<2>(1).setZero();
+            //     appendCylinderToEdge(from, to, color, 0.01, V, F, C);
+            // }
+            // else
+            //     appendCylinderToEdge(from, to, TV(1, 1, 1), 0.01, V, F, C);
+            // if (edge_weights[cnt] < max_w - 1e-3)
+            //     appendCylinderToEdge(from, to, TV(1, 1, 0), 0.01, V, F, C);
+            T red = (edge_weights[cnt] - min_w) / (epsilon - min_w);
+            end_points.push_back(std::make_pair(from ,to));
+            colors.push_back(TV(1.0 * red, 0, 0));
             cnt++;
         });
+
+        appendCylindersToEdges(end_points, colors, 0.01, V, F, C);
     }
 
     if (show_undeformed)
@@ -804,6 +811,7 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
                 if (fname.length() != 0)
                 {
                     simulation.loadEdgeWeights(fname, edge_weights);
+                    std::cout << "Max edge weight " << edge_weights.maxCoeff() << " min " << edge_weights.minCoeff() << std::endl;
                 }
             }
             ImGui::SameLine(0, p);
@@ -813,6 +821,7 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
                 if (fname.length() != 0)
                 {
                     simulation.loadDeformedState(fname);
+                    updateScreen(viewer);
                 }
             }
             // ImGui::SameLine(0, p);
@@ -879,8 +888,10 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
     {
         contracting_edges.push_back(e);
     });
+    TV v0 = simulation.undeformed.segment<3>(contracting_edges[0][0] * 3);
+    TV v1 = simulation.undeformed.segment<3>(contracting_edges[0][1] * 3);
 
-    T visual_R = 0.01;
+    T visual_R = 10.0 * (v1 - v0).norm();
     int n_div = 10;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 3);
@@ -901,7 +912,7 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
     C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
 
     
-    for (int j = 0; j < n_contracting_edges; j++)
+    tbb::parallel_for(0, n_contracting_edges, [&](int j)
     {
         int rov = n_row_V + j * rod_offset_v;
         int rof = n_row_F + j * rod_offset_f;
@@ -941,15 +952,14 @@ void DiffSimApp::appendCylinderToEdges(const VectorXT weights_vector,
                 C.row(rof + i*2 ) = TV(0.0, 1.0, 0.0);
                 C.row(rof + i*2 + 1) = TV(0.0, 1.0, 0.0);
             }
-            // C.row(rof + i*2 ) = TV(1.0, 1.0, 1.0) * weights_vector[j];
-            // C.row(rof + i*2 + 1) = TV(1.0, 1.0, 1.0) * weights_vector[j];
         }
-    }   
+
+    });
 }
 
 
 void SimulationApp::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
-        const TV& color, T radius,
+        const std::vector<TV>& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
 {
     int n_div = 10;
@@ -1000,8 +1010,8 @@ void SimulationApp::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>&
                                         n_row_V + ei * offset_v + i+n_div, 
                                         n_row_V + + ei * offset_v + (i+1)%(n_div) + n_div);
 
-            _C.row(n_row_F + ei * offset_f + i*2 ) = color;
-            _C.row(n_row_F + ei * offset_f + i*2 + 1) = color;
+            _C.row(n_row_F + ei * offset_f + i*2 ) = color[ei];
+            _C.row(n_row_F + ei * offset_f + i*2 + 1) = color[ei];
         }
     });
 }

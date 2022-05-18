@@ -88,6 +88,16 @@ public:
         n = variable_num;
         m = 0;
         nnz_jac_g = 0;
+
+        int cnt = 0;
+        for( int row = 0; row < n; row++ )
+        {
+            for( int col = 0; col <= row; col++ )
+            {
+                cnt++;
+            }
+        }
+        nnz_h_lag = cnt;
         index_style = TNLP::C_STYLE;
         
         return true;
@@ -154,7 +164,8 @@ public:
             p_curr[i] = x[i];
 
         // T E = objective.value(p_curr, true, true);
-        T E = objective.value(p_curr, true, false);
+        T E = objective.value(p_curr, true, new_x);
+        objective.equilibrium_prev = objective.vertex_model.u;
         std::cout << "[ipopt] eval_f: " << E << std::endl;
         obj_value = (Ipopt::Number)E;
         return true;
@@ -172,9 +183,10 @@ public:
             p_curr[i] = x[i];
         T O;
         VectorXT dOdp;
-        objective.gradient(p_curr, dOdp, O, true);
-        std::cout << "forward simulation hessian eigen values: ";
-        objective.vertex_model.checkHessianPD(false);
+        objective.gradient(p_curr, dOdp, O, new_x);
+        objective.equilibrium_prev = objective.vertex_model.u;
+        // std::cout << "forward simulation hessian eigen values: ";
+        // objective.vertex_model.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];
@@ -240,7 +252,38 @@ public:
         Ipopt::Number* values)
     {
         std::cout << "[ipopt] eval_h" << std::endl;
-        return false;
+        if (values == NULL)
+        {
+            int cnt = 0;
+            for( int row = 0; row < n; row++ )
+            {
+                for( int col = 0; col <= row; col++ )
+                {
+                    iRow[cnt] = row;
+                    jCol[cnt] = col;
+                    cnt++;
+                }
+            }
+        }
+        else
+        {
+            VectorXT p_curr(variable_num);
+            for (int i = 0; i < variable_num; i++)
+                p_curr[i] = x[i];
+            MatrixXT HGN;
+            objective.hessianGN(p_curr, HGN, true, new_x);
+            objective.equilibrium_prev = objective.vertex_model.u;
+            int cnt = 0;
+            for( int row = 0; row < n; row++ )
+            {
+                for( int col = 0; col <= row; col++ )
+                {
+                    values[cnt] = HGN(row, col);
+                    cnt++;
+                }
+            }
+        }
+        return true;
     }
 
     //@}

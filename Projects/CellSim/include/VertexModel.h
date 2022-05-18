@@ -388,6 +388,28 @@ public:
     }
 
     template <typename OP>
+    void iterateLateralEdgeSerial(const OP& f)
+    {
+        for (Edge& e : edges)
+        {
+            bool case1 = e[0] < basal_vtx_start && e[1] >= basal_vtx_start;
+            bool case2 = e[1] < basal_vtx_start && e[0] >= basal_vtx_start;
+            if (case1 || case2)
+                f(e);
+        }   
+    }
+
+    template <typename OP>
+    void iterateBasalEdgeSerial(const OP& f)
+    {
+        for (Edge& e : edges)
+        {
+            if (e[0] >= basal_vtx_start && e[1] >= basal_vtx_start)
+                f(e);
+        }   
+    }
+
+    template <typename OP>
     void iterateApicalEdgeSerial(const OP& f)
     {
         for (Edge& e : edges)
@@ -551,23 +573,23 @@ public:
     bool fixed_tet = false;
     bool use_elastic_potential = false;
     bool project_block_hessian_PD = false;
-
+    bool has_rest_shape = false;
     bool add_centroid_points = false;
     bool check_all_vtx_membrane = false;
-
+    bool add_area_term = true;
     bool print_force_norm = false;
     bool profile = false;
 
     Timer profile_timer;
 
-
+    VectorXT rest_length;
     TV mesh_centroid;
     T yolk_vol_init;
     T perivitelline_vol_init;
     T Bp = 1e4;
     T perivitelline_pressure = 0.1;
     T weights_all_edges = 0.1;
-
+    bool contract_all_edges = false;
     // VdbLevelSetSDF sdf;
     IMLS sdf;
 
@@ -576,7 +598,7 @@ public:
     //for inverse problems
     bool assign_per_edge_weight = false;
     VectorXT edge_weights;
-
+    VectorXT edge_weight_mask;
 
     std::unordered_map<int, T> dirichlet_data;
 
@@ -600,6 +622,7 @@ public:
     T computeInsideMembraneStepSize(const VectorXT& _u, const VectorXT& du);
 
     //EdgeTerms.cpp
+    void computeRestLength();
     void addEdgeEnergy(Region region, T w, T& energy);
     void addEdgeForceEntries(Region region, T w, VectorXT& residual);
     void addEdgeHessianEntries(Region region, T w, 
@@ -622,6 +645,11 @@ public:
     void addFaceAreaEnergy(Region region, T w, T& energy);
     void addFaceAreaForceEntries(Region region, T w, VectorXT& residual);
     void addFaceAreaHessianEntries(Region region, T w, 
+        std::vector<Entry>& entries, bool projectPD = false);
+
+    void addFaceAreaEnergyWithRestShape(Region region, T w, T& energy);
+    void addFaceAreaForceEntriesWithRestShape(Region region, T w, VectorXT& residual);
+    void addFaceAreaHessianEntriesWithRestShape(Region region, T w, 
         std::vector<Entry>& entries, bool projectPD = false);
 
     // CellVolume.cpp

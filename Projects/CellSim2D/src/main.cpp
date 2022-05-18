@@ -53,6 +53,10 @@ int main(int argc, char** argv)
         sa.data_folder = argv[1];
         sa.save_results = true;
     }
+    else
+    {
+        sa.save_results = false;
+    }
 
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
@@ -272,9 +276,9 @@ int main(int argc, char** argv)
                     }
                     if (inverse)
                     {
-                        // objective.diffTestGradientScale();
-                        objective.diffTestPartialOPartialPScale();
-                        objective.diffTestPartial2OPartialP2();
+                        objective.diffTestGradientScale();
+                        // objective.diffTestPartialOPartialPScale();
+                        // objective.diffTestPartial2OPartialP2();
                     }
                 }
             }
@@ -333,61 +337,25 @@ int main(int argc, char** argv)
             // vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense.txt");
             vertex_model.saveCellCentroidsToFile(data_folder + "2D_test_targets_dense_spring.txt");
         }
-        // if (ImGui::Button("GenTestData", ImVec2(-1,0)))
-        // {
-        //     std::string perturb_frame1 = "0.8";
-        //     vertex_model.staticSolve();
-        //     vertex_model.savePerturbedCellCentroidsToFile(data_folder + 
-        //         "frame1_perturbed" + (perturb_frame1) + ".txt", 
-        //         0.8, 5);
-        //     vertex_model.reset();
-        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
-        //     vertex_model.staticSolve();
-        //     std::string perturb_frame0 = "0.3";
-        //     vertex_model.savePerturbedCellCentroidsToFile(data_folder + 
-        //         "frame0_perturbed" + (perturb_frame0) + ".txt", 
-        //         0.3, 5);
-        //     std::cout << "generating data finished" << std::endl;
-        // }
-        // if (ImGui::Button("GenUnperturbedData", ImVec2(-1,0)))
-        // {
-        //     vertex_model.staticSolve();
-        //     vertex_model.saveCellCentroidsToFile(data_folder + 
-        //         "frame1_unperturbed.txt", 0.0);
-        //     vertex_model.reset();
-        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
-        //     vertex_model.staticSolve();
-        //     vertex_model.saveCellCentroidsToFile(data_folder + 
-        //         "frame0_unperturbed.txt", 0.0);
-        //     std::cout << "generating data finished" << std::endl;
-        // }
-        // if (ImGui::Button("GenWeights", ImVec2(-1,0)))
-        // {
-        //     std::string perturb_frame0 = "0.3";
-        //     vertex_model.apical_edge_contracting_weights.setConstant(0.1);
-        //     objective.computeWeights(data_folder + 
-        //         "frame0_weights" + (perturb_frame0) + ".txt", 
-        //         data_folder + 
-        //         "frame0_perturbed" + (perturb_frame0) + ".txt");
-        // }
         if (ImGui::Button("LoadTargets", ImVec2(-1,0)))
         {   
-            T perturbance = 0.4;
+            T perturbance = 0.5;
             // objective.loadTarget(data_folder + "2D_test_targets_dense.txt", 0.0);
             // objective.optimizeForStableTarget(perturbance);
             objective.loadTarget(data_folder + "2D_test_targets_dense_spring.txt", 0.8);
             // objective.optimizeForStableTarget(perturbance);
             // objective.optimizeStableTargetsWithSprings(perturbance);
             sa.save_ls_states = true;
-            objective.add_spatial_regularizor = false;
+            objective.add_spatial_regularizor = true;
             objective.w_reg_spacial = 1e-3;
-
+            objective.add_reg = false;
+            objective.reg_w = 0;
             inverse = true; forward = false;
             objective.match_centroid = true;
-            objective.add_forward_potential = true;
+            objective.add_forward_potential = false;
             objective.w_fp = 1e-2;
             objective.contracting_term_only = false;
-            objective.use_penalty = false;
+            objective.use_penalty = true;
             objective.penalty_type = Qubic;
             objective.penalty_weight = 1e3;
             if (objective.use_penalty)
@@ -395,12 +363,13 @@ int main(int argc, char** argv)
             else
             {
                 objective.optimizer = SQP;
-                sa.add_reg = true;
-                sa.reg_w_H = 1e-6;
             }
+            sa.add_reg = true;
+            sa.reg_w_H = 1e-6;
 
-            objective.add_reg = false;
+            // objective.add_reg = true;
             sa.initialize();
+            vertex_model.apical_edge_contracting_weights.setConstant(2.0);
             sa.optimizeIPOPT();
             updateScreen(viewer);
         }
@@ -529,6 +498,7 @@ int main(int argc, char** argv)
 
     vertex_model.initializeScene();
     vertex_model.newton_tol = 1e-6;
+    vertex_model.max_newton_iter = 1000;
     VectorXT delta = VectorXT::Random(vertex_model.apical_edge_contracting_weights.rows());
     delta.array() += delta.minCoeff();
     delta /= delta.norm(); 

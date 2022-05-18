@@ -138,7 +138,7 @@ public:
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, bool simulate = false);
-    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false);
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false, bool use_prev_equil = false);
 
     void diffTestGradientScale();
     void diffTestGradient();

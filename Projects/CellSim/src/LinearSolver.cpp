@@ -47,11 +47,22 @@ void PardisoLDLTSolver::solve(const Eigen::VectorXd &b, VectorXT &x)
     compute();
     if(!use_default)
         solver.pardisoParameterArray()[6] = 0;
-    x = solver.solve(b);
-    VectorXT error = A * x - b;
-    std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
-    T search_direction_dot = x.normalized().dot(b.normalized());
-    std::cout << "\t[" << name << "] dot(dx, -g) " << search_direction_dot << std::endl;
+    T alpha = 1e-6;
+    while (true)
+    {
+        x = solver.solve(b);
+        VectorXT error = A * x - b;
+        T rel_err = error.norm() / b.norm();
+        if (rel_err < 1e-6)
+            break;
+        A.diagonal().segment(0, num_pos_ev).array() += alpha;
+        A.diagonal().segment(num_pos_ev, num_neg_ev).array() -= alpha;      
+        alpha *= 10.0;
+        solver.factorize(A);
+    }
+    // std::cout << "\t[" << name << "] |Ax-b|/|b|: " << error.norm() / b.norm() << std::endl;
+    // T search_direction_dot = x.normalized().dot(b.normalized());
+    // std::cout << "\t[" << name << "] dot(dx, -g) " << search_direction_dot << std::endl;
 }
 
 void PardisoLUSolver::compute()

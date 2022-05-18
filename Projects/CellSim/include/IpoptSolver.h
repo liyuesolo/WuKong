@@ -56,6 +56,7 @@ public:
     double* primals;
     T min_objective = T(1e10);
     std::string data_folder;
+    bool has_bound;
 
     /** default constructor */
     IpoptSolver(ObjNucleiTracking& _objective, const std::string& _data_folder)
@@ -87,6 +88,15 @@ public:
         n = variable_num;
         m = 0;
         nnz_jac_g = 0;
+        int cnt = 0;
+        for( int row = 0; row < n; row++ )
+        {
+            for( int col = 0; col <= row; col++ )
+            {
+                cnt++;
+            }
+        }
+        nnz_h_lag = cnt;
         index_style = TNLP::C_STYLE;
         
         return true;
@@ -104,15 +114,21 @@ public:
         std::cout << "lower bound: " << objective.bound[0] 
             << " upper bound: " << objective.bound[1] << std::endl;
 
-        // tbb::parallel_for(0, n, [&](int i) {
-        //     x_l[i] = objective.bound[0];
-        //     x_u[i] = objective.bound[1];
-        // });
+        if (has_bound)
+        {
+            tbb::parallel_for(0, n, [&](int i) {
+                x_l[i] = objective.bound[0];
+                x_u[i] = 1e19;
+            });
+        }
+        else
+        {
+            tbb::parallel_for(0, n, [&](int i) {
+                x_l[i] = -1e19;
+                x_u[i] = 1e19;
+            });
+        }
 
-        tbb::parallel_for(0, n, [&](int i) {
-            x_l[i] = -1e19;
-            x_u[i] = 1e19;
-        });
 
         return true;
     }
@@ -153,7 +169,8 @@ public:
             p_curr[i] = x[i];
 
         // T E = objective.value(p_curr, true, true);
-        T E = objective.value(p_curr, true, false);
+        T E = objective.value(p_curr, true, new_x);
+        objective.equilibrium_prev = objective.simulation.u;
         std::cout << "[ipopt] eval_f: " << E << std::endl;
         obj_value = (Ipopt::Number)E;
         return true;
@@ -171,9 +188,10 @@ public:
             p_curr[i] = x[i];
         T O;
         VectorXT dOdp;
-        objective.gradient(p_curr, dOdp, O, true);
-        std::cout << "forward simulation hessian eigen values: ";
-        objective.simulation.checkHessianPD(false);
+        objective.gradient(p_curr, dOdp, O, new_x);
+        objective.equilibrium_prev = objective.simulation.u;
+        // std::cout << "forward simulation hessian eigen values: ";
+        // objective.simulation.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];
@@ -181,13 +199,16 @@ public:
 
         T epsilon = 1e-5;
         VectorXT feasible_point_gradients = dOdp;
-        // for (int i = 0; i < variable_num; i++)
-        // {
-        //     if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
-        //         feasible_point_gradients[i] = 0.0;
-        //     if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
-        //         feasible_point_gradients[i] = 0.0;
-        // }
+        if (has_bound)
+        {
+            for (int i = 0; i < variable_num; i++)
+            {
+                if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
+                    feasible_point_gradients[i] = 0.0;
+                // if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
+                //     feasible_point_gradients[i] = 0.0;
+            }
+        }
         
         T g_norm_proj = feasible_point_gradients.norm();
         
@@ -239,7 +260,39 @@ public:
         Ipopt::Number* values)
     {
         std::cout << "[ipopt] eval_h" << std::endl;
-        return false;
+        // return false;
+        if (values == NULL)
+        {
+            int cnt = 0;
+            for( int row = 0; row < n; row++ )
+            {
+                for( int col = 0; col <= row; col++ )
+                {
+                    iRow[cnt] = row;
+                    jCol[cnt] = col;
+                    cnt++;
+                }
+            }
+        }
+        else
+        {
+            VectorXT p_curr(variable_num);
+            for (int i = 0; i < variable_num; i++)
+                p_curr[i] = x[i];
+            MatrixXT HGN;
+            objective.hessianGN(p_curr, HGN, true, new_x);
+            objective.equilibrium_prev = objective.simulation.u;
+            int cnt = 0;
+            for( int row = 0; row < n; row++ )
+            {
+                for( int col = 0; col <= row; col++ )
+                {
+                    values[cnt] = HGN(row, col);
+                    cnt++;
+                }
+            }
+        }
+        return true;
     }
 
     //@}

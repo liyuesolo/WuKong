@@ -866,7 +866,11 @@ void VertexModel::appendCylinderOnContractingEdges(
 {
     if (!add_contraction_term)
         return;
-    T visual_R = 0.05;
+
+    TV v0 = undeformed.segment<3>(edges[0][0] * 3);
+    TV v1 = undeformed.segment<3>(edges[0][1] * 3);
+    T visual_R = 0.1 * (v0 - v1).norm();
+
     int n_div = 10;
     T theta = 2.0 * EIGEN_PI / T(n_div);
     VectorXT points = VectorXT::Zero(n_div * 3);
@@ -886,8 +890,7 @@ void VertexModel::appendCylinderOnContractingEdges(
     F.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
     C.conservativeResize(n_row_F + n_contracting_edges * rod_offset_f, 3);
 
-    for (int i = 0; i < n_contracting_edges; i++)
-    {
+    tbb::parallel_for(0, n_contracting_edges, [&](int i){
         int rov = n_row_V + i * rod_offset_v;
         int rof = n_row_F + i * rod_offset_f;
 
@@ -919,7 +922,9 @@ void VertexModel::appendCylinderOnContractingEdges(
             C.row(rof + i*2 ) = TV(1.0, 0.0, 0.0);
             C.row(rof + i*2 + 1) = TV(1.0, 0.0, 0.0);
         }
-    }   
+
+    });
+    
 }
 
 void VertexModel::appendCylinderOnApicalEdges(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 

@@ -86,4 +86,28 @@ void computeArea9PointsSquaredSum(double stiffness, const Eigen::Matrix<double,2
 void computeArea9PointsSquaredSumGradient(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, Eigen::Matrix<double, 27, 1>& energygradient);
 void computeArea9PointsSquaredSumHessian(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, Eigen::Matrix<double, 27, 27>& energyhessian);
 
+void computeArea4PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,12,1> & face_vertices, const Eigen::Matrix<double,12,1> & undeformed, double& energy);
+void computeArea4PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,12,1> & face_vertices, const Eigen::Matrix<double,12,1> & undeformed, Eigen::Matrix<double, 12, 1>& energygradient);
+void computeArea4PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,12,1> & face_vertices, const Eigen::Matrix<double,12,1> & undeformed, Eigen::Matrix<double, 12, 12>& energyhessian);
+
+void computeArea5PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,15,1> & face_vertices, const Eigen::Matrix<double,15,1> & undeformed, double& energy);
+void computeArea5PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,15,1> & face_vertices, const Eigen::Matrix<double,15,1> & undeformed, Eigen::Matrix<double, 15, 1>& energygradient);
+void computeArea5PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,15,1> & face_vertices, const Eigen::Matrix<double,15,1> & undeformed, Eigen::Matrix<double, 15, 15>& energyhessian);
+
+void computeArea6PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,18,1> & face_vertices, const Eigen::Matrix<double,18,1> & undeformed, double& energy);
+void computeArea6PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,18,1> & face_vertices, const Eigen::Matrix<double,18,1> & undeformed, Eigen::Matrix<double, 18, 1>& energygradient);
+void computeArea6PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,18,1> & face_vertices, const Eigen::Matrix<double,18,1> & undeformed, Eigen::Matrix<double, 18, 18>& energyhessian);
+
+void computeArea7PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,21,1> & undeformed, double& energy);
+void computeArea7PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,21,1> & undeformed, Eigen::Matrix<double, 21, 1>& energygradient);
+void computeArea7PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, const Eigen::Matrix<double,21,1> & undeformed, Eigen::Matrix<double, 21, 21>& energyhessian);
+
+void computeArea8PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,24,1> & undeformed, double& energy);
+void computeArea8PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,24,1> & undeformed, Eigen::Matrix<double, 24, 1>& energygradient);
+void computeArea8PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, const Eigen::Matrix<double,24,1> & undeformed, Eigen::Matrix<double, 24, 24>& energyhessian);
+
+void computeArea9PointsPenaltyWithRestShape(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,27,1> & undeformed, double& energy);
+void computeArea9PointsPenaltyWithRestShapeGradient(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,27,1> & undeformed, Eigen::Matrix<double, 27, 1>& energygradient);
+void computeArea9PointsPenaltyWithRestShapeHessian(double stiffness, const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,27,1> & undeformed, Eigen::Matrix<double, 27, 27>& energyhessian);
+
 #endif

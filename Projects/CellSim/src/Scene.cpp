@@ -1,5 +1,6 @@
 #include <igl/readOBJ.h>
 #include <igl/writeOBJ.h>
+#include <igl/edges.h>
 #include <igl/vertex_triangle_adjacency.h>
 #include <igl/per_face_normals.h>
 
@@ -199,6 +200,9 @@ void VertexModel::initializeContractionData()
                         {
                             contracting_edges.push_back(edge);
                             edge_weights[edge_id] = Gamma;
+                            // edge_weight_mask[edge_id] = 0.0;
+                            // std::cout << edge_weights[edge_id] << " " << edge_id << std::endl;
+                            // std::getchar();
                         }
                     }
                 }
@@ -568,16 +572,23 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
-    // normalizeToUnit(V);
-    
-    // T scale = 2.0;
-    unit = 5.0;
 
-    // T scale = 1.3;
+    // should be 500 µm length, 200 µm diameter
+    // unit = 100.0; // in µm
+    // unit = 0.01;
+    unit = 5.0; // for real model
+    tbb::parallel_for(0, (int)V.rows(), [&](int i)
+    {
+        TM scaling = TM::Identity();
+        // scaling(0, 0) = 5; scaling(1, 1) = 2; scaling(2, 2) = 2; 
+        scaling *= unit;
+        V.row(i) *= scaling;
+    });
 
-    // T scale = 10.0;
+    // igl::writeOBJ("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid6k.obj", V, F);
+    // std::exit(0);
 
-    V *= unit;
+    has_rest_shape = true;
 
     // face centroids corresponds to the vertices of the dual mesh 
     std::vector<TV> face_centroids(F.rows());
@@ -636,22 +647,67 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     basal_vtx_start = deformed.size() / 3;
     deformed.conservativeResize(deformed.rows() * 2);
+    num_nodes = deformed.rows() / 3;
+
+    T avg_edge_norm = 0.0;
+    Eigen::MatrixXi mesh_edges;
+    igl::edges(F, mesh_edges);
+    for (int i = 0; i < F.rows(); i++)
+    {
+        avg_edge_norm += (V.row(mesh_edges.row(i)[1]) - V.row(mesh_edges.row(i)[0])).norm();    
+    }
+
+    avg_edge_norm /= T(mesh_edges.rows());
 
     T e0_norm = (V.row(F.row(0)[1]) - V.row(F.row(0)[0])).norm();
     // T cell_height = 0.5 * e0_norm; //drosophila 1k
     // T cell_height = 0.8 * e0_norm; //drosophila 476
     T cell_height = 0.7 * e0_norm; // drosophila 120 and 241
-    if (scene_type == 3)
-        cell_height = 0.2 * e0_norm;
 
-    tbb::parallel_for(0, (int)basal_vtx_start, [&](int i){
+    // cell_height = 4.0 * e0_norm;
+    cell_height = avg_edge_norm;
+    
+    // cell_height = 0.1; //6k
+
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    std::cout << "BBOX: " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    
+    // auto disCurve = [&](int _x) -> T
+    // {
+    //     T c = 4.0;
+    //     // T a = 4.0;
+    //     T a = 14.0;
+    //     T curved = -a * std::pow(_x, 2.0) + c;
+    //     std::cout << _x << " " << _x * _x << " " << -a * std::pow(_x, 2.0) << " " << curved << std::endl;
+    //     std::getchar();
+    //     return curved;
+    // };  
+
+    // tbb::parallel_for(0, (int)basal_vtx_start, [&](int i)
+    VectorXT percentage(basal_vtx_start);
+    T a = 14.0, c = 4.0;
+    // T a = 10.0, c = 3.5;
+    // T a = 8.0, c = 3.0;
+    
+    if (num_nodes < 2 * 1000)
+    {
+        a = 3.0; c = 1;
+    }
+    for (int i = 0; i < basal_vtx_start; i++)
+    {
         TV apex = deformed.segment<3>(i * 3);
-        // deformed.segment<3>(basal_vtx_start * 3 + i * 3) = mesh_center + 
-        //     (apex - mesh_center) * ((apex - mesh_center).norm() - cell_height);
+        
+        T x = (apex[0] - mesh_center[0]) / (max_corner[0] - min_corner[0]);
+        T curved = -a * std::pow(x, 2.0) + c;
+        // std::cout << "curved " << curved << std::endl;
         deformed.segment<3>(basal_vtx_start * 3 + i * 3) =
-            deformed.segment<3>(i * 3) - 
-            vtx_normals.segment<3>(i * 3) * cell_height;
-    });
+                deformed.segment<3>(i * 3) - 
+                vtx_normals.segment<3>(i * 3) * curved * cell_height;
+    }
+    // );
+    // std::cout << percentage.minCoeff() << " " << percentage.maxCoeff() << std::endl;
+    // std::getchar();
 
     // add apical edges
     for (auto one_ring_face : faces)
@@ -710,13 +766,13 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
     edges.insert(edges.end(), basal_and_lateral_edges.begin(), basal_and_lateral_edges.end());
 
-    num_nodes = deformed.rows() / 3;
+    
     u = VectorXT::Zero(deformed.rows());
     f = VectorXT::Zero(deformed.rows());
     undeformed = deformed;
     n_cells = basal_face_start;
 
-    B = 1e6 * unit;
+    B = 1e6;
     By = 1e5;
 
     contract_apical_face = false;
@@ -731,13 +787,14 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         nu = 0.48;
     }
 
-    alpha = 10.0 * unit; // WORKED
-    gamma = 3.0 * unit;
-    sigma = 2.0 * unit;// apical
+    alpha = 10.0; // WORKED
+    gamma = 3.0;
+    sigma = 2.0;// apical
 
 
     use_face_centroid = use_cell_centroid;
-
+    edge_weight_mask.resize(edges.size());
+    edge_weight_mask.setOnes();
 
     for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 9; d++)
     {
@@ -767,7 +824,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // std::cout << "basal vertex starts at " << basal_vtx_start << std::endl;
 
     add_contraction_term = true;
-    
+    add_area_term = true;
     // Gamma = 0.5;
     Gamma = 1.0;
     // if (scene_type == 3)
@@ -780,10 +837,16 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         {
             if (use_cell_centroid)
             {
-                Gamma = 0.5 * unit * 20.0; 
+                Gamma = 20; 
+                if (has_rest_shape)
+                {
+                    Gamma = 20;
+                    sigma = 1.0;
+                    gamma = 0.2;
+                    alpha = 4.0;
+                }
+                
             }
-            else
-                Gamma = 1.0; // used for fixed tet subdiv
         }
     }
     // Gamma *= 0.01;
@@ -791,10 +854,23 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (assign_per_edge_weight)
     {
         int apical_edge_cnt = 0;
+        int ab_edge_cnt = 0;
         for (Edge& e : edges)
+        {
             if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+            {
                 apical_edge_cnt++;
-        edge_weights.resize(apical_edge_cnt);
+                ab_edge_cnt++;
+            }
+            if (e[0] >= basal_vtx_start && e[1] >= basal_vtx_start)
+            {
+                ab_edge_cnt++;
+            }
+        }
+        if (contract_all_edges)
+            edge_weights.resize(ab_edge_cnt);
+        else
+            edge_weights.resize(apical_edge_cnt);
         // edge_weights.setConstant(1.5);
         // edge_weights.setConstant(0.3);
         // edge_weights.setConstant(0.05); // optimize nuclei
@@ -851,7 +927,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
     if (use_ipc_contact)
     {
-        add_basal_faces_ipc = false;
+        add_basal_faces_ipc = true;
         computeIPCRestData();
         barrier_weight = 1e7;
         barrier_distance = 1e-3;
@@ -898,8 +974,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     weights_all_edges = 500.0;
     if (use_cell_centroid)
         weights_all_edges = 0.1;
-    weights_all_edges = 0.0;
+    // weights_all_edges = 1.0;
     weights_all_edges = 0.1 * Gamma;
+    
 
     // edge_weights[0] -= 1e-6;
 
@@ -934,8 +1011,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e8 * unit;
-        // bound_coeff = 1e6;
+        bound_coeff = 1e6;
         
         T normal_offset = 1e-3;// * unit;
         // T normal_offset = -1e-2;
@@ -979,9 +1055,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         // if (!all_inside)
         //     std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
     }
-    TV min_corner, max_corner;
-    computeBoundingBox(min_corner, max_corner);
-    std::cout << "BBOX: " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    
     
     // removeAllTerms();
     

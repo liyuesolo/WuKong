@@ -179,11 +179,13 @@ bool SensitivityAnalysis::optimizeIPOPT()
     
 
     app->Options()->SetNumericValue("tol", 1e-5);
-    // app->Options()->SetStringValue("mu_strategy", "monotone");
-    app->Options()->SetStringValue("mu_strategy", "adaptive");
+    app->Options()->SetStringValue("mu_strategy", "monotone");
+    // app->Options()->SetStringValue("mu_strategy", "adaptive");
 
     app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
-    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    // app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
+    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
     //        app->Options()->SetNumericValue("mu_max", 0.0001);
     //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
     //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
@@ -413,10 +415,11 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             return true;
 
         int ls_max = 15;
-        for (int ls_cnt = 0; ls_cnt < ls_max; ls_cnt++)
+        int ls_cnt = 0;
+        while (true)
         {
+            ls_cnt++;
             VectorXT p_ls = design_parameters + alpha * search_direction;
-            // saveDesignParameters(data_folder + "/trouble.txt", p_ls);
             
             T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
             if (save_ls_states)
@@ -424,17 +427,37 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 vertex_model.saveStates(data_folder + "/" + method + "_iter_" + std::to_string(step) + "_ls_" + std::to_string(ls_cnt) + ".obj");
             }
             std::cout << "[" << method << "]\t ls " << ls_cnt << " E1: " << E1 << " E0: " << E0 << std::endl;
-            
-            if (E1 < E0)
+
+            if (E1 < E0 || ls_cnt > ls_max)
             {
                 std::cout << "[" << method << "]\tfinal |dp|: " << (p_ls - design_parameters).norm() << " # ls " << ls_cnt << std::endl;
                 design_parameters = p_ls;
                 break;
             }
-            // if (ls_cnt == ls_max - 1)
-            //     std::getchar();
             alpha *= 0.5;
         }
+        // for (int ls_cnt = 0; ls_cnt < ls_max; ls_cnt++)
+        // {
+        //     VectorXT p_ls = design_parameters + alpha * search_direction;
+        //     // saveDesignParameters(data_folder + "/trouble.txt", p_ls);
+            
+        //     T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
+        //     if (save_ls_states)
+        //     {
+        //         vertex_model.saveStates(data_folder + "/" + method + "_iter_" + std::to_string(step) + "_ls_" + std::to_string(ls_cnt) + ".obj");
+        //     }
+        //     std::cout << "[" << method << "]\t ls " << ls_cnt << " E1: " << E1 << " E0: " << E0 << std::endl;
+            
+        //     if (E1 < E0)
+        //     {
+        //         std::cout << "[" << method << "]\tfinal |dp|: " << (p_ls - design_parameters).norm() << " # ls " << ls_cnt << std::endl;
+        //         design_parameters = p_ls;
+        //         break;
+        //     }
+        //     // if (ls_cnt == ls_max - 1)
+        //     //     std::getchar();
+        //     alpha *= 0.5;
+        // }
     }
     if (save_results)
     {

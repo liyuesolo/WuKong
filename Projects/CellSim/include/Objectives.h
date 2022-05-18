@@ -81,6 +81,9 @@ public:
     bool add_reg = false;
     int power = 2;
     bool add_forward_potential = false;
+    bool add_spatial_regularizor = false;
+    
+    T w_reg_spacial = 1e-3;
     T w_fp = 1e-3;
     T w_data = 1.0;
     std::string target_filename;
@@ -101,6 +104,8 @@ public:
         TargetData() : data_point_idx(-1), cell_idx(-1) {}
     };
 
+    
+
     Vector<T, 2> bound;
     Vector<bool, 2> mask;
     std::vector<TargetData> weight_targets;
@@ -111,7 +116,7 @@ public:
 
     virtual T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false) {}
-    virtual void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
+    virtual void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false, bool use_prev_equil = false) {}
     
     virtual void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H,
         bool simulate = false) {}
@@ -155,6 +160,7 @@ public:
     void diffTestd2Odx2Scale();
     void diffTestPartialOPartialpScale();
     void diffTestPartialOPartialp();
+    void diffTestPartial2OPartialp2Scale();
     void diffTestPartial2OPartialp2();
 
 public:
@@ -229,6 +235,8 @@ public:
     T barrier_weight = 1e6;
     bool add_min_act = false;
     T w_min_act = 1.0;
+    
+    std::vector<std::vector<int>> vtx_edges;
 
     bool add_Hessian_PD_term = false;
     Vector<T, 2> bound;
@@ -236,14 +244,14 @@ public:
     int wrapper_type = 0;
     
 public:
-
+    void buildVtxEdgeStructure();
     T simHessianPDEnergy(const VectorXT& p_curr);
     void simHessianPDGradient(const VectorXT& p_curr, T& energy, VectorXT& grad);
     void simHessianPDHessian(const VectorXT& p_curr, StiffnessMatrix& hess);
     
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
-    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false);
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false, bool use_prev_equil = false);
 
     void computeEnergyAllTerms(const VectorXT& p_curr, std::vector<T>& energies,
         bool simulate = true, bool use_prev_equil = false);
@@ -277,13 +285,15 @@ public:
 
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
     void updateTarget();
-
+    void optimizeForStableTarget(T perturbation);
     void loadTarget(const std::string& filename, T perturbation = 0.0);
     void loadWeightedTarget(const std::string& filename);
     void loadWeightedCellTarget(const std::string& filename);
-
+    void filterTrackingData3X2F();
+    void filterTrackingData3X3F();
     void setTargetObjWeights();
-
+    void loadOBJwithOnlyVertices(const std::string& filename, VectorXT& data);
+    void loadTxtVertices(const std::string& filename, VectorXT& data);
     void checkData();
 
     void initializeTargetFromMap(const std::string& filename, int _frame);
@@ -380,7 +390,7 @@ public:
 public:
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
     T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
-    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false) {}
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false, bool use_prev_equil = false) {}
     
     void hessianSGN(const VectorXT& p_curr, StiffnessMatrix& H, 
         bool simulate = false) {}

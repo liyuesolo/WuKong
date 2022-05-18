@@ -534,6 +534,47 @@ void Objectives::diffTestPartial2OPartialp2()
 {
     VectorXT p;
     getDesignParameters(p);
+    
+    StiffnessMatrix A(n_dof_design, n_dof_design);
+    std::vector<Entry> hessian_entries;
+    computed2Odp2(p, hessian_entries);
+    A.setFromTriplets(hessian_entries.begin(), hessian_entries.end());
+
+    
+    T epsilon = 1e-6;
+    for(int dof_i = 0; dof_i < n_dof_design; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        p(dof_i) += epsilon;
+        VectorXT g0(n_dof_design), g1(n_dof_design);
+        g0.setZero(); g1.setZero();
+        computedOdp(p, g0);
+
+        p(dof_i) -= 2.0 * epsilon;
+        computedOdp(p, g1);
+        p(dof_i) += epsilon;
+        VectorXT row_FD = (g0 - g1) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof_design; i++)
+        {
+            if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Diff Test Passed" << std::endl;
+}
+
+void Objectives::diffTestPartial2OPartialp2Scale()
+{
+    VectorXT p;
+    getDesignParameters(p);
     p.setConstant(-10);
     StiffnessMatrix A(n_dof_design, n_dof_design);
     std::vector<Entry> hessian_entries;
@@ -671,7 +712,10 @@ void Objectives::diffTestGradientScale()
     getDesignParameters(p);
     T E0;
     // gradient(p, dOdp, E0, false);
-    gradient(p, dOdp, E0);
+    simulation.staticSolve();
+    VectorXT init = simulation.u;
+    equilibrium_prev = init;
+    gradient(p, dOdp, E0, true, true);
     // std::cout << dOdp.minCoeff() << " " << dOdp.maxCoeff() << std::endl;
     VectorXT dp(n_dof_design);
     dp.setRandom();
@@ -684,7 +728,8 @@ void Objectives::diffTestGradientScale()
         // T E1 = value(p + dp, true, true);
         // VectorXT p1 = (p + dp).cwiseMax(bound[0]).cwiseMin(bound[1]);
         // dp = p1 - p;
-        T E1 = value(p + dp);
+        equilibrium_prev = init;
+        T E1 = value(p + dp, true, true);
         T dE = E1 - E0;
         
         dE -= dOdp.dot(dp);

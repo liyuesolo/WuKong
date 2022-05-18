@@ -111,7 +111,7 @@ public:
     void diffTestdxdp();
 
     void checkStatesAlongGradient();
-
+    void checkStatesAlongGradientSGN();
     void mosekQPTest();
 private:
     void savedxdp(const VectorXT& dx, 

@@ -81,7 +81,7 @@ public:
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     
     virtual void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
-        const TV& color, T radius,
+        const std::vector<TV>& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     
     virtual void appendSphereToPosition(const TV& position, T radius, const TV& color,

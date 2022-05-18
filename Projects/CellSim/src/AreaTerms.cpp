@@ -2,6 +2,7 @@
 #include "../include/autodiff/AreaEnergy.h"
 
 
+
 void VertexModel::addFaceContractionEnergy(T w, T& energy)
 {
     iterateContractingFaceSerial([&](VtxList& face_vtx_list, int face_idx)
@@ -168,6 +169,155 @@ void VertexModel::addFaceContractionHessianEntries(T w, std::vector<Entry>& entr
     });
 }
 
+void VertexModel::addFaceAreaEnergyWithRestShape(Region region, T w, T& energy)
+{
+    VectorXT energies = VectorXT::Zero(faces.size());
+    iterateFaceParallel([&](VtxList& face_vtx_list, int face_idx)
+    {
+        if (validFaceIdx(region, face_idx))
+        {
+            VectorXT positions, positions_undeformed;
+            positionsFromIndices(positions, face_vtx_list);
+            positionsFromIndices(positions_undeformed, face_vtx_list, true);
+
+            if (use_face_centroid)
+            {
+                if (face_vtx_list.size() == 4)
+                    computeArea4PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else if (face_vtx_list.size() == 5)
+                    computeArea5PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else if (face_vtx_list.size() == 6)
+                    computeArea6PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else if (face_vtx_list.size() == 7)
+                    computeArea7PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else if (face_vtx_list.size() == 8)
+                    computeArea8PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else if (face_vtx_list.size() == 9)
+                    computeArea9PointsPenaltyWithRestShape(w, positions, positions_undeformed, energies[face_idx]);
+                else
+                    std::cout << "unknown polygon edge case" << std::endl;
+            }
+        }
+    });
+    energy += energies.sum();
+}
+
+void VertexModel::addFaceAreaForceEntriesWithRestShape(Region region, T w, VectorXT& residual)
+{
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        if (validFaceIdx(region, face_idx))
+        {
+            VectorXT positions, positions_undeformed;
+            positionsFromIndices(positions, face_vtx_list);
+            positionsFromIndices(positions_undeformed, face_vtx_list, true);
+
+            if (face_vtx_list.size() == 4)
+            {
+                Vector<T, 12> dedx;
+                computeArea4PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                addForceEntry<12>(residual, face_vtx_list, -dedx);
+            }
+            else if (face_vtx_list.size() == 5)
+            {
+                Vector<T, 15> dedx;
+                computeArea5PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                addForceEntry<15>(residual, face_vtx_list, -dedx);
+            }
+            else if (face_vtx_list.size() == 6)
+            {
+                Vector<T, 18> dedx;
+                computeArea6PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                addForceEntry<18>(residual, face_vtx_list, -dedx);
+            }
+            else if (face_vtx_list.size() == 7)
+            {
+                Vector<T, 21> dedx;
+                computeArea7PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                addForceEntry<21>(residual, face_vtx_list, -dedx);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                
+                Vector<T, 24> dedx;
+                if (use_face_centroid)
+                {
+                    computeArea8PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                    addForceEntry<24>(residual, face_vtx_list, -dedx);
+                }
+            }
+            else if (face_vtx_list.size() == 9)
+            {
+                Vector<T, 27> dedx;
+                if (use_face_centroid)
+                {
+                    computeArea9PointsPenaltyWithRestShapeGradient(w, positions, positions_undeformed, dedx);
+                    addForceEntry<27>(residual, face_vtx_list, -dedx);
+                }
+            }
+            else
+            {
+                std::cout << "error " << __FILE__ << std::endl;
+            }
+        }
+    });
+}
+
+void VertexModel::addFaceAreaHessianEntriesWithRestShape(Region region, T w, 
+    std::vector<Entry>& entries, bool projectPD)
+{
+    iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
+    {
+        if (validFaceIdx(region, face_idx))
+        {
+            VectorXT positions, positions_undeformed;
+            positionsFromIndices(positions, face_vtx_list);
+            positionsFromIndices(positions_undeformed, face_vtx_list, true);
+
+            if (face_vtx_list.size() == 4)
+            {
+                Matrix<T, 12, 12> hessian;
+                computeArea4PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<12>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 5)
+            {
+                Matrix<T, 15, 15> hessian;
+                computeArea5PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<15>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 6)
+            {
+                Matrix<T, 18, 18> hessian;
+                computeArea6PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<18>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 7)
+            {
+                Matrix<T, 21, 21> hessian;
+                computeArea7PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<21>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 8)
+            {
+                Matrix<T, 24, 24> hessian;
+                computeArea8PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<24>(entries, face_vtx_list, hessian);
+            }
+            else if (face_vtx_list.size() == 9)
+            {
+                Matrix<T, 27, 27> hessian;
+                computeArea9PointsPenaltyWithRestShapeHessian(w, positions, positions_undeformed, hessian);
+                addHessianEntry<27>(entries, face_vtx_list, hessian);
+            }
+            else
+            {
+                std::cout << "unknown " << std::endl;
+            }
+        }
+    });
+}
+
 void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
 {
     VectorXT energies = VectorXT::Zero(faces.size());
@@ -197,49 +347,6 @@ void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
         }
     });
     energy += energies.sum();
-    // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx)
-    // {
-    //     if (validFaceIdx(face_region, face_idx))
-    //     {
-    //         VectorXT positions;
-    //         positionsFromIndices(positions, face_vtx_list);
-    //         T area_energy = 0.0;
-    //         if (face_vtx_list.size() == 4)
-    //         {
-    //             if (use_face_centroid)
-    //                 computeArea4PointsSquaredSum(w, positions, area_energy);
-    //             else
-    //                 computeQuadFaceAreaSquaredSum(w, positions, area_energy);
-    //         }
-    //         else if (face_vtx_list.size() == 5)
-    //         {
-    //             if (use_face_centroid)
-    //                 computeArea5PointsSquaredSum(w, positions, area_energy);
-    //             else
-    //                 computePentFaceAreaSquaredSum(w, positions, area_energy);
-    //         }
-    //         else if (face_vtx_list.size() == 6)
-    //         {
-    //             if (use_face_centroid)
-    //                 computeArea6PointsSquaredSum(w, positions, area_energy);
-    //             else
-    //                 computeHexFaceAreaSquaredSum(w, positions, area_energy);
-    //         }
-    //         else if (face_vtx_list.size() == 7)
-    //         {
-    //             if (use_face_centroid)
-    //                 computeArea7PointsSquaredSum(w, positions, area_energy);
-    //         }
-    //         else if (face_vtx_list.size() == 8)
-    //         {
-    //             if (use_face_centroid)
-    //                 computeArea8PointsSquaredSum(w, positions, area_energy);
-    //         }
-    //         else
-    //             std::cout << "unknown polygon edge case" << std::endl;
-    //         energy += area_energy;
-    //     }
-    // });
 }
 
 void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& residual)
