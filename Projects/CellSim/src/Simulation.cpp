@@ -111,7 +111,8 @@ void Simulation::checkHessianPD(bool save_txt)
         Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
 
         //0 cannot cannot be used as a shift
-        T shift = indefinite ? -1e2 : -1e-4;
+        // T shift = indefinite ? -1e2 : -1e-4;
+        T shift = -1e-4;
         Spectra::SymEigsShiftSolver<T, 
             Spectra::LARGEST_MAGN, 
             Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
@@ -201,36 +202,31 @@ void Simulation::initializeCells()
     woodbury = true;
     cells.use_alm_on_cell_volume = false;
 
-    std::string sphere_file;
+    std::string surface_mesh_file;
     cells.scene_type = 2;
-
-    if (cells.scene_type == 1 || cells.scene_type == 2)
+    if (cells.resolution == 0)
     {
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_6k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid2k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/ellipsoid6k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_1k.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_476.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_120.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k_remesh.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_6k_remesh.obj";
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_463_remesh.obj";
-        // sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_241.obj";   
-        cells.vertexModelFromMesh(sphere_file); 
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_124_remesh.obj";
     }
-    else if(cells.scene_type == 0)
+    else if (cells.resolution == 1)
     {
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/sphere_lowres.obj";
-        cells.vertexModelFromMesh(sphere_file);
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_463_remesh.obj";
     }
-    else if (cells.scene_type == 3)
+    else if (cells.resolution == 2)
     {
-        sphere_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_61.obj";   
-        cells.vertexModelFromMesh(sphere_file); 
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k_remesh.obj";
     }
+    else if (cells.resolution == -1)
+    {
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_59_remesh.obj";
+    }
+    if (cells.use_test_mesh)
+    {
+        cells.addTestPrismGrid(2, 5);
+        woodbury = false;
+    }
+    else
+        cells.vertexModelFromMesh(surface_mesh_file); 
     // cells.addTestPrism(6);
     // cells.addTestPrismGrid(10, 10);
     
@@ -422,12 +418,79 @@ bool Simulation::advanceOneStep(int step)
     }
 }
 
-void Simulation::saveState(const std::string& filename)
+void Simulation::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
+        T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F)
+{
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV(radius * std::cos(theta * T(i)), 
+        0.0, radius * std::sin(theta*T(i)));
+
+    int offset_v = n_div * 2;
+    int offset_f = n_div * 2;
+
+    int n_row_V = _V.rows();
+    int n_row_F = _F.rows();
+
+    int n_edge = edge_pairs.size();
+
+    _V.conservativeResize(n_row_V + offset_v * n_edge, 3);
+    _F.conservativeResize(n_row_F + offset_f * n_edge, 3);
+
+    tbb::parallel_for(0, n_edge, [&](int ei)
+    {
+        TV axis_world = edge_pairs[ei].second - edge_pairs[ei].first;
+        TV axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                _V(n_row_V + ei * offset_v + i, d) = points[i * 3 + d];
+                _V(n_row_V + ei * offset_v + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    _V(n_row_V + ei * offset_v + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            _V.row(n_row_V + ei * offset_v + i) = (_V.row(n_row_V + ei * offset_v + i) * R).transpose() + edge_pairs[ei].first;
+            _V.row(n_row_V + ei * offset_v + i + n_div) = (_V.row(n_row_V + ei * offset_v + i + n_div) * R).transpose() + edge_pairs[ei].first;
+
+            _F.row(n_row_F + ei * offset_f + i*2 ) = IV(n_row_V + ei * offset_v + i, 
+                                    n_row_V + ei * offset_v + i+n_div, 
+                                    n_row_V + ei * offset_v + (i+1)%(n_div));
+
+            _F.row(n_row_F + ei * offset_f + i*2 + 1) = IV(n_row_V + ei * offset_v + (i+1)%(n_div), 
+                                        n_row_V + ei * offset_v + i+n_div, 
+                                        n_row_V + + ei * offset_v + (i+1)%(n_div) + n_div);
+
+        }
+    });
+}
+
+void Simulation::saveState(const std::string& filename, bool save_edges)
 {
     std::ofstream out(filename);
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
     cells.generateMeshForRendering(V, F, C, false);
+    if (save_edges)
+    {
+        int cnt = 0;
+        std::vector<std::pair<TV, TV>> end_points;
+        cells.iterateEdgeSerial([&](Edge& edge)
+        {
+            TV from = deformed.segment<3>(edge[0] * 3);
+            TV to = deformed.segment<3>(edge[1] * 3);
+            end_points.push_back(std::make_pair(from, to));
+            cnt++;
+        });
+        appendCylindersToEdges(end_points, 0.005, V, F);
+    }
     for (int i = 0; i < V.rows(); i++)
     {
         out << "v " << std::setprecision(20) << V.row(i) << std::endl;
@@ -583,15 +646,47 @@ bool Simulation::staticSolve()
     cells.computeVolumeAllCells(cell_volume_final);
     int compressed_cell_cnt = 0;
     T compression = 0.0;
+    T max_compression = -1e10, min_compression = 1e10;
     for (int i = 0; i < cell_volume_final.rows(); i++)
     {
         if (cell_volume_final[i] < cell_volume_initial[i])
         {
             compressed_cell_cnt++;
-            compression += cell_volume_final[i] - cell_volume_initial[i];
+            T delta = cell_volume_final[i] - cell_volume_initial[i];
+            compression += delta;
+            if (std::abs(delta) > max_compression)
+                max_compression = delta;
+            if (std::abs(delta) < min_compression)
+                min_compression = delta;
         }
     }
-    std::cout << compressed_cell_cnt << "/" << cells.basal_face_start << " cells are compressed. avg compression: " << compression / T(compressed_cell_cnt) << std::endl;
+    std::cout << compressed_cell_cnt << "/" << cells.basal_face_start 
+        << " cells are compressed. avg compression: " 
+        << compression / T(compressed_cell_cnt) 
+        << " max compression: " << max_compression
+        << " min compression: " << min_compression
+        << std::endl;
+    if (cells.has_rest_shape)
+    {
+        VectorXT edge_compression(cells.edges.size()); 
+        edge_compression.setZero();
+        tbb::parallel_for(0, (int)cells.edges.size(), [&](int i)
+        {
+            TV Xi = undeformed.segment<3>(cells.edges[i][0] * 3);
+            TV Xj = undeformed.segment<3>(cells.edges[i][1] * 3);
+            TV xi = deformed.segment<3>(cells.edges[i][0] * 3);
+            TV xj = deformed.segment<3>(cells.edges[i][1] * 3);
+            T l0 = (Xj - Xi).norm();
+            T l1 = (xj - xi).norm();
+            if (l1 < l0)
+            {
+                edge_compression[i] = l1 - l0;
+            }
+        });
+        std::cout << "edge compression sum " << edge_compression.sum()
+                    << " edge compression max " << edge_compression.maxCoeff() 
+                    << " edge compression min " << edge_compression.minCoeff() << std::endl;
+    }
 
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
         return false;

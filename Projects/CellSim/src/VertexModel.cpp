@@ -329,7 +329,10 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
             else
                 addCellVolumePreservationEnergy(volume_term);
         }
-
+        energy += volume_term;
+        if (verbose)
+            std::cout << "\tE_volume: " << volume_term << std::endl;
+            
         // ===================================== Face Area =====================================
         if (add_area_term)
         {
@@ -345,16 +348,12 @@ T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_
                 addFaceAreaEnergy(Basal, gamma, area_term);
                 addFaceAreaEnergy(Lateral, alpha, area_term);
             }    
+            energy += area_term;
+            if (verbose)
+                std::cout << "\tE_area: " << area_term << std::endl;
         }
         
-        if (verbose)
-        {
-            std::cout << "\tE_area: " << area_term << std::endl;
-            std::cout << "\tE_volume: " << volume_term << std::endl;
-        }
-
-        energy += volume_term;
-        energy += area_term;
+        
     }
     T vol_barrier_energy = 0.0;
     if (add_tet_vol_barrier)
@@ -447,11 +446,11 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
             else
                 addEdgeContractionForceEntries(Gamma, residual);
         }
+        if (print_force_norm)
+            std::cout << "\tcontracting force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
     }
 
-    if (print_force_norm)
-        std::cout << "\tcontracting force norm: " << (residual - residual_temp).norm() << std::endl;
-    residual_temp = residual;
 
     if (dynamics)
     {
@@ -529,34 +528,13 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
     }
 
     if (add_yolk_volume)
-        addYolkVolumePreservationForceEntries(residual);
-    if(false)
     {
-        VectorXT yolk_force = (residual - residual_temp);
-        int cnt = 0, negative_cnt = 0;
-        for (int i = basal_vtx_start; i < num_nodes; i++)
-        {
-            TV xi = deformed.segment<3>(i * 3);
-            T dot_pro = yolk_force.segment<3>(i * 3).dot(xi - mesh_centroid);
-            if (dot_pro < -1e-8)
-            {
-                negative_cnt++;
-            }
-            // else 
-            // {
-            //     if (yolk_force.norm() > 1e-8)
-            //         std::cout << "!!!!dot " << dot_pro << std::endl;
-            // }
-            
-            cnt ++;
-        }
-        std::cout << "yolk force " << negative_cnt << "/" << cnt << " is negative" << std::endl;
+        addYolkVolumePreservationForceEntries(residual);
+        if (print_force_norm)
+            std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
     }
-
-    if (print_force_norm)
-        std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
-    residual_temp = residual;
-
+    
     if (add_yolk_tet_barrier)
     {
         addYolkTetLogBarrierForceEneries(residual);

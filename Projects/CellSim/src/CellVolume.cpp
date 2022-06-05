@@ -646,6 +646,7 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 }
                 if(projectPD)
                     projectBlockPD<24>(hessian);
+                
                 addHessianEntry<24>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 5)
@@ -684,7 +685,9 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 // VectorXT block_hessian_ev = computeHessianBlockEigenValues<30>(hessian).head<5>().transpose();
                 // if (block_hessian_ev[0] < 1e-6)
                 //     std::cout << block_hessian_ev << std::endl;
-                
+                // std::cout << hessian << std::endl;
+                // std::cout << computeHessianBlockEigenValues<30>(hessian) << std::endl;
+                // std::getchar();
                 addHessianEntry<30>(entries, cell_vtx_list, hessian);
             }
             else if (face_vtx_list.size() == 6)

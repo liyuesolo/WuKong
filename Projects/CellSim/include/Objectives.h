@@ -40,6 +40,7 @@ public:
     using TV = Vector<double, 3>;
     using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
+    using IV2 = Vector<int, 2>;
     using Edge = Vector<int, 2>;
 
     typedef int StorageIndex;
@@ -277,7 +278,7 @@ public:
 
     void computeKernelWeights();
     void computeCellTargetFromDatapoints();
-    void computeCellTargetsFromDatapoints();
+    void computeCellTargetsFromDatapoints(const std::string& filename);
 
     void initializeTarget();
 
@@ -285,7 +286,10 @@ public:
 
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
     void updateTarget();
+    void rotateTarget(T angle);
     void optimizeForStableTarget(T perturbation);
+    void optimizeForStableTargetSpring(T perturbation);
+    void optimizeForStableTargetDeformationGradient(T perturbation);
     void loadTarget(const std::string& filename, T perturbation = 0.0);
     void loadWeightedTarget(const std::string& filename);
     void loadWeightedCellTarget(const std::string& filename);
@@ -296,6 +300,7 @@ public:
     void loadTxtVertices(const std::string& filename, VectorXT& data);
     void checkData();
 
+    void checkDistanceMetrics();
     void initializeTargetFromMap(const std::string& filename, int _frame);
     T maximumStepSize(const VectorXT& dp);
 

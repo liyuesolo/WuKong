@@ -68,20 +68,46 @@ void VertexModel::dfdpWeightsSparse(StiffnessMatrix& dfdp)
     dfdp.resize(num_nodes * 3, edge_weights.rows());
     std::vector<Entry> entries;
     int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e)
+    if (contracting_type == ApicalOnly)
     {
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Vector<T, 6> dedx;
-        computeEdgeSquaredNormGradient(vi, vj, dedx);
-        dedx *= -1.0;
-        for (int i = 0; i < 3; i++)
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            dedx *= -1.0;
+            for (int i = 0; i < 3; i++)
+            {
+                entries.push_back(Entry(e[0] * 3 + i, cnt, dedx[i]));
+                entries.push_back(Entry(e[1] * 3 + i, cnt, dedx[i+3]));
+            }
+            cnt++;
+        });
+    }
+    else
+    {
+        for (Edge& e : edges)
         {
-            entries.push_back(Entry(e[0] * 3 + i, cnt, dedx[i]));
-            entries.push_back(Entry(e[1] * 3 + i, cnt, dedx[i+3]));
+            bool apical = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            bool basal = e[0] >= basal_vtx_start && e[1] >= basal_vtx_start;
+            if ((apical || basal) || contracting_type == ALLEdges)
+            {
+                TV vi = deformed.segment<3>(e[0] * 3);
+                TV vj = deformed.segment<3>(e[1] * 3);
+                Vector<T, 6> dedx;
+                computeEdgeSquaredNormGradient(vi, vj, dedx);
+                dedx *= -1.0;
+                for (int i = 0; i < 3; i++)
+                {
+                    entries.push_back(Entry(e[0] * 3 + i, cnt, dedx[i]));
+                    entries.push_back(Entry(e[1] * 3 + i, cnt, dedx[i+3]));
+                }
+                cnt++;
+            }
         }
-        cnt++;
-    });
+    }
+
+    
     dfdp.setFromTriplets(entries.begin(), entries.end());
 
     for (int i = 0; i < cnt; i++)
@@ -95,16 +121,39 @@ void VertexModel::dfdpWeightsDense(MatrixXT& dfdp)
     dfdp.resize(num_nodes * 3, edge_weights.rows());
     dfdp.setZero();
     int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Vector<T, 6> dedx;
-        computeEdgeSquaredNormGradient(vi, vj, dedx);
-        dedx *= -1.0;
-        dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
-        dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
-        cnt++;
-    });
+        
+    if (contracting_type == ApicalOnly)
+    {
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            dedx *= -1.0;
+            dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+            dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+            cnt++;
+        });
+    }
+    else
+    {
+        for (Edge& e : edges)
+        {
+            bool apical = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            bool basal = e[0] >= basal_vtx_start && e[1] >= basal_vtx_start;
+            if ((apical || basal) || contracting_type == ALLEdges)
+            {
+                TV vi = deformed.segment<3>(e[0] * 3);
+                TV vj = deformed.segment<3>(e[1] * 3);
+                Vector<T, 6> dedx;
+                computeEdgeSquaredNormGradient(vi, vj, dedx);
+                dedx *= -1.0;
+                dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+                dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+                cnt++;
+            }
+        }
+    }
 
     for (int i = 0; i < cnt; i++)
         for (auto data : dirichlet_data)
@@ -117,16 +166,39 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     MatrixXT dfdp(num_nodes * 3, edge_weights.rows());
     dfdp.setZero();
     int cnt = 0;
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Vector<T, 6> dedx;
-        computeEdgeSquaredNormGradient(vi, vj, dedx);
-        dedx *= -1.0;
-        dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
-        dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
-        cnt++;
-    });
+    if (contracting_type == ApicalOnly)
+    {
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            dedx *= -1.0;
+            dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+            dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+            cnt++;
+        });
+    }
+    else
+    {
+        for (Edge& e : edges)
+        {
+            bool apical = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            bool basal = e[0] >= basal_vtx_start && e[1] >= basal_vtx_start;
+            if ((apical || basal) || contracting_type == ALLEdges)
+            {
+                TV vi = deformed.segment<3>(e[0] * 3);
+                TV vj = deformed.segment<3>(e[1] * 3);
+                Vector<T, 6> dedx;
+                computeEdgeSquaredNormGradient(vi, vj, dedx);
+                dedx *= -1.0;
+                dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
+                dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
+                cnt++;
+            }
+        }
+    }
+        
 
     for (int i = 0; i < cnt; i++)
         for (auto data : dirichlet_data)
@@ -144,108 +216,6 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     {
         dxdp.col(i) = solver.solve(dfdp.col(i));
     }
-
-    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dfdp(dfdp, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    
-
-    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dfdp(dfdp, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    // std::cout << "dimension: " << svd_dfdp.matrixU().rows() << " " << svd_dfdp.matrixU().cols() << " "<< svd_dfdp.matrixV().rows() << " "<< svd_dfdp.matrixV().cols() << std::endl;
-    // std::cout << "np: " << edge_weights.rows() << std::endl;
-    // std::cout << "dfdp singular values " << svd_dfdp.singularValues().rows() << std::endl;
-    // std::cout << svd_dfdp.singularValues().transpose() << std::endl;
-
-    // Eigen::JacobiSVD<Eigen::MatrixXd> svd_dxdp(dxdp, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    // std::cout << "dxdp singular values " << svd_dxdp.singularValues().rows() <<  std::endl;
-    // std::cout << svd_dxdp.singularValues().transpose() << std::endl;
-
-    // MatrixXT dfdpTdfdp = dfdp.transpose() * dfdp;
-    // MatrixXT dxdpTdxdp = dxdp.transpose() * dxdp;
-
-    // Spectra::DenseSymMatProd<T> op(dfdpTdfdp);
-    // Spectra::SymEigsSolver<T, Spectra::SMALLEST_ALGE, Spectra::DenseSymMatProd<T> > eigs(&op, 20, dfdpTdfdp.cols());
-    // eigs.init();
-
-    // int nconv = eigs.compute();
-    // Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-    // Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-    // std::cout << "dfdpTdfdp eigen values: " << eigen_values.tail<20>().transpose() << std::endl;
-    
-    // T residual = 0.0;
-    // for (int i = 0; i < eigen_values.rows(); i++)
-    // {
-    //     residual += (dfdpTdfdp * eigen_vectors.col(i) - eigen_values[i] * eigen_vectors.col(i)).norm();
-    // }
-    
-    // std::cout << "(A-lambdaI)vectors: " << residual << std::endl;
-
-    // Spectra::DenseSymMatProd<T> op2(dxdpTdxdp);
-    // Spectra::SymEigsSolver<T, Spectra::SMALLEST_ALGE, Spectra::DenseSymMatProd<T> > eigs2(&op2, 20, dxdpTdxdp.cols());
-    // eigs2.init();
-
-    // int nconv2 = eigs2.compute();
-    // Eigen::VectorXd eigen_values2 = eigs2.eigenvalues().real();
-    // Eigen::MatrixXd eigen_vectors2 = eigs2.eigenvectors().real();
-    // std::cout << "dxdpTdxdp eigen values: " << eigen_values2.tail<20>().transpose() << std::endl;
-    
-    // residual = 0.0;
-    // for (int i = 0; i < eigen_values2.rows(); i++)
-    // {
-    //     residual += (dxdpTdxdp * eigen_vectors2.col(i) - eigen_values2[i] * eigen_vectors2.col(i)).norm();
-    // }
-
-    // std::cout << "(A-lambdaI)vectors: " << residual << std::endl;
-
-    // Spectra::SparseSymShiftSolve<T, Eigen::Upper> op3(d2edx2);
-
-    // Spectra::SymEigsShiftSolver<T, 
-    //     Spectra::LARGEST_MAGN, 
-    //     Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
-    //     eigs3(&op3, 20, 40, -1e-4);
-
-    // eigs3.init();
-
-    // int nconv3 = eigs3.compute();
-
-    // Eigen::VectorXd eigen_values3 = eigs3.eigenvalues().real();
-    // std::cout << "Hessian eigen values: " << eigen_values3.tail<20>().transpose() << std::endl;
-    // std::exit(0);
-
-    // ttt.stop();
-    // std::cout << "dxdp " << ttt.elapsed_sec() << std::endl;
-
-    // StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
-    // MatrixXT UV;
-    // buildSystemMatrixWoodbury(u, d2edx2, UV);
-
-    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
-    // solver.analyzePattern(d2edx2);
-    // T alpha = 1.0;
-    // for (int i = 0; i < 50; i++)
-    // {
-    //     solver.factorize(d2edx2);
-        
-    //     if (solver.info() == Eigen::NumericalIssue)
-    //     {
-    //         d2edx2.diagonal().array() += alpha; 
-    //         alpha *= 10;
-    //         continue;
-    //     }
-    // }
-    
-    // MatrixXT A_inv_U(UV.rows(), UV.cols());
-    // for (int col = 0; col < UV.cols(); col++)
-    //     A_inv_U.col(col) = solver.solve(UV.col(col));
-
-    // MatrixXT C(UV.cols(), UV.cols());
-    // C.setIdentity();
-    // C += UV.transpose() * A_inv_U;
-    // MatrixXT C_inv = C.inverse();
-    // for (int i = 0; i < cnt; i++)
-    // {
-        
-    //     VectorXT A_inv_g = solver.solve(dfdp.col(i));    
-    //     dxdp.col(i) = A_inv_g - A_inv_U * C_inv * UV.transpose() * A_inv_g;
-    // }
 }
 
 void VertexModel::computededp(VectorXT& dedp)
@@ -336,21 +306,43 @@ void VertexModel::dOdpEdgeWeightsFromLambda(const VectorXT& lambda, VectorXT& dO
             if (find_node_j) vec[3 + d] = 0;
         }    
     };
-    
-    iterateApicalEdgeSerial([&](Edge& e){
-        TV vi = deformed.segment<3>(e[0] * 3);
-        TV vj = deformed.segment<3>(e[1] * 3);
-        Vector<T, 6> dedx;
-        computeEdgeSquaredNormGradient(vi, vj, dedx);
-        
-        dedx *= -1.0;
-        maskDirichletDof(dedx, e[0], e[1]);
-        dOdp[cnt] += lambda.segment<3>(e[0] * 3).dot(dedx.segment<3>(0));
-        dOdp[cnt] += lambda.segment<3>(e[1] * 3).dot(dedx.segment<3>(3));
-        // dfdp.col(cnt).segment<3>(e[0] * 3) += dedx.segment<3>(0);
-        // dfdp.col(cnt).segment<3>(e[1] * 3) += dedx.segment<3>(3);
-        cnt++;
-    });
+
+    if (contracting_type == ApicalOnly)
+    {
+        iterateApicalEdgeSerial([&](Edge& e){
+            TV vi = deformed.segment<3>(e[0] * 3);
+            TV vj = deformed.segment<3>(e[1] * 3);
+            Vector<T, 6> dedx;
+            computeEdgeSquaredNormGradient(vi, vj, dedx);
+            
+            dedx *= -1.0;
+            maskDirichletDof(dedx, e[0], e[1]);
+            dOdp[cnt] += lambda.segment<3>(e[0] * 3).dot(dedx.segment<3>(0));
+            dOdp[cnt] += lambda.segment<3>(e[1] * 3).dot(dedx.segment<3>(3));
+            cnt++;
+        });
+    }
+    else
+    {
+        for (Edge& e : edges)
+        {
+            bool apical = e[0] < basal_vtx_start && e[1] < basal_vtx_start;
+            bool basal = e[0] >= basal_vtx_start && e[1] >= basal_vtx_start;
+            if ((apical || basal) || contracting_type == ALLEdges)
+            {
+                TV vi = deformed.segment<3>(e[0] * 3);
+                TV vj = deformed.segment<3>(e[1] * 3);
+                Vector<T, 6> dedx;
+                computeEdgeSquaredNormGradient(vi, vj, dedx);
+                
+                dedx *= -1.0;
+                maskDirichletDof(dedx, e[0], e[1]);
+                dOdp[cnt] += lambda.segment<3>(e[0] * 3).dot(dedx.segment<3>(0));
+                dOdp[cnt] += lambda.segment<3>(e[1] * 3).dot(dedx.segment<3>(3));
+                cnt++;
+            }
+        }
+    }
     
     T epsilon = 1e-6;
     auto edgeForce = [&](VectorXT& force)

@@ -45,6 +45,12 @@ enum Region
 {
     Apical, Basal, Lateral, ALL
 };
+
+enum ContractionType
+{
+    ApicalOnly, ApicalBasal, ALLEdges 
+};
+
 class VertexModel
 {
 public:
@@ -497,8 +503,10 @@ public:
     int lateral_face_start;
 
     int n_cells;
+    int n_edges;
 
     T unit = 1.0;
+    int resolution = 0;
 
     // vertex model
     T sigma = 1.0;
@@ -580,6 +588,8 @@ public:
     bool print_force_norm = false;
     bool profile = false;
 
+    bool use_test_mesh = false;
+
     Timer profile_timer;
 
     VectorXT rest_length;
@@ -589,7 +599,7 @@ public:
     T Bp = 1e4;
     T perivitelline_pressure = 0.1;
     T weights_all_edges = 0.1;
-    bool contract_all_edges = false;
+    ContractionType contracting_type = ApicalBasal;
     // VdbLevelSetSDF sdf;
     IMLS sdf;
 

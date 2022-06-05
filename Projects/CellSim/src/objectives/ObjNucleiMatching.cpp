@@ -105,6 +105,10 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
                 continue;
             if ((target - TV::Constant(-1)).norm() < 1e-6)
                 continue;
+            
+            if (!simulation.cells.sdf.inside(target))
+                continue;
+
             VectorXT positions;
             std::vector<int> indices;
             simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
@@ -140,24 +144,24 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename)
                     target_obj_weights[i] = 1.0 / visited[i];
             }
         }
-        // for (int i = 0; i < n_cells; i++)
-        // {
-        //     if (visited[i] == 0)
-        //     {
-        //         VectorXT positions;
-        //         std::vector<int> indices;
-        //         simulation.cells.getCellVtxAndIdx(i, positions, indices);
-        //         VectorXT w(indices.size());
-        //         T avg = 1.0 / T(indices.size());
-        //         w.setConstant(avg);
-        //         TV centroid = TV::Zero();
-        //         for (int j  = 0; j < indices.size(); j++)
-        //             centroid += positions.segment<3>(j * 3);
-        //         centroid *= avg;
-        //         weight_targets.push_back(TargetData(w, data_point_idx, i, centroid));
-        //         target_obj_weights[i] = 1e-3;
-        //     }
-        // }
+        for (int i = 0; i < n_cells; i++)
+        {
+            if (visited[i] == 0)
+            {
+                VectorXT positions;
+                std::vector<int> indices;
+                simulation.cells.getCellVtxAndIdx(i, positions, indices);
+                VectorXT w(indices.size());
+                T avg = 1.0 / T(indices.size());
+                w.setConstant(avg);
+                TV centroid = TV::Zero();
+                for (int j  = 0; j < indices.size(); j++)
+                    centroid += positions.segment<3>(j * 3);
+                centroid *= avg;
+                weight_targets.push_back(TargetData(w, data_point_idx, i, centroid));
+                target_obj_weights[i] = 1e-3;
+            }
+        }
         
     }
     target_obj_weights *= w_data;
@@ -244,6 +248,439 @@ void ObjNucleiTracking::setTargetObjWeights()
     //     for (int idx : neighbors)
     //         target_obj_weights[idx] = 0.0;
     // }
+}
+
+void ObjNucleiTracking::optimizeForStableTargetDeformationGradient(T perturbation)
+{
+    TV c0, c1;
+    simulation.cells.computeCellCentroid(simulation.cells.faces[0], c0);
+    simulation.cells.computeCellCentroid(simulation.cells.faces[1], c1);
+    
+    T length = (c0 - c1).norm();
+    
+    VectorXT targets_inititial(target_positions.size() * 3);
+    VectorXT targets_opt(target_positions.size() * 3);
+    VectorXT targets_rest(target_positions.size() * 3);
+
+    std::vector<std::vector<int>> neighbor_cells;
+
+    for (auto data : target_positions)
+    {
+        targets_rest.segment<3>(data.first * 3) = data.second;
+        targets_inititial.segment<3>(data.first * 3) = data.second + perturbation * TV::Random().normalized() * length;
+        targets_opt.segment<3>(data.first * 3) = targets_inititial.segment<3>(data.first * 3);
+    }
+
+    int n_cells = simulation.cells.n_cells;
+    int n_dof = targets_inititial.rows();
+
+    T w_p = 100.0;
+
+    auto fetchEntryFromVector = [&](const std::vector<int>& indices, 
+        const VectorXT& vector, VectorXT& entries)
+    {
+        entries.resize(indices.size() * 3);
+        for (int i = 0; i < indices.size(); i++)
+            entries.segment<3>(i * 3) = vector.segment<3>(indices[i] * 3);
+    };
+
+    auto energyValue = [&](const VectorXT& x)
+    {
+        T energy = 0.0;
+        energy += 0.5 * (x - targets_inititial).dot(x - targets_inititial);
+
+        for (int i = 0; i < n_cells; i++)
+        {
+            VectorXT undeformed, deformed;
+            fetchEntryFromVector(neighbor_cells[i], targets_rest, undeformed);
+            fetchEntryFromVector(neighbor_cells[i], x, deformed);
+            T ei;
+            computeDeformationPenaltyCST3D(w_p, undeformed, deformed, ei);
+            energy += ei;
+        }
+        
+        return energy;
+    };
+
+    auto energyGradient = [&](const VectorXT& x, VectorXT& dedx)
+    {
+        dedx = x - targets_inititial;
+        for (int i = 0; i < n_cells; i++)
+        {
+            VectorXT undeformed, deformed;
+            fetchEntryFromVector(neighbor_cells[i], targets_rest, undeformed);
+            fetchEntryFromVector(neighbor_cells[i], x, deformed);
+            Vector<T, 9> dedx_local;
+            computeDeformationPenaltyCST3DGradient(w_p, undeformed, deformed, dedx_local);
+            if (std::isnan(dedx_local.norm()))
+            {
+                std::ofstream out("stupid_points.obj");
+                for (int i = 0; i < 3; i++)
+                    out << "v " << undeformed.segment<3>(i * 3).transpose() << std::endl;
+                out.close();
+                std::cout << dedx_local.norm() << std::endl;
+                std::getchar();
+            }
+            for (int j = 0; j < neighbor_cells[i].size(); j++)
+            {
+                dedx.segment<3>(neighbor_cells[i][j] * 3) += dedx_local.segment<3>(j * 3);
+            }
+        }
+        return dedx.norm();
+    };
+
+    auto energyHessian = [&](const VectorXT& x, std::vector<Entry>& entries)
+    {
+        for (int n = 0; n < n_cells; n++)
+        {
+            entries.push_back(Entry(n, n, 1.0));
+            VectorXT undeformed, deformed;
+            fetchEntryFromVector(neighbor_cells[n], targets_rest, undeformed);
+            fetchEntryFromVector(neighbor_cells[n], x, deformed);
+            Matrix<T, 9, 9> hessian_local;
+            computeDeformationPenaltyCST3DHessian(w_p, undeformed, deformed, hessian_local);
+            for (int i = 0; i < neighbor_cells[n].size(); i++)
+            {
+                for (int j = 0; j < neighbor_cells[n].size(); j++)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        for (int l = 0; l < 3; l++)
+                        {
+                            entries.push_back(Entry(neighbor_cells[n][i] * 3 + k, neighbor_cells[n][j] * 3 + l, hessian_local(i * 3 + k, j * 3 + l)));
+                        }   
+                    }
+                }
+            }
+        }
+    };
+
+    SpatialHash hash;
+    T spacing = 0.5 * length;
+    hash.build(spacing, targets_rest);
+
+    for (int i = 0; i < n_cells; i++)
+    {
+        std::vector<int> neighbors;
+        TV pi = targets_rest.segment<3>(i * 3);
+        hash.getOneRingNeighbors(pi, neighbors);
+        
+        std::vector<T> distance;
+        std::vector<int> indices;
+        for (int idx : neighbors)
+        {
+            TV pj = targets_rest.segment<3>(idx * 3);
+            if ((pi - pj).norm() < 1e-5)
+                continue;
+            distance.push_back((pi - pj).norm());
+            indices.push_back(idx);
+        }
+        std::sort(indices.begin(), indices.end(), [&distance](int a, int b){ return distance[a] < distance[b]; } );
+        
+        std::vector<int> closest_pts;
+        closest_pts.push_back(i);
+        closest_pts.push_back(indices[0]);
+        closest_pts.push_back(indices[1]);
+        // closest_pts.push_back(indices[2]);
+        neighbor_cells.push_back(closest_pts);
+    }
+
+    T tol = 1e-9;
+    T g_norm = 1e10;
+    int ls_max = 10;
+    int opt_iter = 0;
+
+    int max_iter = 100;
+    simulation.verbose = false;
+    T g_norm0 = 0;
+    while (true)
+    {
+        T O; 
+        VectorXT dOdx;
+        g_norm = energyGradient(targets_opt, dOdx);
+        O = energyValue(targets_opt);
+        std::cout << "iter " << opt_iter << " |g|: " << g_norm << " E: " << O << std::endl;
+        
+        if (opt_iter == 0)
+            g_norm0 = g_norm;
+        if (g_norm < tol * g_norm0 || opt_iter > max_iter)
+            break;
+        StiffnessMatrix H(n_dof, n_dof);
+        std::vector<Entry> entries;
+        energyHessian(targets_opt, entries);
+        H.setFromTriplets(entries.begin(), entries.end());
+        VectorXT g = -dOdx, dx = VectorXT::Zero(n_dof);
+        simulation.linearSolve(H, g, dx);
+        T alpha = 1.0;
+        int i = 0;
+        for (; i < ls_max; i++)
+        {
+            VectorXT x_ls = targets_opt + alpha * dx;
+            T O_ls = energyValue(x_ls);
+            if (O_ls < O)
+            {
+                targets_opt = x_ls;
+                break;
+            }
+            alpha *= 0.5;
+        }
+        if (i == ls_max)
+        {
+
+        }
+        std::cout << "#ls " << i << "/" << ls_max << std::endl;
+        opt_iter++;
+    } 
+    std::ofstream out("init.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_inititial.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+    out.open("opt.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_opt.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+    out.open("rest.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_rest.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+
+    for (auto& data : target_positions)
+    {
+        data.second = targets_opt.segment<3>(data.first * 3);
+    }
+}
+
+void ObjNucleiTracking::optimizeForStableTargetSpring(T perturbation)
+{
+    TV c0, c1;
+    simulation.cells.computeCellCentroid(simulation.cells.faces[0], c0);
+    simulation.cells.computeCellCentroid(simulation.cells.faces[1], c1);
+    
+    T length = (c0 - c1).norm();
+    
+    VectorXT targets_inititial(target_positions.size() * 3);
+    VectorXT targets_opt(target_positions.size() * 3);
+    VectorXT targets_rest(target_positions.size() * 3);
+
+    for (auto data : target_positions)
+    {
+        targets_rest.segment<3>(data.first * 3) = data.second;
+        targets_inititial.segment<3>(data.first * 3) = data.second + perturbation * TV::Random().normalized() * length;
+        targets_opt.segment<3>(data.first * 3) = targets_inititial.segment<3>(data.first * 3);
+    }
+
+    int n_cells = simulation.cells.n_cells;
+    int n_dof = targets_inititial.rows();
+    SpatialHash hash;
+    T spacing = 0.5 * length;
+    hash.build(spacing, targets_rest);
+
+    struct Spring
+    {
+        T thres = 0.75;
+        // T thres = 1.0;
+        T stiffness;
+        Vector<T, 6> x;
+        Vector<T, 6> X;
+        IV2 indices;
+        T rest_length = 1.0;
+        Spring(T _stiffness, const Vector<T, 6>& _x, 
+            const Vector<T, 6>& _X, const IV2& _indices,
+            T _rest_length) : 
+            stiffness(_stiffness), x(_x), X(_X), 
+            indices(_indices), rest_length(_rest_length) {}
+        T l0() { return (X.segment<3>(3) - X.segment<3>(0)).norm(); }
+        // T l0 () {return rest_length; }
+        T l() { return (x.segment<3>(3) - x.segment<3>(0)).norm(); }
+        void setx(const Vector<T, 6>& _x) { x = _x; }
+        T energy() 
+        {
+            if (l() > thres * l0())
+                return 0.0;
+            T e;
+            computeSpringUnilateralQubicEnergyRestLength3D(stiffness, l0(), x, e);
+            return e;
+        }
+        void gradient(Vector<T, 6>& g)
+        {
+            if (l() > thres * l0())
+            {
+                g.setZero();
+                return;
+            }
+            computeSpringUnilateralQubicEnergyRestLength3DGradient(stiffness, l0(), x, g);
+        }
+        void hessian(std::vector<Entry>& entries)
+        {
+            if (l() > thres * l0())
+                return;
+            Matrix<T, 6, 6> h;
+            computeSpringUnilateralQubicEnergyRestLength3DHessian(stiffness, l0(), x, h);
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                    for (int k = 0; k < 3; k++)
+                        for (int l = 0; l < 3; l++)
+                            entries.push_back(Entry(indices[i] * 3 + k, indices[j] * 3 + l, h(i * 3 + k, j * 3 + l)));
+            
+        }
+    };
+
+    int n_pt = n_dof / 3;
+    MatrixXT visited(n_pt, n_pt);
+    visited.setConstant(-1);
+    T k = 1e4;
+    std::vector<Spring> springs;
+    for (int i = 0; i < n_pt; i++)
+    {
+        TV pi = targets_rest.segment<3>(i * 3);
+        std::vector<int> neighbors;
+        hash.getOneRingNeighbors(pi, neighbors);
+        for (int j : neighbors)
+        {
+            if (visited(i, j) == -1)
+            {
+                TV pj = targets_rest.segment<3>(j * 3);
+                if ((pi - pj).norm() < 1e-6)
+                    continue;
+                Vector<T, 6> X; X << pi, pj;
+                springs.push_back(Spring(k, X, X, IV2(i, j), length));
+                visited(i, j) = 1; visited(j, i) = 1;
+            }
+        }
+    }
+
+    std::cout << "# springs " << springs.size() << std::endl;
+    // std::getchar();
+
+    auto energyValue = [&](const VectorXT& x)
+    {
+        T energy = 0.0;
+        energy += 0.5 * (x - targets_inititial).dot(x - targets_inititial);
+
+        for (auto spring : springs)
+        {
+            Vector<T, 6> x0x1;
+            x0x1.segment<3>(0) = x.segment<3>(spring.indices[0] * 3);
+            x0x1.segment<3>(3) = x.segment<3>(spring.indices[1] * 3);
+            spring.setx(x0x1);
+            energy += spring.energy();
+        }
+
+        return energy;
+    };
+
+    auto energyGradient = [&](const VectorXT& x, VectorXT& dedx)
+    {
+        dedx = x - targets_inititial;
+        for (auto spring : springs)
+        {
+            Vector<T, 6> x0x1;
+            x0x1.segment<3>(0) = x.segment<3>(spring.indices[0] * 3);
+            x0x1.segment<3>(3) = x.segment<3>(spring.indices[1] * 3);
+            spring.setx(x0x1);
+            Vector<T, 6> dedx_local;
+            spring.gradient(dedx_local);
+            dedx.segment<3>(spring.indices[0] * 3) += dedx_local.segment<3>(0);
+            dedx.segment<3>(spring.indices[1] * 3) += dedx_local.segment<3>(3);
+        }
+
+        return dedx.norm();
+    };
+
+    auto energyHessian = [&](const VectorXT& x, std::vector<Entry>& entries)
+    {
+        for (int i = 0; i < n_dof; i++)
+        {
+            entries.push_back(Entry(i , i, 1.0));
+        }
+        
+        for (auto spring : springs)
+        {
+            Vector<T, 6> x0x1;
+            x0x1.segment<3>(0) = x.segment<3>(spring.indices[0] * 3);
+            x0x1.segment<3>(3) = x.segment<3>(spring.indices[1] * 3);
+            spring.setx(x0x1);
+            
+            spring.hessian(entries);
+        }
+    };
+
+    T tol = 1e-7;
+    T g_norm = 1e10;
+    int ls_max = 10;
+    int opt_iter = 0;
+
+    int max_iter = 200;
+    simulation.verbose = false;
+    T g_norm0 = 0;
+    while (true)
+    {
+        T O; 
+        VectorXT dOdx;
+        g_norm = energyGradient(targets_opt, dOdx);
+        O = energyValue(targets_opt);
+        std::cout << "iter " << opt_iter << " |g|: " << g_norm << " E: " << O << std::endl;
+        // std::getchar();
+        if (opt_iter == 0)
+            g_norm0 = g_norm;
+        if (g_norm < tol * g_norm0 || opt_iter > max_iter)
+            break;
+        StiffnessMatrix H(n_dof, n_dof);
+        std::vector<Entry> entries;
+        energyHessian(targets_opt, entries);
+        H.setFromTriplets(entries.begin(), entries.end());
+        VectorXT g = -dOdx, dx = VectorXT::Zero(n_dof);
+        simulation.linearSolve(H, g, dx);
+        
+        T alpha = 1.0;
+        int i = 0;
+        for (; i < ls_max; i++)
+        {
+            VectorXT x_ls = targets_opt + alpha * dx;
+            T O_ls = energyValue(x_ls);
+            if (O_ls < O)
+            {
+                targets_opt = x_ls;
+                break;
+            }
+            alpha *= 0.5;
+        }
+        if (i == ls_max)
+        {
+
+        }
+        std::cout << "#ls " << i << "/" << ls_max << std::endl;
+        opt_iter++;
+    }
+    std::ofstream out("init.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_inititial.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+    out.open("opt.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_opt.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+    out.open("rest.obj");
+    for (int i = 0; i < n_cells; i++)
+    {
+        out << "v " << targets_rest.segment<3>(i * 3).transpose() << std::endl;
+    }
+    out.close();
+
+    for (auto& data : target_positions)
+    {
+        data.second = targets_opt.segment<3>(data.first * 3);
+    }
 }
 
 void ObjNucleiTracking::optimizeForStableTarget(T perturbation)
@@ -416,6 +853,7 @@ void ObjNucleiTracking::optimizeForStableTarget(T perturbation)
         g_norm = energyGradient(targets_opt, dOdx);
         O = energyValue(targets_opt);
         std::cout << "iter " << opt_iter << " |g|: " << g_norm << " E: " << O << std::endl;
+        std::getchar();
         if (opt_iter == 0)
             g_norm0 = g_norm;
         if (g_norm < tol * g_norm0 || opt_iter > max_iter)
@@ -484,12 +922,31 @@ void ObjNucleiTracking::loadTarget(const std::string& filename, T perturbation)
     {
         TV perturb = perturbation * TV::Random().normalized();
         target_positions[idx] = TV(x, y, z) + perturb;
+        T alpha = 1.0;
+        while (true)
+        {
+            if (simulation.cells.sdf.inside(target_positions[idx]))
+                break;
+            alpha *= 0.5;
+            target_positions[idx] = TV(x, y, z) + alpha * perturb;
+        }
+        
     }
     in.close();
 
     target_obj_weights = VectorXT::Ones(simulation.cells.basal_face_start);
     target_obj_weights *= w_data;
 }         
+
+void ObjNucleiTracking::rotateTarget(T angle)
+{
+    TM R = Eigen::AngleAxisd(angle, TV::UnitX()).toRotationMatrix();
+    for (auto& data : target_positions)
+    {
+        data.second = R * data.second;
+    }
+    
+}
 
 void ObjNucleiTracking::buildVtxEdgeStructure()
 {
@@ -930,20 +1387,54 @@ void ObjNucleiTracking::computed2Odp2(const VectorXT& p_curr, std::vector<Entry>
     }
 }
 
+void ObjNucleiTracking::checkDistanceMetrics()
+{   
+    T total_length = 0.0;
+    int cnt = 0;
+    if (match_centroid)
+    {
+        iterateTargets([&](int cell_idx, TV& target_pos)
+        {
+            VtxList face_vtx_list = simulation.cells.faces[cell_idx];
+            TV centroid;
+            simulation.cells.computeCellCentroid(face_vtx_list, centroid);
+            total_length += (centroid - target_pos).norm();
+            cnt++;
+        });
+    }
+    else
+    {
+        iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
+            const TV& target, const VectorXT& weights)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+
+            int n_pt = weights.rows();
+            TV current = TV::Zero();
+            for (int i = 0; i < n_pt; i++)
+                current += weights[i] * positions.segment<3>(i * 3);
+            total_length += (current - target).norm();
+            cnt++;
+        });
+    }
+    T avg_length = total_length / T(cnt);
+    std::cout << "Total distance: " << total_length << " avg distance: " << avg_length << std::endl;
+    std::cout << "Total distance in micrometers: " << total_length / simulation.cells.unit 
+        << " avg distance in micrometers: " << avg_length / simulation.cells.unit << std::endl;
+}
+
 T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     // simulation.loadDeformedState("current_mesh.obj");
-    VectorXT p_wrap = p_curr;
-    for (int i = 0; i < n_dof_design; i++)
-    {
-        p_wrap[i] = wrapper<0>(p_curr[i]);
-    }
     
-    updateDesignParameters(p_wrap);
+    
+    updateDesignParameters(p_curr);
 
     T offset = 0.2 * (bound[1] - bound[0]);
-    std::cout << p_wrap.maxCoeff()<< " " << bound[1] + offset << " " << p_wrap.minCoeff() << " " << bound[0] - offset << std::endl;
-    if (p_wrap.maxCoeff() > bound[1] + offset || p_wrap.minCoeff() < bound[0] - offset)
+    std::cout << p_curr.maxCoeff()<< " " << bound[1] + offset << " " << p_curr.minCoeff() << " " << bound[0] - offset << std::endl;
+    if (p_curr.maxCoeff() > bound[1] + offset || p_curr.minCoeff() < bound[0] - offset)
         return 1e10;
     // if (p_wrap.maxCoeff() > bound[1] + offset || p_wrap.minCoeff() < -1)
     //     return 1e10;
@@ -979,7 +1470,7 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
     T energy = 0.0;
     computeOx(simulation.deformed, energy);
     
-    T Op; computeOp(p_wrap, Op);
+    T Op; computeOp(p_curr, Op);
     energy += Op;
 
     return energy;
@@ -989,13 +1480,8 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
 T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate, bool use_prev_equil)
 {
     // simulation.loadDeformedState("current_mesh.obj");
-    VectorXT p_wrap = p_curr;
-    for (int i = 0; i < n_dof_design; i++)
-    {
-        p_wrap[i] = wrapper<0>(p_curr[i]);
-    }
     
-    updateDesignParameters(p_wrap);
+    updateDesignParameters(p_curr);
     if (simulate)
     {
         simulation.reset();
@@ -1076,9 +1562,9 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
         equilibrium_prev = simulation.u;
 
     VectorXT partialO_partialp;
-    computedOdp(p_wrap, partialO_partialp);
+    computedOdp(p_curr, partialO_partialp);
 
-    T Op; computeOp(p_wrap, Op);
+    T Op; computeOp(p_curr, Op);
     dOdp += partialO_partialp;
     energy += Op;
     for (int i = 0; i < n_dof_design; i++)
@@ -1167,13 +1653,8 @@ void ObjNucleiTracking::SGNforQP(const VectorXT& p_curr, StiffnessMatrix& object
 void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr, 
     StiffnessMatrix& H, bool simulate)
 {
-    VectorXT p_wrap = p_curr;
-    for (int i = 0; i < n_dof_design; i++)
-    {
-        p_wrap[i] = wrapper<0>(p_curr[i]);
-    }
 
-    updateDesignParameters(p_wrap);
+    updateDesignParameters(p_curr);
     if (simulate)
     {
         simulation.reset();
@@ -1226,7 +1707,7 @@ void ObjNucleiTracking::hessianSGN(const VectorXT& p_curr,
     }
 
     std::vector<Entry> d2Odp2_entries;
-    computed2Odp2(p_wrap, d2Odp2_entries);
+    computed2Odp2(p_curr, d2Odp2_entries);
 
     for (auto entry : d2Odp2_entries)
         entries.push_back(Entry(entry.row() + n_dof_sim, 
@@ -1290,6 +1771,8 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     // MatrixXT d2Odx2_dense = d2Odx2_matrix;
     // std::cout << d2Odx2_dense.minCoeff() << " " << d2Odx2_dense.maxCoeff() << std::endl;
     
+    // d2Odx2_matrix.setIdentity();
+
     MatrixXT dxdpTHdxdp = dxdp.transpose() * d2Odx2_matrix * dxdp;
 
     H = dxdpTHdxdp;
@@ -1362,7 +1845,10 @@ bool ObjNucleiTracking::getTargetTrajectoryFrame(VectorXT& frame_data)
             TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
             updated = R2 * R * updated;
             // frame_data.segment<3>(i * 3) = updated * 0.9; 
-            frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+            if (simulation.cells.resolution == 0)
+                frame_data.segment<3>(i * 3) = updated * 0.82 * simulation.cells.unit; 
+            else if (simulation.cells.resolution == 1)
+                frame_data.segment<3>(i * 3) = updated * 0.88 * simulation.cells.unit; 
         }
     }
     
@@ -1934,7 +2420,7 @@ void ObjNucleiTracking::checkData()
     out.close();
 }
 
-void ObjNucleiTracking::computeCellTargetsFromDatapoints()
+void ObjNucleiTracking::computeCellTargetsFromDatapoints(const std::string& filename)
 {
     VectorXT data_points;
     bool success = getTargetTrajectoryFrame(data_points);
@@ -1951,8 +2437,8 @@ void ObjNucleiTracking::computeCellTargetsFromDatapoints()
 
     if (success)
     {
-        std::string base_dir = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
-        std::ofstream out(base_dir + "weighted_dense_targets.txt");
+        
+        std::ofstream out(filename);
         VectorXT cell_centroids;
         simulation.cells.getAllCellCentroids(cell_centroids);
         // out_test_points.open("sim_points" + std::to_string(frame) + "_test.obj");

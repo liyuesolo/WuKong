@@ -50,17 +50,35 @@ public:
 
 
     ObjNucleiTracking& objective;
-
+    int current_iteration = 0;
+    int function_evaluation_cnt = 0;
     int variable_num = 0;
     int count = 0;
     double* primals;
     T min_objective = T(1e10);
     std::string data_folder;
-    bool has_bound;
+    bool has_bound = true;
+    bool use_GN_hessian = true;
+    bool restart_all_the_time = false;
+    bool save_results = false;
+    VectorXT p_prev;
 
     /** default constructor */
+    IpoptSolver(ObjNucleiTracking& _objective, const std::string& _data_folder, 
+        bool _use_GN_hessian, bool _has_bound, bool _save_results)
+        : objective(_objective), data_folder(_data_folder), 
+        use_GN_hessian(_use_GN_hessian), has_bound(_has_bound),
+        save_results(_save_results)
+    {
+        variable_num = objective.n_dof_design;
+        primals = new double[variable_num];
+        std::cout << "[ipopt]: #variable: " << variable_num << std::endl;
+    }
+
     IpoptSolver(ObjNucleiTracking& _objective, const std::string& _data_folder)
-        : objective(_objective), data_folder(_data_folder)
+        : objective(_objective), data_folder(_data_folder), 
+        use_GN_hessian(false), has_bound(false),
+        save_results(false)
     {
         variable_num = objective.n_dof_design;
         primals = new double[variable_num];
@@ -88,15 +106,18 @@ public:
         n = variable_num;
         m = 0;
         nnz_jac_g = 0;
-        int cnt = 0;
-        for( int row = 0; row < n; row++ )
+        if (use_GN_hessian)
         {
-            for( int col = 0; col <= row; col++ )
+            int cnt = 0;
+            for( int row = 0; row < n; row++ )
             {
-                cnt++;
+                for( int col = 0; col <= row; col++ )
+                {
+                    cnt++;
+                }
             }
+            nnz_h_lag = cnt;
         }
-        nnz_h_lag = cnt;
         index_style = TNLP::C_STYLE;
         
         return true;
@@ -117,8 +138,10 @@ public:
         if (has_bound)
         {
             tbb::parallel_for(0, n, [&](int i) {
-                x_l[i] = objective.bound[0];
-                x_u[i] = 1e19;
+                // x_l[i] = objective.bound[0];
+                // x_u[i] = 200.0;
+                x_l[i] = 0;
+                x_u[i] = 50.0;
             });
         }
         else
@@ -168,10 +191,30 @@ public:
         for (int i = 0; i < variable_num; i++)
             p_curr[i] = x[i];
 
+        
         // T E = objective.value(p_curr, true, true);
-        T E = objective.value(p_curr, true, new_x);
+        // T E = objective.value(p_curr, new_x, true);
+        T E;
+        if (restart_all_the_time)
+            E = objective.value(p_curr, true, false);
+        else
+        {
+            if (new_x)
+                E = objective.value(p_curr, true, true);
+            else
+                E = objective.value(p_curr, false);
+        }
         objective.equilibrium_prev = objective.simulation.u;
         std::cout << "[ipopt] eval_f: " << E << std::endl;
+        if (new_x)
+        {
+            std::cout << "|dp|: " << (p_curr - p_prev).norm() << std::endl;
+            std::string iteration_string = "/iter_" + std::to_string(current_iteration) + " eval_f_iter_" + std::to_string(function_evaluation_cnt);
+            function_evaluation_cnt++;
+            // objective.saveState(data_folder + iteration_string + ".obj");
+            // objective.saveDesignParameters(data_folder + iteration_string + ".txt", p_curr);
+            p_prev = p_curr;
+        }
         obj_value = (Ipopt::Number)E;
         return true;
     }
@@ -188,10 +231,18 @@ public:
             p_curr[i] = x[i];
         T O;
         VectorXT dOdp;
-        objective.gradient(p_curr, dOdp, O, new_x);
+        if (restart_all_the_time)
+            objective.gradient(p_curr, dOdp, O, true, false);
+        else
+        {
+            if (new_x)
+                objective.gradient(p_curr, dOdp, O, true, true);
+            else
+                objective.gradient(p_curr, dOdp, O, false);
+        }
+        // objective.gradient(p_curr, dOdp, O, true);
         objective.equilibrium_prev = objective.simulation.u;
-        // std::cout << "forward simulation hessian eigen values: ";
-        // objective.simulation.checkHessianPD(false);
+        std::cout << "forward simulation hessian eigen values: "; objective.simulation.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];
@@ -205,8 +256,8 @@ public:
             {
                 if (x[i] < objective.bound[0] + epsilon && dOdp[i] >= 0)
                     feasible_point_gradients[i] = 0.0;
-                // if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
-                //     feasible_point_gradients[i] = 0.0;
+                if (x[i] > objective.bound[1] - epsilon && dOdp[i] <= 0)
+                    feasible_point_gradients[i] = 0.0;
             }
         }
         
@@ -260,7 +311,8 @@ public:
         Ipopt::Number* values)
     {
         std::cout << "[ipopt] eval_h" << std::endl;
-        // return false;
+        if (!use_GN_hessian)
+            return false;
         if (values == NULL)
         {
             int cnt = 0;
@@ -280,7 +332,19 @@ public:
             for (int i = 0; i < variable_num; i++)
                 p_curr[i] = x[i];
             MatrixXT HGN;
-            objective.hessianGN(p_curr, HGN, true, new_x);
+            if (restart_all_the_time)
+            {
+                objective.hessianGN(p_curr, HGN, true, false);
+            }
+            else
+            {
+                if (new_x)
+                    objective.hessianGN(p_curr, HGN, new_x, false);
+                else
+                    objective.hessianGN(p_curr, HGN, false);
+            }
+            // objective.hessianGN(p_curr, HGN, true, false);
+            HGN.diagonal().array() += 1e-6;
             objective.equilibrium_prev = objective.simulation.u;
             int cnt = 0;
             for( int row = 0; row < n; row++ )
@@ -316,14 +380,12 @@ public:
         for (int i = 0; i < n; i++)
             p_curr[i] = x[i];
         objective.updateDesignParameters(p_curr);
-        VectorXT p_wrap = p_curr;
-        for (int i = 0; i < n; i++)
-        {
-            p_wrap[i] = objective.wrapper<0>(p_curr[i]);
-        }
         
-        objective.saveDesignParameters(data_folder + "/p_ipopt.txt", p_wrap);
-        objective.saveState(data_folder + "/x_ipopt.obj");
+        if (save_results)
+        {
+            objective.saveDesignParameters(data_folder + "/p_ipopt.txt", p_curr);
+            objective.saveState(data_folder + "/x_ipopt.obj");
+        }
 
         // here is where we would store the solution to variables, or write to a file, etc
         // so we could use the solution.
@@ -378,21 +440,26 @@ public:
 
             if (tnlp_adapter != NULL) 
             {
+                current_iteration = iter;
+                function_evaluation_cnt = 0;
                 double* intermediate = new double[variable_num];
                 tnlp_adapter->ResortX(*ip_data->curr()->x(), intermediate);
 
                 delete[] primals;
                 primals = intermediate;
 
-                if (obj_value < min_objective) 
+                // if (obj_value < min_objective) 
                 {
                     VectorXT p_curr(variable_num);
                     for (int i = 0; i < variable_num; i++)
                         p_curr[i] = primals[i];
 
-                    T E = objective.value(p_curr, true, false);
-                    objective.saveState(data_folder + "/" + std::to_string(count) + ".obj");
-                    objective.saveDesignParameters(data_folder + "/" + std::to_string(count) + ".txt", p_curr);
+                    T E = objective.value(p_curr, true, true);
+                    if (save_results)
+                    {
+                        objective.saveState(data_folder + "/" + std::to_string(count) + ".obj");
+                        objective.saveDesignParameters(data_folder + "/" + std::to_string(count) + ".txt", p_curr);
+                    }
                     min_objective = obj_value;   
                     std::cout << "[ipopt]\t real obj: " << E << std::endl; 
                     count++;

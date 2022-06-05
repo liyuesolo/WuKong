@@ -248,6 +248,8 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
             undeformed.segment<3>((idx + basal_vtx_start) * 3) = TV(col * dx, -dz, row * dy);
         }
     }
+    undeformed *= 10.0;
+
     deformed = undeformed;
     u = VectorXT::Zero(deformed.size());
     f = VectorXT::Zero(deformed.rows());
@@ -311,14 +313,14 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
     
     B = 1e6;
     By = 1e4;
-    alpha = 1.0; 
-    gamma = 1.0;
-    sigma = 0.01;
+    sigma = 1.0;
+    gamma = 0.2;
+    alpha = 4.0;
 
     use_cell_centroid = true;
 
 
-    for (int d = 0; d < 3; d++)
+    for (int d = basal_vtx_start * 3; d < basal_vtx_start * 3 + 9; d++)
     {
         dirichlet_data[d] = 0.0;
     }
@@ -332,13 +334,33 @@ void VertexModel::addTestPrismGrid(int n_row, int n_col)
             mesh_centroid += undeformed.segment<3>(i * 3);
         mesh_centroid /= T(num_nodes);
     }
-    
-    yolk_vol_init = 0.0;
-    if (add_yolk_volume)
-    {
-        yolk_vol_init = computeYolkVolume();
-    }
-    std::cout << "yolk volume init " << yolk_vol_init << std::endl;
+    n_cells = basal_face_start;
+
+    woodbury = false;
+    add_contraction_term = false;
+    use_sphere_radius_bound = false;
+    perivitelline_pressure = false;
+    use_yolk_pressure = false; 
+    use_ipc_contact = false;
+    add_perivitelline_liquid_volume = false;
+    use_sdf_boundary = false;
+    add_contraction_term = false;
+    use_fixed_centroid = false;
+    use_elastic_potential = false;
+    preserve_tet_vol = false;
+    add_area_term = true;
+    add_tet_vol_barrier = true;
+    add_yolk_tet_barrier = false;
+    use_face_centroid = true;
+    computeVolumeAllCells(cell_volume_init);
+
+
+
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    std::cout << "BBOX: " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    std::cout << "# system DoF: " << deformed.rows() << std::endl;
+    std::cout << "# cells: " << basal_face_start << std::endl;
 }
 
 void VertexModel::addTestPrism(int edge)
@@ -690,10 +712,14 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     // T a = 10.0, c = 3.5;
     // T a = 8.0, c = 3.0;
     
-    if (num_nodes < 2 * 1000)
+    if (resolution < 2)
     {
         a = 3.0; c = 1;
     }
+        
+    // else if (resolution == 2)
+    //     a = 8.0, c = 3.0;
+    
     for (int i = 0; i < basal_vtx_start; i++)
     {
         TV apex = deformed.segment<3>(i * 3);
@@ -766,14 +792,15 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
     edges.insert(edges.end(), basal_and_lateral_edges.begin(), basal_and_lateral_edges.end());
 
+    n_edges = edges.size();
     
     u = VectorXT::Zero(deformed.rows());
     f = VectorXT::Zero(deformed.rows());
     undeformed = deformed;
     n_cells = basal_face_start;
 
-    B = 1e6;
-    By = 1e5;
+    B = 1e4;
+    By = 1e4;
 
     contract_apical_face = false;
     use_cell_centroid = true;
@@ -800,7 +827,6 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         dirichlet_data[d] = 0.0;
     }
-
     
     computeVolumeAllCells(cell_volume_init);
 
@@ -851,6 +877,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     }
     // Gamma *= 0.01;
     assign_per_edge_weight = true;
+    contracting_type = ApicalOnly;
     if (assign_per_edge_weight)
     {
         int apical_edge_cnt = 0;
@@ -867,14 +894,22 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
                 ab_edge_cnt++;
             }
         }
-        if (contract_all_edges)
+        if (contracting_type == ALLEdges)
+        {
+            edge_weights.resize(n_edges);
+            edge_weights.setConstant(0.1);
+        }
+        else if (contracting_type == ApicalBasal)
+        {
             edge_weights.resize(ab_edge_cnt);
+            edge_weights.segment(0, apical_edge_cnt).setConstant(0.1);
+            edge_weights.segment(apical_edge_cnt, ab_edge_cnt - apical_edge_cnt).setConstant(gamma);
+        }
         else
+        {
             edge_weights.resize(apical_edge_cnt);
-        // edge_weights.setConstant(1.5);
-        // edge_weights.setConstant(0.3);
-        // edge_weights.setConstant(0.05); // optimize nuclei
-        edge_weights.setConstant(0.1);
+            edge_weights.segment(0, apical_edge_cnt).setConstant(0.1);
+        }
     }
 
     if (add_contraction_term)
@@ -1011,9 +1046,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
-        bound_coeff = 1e6;
+        bound_coeff = 1e2;
         
         T normal_offset = 1e-3;// * unit;
+        // T normal_offset = 0.1;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
         getInitialApicalSurface(vertices, indices);

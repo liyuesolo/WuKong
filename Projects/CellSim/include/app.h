@@ -44,6 +44,7 @@ protected:
     int compute_energy_cnt = 0;
     bool use_debug_color = false;
     int static_solve_step = 0;
+    bool show_edges = true;
 
     int opt_step = 0;
     bool check_modes = false;
@@ -109,7 +110,7 @@ private:
     bool show_edge_weights_opt = false;
     VectorXT edge_weights;
     float threshold = 1.0;
-    bool show_edges = true;
+    
     bool load_opt_state = false;
     bool load_debug_state = false;
     bool load_ls_state = false;
@@ -147,6 +148,7 @@ public:
 class DataViewerApp : public SimulationApp
 {
 public:
+    using Edge = Vector<int, 2>;
     DataIO data_io;
     MatrixXT cell_trajectories;
     bool raw_data = false;

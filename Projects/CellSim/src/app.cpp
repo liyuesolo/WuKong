@@ -372,6 +372,14 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
         case ' ':
             viewer.core().is_animating = true;
             return true;
+        case 's':
+            sa.optimizeOneStep(opt_step, sa.objective.default_optimizer);
+            updateScreen(viewer);
+            return true;
+        case 'd':
+            sa.simulation.staticSolve();
+            updateScreen(viewer);
+            return true;
         case 'a':
             viewer.core().is_animating = !viewer.core().is_animating;
             return true;
@@ -472,7 +480,8 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     TV max_corner, min_corner;
     simulation.cells.computeBoundingBox(min_corner, max_corner);
-    TV shift = TV(1.2 * (max_corner[0] - min_corner[0]), 0, 0);
+    // TV shift = TV(0, -1.2 * (max_corner[0] - min_corner[0]), 0);
+    TV shift = TV(0, -1.2 * (max_corner[1] - min_corner[1]), 0);
     T sphere_radius = 0.01 * (max_corner - min_corner).norm();
     simulation.generateMeshForRendering(V, F, C, show_current, show_rest, split, split_a_bit, yolk_only);
     if (use_debug_color)
@@ -487,6 +496,20 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             loadSVDMatrixV("cell_edge_weights_svd_vectors_V.txt");   
         appendCylinderToEdges(svd_V.col(modes), V, F, C);
     }
+
+    if (show_outside_vtx)
+    {
+        simulation.cells.getOutsideVtx(bounding_surface_samples, 
+            bounding_surface_samples_color, sdf_test_sample_idx_offset);
+        MatrixXT bounding_surface_samples_shifted = bounding_surface_samples;
+        tbb::parallel_for(0, (int)bounding_surface_samples.rows(), [&](int i)
+        {
+            bounding_surface_samples_shifted.row(i) += shift;
+        });
+
+        viewer.data().set_points(bounding_surface_samples_shifted, bounding_surface_samples_color);
+    }
+
     if (show_target)
     {
         TV color(1, 0, 0);
@@ -626,25 +649,35 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         // T epsilon = min_w + (max_w - min_w) * threshold;
         T epsilon = max_w;
         std::vector<std::pair<TV, TV>> end_points;
-        simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
-            TV from = simulation.deformed.segment<3>(edge[0] * 3);
-            TV to = simulation.deformed.segment<3>(edge[1] * 3);
-            // if (edge_weights[cnt] < epsilon)
-            // {
-            //     TV color = (edge_weights[cnt] - min_w) / (epsilon - min_w) * TV::Ones();
-            //     if (use_debug_color)
-            //         color.segment<2>(1).setZero();
-            //     appendCylinderToEdge(from, to, color, 0.01, V, F, C);
-            // }
-            // else
-            //     appendCylinderToEdge(from, to, TV(1, 1, 1), 0.01, V, F, C);
-            // if (edge_weights[cnt] < max_w - 1e-3)
-            //     appendCylinderToEdge(from, to, TV(1, 1, 0), 0.01, V, F, C);
-            T red = (edge_weights[cnt] - min_w) / (epsilon - min_w);
-            end_points.push_back(std::make_pair(from ,to));
-            colors.push_back(TV(1.0 * red, 0, 0));
-            cnt++;
-        });
+        if (simulation.cells.contracting_type == ApicalOnly)
+        {
+            simulation.cells.iterateApicalEdgeSerial([&](Edge& edge){
+                TV from = simulation.deformed.segment<3>(edge[0] * 3);
+                TV to = simulation.deformed.segment<3>(edge[1] * 3);
+                T red = (edge_weights[cnt] - min_w) / (epsilon - min_w);
+                end_points.push_back(std::make_pair(from ,to));
+                colors.push_back(TV(1.0 * red, 0, 0));
+                cnt++;
+            });
+        }
+        else
+        {
+            for (Edge& e : simulation.cells.edges)
+            {
+                bool apical = e[0] < simulation.cells.basal_vtx_start && e[1] < simulation.cells.basal_vtx_start;
+                bool basal = e[0] >= simulation.cells.basal_vtx_start && e[1] >= simulation.cells.basal_vtx_start;
+                if (apical || basal || simulation.cells.contracting_type == ALLEdges)
+                {
+                    TV from = simulation.deformed.segment<3>(e[0] * 3);
+                    TV to = simulation.deformed.segment<3>(e[1] * 3);
+                    T red = (edge_weights[cnt] - min_w) / (epsilon - min_w);
+                    end_points.push_back(std::make_pair(from ,to));
+                    colors.push_back(TV(1.0 * red, 0, 0));
+                    cnt++;
+                }
+            }
+        }
+            
 
         appendCylindersToEdges(end_points, colors, 0.01, V, F, C);
     }
@@ -821,6 +854,7 @@ void DiffSimApp::setMenu(igl::opengl::glfw::Viewer& viewer,
                 if (fname.length() != 0)
                 {
                     simulation.loadDeformedState(fname);
+                    sa.objective.checkDistanceMetrics();
                     updateScreen(viewer);
                 }
             }
@@ -1245,6 +1279,23 @@ void DataViewerApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     VectorXT frame_data;
     loadFrameData(frame_cnt, frame_data);
     V.resize(0, 0); F.resize(0, 0); C.resize(0, 0);
+    if (show_current)
+        simulation.generateMeshForRendering(V, F, C);
+    if (show_edges)
+    {
+        std::vector<TV> color;
+        int cnt = 0;
+        std::vector<std::pair<TV, TV>> end_points;
+        simulation.cells.iterateEdgeSerial([&](Edge& edge)
+        {
+            TV from = simulation.deformed.segment<3>(edge[0] * 3);
+            TV to = simulation.deformed.segment<3>(edge[1] * 3);
+            end_points.push_back(std::make_pair(from, to));
+            color.push_back(TV(0, 1, 1));
+            cnt++;
+        });
+        appendCylindersToEdges(end_points, color, 0.005, V, F, C);
+    }
     TV color = TV(0, 1, 0);
     appendSphereToPositionVector(frame_data, 0.025, color, V, F, C);
     viewer.data().set_mesh(V, F);
@@ -1265,8 +1316,13 @@ void DataViewerApp::loadFrameData(int frame, VectorXT& frame_data)
         TV pos = frame_data.segment<3>(i * 3);
         TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
         updated = R2 * R * updated;
-        // frame_data.segment<3>(i * 3) = updated * 0.8 * simulation.cells.unit; 
-        frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+        if (simulation.cells.resolution == 0)
+            frame_data.segment<3>(i * 3) = updated * 0.82 * simulation.cells.unit; 
+        else if (simulation.cells.resolution == 1)
+            frame_data.segment<3>(i * 3) = updated * 0.88 * simulation.cells.unit; 
+        else if (simulation.cells.resolution == 2)
+            frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+        // frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
     }
 }
 
@@ -1283,6 +1339,14 @@ void DataViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                     loadRawData();
                 else
                     loadFilteredData();
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowCurrent", &show_current))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("ShowEdges", &show_edges))
+            {
                 updateScreen(viewer);
             }
         }
