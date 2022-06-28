@@ -244,6 +244,7 @@ void Simulation::initializeCells()
     // verbose = true;
     cells.print_force_norm = true;
     // save_mesh = true;
+    // cells.project_block_hessian_PD = true;
     
 }
 void Simulation::reinitializeCells()
@@ -760,102 +761,109 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
     
-    // Timer t(true);
+    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = K;
+    Timer t(true);
+    Noether::CHOLMODSolver<long int> solver;
+    T alpha = 10e-6;
+    solver.set_pattern(K_prime);
     
-    // Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> solver;
-    // T alpha = 10e-6;
-    // solver.set_pattern(K);
-    // solver.analyze_pattern();    
-    // int i = 0;
-    // int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
-    // for (; i < 50; i++)
-    // {
-    //     if (!solver.factorize())
-    //     {
-    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-    //         // {
-    //         //     K.coeffRef(row, row) += alpha;
-    //         // }); 
-    //         K.diagonal().array() += alpha; 
-    //         alpha *= 10;
-    //         indefinite_count_reg_cnt++;
-    //         continue;
-    //     }
+    solver.analyze_pattern();    
+    
+    int i = 0;
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    for (; i < 50; i++)
+    {
+        if (!solver.factorize())
+        {
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K_prime.coeffRef(row, row) += alpha;
+            // }); 
+            K_prime.diagonal().array() += alpha; 
+            alpha *= 10;
+            indefinite_count_reg_cnt++;
+            continue;
+        }
+        
+        // sherman morrison
+        if (UV.cols() == 1)
+        {
+            VectorXT v = UV.col(0);
+            VectorXT A_inv_g = VectorXT::Zero(du.rows());
+            VectorXT A_inv_u = VectorXT::Zero(du.rows());
+            solver.solve(residual.data(), A_inv_g.data(), true);
+            solver.solve(v.data(), A_inv_u.data(), true);
 
-    //     // sherman morrison
-    //     if (UV.cols() == 1)
-    //     {
-    //         VectorXT v = UV.col(0);
-    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
-    //         VectorXT A_inv_u = VectorXT::Zero(du.rows());
-    //         solver.solve(residual.data(), A_inv_g.data(), true);
-    //         solver.solve(v.data(), A_inv_u.data(), true);
+            T dem = 1.0 + v.dot(A_inv_u);
 
-    //         T dem = 1.0 + v.dot(A_inv_u);
+            du.noalias() = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+        }
+        // UV is actually only U, since UV is the same in the case
+        // C is assume to be Identity
+        else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+        {
+            VectorXT A_inv_g = VectorXT::Zero(du.rows());
+            solver.solve(residual.data(), A_inv_g.data(), true);
+            // VectorXT A_inv_g = solver.solve(residual);
 
-    //         du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
-    //     }
-    //     // UV is actually only U, since UV is the same in the case
-    //     // C is assume to be Identity
-    //     else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-    //     {
-    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
-    //         solver.solve(residual.data(), A_inv_g.data(), true);
-    //         // VectorXT A_inv_g = solver.solve(residual);
-
-    //         MatrixXT A_inv_U(UV.rows(), UV.cols());
-    //         for (int col = 0; col < UV.cols(); col++)
-    //             solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
-    //             // A_inv_U.col(col) = solver.solve(UV.col(col));
+            MatrixXT A_inv_U(UV.rows(), UV.cols());
+            for (int col = 0; col < UV.cols(); col++)
+                solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
+                // A_inv_U.col(col) = solver.solve(UV.col(col));
             
-    //         MatrixXT C(UV.cols(), UV.cols());
-    //         C.setIdentity();
-    //         C += UV.transpose() * A_inv_U;
-    //         du = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
-    //     }
+            MatrixXT C(UV.cols(), UV.cols());
+            C.setIdentity();
+            C += UV.transpose() * A_inv_U;
+            du.noalias() = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+        }
         
 
-    //     T dot_dx_g = du.normalized().dot(residual.normalized());
+        T dot_dx_g = du.normalized().dot(residual.normalized());
 
-    //     int num_negative_eigen_values = 0;
-    //     int num_zero_eigen_value = 0;
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
 
-    //     bool positive_definte = num_negative_eigen_values == 0;
-    //     bool search_dir_correct_sign = dot_dx_g > 1e-3;
-    //     if (!search_dir_correct_sign)
-    //         invalid_search_dir_cnt++;
-    //     bool solve_success = ((K + UV * UV.transpose())*du - residual).norm() < 1e-6;
-    //     if (!solve_success)
-    //         invalid_residual_cnt++;
-    //     // std::cout << "PD: " << positive_definte << " direction " 
-    //     //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        if (!search_dir_correct_sign)
+            invalid_search_dir_cnt++;
+        bool solve_success = true;
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
 
-    //     if (positive_definte && search_dir_correct_sign && solve_success)
-    //     {
-    //         t.stop();
-    //         std::cout << "\t===== Linear Solve ===== " << std::endl;
-    //         std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-    //         std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-    //         std::cout << "\t# regularization step " << i 
-    //             << " indefinite " << indefinite_count_reg_cnt 
-    //             << " invalid search dir " << invalid_search_dir_cnt
-    //             << " invalid solve " << invalid_residual_cnt << std::endl;
-    //         std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-    //         std::cout << "\t======================== " << std::endl;
-    //         return true;
-    //     }
-    //     else
-    //     {
-    //         // K = H + alpha * I;       
-    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-    //         // {
-    //         //     K.coeffRef(row, row) += alpha;
-    //         // });  
-    //         K.diagonal().array() += alpha; 
-    //         alpha *= 10;
-    //     }
-    // }
-    // return false;
+        if (positive_definte && search_dir_correct_sign && solve_success)
+        {
+            t.stop();
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K_prime.nonZeros() << std::endl;
+                std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                std::cout << "\t======================== " << std::endl;
+                
+            }
+            return true;
+            
+        }
+        else
+        {
+            // K = H + alpha * I;       
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // });  
+            K.diagonal().array() += alpha; 
+            alpha *= 10;
+        }
+    }
+    return false;
 }
 
 
@@ -899,7 +907,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     MatrixXT UVT= UV.transpose();
     bool use_cholmod = true;
     Timer t(true);
-
+    // Eigen::SimplicialLLT<StiffnessMatrix> solver;
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     solver.pardisoParameterArray()[6] = 0;
     // solver.pardisoParameterArray()[59] = 1;
@@ -922,8 +930,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
 	iparm[26] = 1; // check matrix
 	iparm[34] = 1; // 0 based indexing
 
+
     T alpha = 10e-6;
     solver.analyzePattern(K);
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
     int i = 0;
     int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
     for (; i < 50; i++)
@@ -931,6 +942,8 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         // std::cout << i << std::endl;
 
         solver.factorize(K);
+        // T time_factorize = t.elapsed_sec() - time_analyze;
+        // std::cout << "\t factorize takes " << time_factorize << "s" << std::endl;
         // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
@@ -949,12 +962,14 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
         if (UV.cols() == 1)
         {
             VectorXT v = UV.col(0);
-            VectorXT A_inv_g = solver.solve(residual);
-            VectorXT A_inv_u = solver.solve(v);
+            MatrixXT rhs(K.rows(), 2); rhs.col(0) = residual; rhs.col(1) = v;
+            // VectorXT A_inv_g = solver.solve(residual);
+            // VectorXT A_inv_u = solver.solve(v);
+            MatrixXT A_inv_gu = solver.solve(rhs);
 
-            T dem = 1.0 + v.dot(A_inv_u);
+            T dem = 1.0 + v.dot(A_inv_gu.col(1));
 
-            du = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+            du.noalias() = A_inv_gu.col(0) - (A_inv_gu.col(0).dot(v)) * A_inv_gu.col(1) / dem;
         }
         // UV is actually only U, since UV is the same in the case
         // C is assume to be Identity
@@ -963,9 +978,10 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
             VectorXT A_inv_g = solver.solve(residual);
 
             MatrixXT A_inv_U(UV.rows(), UV.cols());
-            for (int col = 0; col < UV.cols(); col++)
-                A_inv_U.col(col) = solver.solve(UV.col(col));
-            
+            // for (int col = 0; col < UV.cols(); col++)
+                // A_inv_U.col(col) = solver.solve(UV.col(col));
+            A_inv_U = solver.solve(UV);
+
             MatrixXT C(UV.cols(), UV.cols());
             C.setIdentity();
             C += UVT * A_inv_U;

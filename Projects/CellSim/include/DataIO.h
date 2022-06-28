@@ -81,10 +81,16 @@ public:
         const std::string& float_data_file);
     
     void trackCells();
-    void loadTrajectories(const std::string& filename, MatrixXT& trajectories);
+    void processData();
+    void filterWithVelocity();
+    void loadTrajectories(const std::string& filename, MatrixXT& trajectories, bool filter = false);
+    void runStatsOnTrajectories(const MatrixXT& trajectories, const std::string& filename);
+    void loadData(const std::string& filename, VectorXT& data);
 
     DataIO() {}
     ~DataIO() {}
+
+
 };
 
 #endif

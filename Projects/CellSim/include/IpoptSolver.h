@@ -191,7 +191,8 @@ public:
         for (int i = 0; i < variable_num; i++)
             p_curr[i] = x[i];
 
-        
+        objective.saveDesignParameters(data_folder + "/tmp.txt", p_curr);
+        std::cout << "min : " << p_curr.minCoeff() << " max: " << p_curr.maxCoeff() << std::endl;
         // T E = objective.value(p_curr, true, true);
         // T E = objective.value(p_curr, new_x, true);
         T E;
@@ -204,7 +205,8 @@ public:
             else
                 E = objective.value(p_curr, false);
         }
-        objective.equilibrium_prev = objective.simulation.u;
+        if (E < 100)
+            objective.equilibrium_prev = objective.simulation.u;
         std::cout << "[ipopt] eval_f: " << E << std::endl;
         if (new_x)
         {
@@ -242,7 +244,7 @@ public:
         }
         // objective.gradient(p_curr, dOdp, O, true);
         objective.equilibrium_prev = objective.simulation.u;
-        std::cout << "forward simulation hessian eigen values: "; objective.simulation.checkHessianPD(false);
+        // std::cout << "forward simulation hessian eigen values: "; objective.simulation.checkHessianPD(false);
         tbb::parallel_for(0, variable_num, [&](int i) 
         {
             grad_f[i] = dOdp[i];

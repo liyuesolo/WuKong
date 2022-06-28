@@ -73,7 +73,6 @@ public:
     void initialize();
 
     void optimizeLBFGSB();
-    void optimizeLBFGS();
 
     int optimizeIPOPT();
 

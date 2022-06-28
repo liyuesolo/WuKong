@@ -8,9 +8,8 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 #include "../include/LinearSolver.h"
 #include <LBFGSB.h>
-#include <LBFGS.h>
+#include <filesystem>
 #include "../include/IpoptSolver.h"
-// #include <IpTNLP.hpp>
 
 void SensitivityAnalysis::setSimulationEnergyWeights()
 {
@@ -36,7 +35,7 @@ void SensitivityAnalysis::initialize()
     objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
     objective.bound[0] = 0.0;
     // objective.bound[1] = 20.0 * simulation.cells.unit;
-    objective.bound[1] = 30;
+    objective.bound[1] = 50;
     objective.mask[0] = true;
     objective.mask[1] = true;
     objective.equilibrium_prev = VectorXT::Zero(simulation.deformed.rows());
@@ -46,12 +45,6 @@ void SensitivityAnalysis::initialize()
     // simulation.cells.edge_weights.setConstant(0.1);
     objective.getDesignParameters(design_parameters);
     objective.prev_params = design_parameters;
-    for (int i = 0; i < n_dof_design; i++)
-    {
-        objective.prev_params[i] = objective.wrapper<0>(objective.prev_params[i]);
-    }
-    
-    
     std::cout << "# dof sim: " << n_dof_sim << " # dof design: " << n_dof_design << std::endl;
 }
 
@@ -414,7 +407,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     T g_norm = 0;
     T E0;
     VectorXT dOdp, dp;
-    bool abs_tol = true;
+    bool abs_tol = false;
 
     // mma 
     T mma_step_size = 1.0 * simulation.cells.unit;
@@ -525,11 +518,11 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             MatrixXT H_GN;
             objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
 
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            // Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
             // MatrixXT U = svd.matrixU();
-            VectorXT Sigma = svd.singularValues();
+            // VectorXT Sigma = svd.singularValues();
             // MatrixXT V = svd.matrixV();
-            std::cout << "\t[SQP] GN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
+            // std::cout << "\t[SQP] GN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
             // std::cout << "\t[SQP] GN Hessian singular values first: " << Sigma.head<5>().transpose() << std::endl;
 
             if (add_reg)
@@ -637,15 +630,19 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         {
             StiffnessMatrix Q, A;
             objective.SGNforQP(design_parameters, Q, A);
+            // std::ofstream out("Q.txt"); out << Q; out.close();
             Eigen::PardisoLLT<StiffnessMatrix> solver;
+            std::cout << "analyzePattern here" << std::endl;
             solver.analyzePattern(Q);
             T Q_reg_alpha = 1e-6;
             while (true)
             {
                 solver.factorize(Q);
+                std::cout << "factorize here" << std::endl;
                 if (solver.info() == Eigen::NumericalIssue)
                 {
                     Q.diagonal().array() += Q_reg_alpha;
+                    std::cout << "add reg here" << std::endl;
                     Q_reg_alpha *= 10.0;
                     continue;
                 }
@@ -695,7 +692,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                 out.open("ux.txt"); out << ux; out.close();
             };
 
-            saveQPData();
+            // saveQPData();
             // std::exit(0);
         }
         gn_timer.stop();
@@ -891,97 +888,33 @@ void SensitivityAnalysis::saveDesignParameters(const std::string& filename, cons
     out.close();
 }
 
-
-void SensitivityAnalysis::optimizeLBFGS()
-{
-    using namespace LBFGSpp;
-    int cnt = 0;
-    auto computeObjAndGradient = [&](const VectorXT& x, VectorXT& grad)
-    {
-        T energy = 0.0;
-        objective.updateDesignParameters(x);
-        objective.gradient(x, grad, energy, true);
-
-        // StiffnessMatrix mat_SGN;
-        // objective.hessianSGN(x, mat_SGN, /*simulate = */false);
-        
-        // VectorXT rhs_SGN(n_dof_design + n_dof_sim * 2);
-        // rhs_SGN.setZero();
-        // rhs_SGN.segment(n_dof_sim, n_dof_design) = -grad;
-        // VectorXT delta;
-        
-        
-        // PardisoLDLTSolver solver(mat_SGN, /*use_default=*/false);
-        // solver.setPositiveNegativeEigenValueNumber(n_dof_sim + n_dof_design, n_dof_sim);
-        // solver.setRegularizationIndices(n_dof_sim, n_dof_design);
-
-        // solver.solve(rhs_SGN, delta);
-        
-        // grad = -delta.segment(n_dof_sim, n_dof_design);
-
-        objective.saveState("output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".obj");
-        std::string filename = "output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".txt";
-        std::ofstream out(filename);
-        out << x << std::endl;
-        out.close();
-        std::cout << "[L-BFGS-G] iter " << cnt << " |g|: " << grad.norm() << " obj: " << energy << std::endl;
-        cnt++;
-        return energy;
-    };
-    
-    LBFGSParam param;
-    LBFGSSolver solver(param);
-
-    T fx;
-    int niter = solver.minimize(computeObjAndGradient, design_parameters, fx);
-}
-
 void SensitivityAnalysis::optimizeLBFGSB()
 {
-    using namespace LBFGSpp;
+    LBFGSB lbfgsb_solver;
+    VectorXT lower_bounds = VectorXT::Zero(n_dof_design);
+    VectorXT upper_bounds = VectorXT::Constant(n_dof_design, objective.bound[1]);
+    std::cout << objective.bound[1] << std::endl;
+
+    lbfgsb_solver.setBounds(lower_bounds, upper_bounds);
+
     int cnt = 0;
     auto computeObjAndGradient = [&](const VectorXT& x, VectorXT& grad)
     {
         T energy = 0.0;
         objective.updateDesignParameters(x);
-        objective.gradient(x, grad, energy, true);
-
-        // StiffnessMatrix mat_SGN;
-        // objective.hessianSGN(x, mat_SGN, /*simulate = */false);
-        
-        // VectorXT rhs_SGN(n_dof_design + n_dof_sim * 2);
-        // rhs_SGN.setZero();
-        // rhs_SGN.segment(n_dof_sim, n_dof_design) = -grad;
-        // VectorXT delta;
-        
-        
-        // PardisoLDLTSolver solver(mat_SGN, /*use_default=*/false);
-        // solver.setPositiveNegativeEigenValueNumber(n_dof_sim + n_dof_design, n_dof_sim);
-        // solver.setRegularizationIndices(n_dof_sim, n_dof_design);
-
-        // solver.solve(rhs_SGN, delta);
-        
-        // grad = -delta.segment(n_dof_sim, n_dof_design);
-
-        objective.saveState("output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".obj");
-        std::string filename = "output/cells/lbfgs/lbfgs_iter_" + std::to_string(cnt) + ".txt";
-        std::ofstream out(filename);
-        out << x << std::endl;
-        out.close();
-        std::cout << "[L-BFGS-G] iter " << cnt << " |g|: " << grad.norm() << " obj: " << energy << std::endl;
+        objective.gradient(x, grad, energy, true, true);
+        objective.equilibrium_prev = objective.simulation.u;
+        objective.saveState(data_folder + "/" + "lbfgs_iter_" + std::to_string(cnt) + ".obj");
+        std::string filename = data_folder + "/" + "lbfgs_iter_" + std::to_string(cnt) + ".txt";
+        saveDesignParameters(filename, x);
+        // std::cout << "[L-BFGS-G] iter " << cnt << " |g|: " << grad.norm() << " obj: " << energy << std::endl;
         cnt++;
         return energy;
     };
-    
-    LBFGSBParam<T> param;
-    LBFGSBSolver<T> solver(param);
 
-    T lower_bound = 0.001, upper_bound = 5.5 * simulation.cells.unit;
-    VectorXT lb = VectorXT::Constant(n_dof_design, lower_bound);
-    VectorXT ub = VectorXT::Constant(n_dof_design, upper_bound);
-
-    T fx;
-    int niter = solver.minimize(computeObjAndGradient, design_parameters, fx, lb, ub);
+    lbfgsb_solver.setObjective(computeObjAndGradient);
+    lbfgsb_solver.setX(design_parameters);
+    lbfgsb_solver.solve();
 }
 
 void SensitivityAnalysis::optimizeMMA()
@@ -1784,8 +1717,8 @@ int SensitivityAnalysis::optimizeIPOPT()
     app->Options()->SetNumericValue("tol", 1e-4);
     app->Options()->SetNumericValue("acceptable_tol", 1e-4);
     app->Options()->SetStringValue("mu_strategy", "monotone");
-    app->Options()->SetNumericValue("acceptable_obj_change_tol",  1e-5);
-    app->Options()->SetIntegerValue("max_iter",  1000);
+    app->Options()->SetNumericValue("acceptable_obj_change_tol",  1e-4);
+    app->Options()->SetIntegerValue("max_iter",  300);
     // app->Options()->SetStringValue("mu_strategy", "adaptive");
     app->Options()->SetStringValue("output_file", data_folder + "/ipopt_frame_" + std::to_string(objective.frame) + ".out");
 
@@ -1867,6 +1800,7 @@ void SensitivityAnalysis::saveConfig()
 void SensitivityAnalysis::runTracking(int start_frame, int end_frame, 
     bool load_weights, const std::string& filename)
 {
+    simulation.max_newton_iter = 300;
     objective.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
     
     objective.match_centroid = false;
@@ -1875,7 +1809,7 @@ void SensitivityAnalysis::runTracking(int start_frame, int end_frame,
     objective.power = 2;
     
     objective.add_reg = true;
-    objective.reg_w = 1e-6;
+    objective.reg_w = 1e-5;
     add_reg = !objective.add_reg;
     reg_w_H = 1e-6;
     objective.use_penalty = false;
@@ -1893,7 +1827,7 @@ void SensitivityAnalysis::runTracking(int start_frame, int end_frame,
     simulation.verbose = false;
     
     objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
-    objective.bound[0] = 1e-5;
+    objective.bound[0] = 0;
     objective.bound[1] = 40;
     objective.equilibrium_prev = VectorXT::Zero(simulation.deformed.rows());
 
@@ -1907,12 +1841,14 @@ void SensitivityAnalysis::runTracking(int start_frame, int end_frame,
         simulation.cells.edge_weights.setConstant(0.01);
         objective.prev_params = simulation.cells.edge_weights;
     }
-    
+    std::string base_folder = data_folder;
     for (int frame_id = start_frame; frame_id < end_frame + 1; frame_id++)
     {
         std::cout << "################################## FRAME " << frame_id << " ##################################" << std::endl;
         objective.setFrame(frame_id);
         std::string weights_filename = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
+        std::filesystem::create_directories(base_folder + "/" + std::to_string(frame_id));
+        data_folder = base_folder + "/" + std::to_string(frame_id);
         if (simulation.cells.resolution == 0)
             weights_filename += "weights_124.txt";
         else if (simulation.cells.resolution == 1)

@@ -1,8 +1,11 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/project.h>
 #include <igl/unproject_on_plane.h>
+#include <igl/axis_angle_to_quat.h>
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+#include <igl/png/writePNG.h>
+#include <igl/trackball.h>
 #include <imgui/imgui.h>
 
 
@@ -19,7 +22,7 @@ using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
 using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-
+using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 // SensitivityAnalysis sa(simulation, obj_find_init);
 
 
@@ -55,13 +58,15 @@ int main(int argc, char** argv)
     // std::exit(0);
     std::string data_folder = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/";
     DataIO data_io;
-    auto loadDrosophilaData = [&]()
+    auto processDrosophilaData = [&]()
     {
         // data_io.loadDataFromTxt("/home/yueli/Downloads/drosophila_data/drosophila_side_2_tracks_071621.txt");
         data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
             "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
             "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
-        data_io.trackCells();
+        // data_io.trackCells();
+        // data_io.processData();
+        data_io.filterWithVelocity();
     };
 
     auto registerMesh = [&]()
@@ -83,10 +88,6 @@ int main(int argc, char** argv)
     simulation.cells.tet_vol_barrier_w = 1e-22;
     simulation.newton_tol = 1e-6;
     simulation.max_newton_iter = 2000;
-    
-    simulation.cells.bound_coeff = 1e6;
-    simulation.cells.add_perivitelline_liquid_volume = false;
-    simulation.cells.Bp = 0.0;
     
     sa.max_num_iter = 2000;
 
@@ -144,10 +145,15 @@ int main(int argc, char** argv)
     {
         simulation.cells.resolution = 1;
         simulation.initializeCells();
+        simulation.cells.edge_weights.setConstant(0.01);
         simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
-        obj.setFrame(40);
-        obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat");
+        simulation.cells.tet_vol_barrier_w = 1e-10;
+        simulation.cells.add_perivitelline_liquid_volume = false;
+        simulation.cells.Bp = 0.0;
+        // simulation.cells.bound_coeff = 1e6;
+        obj.setFrame(30);
+        obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
         
         std::string weights_filename = data_folder;
         if (simulation.cells.resolution == 0)
@@ -155,8 +161,12 @@ int main(int argc, char** argv)
         else if (simulation.cells.resolution == 1)
             weights_filename += "weights_463.txt";
         else if (simulation.cells.resolution == 2)
+        {
             weights_filename += "weights_1500.txt";
-        obj.loadWeightedCellTarget(weights_filename);
+            // simulation.cells.tet_vol_barrier_w = 1e-31;
+        }
+
+        obj.loadWeightedCellTarget(weights_filename, /*use_all_points = */ false);
         
         // obj.filterTrackingData3X2F();
                 
@@ -167,11 +177,9 @@ int main(int argc, char** argv)
         
         obj.power = 2;
         obj.w_fp = 1e-2;
+        
         if (obj.power == 4)
-        {
-            // obj.w_fp = 1e-4;
-            // obj.w_data = 1e4;
-        }
+            obj.w_data *= 1e3;
         // obj.w_data = 1e-4;
         obj.add_spatial_regularizor = true;
         if (obj.add_spatial_regularizor)
@@ -195,9 +203,12 @@ int main(int argc, char** argv)
         else
             obj.setOptimizer(SQP);
 
-        sa.initialize();
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/842/p_ipopt.txt", simulation.cells.edge_weights);
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/842/x_ipopt.obj");
+        sa.initialize(); 
         sa.saveConfig();
-        sa.optimizeIPOPT();
+        // sa.optimizeIPOPT();
+        sa.optimizeLBFGSB();
         int iter = 449;
         int exp_id = 606;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/x_ipopt.obj");
@@ -213,6 +224,29 @@ int main(int argc, char** argv)
         simulation.cells.use_test_mesh = true;
         simulation.initializeCells();   
     }
+    else if (test_case == 5)
+    {
+        std::string folder = "/home/yueli/Documents/ETH/WuKong/output/cells/video_data/";
+        simulation.cells.resolution = 1;
+        simulation.initializeCells();
+        int global_cnt = 0;
+        for (int i = 30; i < 40; i++)
+        {
+            // simulation.loadDeformedState(folder + "frame_"+std::to_string(i)+".obj");
+            // VectorXT xi = simulation.deformed;
+            // simulation.loadDeformedState(folder + "frame_"+std::to_string(i+1)+".obj");
+            // VectorXT xj = simulation.deformed; 
+            // int step = 25;
+            // VectorXT dx = (xj - xi) / T(step);
+            // for (int j = 0; j < step; j++)
+            // {
+            //     simulation.deformed = xi + T(j) * dx;
+            //     simulation.saveState(folder + "sub/" + std::to_string(global_cnt)+".obj");
+            //     global_cnt++;
+            // }   
+        }
+        
+    }
 
     
     igl::opengl::glfw::Viewer viewer;
@@ -224,10 +258,10 @@ int main(int argc, char** argv)
     {
         SimulationApp sim_app(simulation);
         
-        int iter = 42;
-        int exp_id = 694;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_"+std::to_string(iter)+".obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
+        int iter = 3;
+        int exp_id = 838;
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
         // simulation.newton_tol = 1e-8;
         // simulation.cells.edge_weights.setConstant(0.1);
         sim_app.setViewer(viewer, menu);
@@ -313,25 +347,125 @@ int main(int argc, char** argv)
         viewer.launch();
     };
 
-    auto runSequentialTracking = [&]()
+    auto renderScene = [&]()
     {
+        // RendererApp render_app(simulation);
+        // render_app.setViewer(viewer, menu);
+        // viewer.launch();
+        DiffSimApp diff_sim_app(simulation, sa);
+        // diff_sim_app.setViewer(viewer, menu);
+        diff_sim_app.show_target = false;
+        diff_sim_app.show_target_current = false;
+        diff_sim_app.show_edges = false;
+        diff_sim_app.use_debug_color = true;
 
+        viewer.launch_init();
+        viewer.core().camera_zoom *= 0.8;
+        // Eigen::Quaternionf rot_quat(Eigen::AngleAxisf(float(-M_PI /2.0), Eigen::Vector3f(1, 0, 0)));
+        Eigen::Quaternionf rot_quat(Eigen::AngleAxisf(float(-M_PI /2.0), Eigen::Vector3f(1, 0, 0)));
+        Eigen::Quaternionf rot_quat2(Eigen::AngleAxisf(float(-M_PI /2.0), Eigen::Vector3f(0, 1, 0)));
+
+        // viewer.core().trackball_angle = rot_quat;
+        std::string folder = "/home/yueli/Documents/ETH/WuKong/output/cells/video_data/";
+        // simulation.cells.resolution = 1;
+        // simulation.initializeCells();
+        int global_cnt = 0;
+        for (int i = 30; i < 40; i++)
+        {
+            simulation.loadDeformedState(folder + "frame_"+std::to_string(i)+".obj");
+            VectorXT wi, wj;
+            simulation.loadEdgeWeights(folder+ + "frame_"+std::to_string(i) + ".txt", wi);
+            VectorXT xi = simulation.deformed;
+            simulation.loadDeformedState(folder + "frame_"+std::to_string(i+1)+".obj");
+            simulation.loadEdgeWeights(folder+ + "frame_"+std::to_string(i) + ".txt", wj);
+            std::cout << wj.sum() / T(wj.rows()) << std::endl;
+            VectorXT xj = simulation.deformed; 
+            int step = 25;
+            VectorXT dx = (xj - xi) / T(step);
+            VectorXT dp = (wj - wi) / T(step);
+            for (int j = 0; j < step; j++)
+            {
+                std::cout << global_cnt << std::endl;
+                simulation.deformed = xi + T(j) * dx;
+                // simulation.deformed = simulation.undeformed;
+                diff_sim_app.edge_weights = wi + T(j) * dp;
+                diff_sim_app.show_edge_weights_opt = true;
+                int width = 2000, height = 2000;
+                CMat R(width,height), G(width,height), B(width,height), A(width,height);
+                // viewer.data().clear();
+                // Eigen::MatrixXd V, C; Eigen::MatrixXi F;
+                // simulation.generateMeshForRendering(V, F, C);
+                // viewer.data().set_mesh(V, F);
+                // viewer.data().set_colors(C);  
+                viewer.core().background_color.setOnes();
+                viewer.data().set_face_based(true);
+                viewer.data().shininess = 1.0;
+                viewer.data().point_size = 10.0;
+
+                // viewer.data().set_mesh(V, F);     
+                // viewer.data().set_colors(C);
+                
+                // viewer.core().align_camera_center(V);
+                diff_sim_app.updateScreen(viewer);
+                
+                
+
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                global_cnt++;
+                igl::png::writePNG(R,G,B,A, folder + "sub/imgs/"+std::to_string(global_cnt)+".png");
+                // std::exit(0);
+            }       
+            
+        }
+        viewer.launch_shut();
+        
+    };
+
+    auto renderData = [&]()
+    {
+        DataViewerApp data_viewer_app(simulation);
+        // data_viewer_app.connect_neighbor = true;
+        data_viewer_app.setViewer(viewer, menu);
+        int width = 3000, height = 2600;
+        viewer.launch_init(true, false, "wukong", width, height);
+        // Eigen::Quaternionf rot_quat(Eigen::AngleAxisf(float(-M_PI /2.0), Eigen::Vector3f(1, 0, 0)));
+        Eigen::Quaternionf rot_quat(Eigen::AngleAxisf(float(M_PI), Eigen::Vector3f(0, 1, 0)));
+        // Eigen::Quaternionf rot_quat2(Eigen::AngleAxisf(float(M_PI /8.0), Eigen::Vector3f(1, 0, 0)));
+        
+        viewer.core().trackball_angle = rot_quat;
+        // viewer.core().camera_zoom *= 2.2;
+        // viewer.core().toggle(viewer.data().show_lines);
+        std::string folder = "/home/yueli/Documents/ETH/WuKong/output/cells/stats/voronoi/";
+        for (int frame = 0; frame < 41; frame++)
+        {
+            CMat R(width,height), G(width,height), B(width,height), A(width,height);
+            data_viewer_app.frame_cnt = frame;
+            data_viewer_app.updateScreen(viewer);
+            viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+            A.setConstant(255);
+            igl::png::writePNG(R,G,B,A, folder +std::to_string(frame)+"_lateral_view2.png");
+        }
+        
     };
 
     if (argc == 1)
     {
+        // renderData();
+        // processDrosophilaData();
         // visualizeData();
-        runSA();
-        // runSim();
+        // runSA();
+        runSim();
         // generateNucleiGT();
         // generateWeights();
+        // renderScene();
     }
     else if (argc > 1)
     {
         // sa.saveConfig();
         // sa.optimizeIPOPT();
         runSA();
-        // sa.runTracking(0, 40, /*load weights = */false, /*weigts_file = */"");
+        // sa.runTracking(28, 45, /*load weights = */false, /*weigts_file = */"");
     }
 
     

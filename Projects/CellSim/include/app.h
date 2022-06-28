@@ -16,15 +16,18 @@ class Simulation;
 class SensitivityAnalysis;
 class DataIO;
 
+
 class SimulationApp
 {
 public:
     using TV = Vector<double, 3>;
     using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
+    using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
     using IV = Vector<int, 3>;
     using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
 
-protected:
+public:
     Simulation& simulation;
 
     bool show_rest = false;
@@ -91,6 +94,9 @@ public:
     virtual void appendSphereToPositionVector(const VectorXT& position, T radius, const TV& color,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
     
+    virtual void appendSphereToPositionVector(const VectorXT& position, T radius, const Eigen::MatrixXd& color,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
 public:
     SimulationApp(Simulation& _simulation) : simulation(_simulation) {}
     ~SimulationApp() {}
@@ -100,7 +106,7 @@ class DiffSimApp : public SimulationApp
 {
 public:
     using Edge = Vector<int, 2>;
-private:
+public:
     SensitivityAnalysis& sa;
     int opt_step = 0;
     bool show_edge_weights = false;
@@ -149,10 +155,25 @@ class DataViewerApp : public SimulationApp
 {
 public:
     using Edge = Vector<int, 2>;
+    
     DataIO data_io;
     MatrixXT cell_trajectories;
     bool raw_data = false;
+    bool show_trajectory = false;
+    bool connect_neighbor = false;
+    bool save_neighbor = false;
+    bool show_voronoi_diagram = false;
+    bool fake_voronoi = false;
+    bool animate_neighbor_group = false;
     int frame_cnt = 0;
+    SpatialHash hash;
+    std::vector<Edge> adj_edges;
+
+    Eigen::MatrixXd voronoi_samples;
+    Eigen::MatrixXd voronoi_samples_colors;
+
+    std::vector<TV> cell_colors;
+    std::vector<int> valid_cell_indices;
 public:
     void loadRawData();
     
@@ -163,8 +184,30 @@ public:
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
 
+    void checkConnectivity();
+    void checkNeighborhoodIndices();
+    void checkIntersection();
+    void checkLocalDistanceOverTime();
+    void writePointCloud();
+    void pickValidCellTrajectory(int start_frame, int end_frame);
+
+    void sampleSphere(const TV& center, T radius, int n_samples, std::vector<TV>& samples);
+
+    template <typename Type>
+    void loadDataFromFile(const std::string& filename, Matrix<Type, Eigen::Dynamic, 1>& data)
+    {
+        Type entry;
+        std::ifstream in(filename);
+        std::vector<Type> data_vec;
+        while (in >> entry)
+            data_vec.push_back(entry);
+        data = Eigen::Map<Matrix<Type, Eigen::Dynamic, 1>>(data_vec.data(), data_vec.size());
+        in.close();
+    }
+
     DataViewerApp(Simulation& _simulation) : SimulationApp(_simulation) {}
     ~DataViewerApp() {}
 };
+
 
 #endif

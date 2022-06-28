@@ -282,7 +282,7 @@ public:
 
     void initializeTarget();
 
-    void loadTargetTrajectory(const std::string& filename);
+    void loadTargetTrajectory(const std::string& filename, bool filer = false);
 
     bool getTargetTrajectoryFrame(VectorXT& frame_data);
     void updateTarget();
@@ -292,7 +292,7 @@ public:
     void optimizeForStableTargetDeformationGradient(T perturbation);
     void loadTarget(const std::string& filename, T perturbation = 0.0);
     void loadWeightedTarget(const std::string& filename);
-    void loadWeightedCellTarget(const std::string& filename);
+    void loadWeightedCellTarget(const std::string& filename, bool use_all_points = false);
     void filterTrackingData3X2F();
     void filterTrackingData3X3F();
     void setTargetObjWeights();

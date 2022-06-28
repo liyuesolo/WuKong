@@ -1,7 +1,7 @@
 #include "../include/VertexModel.h"
 #include "../include/LinearSolver.h"
 #include "../include/autodiff/EdgeEnergy.h"
-
+#include "../../../Solver/CHOLMODSolver.hpp"
 #include <Eigen/PardisoSupport>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
@@ -205,17 +205,33 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
             dfdp(data.first, i) = 0;
     
     dxdp.resize(num_nodes * 3, edge_weights.rows());
-    dxdp.setZero();
+    dxdp.setZero(); 
     StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
     buildSystemMatrix(u, d2edx2);
     // Timer ttt(true);
-    Eigen::PardisoLLT<StiffnessMatrix> solver;
-    solver.analyzePattern(d2edx2);
-    solver.factorize(d2edx2);
+
+    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = d2edx2;
+    Noether::CHOLMODSolver<long int> solver;
+    solver.set_pattern(K_prime);
+    solver.analyze_pattern();
+    solver.factorize();
     for (int i = 0; i < cnt; i++)
     {
-        dxdp.col(i) = solver.solve(dfdp.col(i));
+        VectorXT res = VectorXT::Zero(dfdp.rows()), rhs = dfdp.col(i);
+        solver.solve(rhs.data(), res.data(), true);
+        dxdp.col(i) = res;
     }
+        
+    // Eigen::PardisoLLT<StiffnessMatrix> solver;
+    // solver.analyzePattern(d2edx2);
+    // solver.factorize(d2edx2);
+    // dxdp = solver.solve(dfdp);
+    
+    for (int i = 0; i < cnt; i++)
+        for (auto data : dirichlet_data)
+        {
+            dxdp(data.first, i) = 0;
+        }
 }
 
 void VertexModel::computededp(VectorXT& dedp)
