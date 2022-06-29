@@ -18,6 +18,8 @@
 #include "../include/DataIO.h"
 #include "../include/GeometryHelper.h"
 
+
+
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
 using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
@@ -143,16 +145,16 @@ int main(int argc, char** argv)
     }
     else if (test_case == 2)
     {
-        simulation.cells.resolution = 1;
+        simulation.cells.resolution = 3;
         simulation.initializeCells();
-        simulation.cells.edge_weights.setConstant(0.01);
+        // simulation.cells.edge_weights.setConstant(0.01);
         simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
         simulation.cells.tet_vol_barrier_w = 1e-10;
         simulation.cells.add_perivitelline_liquid_volume = false;
         simulation.cells.Bp = 0.0;
         // simulation.cells.bound_coeff = 1e6;
-        obj.setFrame(30);
+        obj.setFrame(40);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
         
         std::string weights_filename = data_folder;
@@ -208,7 +210,7 @@ int main(int argc, char** argv)
         sa.initialize(); 
         sa.saveConfig();
         // sa.optimizeIPOPT();
-        sa.optimizeLBFGSB();
+        // sa.optimizeLBFGSB();
         int iter = 449;
         int exp_id = 606;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/x_ipopt.obj");
@@ -220,8 +222,7 @@ int main(int argc, char** argv)
     }
     else if (test_case == 4)
     {
-        simulation.cells.resolution = -1;
-        simulation.cells.use_test_mesh = true;
+        simulation.cells.resolution = 1;
         simulation.initializeCells();   
     }
     else if (test_case == 5)

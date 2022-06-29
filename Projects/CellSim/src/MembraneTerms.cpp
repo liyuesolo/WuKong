@@ -9,18 +9,30 @@ void VertexModel::addMembraneSDFBoundEnergy(T& energy)
 {
     T sdf_energy = 0.0;
     int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
-    for (int i = 0; i < n_vtx; i++)
-    {
+    VectorXT energies(n_vtx);
+    energies.setZero();
+    tbb::parallel_for(0, n_vtx, [&](int i){
         TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi) && !run_diff_test)
-            continue;
+            return;
         if (cubic)
-            sdf_energy += bound_coeff * std::pow(sdf.value(xi), 3);
+            energies[i] += bound_coeff * std::pow(sdf.value(xi), 3);
         else
-            sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
+            energies[i] += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
+    });
+    // for (int i = 0; i < n_vtx; i++)
+    // {
+    //     TV xi = deformed.segment<3>(i * 3);
+    //     if (sdf.inside(xi) && !run_diff_test)
+    //         continue;
+    //     if (cubic)
+    //         sdf_energy += bound_coeff * std::pow(sdf.value(xi), 3);
+    //     else
+    //         sdf_energy += 0.5 * bound_coeff * std::pow(sdf.value(xi), 2);
         
-    }
-    energy += sdf_energy;
+    // }
+    // energy += sdf_energy;
+    energy += energies.sum();
 }
 
 void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
@@ -28,12 +40,27 @@ void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
     
     int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
     int outside_cnt = 0;
-    for (int i = 0; i < n_vtx; i++)
-    {
-        TV xi = deformed.segment<3>(i * 3);
+    // for (int i = 0; i < n_vtx; i++)
+    // {
+    //     TV xi = deformed.segment<3>(i * 3);
 
+    //     if (sdf.inside(xi) && !run_diff_test)
+    //         continue;
+    //     outside_cnt++;
+    //     Vector<T, 3> dedx;
+    //     sdf.gradient(xi, dedx);
+    //     T value = sdf.value(xi);
+    //     if (cubic)
+    //         addForceEntry<3>(residual, {i}, -3.0 * bound_coeff * std::pow(value, 2) * dedx);
+    //     else
+    //         addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
+    //     // std::cout << "force norm " << dedx.norm() << std::endl;
+    //     // std::getchar();
+    // }
+    tbb::parallel_for(0, n_vtx, [&](int i){
+        TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi) && !run_diff_test)
-            continue;
+            return;
         outside_cnt++;
         Vector<T, 3> dedx;
         sdf.gradient(xi, dedx);
@@ -42,9 +69,7 @@ void VertexModel::addMembraneSDFBoundForceEntries(VectorXT& residual)
             addForceEntry<3>(residual, {i}, -3.0 * bound_coeff * std::pow(value, 2) * dedx);
         else
             addForceEntry<3>(residual, {i}, -bound_coeff * value * dedx);
-        // std::cout << "force norm " << dedx.norm() << std::endl;
-        // std::getchar();
-    }
+    });
     // std::cout << "[SDF force ]" << outside_cnt << "/" << n_vtx << " are outside the sdf" << std::endl;
 }
 
@@ -52,12 +77,11 @@ void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries,
 {
     int n_vtx = check_all_vtx_membrane ? num_nodes : basal_vtx_start;
 
-    for (int i = 0; i < n_vtx; i++)
-    {
+    std::vector<Matrix<T, 3, 3>> sub_hessian(n_vtx, Matrix<T, 3, 3>::Zero());
+    tbb::parallel_for(0, n_vtx, [&](int i){
         TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi) && !run_diff_test)
-        // if (sdf.inside(xi))
-            continue;
+            return;
         Matrix<T, 3, 3> d2phidx2;
         sdf.hessian(xi, d2phidx2);
         Vector<T, 3> dphidx;
@@ -71,8 +95,32 @@ void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries,
         
         if (projectPD) 
             projectBlockPD<3>(hessian);
-        addHessianEntry<3>(entries, {i}, hessian);    
-    }
+        sub_hessian[i] = hessian;
+    });
+    for (int i = 0; i < n_vtx; i++)
+        addHessianEntry<3>(entries, {i}, sub_hessian[i]);    
+
+    // for (int i = 0; i < n_vtx; i++)
+    // {
+    //     TV xi = deformed.segment<3>(i * 3);
+    //     if (sdf.inside(xi) && !run_diff_test)
+    //     // if (sdf.inside(xi))
+    //         continue;
+    //     Matrix<T, 3, 3> d2phidx2;
+    //     sdf.hessian(xi, d2phidx2);
+    //     Vector<T, 3> dphidx;
+    //     sdf.gradient(xi, dphidx);
+    //     T value = sdf.value(xi);
+    //     Matrix<T, 3, 3> hessian;
+    //     if (cubic)       
+    //         hessian = bound_coeff * (6.0 * value * dphidx * dphidx.transpose() + 3.0 * value * value * d2phidx2);
+    //     else
+    //         hessian = bound_coeff * (dphidx * dphidx.transpose() + value * d2phidx2);
+        
+    //     if (projectPD) 
+    //         projectBlockPD<3>(hessian);
+    //     addHessianEntry<3>(entries, {i}, hessian);    
+    // }
 }
 
 void VertexModel::addMembraneBoundEnergy(T& energy)

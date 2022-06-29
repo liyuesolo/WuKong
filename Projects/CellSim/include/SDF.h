@@ -70,7 +70,7 @@ public:
     VectorXT data_point_normals;
     VectorXT radii;
     T search_radius;
-
+    T ref_dis = 0.1;
     SpatialHash hash;
 
 private:
@@ -82,6 +82,7 @@ private:
 
     void computeBBox();
 public:
+    void setRefDis(T _ref_dis) { ref_dis = _ref_dis; }
     T value(const TV& test_point);
     void gradient(const TV& test_point, TV& dphidx);
     void hessian(const TV& test_point, TM& d2phidx2);

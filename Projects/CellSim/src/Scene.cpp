@@ -1063,9 +1063,15 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             TV normal = (xk - xj).normalized().cross((xi - xj).normalized()).normalized();
             vtx_normals.segment<3>(offset + i * 3) = -normal;
         }
+        
+        TV v0 = deformed.segment<3>(edges[0][0] * 3);
+        TV v1 = deformed.segment<3>(edges[0][1] * 3);
+        T ref_spacing = (v1 - v0).norm();
+        // ref_spacing = 0.4;
+        // std::cout << ref_spacing << std::endl;
+        // std::getchar();
+        sdf.setRefDis(ref_spacing);
         sdf.initializedMeshData(vertices, indices, vtx_normals, normal_offset);
-        // sdfFromHighResDualMesh("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_embryo_4k.obj");
-        // std::cout << "total volume " << total_volume << std::endl;
         
         VectorXT vtx_normal_all = vtx_normals.segment(0, basal_vtx_start * 3);
         vtx_normal_all.conservativeResize(num_nodes * 3);

@@ -496,6 +496,13 @@ public:
     VectorXT tet_vol_init;
 
     std::unordered_map<Edge, int, VectorHash<2>> lateral_edge_face_map;
+    
+    bool use_pre_build_structure = false;
+    std::unordered_map<IV2, std::ptrdiff_t, VectorHash<2>> ij_to_value_array;
+    std::unordered_map<uint64_t, std::ptrdiff_t> ijv;
+    std::vector<StorageIndex> inner_indices, outer_indices;
+    std::vector<T> val;
+    StiffnessMatrix Hessian_copy;
 
     int num_nodes;
     int basal_vtx_start;
@@ -624,6 +631,8 @@ public:
         const std::unordered_map<int, T>& data);
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     void buildSystemMatrixWoodbury(const VectorXT& _u, 
+        StiffnessMatrix& K, MatrixXT& UV);
+    void buildSystemMatrixWoodburyFaster(const VectorXT& _u, 
         StiffnessMatrix& K, MatrixXT& UV);
     T computeTotalEnergy(const VectorXT& _u, bool verbose = false, bool add_to_deform = true);
     T computeResidual(const VectorXT& _u,  VectorXT& residual, bool verbose = false);
@@ -848,19 +857,87 @@ public:
     {
         if (vtx_idx.size() * 3 != dim)
             std::cout << "wrong hessian block size" << std::endl;
+        // int n_curr = triplets.size();
+        // triplets.resize(n_curr + vtx_idx.size() * vtx_idx.size() * 3 * 3);
 
-        for (int i = 0; i < vtx_idx.size(); i++)
+        std::vector<uint64_t> keys(vtx_idx.size() * vtx_idx.size() * 3 * 3);
+        std::vector<T> values(vtx_idx.size() * vtx_idx.size() * 3 * 3);
+        std::vector<Entry> local_triplets(vtx_idx.size() * vtx_idx.size() * 3 * 3);
+
+        auto offset = [&](int i, int j, int k, int l) -> int
         {
-            int dof_i = vtx_idx[i];
-            for (int j = 0; j < vtx_idx.size(); j++)
+            return i * vtx_idx.size() * 3 * 3 + j * 3 * 3 + k * 3 + l;
+        };
+
+        if (use_pre_build_structure)
+        {
+            // tbb::parallel_for(0, (int)vtx_idx.size(), [&](int i){
+            for (int i = 0; i < vtx_idx.size(); i++){
+                int dof_i = vtx_idx[i];
+                for (int j = 0; j < vtx_idx.size(); j++)
+                {
+                    int dof_j = vtx_idx[j];
+                    for (int k = 0; k < 3; k++)
+                        for (int l = 0; l < 3; l++)
+                        {
+                            // if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
+                            {
+                                // if (use_pre_build_structure)
+                                {
+                                    // IV2 idx(dof_i * 3 + k, dof_j * 3 + l);
+                                    // auto idx = std::make_pair(dof_i * 3 + k, dof_j * 3 + l);
+                                    uint64_t lower_bit = dof_i * 3 + k;
+                                    uint64_t upper_bit = dof_j * 3 + l;
+                                    uint64_t whole = upper_bit << 32 | lower_bit;
+                                    // if (ij_to_value_array.find(idx) != ij_to_value_array.end())
+                                    {
+                                        // std::ptrdiff_t ptr_diff = ij_to_value_array[idx];
+                                        // std::ptrdiff_t ptr_diff = ijv[whole];
+                                        
+                                        // *(&val[0] + ptr_diff) += hessian(i * 3 + k, j * 3 + l);
+                                        keys[offset(i, j, k, l)] = whole;
+                                        values[offset(i, j, k, l)] = hessian(i * 3 + k, j * 3 + l);
+                                        local_triplets[offset(i, j, k, l)] = Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l));
+                                    }
+                                    // else
+                                    // {
+                                    //     use_pre_build_structure = false;
+                                    // }
+                                }
+                                // triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
+                                // local_triplets[i * 3 + k, j * 3 + l] = Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l));
+                            }
+                        }
+                }
+            }
+            
+            tbb::parallel_for(0, (int)values.size(), [&](int i){
+                *(&val[0] + ijv[keys[i]]) += values[i];
+            });
+            // triplets.insert(triplets.end(), local_triplets.begin(), local_triplets.end());
+        }
+        else
+        {
+            int cnt = 0;
+            for (int i = 0; i < vtx_idx.size(); i++)
             {
-                int dof_j = vtx_idx[j];
-                for (int k = 0; k < 3; k++)
-                    for (int l = 0; l < 3; l++)
-                    {
-                        if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
-                            triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
-                    }
+                int dof_i = vtx_idx[i];
+                for (int j = 0; j < vtx_idx.size(); j++)
+                {
+                    int dof_j = vtx_idx[j];
+                    if (j >= i) continue;
+                    for (int k = 0; k < 3; k++)
+                        for (int l = 0; l < 3; l++)
+                        {
+                            if (l >= k) continue;
+                            if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
+                            {
+                                // triplets[n_curr + cnt] = Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l));
+                                // cnt++;
+                                triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
+                            }
+                        }
+                }
             }
         }
     }

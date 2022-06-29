@@ -33,10 +33,11 @@ void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices
     n_points = vertices.rows() / 3;
     data_points = vertices;
     data_point_normals = normals;
-    T h = 0.1;
+    // T h = 0.1;
+    T h = ref_dis;
     radii = VectorXT::Ones(n_points) * h;
     data_points += normals * epsilon;
-    hash.build(h * 4.0, data_points); 
+    hash.build(h * 2.0, data_points); 
     computeBBox();
 }   
 
@@ -55,7 +56,8 @@ T IMLS::value(const TV& test_point)
     else 
         for (int i = 0; i < n_points; i++) 
             neighbors.push_back(i);
-
+    // std::cout << "#neighbors" << neighbors.size() << std::endl;
+    // std::getchar();
     for (int i : neighbors)
     {
         TV pi = data_points.segment<3>(i * 3);

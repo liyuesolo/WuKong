@@ -586,8 +586,8 @@ T VertexModel::computeResidual(const VectorXT& _u,  VectorXT& residual, bool ver
 }
 
 
-
-void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix& K, MatrixXT& UV)
+void VertexModel::buildSystemMatrixWoodburyFaster(const VectorXT& _u, 
+        StiffnessMatrix& K, MatrixXT& UV)
 {
     VectorXT projected = _u;
     if (!run_diff_test)
@@ -601,7 +601,87 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
     deformed = undeformed + projected;
 
     std::vector<Entry> entries;
-    
+
+    iterateEdgeSerial([&](Edge& e){
+        TV vi = deformed.segment<3>(e[0] * 3);
+        TV vj = deformed.segment<3>(e[1] * 3);
+        Matrix<T, 6, 6> hessian;
+        computeEdgeSquaredNormHessian(vi, vj, hessian);
+        Matrix<T, 6, 6> spring_hessian;
+        TV Xi = undeformed.segment<3>(e[0] * 3);
+        TV Xj = undeformed.segment<3>(e[1] * 3);
+        T l0 = (Xj - Xi).norm();
+        Vector<T, 6> x;
+        x << vi, vj;
+        int apical_edge_cnt = 0;
+        if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+        {
+            hessian *= edge_weights[apical_edge_cnt++];
+            addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+            computeEdgeEnergyRestLength3DHessian(sigma, l0, x, spring_hessian);
+        }
+        if (e[0] >= basal_vtx_start && e[1] >= basal_vtx_start)
+        {
+            computeEdgeEnergyRestLength3DHessian(gamma, l0, x, spring_hessian);
+        }
+        bool case1 = e[0] < basal_vtx_start && e[1] >= basal_vtx_start;
+        bool case2 = e[1] < basal_vtx_start && e[0] >= basal_vtx_start;
+        if (case1 || case2)
+        {
+            computeEdgeEnergyRestLength3DHessian(alpha, l0, x, spring_hessian);
+        }
+        addHessianEntry<6>(entries, {e[0], e[1]}, spring_hessian);
+    });
+}
+
+
+void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix& K, MatrixXT& UV)
+{
+    bool profile = true;
+    VectorXT projected = _u;
+    if (!run_diff_test)
+    {
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            projected[offset] = target;
+        });
+    }
+
+    deformed = undeformed + projected;
+
+    std::vector<Entry> entries;
+
+    // iterateEdgeSerial([&](Edge& e){
+    //     TV vi = deformed.segment<3>(e[0] * 3);
+    //     TV vj = deformed.segment<3>(e[1] * 3);
+    //     Matrix<T, 6, 6> hessian;
+    //     computeEdgeSquaredNormHessian(vi, vj, hessian);
+    //     Matrix<T, 6, 6> spring_hessian;
+    //     TV Xi = undeformed.segment<3>(e[0] * 3);
+    //     TV Xj = undeformed.segment<3>(e[1] * 3);
+    //     T l0 = (Xj - Xi).norm();
+    //     Vector<T, 6> x;
+    //     x << vi, vj;
+    //     int apical_edge_cnt = 0;
+    //     if (e[0] < basal_vtx_start && e[1] < basal_vtx_start)
+    //     {
+    //         hessian *= edge_weights[apical_edge_cnt++];
+    //         addHessianEntry<6>(entries, {e[0], e[1]}, hessian);
+    //         computeEdgeEnergyRestLength3DHessian(sigma, l0, x, spring_hessian);
+    //     }
+    //     if (e[0] >= basal_vtx_start && e[1] >= basal_vtx_start)
+    //     {
+    //         computeEdgeEnergyRestLength3DHessian(gamma, l0, x, spring_hessian);
+    //     }
+    //     bool case1 = e[0] < basal_vtx_start && e[1] >= basal_vtx_start;
+    //     bool case2 = e[1] < basal_vtx_start && e[0] >= basal_vtx_start;
+    //     if (case1 || case2)
+    //     {
+    //         computeEdgeEnergyRestLength3DHessian(alpha, l0, x, spring_hessian);
+    //     }
+    //     addHessianEntry<6>(entries, {e[0], e[1]}, spring_hessian);
+    // });
+    Timer tp_timer(true);
     if (add_contraction_term)
     {
         if (contract_apical_face)
@@ -614,7 +694,11 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 addEdgeContractionHessianEntries(Gamma, entries, project_block_hessian_PD);
         }
     }
-
+    if (profile)
+    {
+        std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
     if (dynamics)
         addInertialHessianEntries(entries);
     
@@ -628,7 +712,11 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         addEdgeHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
         addEdgeHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
         // addEdgeHessianEntries(ALL, weights_all_edges, entries, project_block_hessian_PD);
-
+        if (profile)
+        {
+            std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+            tp_timer.restart();
+        }
         if (preserve_tet_vol)
             addTetVolumePreservationHessianEntries(entries, project_block_hessian_PD);
         else
@@ -637,6 +725,11 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 addCellVolumePreservationHessianEntriesFixedCentroid(entries, project_block_hessian_PD);
             else
                 addCellVolumePreservationHessianEntries(entries, project_block_hessian_PD);
+        }
+        if (profile)
+        {
+            std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+            tp_timer.restart();
         }
         // ===================================== Face Area =====================================
         if (add_area_term)
@@ -652,6 +745,11 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
                 addFaceAreaHessianEntries(Apical, sigma, entries, project_block_hessian_PD);
                 addFaceAreaHessianEntries(Basal, gamma, entries, project_block_hessian_PD);
                 addFaceAreaHessianEntries(Lateral, alpha, entries, project_block_hessian_PD);
+                if (profile)
+                {
+                    std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+                    tp_timer.restart();
+                }
             }
         }
         
@@ -665,12 +763,21 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         else
             addFixedTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
     }
+    if (profile)
+    {
+        std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
     if (add_yolk_tet_barrier)
         addYolkTetLogBarrierHessianEneries(entries, project_block_hessian_PD);
-        
+    if (profile)
+    {
+        std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
     if (add_perivitelline_liquid_volume)
         addPerivitellineVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
     
@@ -683,43 +790,122 @@ void VertexModel::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix&
         else
             addMembraneBoundHessianEntries(entries, project_block_hessian_PD);
     }
-
+    if (profile)
+    {
+        std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
     // ===================================== IPC =====================================
     if (use_ipc_contact)
     {
         addIPCHessianEntries(entries, project_block_hessian_PD);
     }
-
-    K.resize(num_nodes * 3, num_nodes * 3);
-    K.setFromTriplets(entries.begin(), entries.end());
+    if (profile)
+    {
+        std::cout << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
+    if (use_pre_build_structure)
+    {
+        std::cout << "use prebuild structure" << std::endl;
+        // K.resize(num_nodes * 3, num_nodes * 3);
+        // K.reserve(Hessian_copy.nonZeros());
+        // val.resize(Hessian_copy.nonZeros());
+        // memset(&val[0], 0.0, K.nonZeros() * sizeof(T));
+        // for (auto entry : entries)
+        // {
+        //     std::ptrdiff_t ptr_diff = ij_to_value_array[IV2(entry.row(), entry.col())];
+        //     *(&val[0] + ptr_diff) += entry.value();
+        // }
+        // tp_timer.restart();
+        K = Hessian_copy;
+        // memset(K.valuePtr(), 0.0, K.nonZeros() * sizeof(T));
+        // StiffnessMatrix test(num_nodes * 3, num_nodes * 3);
+        // test.setFromTriplets(entries.begin(), entries.end());
+        // // K.setZero();
+        // // VectorXT value(Hessian_copy.nonZeros());
+        // for (auto entry : entries)
+        // {
+        //     // if (ij_to_value_array.find(IV2(entry.row(), entry.col())) != ij_to_value_array.end())
+        //     {
+        //         std::ptrdiff_t ptr_diff = ij_to_value_array[IV2(entry.row(), entry.col())];
+        //         // std::cout << ptr_diff << " " << val.size() << std::endl;
+        //         // std::getchar();
+        //         // *(&val[0] + ptr_diff) += entry.value();
+        //         *(K.valuePtr() + ptr_diff) += entry.value();
+        //     }
+        //     // else
+        //     // {
+        //     //     std::cout << IV2(entry.row(), entry.col()).transpose() << std::endl;
+        //     //     std::getchar();
+        //     // }
+        // }
         
-    // VectorXT sv = K.row(0);
-    // int nz_cnt = 0;
-    // for (int i  = 0; i < sv.rows();i++)
-    //     if (std::abs(sv[i]) > 1e-8)
-    //         nz_cnt++;
-    // std::cout << nz_cnt << std::endl;
-
-    // std::ofstream out("H3d.txt");
-    // out << K;
-    // out.close();
-    // std::exit(0);
-
+        memcpy(K.valuePtr(), val.data(),
+            val.size() * sizeof(val[0]));
+        std::vector<T>().swap(val);
+        // memcpy(K.innerIndexPtr(), inner_indices.data(),
+        //     inner_indices.size() * sizeof(inner_indices[0]));
+        // memcpy(K.outerIndexPtr(), outer_indices.data(),
+        //     outer_indices.size() * sizeof(outer_indices[0]));
+        
+        K.finalize();
+        // std::cout << (K - test).norm() << std::endl;
+        // std::getchar();
+    }
+    else
+    {
+        K.resize(num_nodes * 3, num_nodes * 3);
+        K.reserve(0.5 * entries.size());
+        K.setFromTriplets(entries.begin(), entries.end());
+    }
+    
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
-    // std::cout << K << std::endl;
-
-    // Matrix<T, 2, 2> I;
-    // I.setIdentity();    
-    // MatrixXT dense_part = UV * I * UV.transpose();
-    // dense_part += K;
-    // K = dense_part.sparseView();
-    // std::ofstream out("hessian.txt");
-    // out << K;
-    // out.close();
-    // std::exit(0);
+    if (profile)
+    {
+        std::cout << "assemble " << tp_timer.elapsed_sec() << "s" << std::endl;
+        tp_timer.restart();
+    }
+    if (!use_pre_build_structure)
+    {
+        K.makeCompressed();
+        // val.resize(K.innerSize());
+        // memcpy(val.data(), K.valuePtr(),
+        //     val.size() * sizeof(T));
+        for (int i = 0; i < K.outerSize(); i++)
+        {
+            for (StiffnessMatrix::InnerIterator it(K, i); it; ++it)
+            {
+                T* ref = &it.valueRef();
+                std::ptrdiff_t prt_diff = ref - K.valuePtr();
+                // std::cout << prt_diff << std::endl;
+                // std::getchar();
+                // ij_to_value_array[IV2(it.row(), it.col())] = prt_diff;
+                uint64_t lower_bit = it.row();
+                uint64_t upper_bit = it.col();
+                uint64_t whole = upper_bit << 32 | lower_bit;
+                ijv[whole] = prt_diff;
+                // *(K.valuePtr() + diff) = value;
+            }
+        }
+        // std::cout << K.nonZeros() << std::endl;
+        // std::getchar();
+        
+        // inner_indices.resize(sizeof(K.innerIndexPtr()));
+        // outer_indices.resize(sizeof(K.outerIndexPtr()));
+        // std::cout << inner_indices.size() << " " << K.nonZeros() << std::endl;
+        // std::getchar();
+        // memcpy(inner_indices.data(), K.innerIndexPtr(),
+        //     inner_indices.size() * sizeof(StorageIndex));
+        // memcpy(outer_indices.data(), K.outerIndexPtr(), 
+        //     outer_indices.size() * sizeof(StorageIndex));
+        Hessian_copy = K;
+        use_pre_build_structure = true;
+    }
+    val.resize(Hessian_copy.nonZeros());
+    memset(&val[0], 0.0, Hessian_copy.nonZeros() * sizeof(T));
     // std::getchar();
-    K.makeCompressed();
 }
 
 void VertexModel::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)

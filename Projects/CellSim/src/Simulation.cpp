@@ -216,6 +216,10 @@ void Simulation::initializeCells()
     {
         surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_1.5k_remesh.obj";
     }
+    else if (cells.resolution == 3)
+    {
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_6k_remesh.obj";
+    }
     else if (cells.resolution == -1)
     {
         surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_59_remesh.obj";
@@ -396,7 +400,8 @@ bool Simulation::advanceOneStep(int step)
             cells.updateIPCVertices(u);
 
         T residual_norm = computeResidual(u, residual);
-        // std::cout << "[Newton] computeResidual takes " << step_timer.elapsed_sec() << "s" << std::endl;
+        std::cout << "[Newton] computeResidual takes " << step_timer.elapsed_sec() << "s" << std::endl;
+        step_timer.restart();
         if (save_mesh)
             cells.saveCellMesh(step);
         // std::cout << "[Newton] saveCellMesh takes " << step_timer.elapsed_sec() << "s" << std::endl;
@@ -1284,12 +1289,13 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(_u, K, UV);
-        // std::cout << "build system: " << ti.elapsed_sec() << std::endl;
+        std::cout << "build system takes: " << ti.elapsed_sec() << "s" << std::endl;
+        ti.restart();
         // ti.restart();
-        success = WoodburySolve(K, UV, residual, du);   
-        // success = solveWoodburyCholmod(K, UV, residual, du); 
-        // std::cout << "solve: " << ti.elapsed_sec() << std::endl;
-        // ti.restart();
+        // success = WoodburySolve(K, UV, residual, du);   
+        success = solveWoodburyCholmod(K, UV, residual, du); 
+        std::cout << "solve takes: " << ti.elapsed_sec() << "s" << std::endl;
+        ti.restart();
     }
     else
     {
@@ -1306,7 +1312,7 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     T norm = du.norm();
     
     T alpha = cells.computeLineSearchInitStepsize(_u, du, verbose);
-    // std::cout << "computeLineSearchInitStepsize: " << ti.elapsed_sec() << std::endl;
+    std::cout << "computeLineSearchInitStepsize: " << ti.elapsed_sec() << std::endl;
     ti.restart();
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
