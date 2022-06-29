@@ -9,7 +9,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
-
+#include <tgmath.h>
 #include "VecMatDef.h"
 #include "SDF.h"
 #include "Timer.h"
@@ -594,6 +594,7 @@ public:
     bool add_area_term = true;
     bool print_force_norm = false;
     bool profile = false;
+    bool lower_triangular = false;
 
     bool use_test_mesh = false;
 
@@ -839,13 +840,21 @@ public:
     void dfdpWeightsFD(MatrixXT& dfdp);
     void computededp(VectorXT& dedp);
 
-    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A, bool lower_tri_only = false)
     {
         std::vector<Entry> triplets;
 
         for (int k=0; k < A.outerSize(); ++k)
             for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
-                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+            {
+                if (!lower_tri_only)
+                    triplets.push_back(Entry(it.row(), it.col(), it.value()));
+                else
+                {
+                    if (it.row() <= it.col())
+                        triplets.push_back(Entry(it.row(), it.col(), it.value()));
+                }
+            }
         return triplets;
     }
     
@@ -857,8 +866,12 @@ public:
     {
         if (vtx_idx.size() * 3 != dim)
             std::cout << "wrong hessian block size" << std::endl;
-        // int n_curr = triplets.size();
-        // triplets.resize(n_curr + vtx_idx.size() * vtx_idx.size() * 3 * 3);
+        int n_curr = triplets.size();
+        int cnt = 0;
+        
+        int n_entry = (1 + vtx_idx.size() * 3) * vtx_idx.size() * 3 / 2;
+        
+        // triplets.resize(n_curr + cnt);
 
         std::vector<uint64_t> keys(vtx_idx.size() * vtx_idx.size() * 3 * 3);
         std::vector<T> values(vtx_idx.size() * vtx_idx.size() * 3 * 3);
@@ -918,19 +931,23 @@ public:
         }
         else
         {
-            int cnt = 0;
+            // cnt = 0;
             for (int i = 0; i < vtx_idx.size(); i++)
             {
                 int dof_i = vtx_idx[i];
                 for (int j = 0; j < vtx_idx.size(); j++)
                 {
                     int dof_j = vtx_idx[j];
-                    if (j >= i) continue;
+                    if (lower_triangular)
+                        if (dof_j > dof_i) continue;
                     for (int k = 0; k < 3; k++)
                         for (int l = 0; l < 3; l++)
                         {
-                            if (l >= k) continue;
-                            if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
+                            if (lower_triangular && (dof_i == dof_j))
+                                if (l > k) continue;
+                            // if (lower_triangular)
+                            //     if (dof_j * 3 + l > dof_i * 3 + k) continue;
+                            // if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
                             {
                                 // triplets[n_curr + cnt] = Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l));
                                 // cnt++;
@@ -999,10 +1016,13 @@ private:
 
         int dof_i = vtx_idx[0];
         int dof_j = vtx_idx[1];
-
+        if (lower_triangular)
+            if (dof_j > dof_i) return;
         for (int k = 0; k < dim; k++)
             for (int l = 0; l < dim; l++)
             {
+                if (lower_triangular && (dof_i == dof_j))
+                        if (l > k) continue;
                 if (std::abs(hessian_block(k, l)) > 1e-8)
                     triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian_block(k, l)));
             }

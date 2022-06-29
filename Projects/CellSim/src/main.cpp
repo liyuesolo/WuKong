@@ -145,14 +145,17 @@ int main(int argc, char** argv)
     }
     else if (test_case == 2)
     {
-        simulation.cells.resolution = 3;
+        simulation.cells.resolution = 1;
         simulation.initializeCells();
-        // simulation.cells.edge_weights.setConstant(0.01);
+        simulation.cells.edge_weights.setConstant(0.01);
         simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
         simulation.cells.tet_vol_barrier_w = 1e-10;
         simulation.cells.add_perivitelline_liquid_volume = false;
         simulation.cells.Bp = 0.0;
+
+        // simulation.cells.checkTotalHessianScale();
+
         // simulation.cells.bound_coeff = 1e6;
         obj.setFrame(40);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
@@ -455,8 +458,8 @@ int main(int argc, char** argv)
         // renderData();
         // processDrosophilaData();
         // visualizeData();
-        // runSA();
-        runSim();
+        runSA();
+        // runSim();
         // generateNucleiGT();
         // generateWeights();
         // renderScene();

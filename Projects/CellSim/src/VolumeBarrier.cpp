@@ -548,7 +548,7 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
 
             positionsFromIndices(positions, cell_vtx_list);
             VectorXT qubic_mask, log_mask;
-            computeTetBarrierWeightMask(positions, face_vtx_list, log_mask, qubic_mask, cell_volume_init[face_idx]);
+            // computeTetBarrierWeightMask(positions, face_vtx_list, log_mask, qubic_mask, cell_volume_init[face_idx]);
             T scaling_factor = cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
 
             T log_term_active_vol = log_active_percentage * cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);

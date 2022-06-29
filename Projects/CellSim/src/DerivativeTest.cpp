@@ -83,17 +83,22 @@ void VertexModel::checkTotalHessian(bool perturb)
     
     print_force_norm = false;
     StiffnessMatrix A;
-    if (woodbury)
+    // if (woodbury)
+    // {
+    //     MatrixXT UV;
+    //     buildSystemMatrixWoodbury(u, A, UV);
+    //     Eigen::MatrixXd UVT  = UV * UV.transpose();
+    //     UVT += A;
+    //     A = UVT.sparseView();
+    // }
+    // else
+    buildSystemMatrix(u, A);
+    if (lower_triangular)
     {
-        MatrixXT UV;
-        buildSystemMatrixWoodbury(u, A, UV);
-        Eigen::MatrixXd UVT  = UV * UV.transpose();
-        UVT += A;
-        A = UVT.sparseView();
+        StiffnessMatrix A_prim = A.selfadjointView<Eigen::Lower>();
+        A = A_prim;
     }
-    else
-        buildSystemMatrix(u, A);
-
+    // std::cout << A.coeff(0, 100) << std::endl;
     // std::ofstream out("hessian.txt");
     // out << A;
     // out.close();
@@ -117,9 +122,12 @@ void VertexModel::checkTotalHessian(bool perturb)
 
         for(int i = 0; i < n_dof; i++)
         {
-            if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+            if (lower_triangular)
+                if (dof_i > i)
+                    continue;
+            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
                 continue;
-            if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
                 continue;
             // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
@@ -242,16 +250,34 @@ void VertexModel::checkTotalHessianScale(bool perturb)
     int n_dof = num_nodes * 3;
 
     StiffnessMatrix A;
+    
     if (woodbury)
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(u, A, UV);
+        if (lower_triangular)
+        {
+            StiffnessMatrix A_prim = A.selfadjointView<Eigen::Lower>();
+            A = A_prim;
+        }
+        // std::cout << "A: " << A.rows() << " " << A.cols() << std::endl;
+        // std::ofstream out("lower_triangular.txt");
+        // out << A;
+        // out.close();
         Eigen::MatrixXd UVT  = UV * UV.transpose();
         UVT += A;
         A = UVT.sparseView();
     }
     else
+    {
         buildSystemMatrix(u, A);
+        if (lower_triangular)
+        {
+            StiffnessMatrix A_prim = A.selfadjointView<Eigen::Lower>();
+            A = A_prim;
+        }
+    }
+
     std::cout << "build matrix" << std::endl;
     VectorXT f0(n_dof);
     f0.setZero();

@@ -209,8 +209,8 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
     buildSystemMatrix(u, d2edx2);
     // Timer ttt(true);
-
-    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = d2edx2;
+    StiffnessMatrix full_hessian = d2edx2.selfadjointView<Eigen::Lower>();
+    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = full_hessian;
     Noether::CHOLMODSolver<long int> solver;
     solver.set_pattern(K_prime);
     solver.analyze_pattern();

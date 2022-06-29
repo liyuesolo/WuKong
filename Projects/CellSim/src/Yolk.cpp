@@ -603,9 +603,9 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
         }
         else
         {
-            for (int dof_i = 0; dof_i < num_nodes; dof_i++)
+            for (int dof_i = basal_vtx_start; dof_i < num_nodes; dof_i++)
             {
-                for (int dof_j = 0; dof_j < num_nodes; dof_j++)
+                for (int dof_j = basal_vtx_start; dof_j < num_nodes; dof_j++)
                 {
                     Vector<T, 6> dVdx;
                     getSubVector<6>(dVdx_full, {dof_i, dof_j}, dVdx);

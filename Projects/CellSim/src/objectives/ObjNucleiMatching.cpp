@@ -1539,7 +1539,7 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     });
     
     VectorXT lambda;
-    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2);
     T alpha = 1.0;
     for (int i = 0; i < 50; i++)

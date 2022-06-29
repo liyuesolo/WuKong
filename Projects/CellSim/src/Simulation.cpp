@@ -249,6 +249,7 @@ void Simulation::initializeCells()
     cells.print_force_norm = true;
     // save_mesh = true;
     // cells.project_block_hessian_PD = true;
+    cells.lower_triangular = true;
     
 }
 void Simulation::reinitializeCells()
@@ -913,7 +914,11 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     bool use_cholmod = true;
     Timer t(true);
     // Eigen::SimplicialLLT<StiffnessMatrix> solver;
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
+    // std::ofstream out("lower_triangular.txt");
+    // out << K;
+    // out.close();
+    // std::exit(0);
+    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>, Eigen::Lower> solver;
     solver.pardisoParameterArray()[6] = 0;
     // solver.pardisoParameterArray()[59] = 1;
     auto& iparm = solver.pardisoParameterArray();
@@ -1289,13 +1294,13 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     {
         MatrixXT UV;
         buildSystemMatrixWoodbury(_u, K, UV);
-        std::cout << "build system takes: " << ti.elapsed_sec() << "s" << std::endl;
-        ti.restart();
+        // std::cout << "build system takes: " << ti.elapsed_sec() << "s" << std::endl;
         // ti.restart();
-        // success = WoodburySolve(K, UV, residual, du);   
-        success = solveWoodburyCholmod(K, UV, residual, du); 
-        std::cout << "solve takes: " << ti.elapsed_sec() << "s" << std::endl;
-        ti.restart();
+        // ti.restart();
+        success = WoodburySolve(K, UV, residual, du);   
+        // success = solveWoodburyCholmod(K, UV, residual, du); 
+        // std::cout << "solve takes: " << ti.elapsed_sec() << "s" << std::endl;
+        // ti.restart();
     }
     else
     {
@@ -1312,8 +1317,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
     T norm = du.norm();
     
     T alpha = cells.computeLineSearchInitStepsize(_u, du, verbose);
-    std::cout << "computeLineSearchInitStepsize: " << ti.elapsed_sec() << std::endl;
-    ti.restart();
+    // std::cout << "computeLineSearchInitStepsize: " << ti.elapsed_sec() << std::endl;
+    // ti.restart();
     T E0 = computeTotalEnergy(_u);
     // std::cout << "E0 " << E0 << std::endl;
     // std::getchar();

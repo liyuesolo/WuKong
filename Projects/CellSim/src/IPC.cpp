@@ -91,7 +91,7 @@ void VertexModel::addIPCHessianEntries(std::vector<Entry>& entries,
     // StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
     //     ipc_edges, ipc_faces, ipc_constraints, barrier_distance, true);
 
-    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
+    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian, lower_triangular);
     entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
 
     if (add_friction)
