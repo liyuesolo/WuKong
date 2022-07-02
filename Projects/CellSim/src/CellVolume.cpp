@@ -192,54 +192,47 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
     }
     else
     {
-        if (use_fixed_centroid)
+        iterateCellParallel([&](VtxList& face_vtx_list, int cell_idx)
         {
-            iterateCellCentroidDoFSerial([&](VectorXT& positions,
-                VectorXT& centroids, VtxList& indices, int cell_idx)
+            VectorXT positions;
+            VtxList cell_vtx_list = face_vtx_list;
+            for (int idx : face_vtx_list)
+                cell_vtx_list.push_back(idx + basal_vtx_start);
+            
+            positionsFromIndices(positions, cell_vtx_list);
+            if (use_cell_centroid)
             {
-                T vi = 0.0;
-                if (centroids.rows() == (4 + 3) * 3)
-                {
-                    
-                }
-                else if (centroids.rows() == (5 + 3) * 3)
-                {
-                    computeVolume5PointsFixedCentroid(positions, centroids, vi);
-                }
-                else if (centroids.rows() == (6 + 3) * 3)
-                {
-                    computeVolume6PointsFixedCentroid(positions, centroids, vi);
-                }
-                cell_volume_list[cell_idx] = vi;
-            });
-        }
-        else
-        {
-            iterateCellParallel([&](VtxList& face_vtx_list, int cell_idx)
+                
+                if (face_vtx_list.size() == 4)
+                    computeVolume4Points(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 5)
+                    computeVolume5Points(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 6)
+                    computeVolume6Points(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 7)
+                    computeVolume7Points(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 8)
+                    computeVolume8Points(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 9)
+                    computeVolume9Points(positions, cell_volume_list[cell_idx]);
+            }
+            else
             {
-                 if (use_cell_centroid)
-                 {
-                    VectorXT positions;
-                    VtxList cell_vtx_list = face_vtx_list;
-                    for (int idx : face_vtx_list)
-                        cell_vtx_list.push_back(idx + basal_vtx_start);
-                    
-                    positionsFromIndices(positions, cell_vtx_list);
-                    
-                    if (face_vtx_list.size() == 4)
-                        computeVolume4Points(positions, cell_volume_list[cell_idx]);
-                    else if (face_vtx_list.size() == 5)
-                        computeVolume5Points(positions, cell_volume_list[cell_idx]);
-                    else if (face_vtx_list.size() == 6)
-                        computeVolume6Points(positions, cell_volume_list[cell_idx]);
-                    else if (face_vtx_list.size() == 7)
-                        computeVolume7Points(positions, cell_volume_list[cell_idx]);
-                    else if (face_vtx_list.size() == 8)
-                        computeVolume8Points(positions, cell_volume_list[cell_idx]);
-                    else if (face_vtx_list.size() == 9)
-                        computeVolume9Points(positions, cell_volume_list[cell_idx]);
-                 }
-            });
+                
+                if (face_vtx_list.size() == 4)
+                    computeQuadBasePrismVolume(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 5)
+                    computePentaBasePrismVolume(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 6)
+                    computeHexBasePrismVolume(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 7)
+                    computeSepBasePrismVolume(positions, cell_volume_list[cell_idx]);
+                else if (face_vtx_list.size() == 8)
+                    computeOctBasePrismVolume(positions, cell_volume_list[cell_idx]);
+            }
+        });
+        
+        
             // int cnt = 0;
             // iterateFaceSerial([&](VtxList& face_vtx_list, int face_idx){
             //     if (face_idx < basal_face_start)
@@ -315,7 +308,7 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
             //         }
             //     }
             // });
-        }
+        
         
     }
     
@@ -436,6 +429,8 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 42> dedx;
                     if (use_cell_centroid)
                         computeVolume7PointsGradient(positions, dedx);
+                    else
+                        computeSepBasePrismVolumeGradient(positions, dedx);
                     dedx *= -B * ci;
                     addForceEntry<42>(residual, cell_vtx_list, dedx);
                 }
@@ -444,6 +439,8 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 48> dedx;
                     if (use_cell_centroid)
                         computeVolume8PointsGradient(positions, dedx);
+                    else
+                        computeOctBasePrismVolumeGradient(positions, dedx);
                     dedx *= -B * ci;
                     addForceEntry<48>(residual, cell_vtx_list, dedx);
                 }
@@ -557,11 +554,14 @@ void VertexModel::computeCellVolumeHessianEigenValues(VectorXT& cell_hessian_evs
                 Matrix<T, 42, 42> d2Vdx2;
                 if (use_cell_centroid)
                     computeVolume7PointsHessian(positions, d2Vdx2);
+                else
+                    computeSepBasePrismVolumeHessian(positions, d2Vdx2);
                 
                 Vector<T, 42> dVdx;
                 if (use_cell_centroid)
                     computeVolume7PointsGradient(positions, dVdx);
-                
+                else
+                    computeSepBasePrismVolumeGradient(positions, dVdx);
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 42, 42> hessian;
 
@@ -578,10 +578,14 @@ void VertexModel::computeCellVolumeHessianEigenValues(VectorXT& cell_hessian_evs
                 Matrix<T, 48, 48> d2Vdx2;
                 if (use_cell_centroid)
                     computeVolume8PointsHessian(positions, d2Vdx2);
+                else
+                    computeOctBasePrismVolumeHessian(positions, d2Vdx2);
                 
                 Vector<T, 48> dVdx;
                 if (use_cell_centroid)
                     computeVolume8PointsGradient(positions, dVdx);
+                else
+                    computeOctBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 48, 48> hessian;
@@ -734,10 +738,14 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 42, 42> d2Vdx2;
                 if (use_cell_centroid)
                     computeVolume7PointsHessian(positions, d2Vdx2);
-                
+                else
+                    computeSepBasePrismVolumeHessian(positions, d2Vdx2);
+
                 Vector<T, 42> dVdx;
                 if (use_cell_centroid)
                     computeVolume7PointsGradient(positions, dVdx);
+                else
+                    computeSepBasePrismVolumeGradient(positions, dVdx);
                 
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 42, 42> hessian;
@@ -759,11 +767,13 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 48, 48> d2Vdx2;
                 if (use_cell_centroid)
                     computeVolume8PointsHessian(positions, d2Vdx2);
-                
+                else
+                    computeOctBasePrismVolumeHessian(positions, d2Vdx2);
                 Vector<T, 48> dVdx;
                 if (use_cell_centroid)
                     computeVolume8PointsGradient(positions, dVdx);
-                
+                else
+                    computeOctBasePrismVolumeGradient(positions, dVdx);
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 48, 48> hessian;
                 hessian.setZero();

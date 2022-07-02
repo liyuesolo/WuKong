@@ -8,10 +8,12 @@ void VertexModel::addFixedTetLogBarrierEnergy(T& energy)
     iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
     {
         T e = 0.0;
-        T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_cur = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_bar = computeTetVolume(x_undeformed.col(0), x_undeformed.col(1), x_undeformed.col(2), x_undeformed.col(3));
+        T d = d_cur / d_bar;
         if (d < tet_vol_barrier_dhat)
         {
-            computeTetInversionBarrier(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, e);
+            computeTetInversionBarrierScaled(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, x_undeformed, e);
             barrier_energy += e;
         }
     });
@@ -22,11 +24,13 @@ void VertexModel::addFixedTetLogBarrierForceEneries(VectorXT& residual)
 {
     iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
     {
-        T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_cur = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_bar = computeTetVolume(x_undeformed.col(0), x_undeformed.col(1), x_undeformed.col(2), x_undeformed.col(3));
+        T d = d_cur / d_bar;
         if (d < tet_vol_barrier_dhat)
-        {
+        {   
             Vector<T, 12> dedx;
-            computeTetInversionBarrierGradient(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, dedx);
+            computeTetInversionBarrierScaledGradient(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, x_undeformed, dedx);
             addForceEntry<12>(residual, indices, -dedx);
         }
     });
@@ -36,11 +40,13 @@ void VertexModel::addFixedTetLogBarrierHessianEneries(std::vector<Entry>& entrie
 {
     iterateFixedTetsSerial([&](TetVtx& x_deformed, TetVtx& x_undeformed, VtxList& indices)
     {
-        T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_cur = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+        T d_bar = computeTetVolume(x_undeformed.col(0), x_undeformed.col(1), x_undeformed.col(2), x_undeformed.col(3));
+        T d = d_cur / d_bar;
         if (d < tet_vol_barrier_dhat)
         {
             Matrix<T, 12, 12> hessian;
-            computeTetInversionBarrierHessian(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, hessian);
+            computeTetInversionBarrierScaledHessian(tet_vol_barrier_w, tet_vol_barrier_dhat, x_deformed, x_undeformed, hessian);
             if (projectPD)
                 projectBlockPD<12>(hessian);
             addHessianEntry<12>(entries, indices, hessian);
@@ -163,6 +169,8 @@ void VertexModel::computeTetBarrierWeightMask(const VectorXT& positions,
 T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& du)
 {
     T step_size = 1.0;
+    if (!add_tet_vol_barrier)
+        return 1.0;
     int cnt = 0;
     while (true)
     {

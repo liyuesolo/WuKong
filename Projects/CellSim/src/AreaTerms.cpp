@@ -197,6 +197,10 @@ void VertexModel::addFaceAreaEnergyWithRestShape(Region region, T w, T& energy)
                 else
                     std::cout << "unknown polygon edge case" << std::endl;
             }
+            else
+            {
+
+            }
         }
     });
     energy += energies.sum();
@@ -344,6 +348,21 @@ void VertexModel::addFaceAreaEnergy(Region face_region, T w, T& energy)
                 else
                     std::cout << "unknown polygon edge case" << std::endl;
             }
+            else
+            {
+                if (face_vtx_list.size() == 4)
+                    computeQuadFaceAreaSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 5)
+                    computePentFaceAreaSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 6)
+                    computeHexFaceAreaSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 7)
+                    computeSepFaceAreaSquaredSum(w, positions, energies[face_idx]);
+                else if (face_vtx_list.size() == 8)
+                    computeOctFaceAreaSquaredSum(w, positions, energies[face_idx]);
+                else
+                    std::cout << "unknown polygon edge case" << std::endl;
+            }
         }
     });
     energy += energies.sum();
@@ -390,6 +409,8 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
                 Vector<T, 21> dedx;
                 if (use_face_centroid)
                     computeArea7PointsSquaredSumGradient(w, positions, dedx);
+                else
+                    computeSepFaceAreaSquaredSumGradient(w, positions, dedx);
                 addForceEntry<21>(residual, face_vtx_list, -dedx);
             }
             else if (face_vtx_list.size() == 8)
@@ -397,10 +418,10 @@ void VertexModel::addFaceAreaForceEntries(Region face_region, T w, VectorXT& res
                 
                 Vector<T, 24> dedx;
                 if (use_face_centroid)
-                {
                     computeArea8PointsSquaredSumGradient(w, positions, dedx);
-                    addForceEntry<24>(residual, face_vtx_list, -dedx);
-                }
+                else
+                    computeOctFaceAreaSquaredSumGradient(w, positions, dedx);
+                addForceEntry<24>(residual, face_vtx_list, -dedx);
             }
             else if (face_vtx_list.size() == 9)
             {
@@ -465,6 +486,8 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
                 Matrix<T, 21, 21> hessian;
                 if (use_face_centroid)
                     computeArea7PointsSquaredSumHessian(w, positions, hessian);
+                else
+                    computeSepFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
                     projectBlockPD<21>(hessian);
                 addHessianEntry<21>(entries, face_vtx_list, hessian);
@@ -474,6 +497,8 @@ void VertexModel::addFaceAreaHessianEntries(Region face_region, T w,
                 Matrix<T, 24, 24> hessian;
                 if (use_face_centroid)
                     computeArea8PointsSquaredSumHessian(w, positions, hessian);
+                else
+                    computeOctFaceAreaSquaredSumHessian(w, positions, hessian);
                 if (projectPD) 
                     projectBlockPD<24>(hessian);
                 addHessianEntry<24>(entries, face_vtx_list, hessian);

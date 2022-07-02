@@ -37,6 +37,14 @@ void computeHexBasePrismVolumePenalty(double stiffness, const Eigen::Matrix<doub
 void computeHexBasePrismVolumePenaltyGradient(double stiffness, const Eigen::Matrix<double,36,1> & prism_vertices, const Eigen::Matrix<double,12,1> & init_tet_vol, Eigen::Matrix<double, 36, 1>& energygradient);
 void computeHexBasePrismVolumePenaltyHessian(double stiffness, const Eigen::Matrix<double,36,1> & prism_vertices, const Eigen::Matrix<double,12,1> & init_tet_vol, Eigen::Matrix<double, 36, 36>& energyhessian);
 
+void computeSepBasePrismVolume(const Eigen::Matrix<double,42,1> & prism_vertices, double& energy);
+void computeSepBasePrismVolumeGradient(const Eigen::Matrix<double,42,1> & prism_vertices, Eigen::Matrix<double, 42, 1>& energygradient);
+void computeSepBasePrismVolumeHessian(const Eigen::Matrix<double,42,1> & prism_vertices, Eigen::Matrix<double, 42, 42>& energyhessian);
+
+void computeOctBasePrismVolume(const Eigen::Matrix<double,48,1> & prism_vertices, double& energy);
+void computeOctBasePrismVolumeGradient(const Eigen::Matrix<double,48,1> & prism_vertices, Eigen::Matrix<double, 48, 1>& energygradient);
+void computeOctBasePrismVolumeHessian(const Eigen::Matrix<double,48,1> & prism_vertices, Eigen::Matrix<double, 48, 48>& energyhessian);
+
 void computeVolume5PointsFixedCentroid(const Eigen::Matrix<double,30,1> & cell_vertices, const Eigen::Matrix<double,24,1> & centroids, double& energy);
 void computeVolume5PointsFixedCentroidGradient(const Eigen::Matrix<double,30,1> & cell_vertices, const Eigen::Matrix<double,24,1> & centroids, Eigen::Matrix<double, 30, 1>& energygradient);
 void computeVolume5PointsFixedCentroidHessian(const Eigen::Matrix<double,30,1> & cell_vertices, const Eigen::Matrix<double,24,1> & centroids, Eigen::Matrix<double, 30, 30>& energyhessian);

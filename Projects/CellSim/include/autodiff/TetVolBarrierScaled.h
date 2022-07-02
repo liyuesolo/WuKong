@@ -25,6 +25,9 @@ void computeVolumeBarrier9PointsScaled(double stiffness, double scaling_factor, 
 void computeVolumeBarrier9PointsScaledGradient(double stiffness, double scaling_factor, const Eigen::Matrix<double,54,1> & cell_vertices, Eigen::Matrix<double, 54, 1>& energygradient);
 void computeVolumeBarrier9PointsScaledHessian(double stiffness, double scaling_factor, const Eigen::Matrix<double,54,1> & cell_vertices, Eigen::Matrix<double, 54, 54>& energyhessian);
 
+void computeTetInversionBarrierScaled(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, const Eigen::Matrix<double,3,4> & X, double& energy);
+void computeTetInversionBarrierScaledGradient(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, const Eigen::Matrix<double,3,4> & X, Eigen::Matrix<double, 12, 1>& energygradient);
+void computeTetInversionBarrierScaledHessian(double stiffness, double dhat, const Eigen::Matrix<double,3,4> & x, const Eigen::Matrix<double,3,4> & X, Eigen::Matrix<double, 12, 12>& energyhessian);
 
 
 #endif

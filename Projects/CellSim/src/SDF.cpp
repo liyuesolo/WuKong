@@ -9,8 +9,31 @@
 #include <openvdb/tools/VolumeToMesh.h>
 #include <openvdb/points/PointConversion.h>
 #include <openvdb/points/PointCount.h>
+#include<random>
+#include<cmath>
+#include<chrono>
 
 bool use_spacial_hash = true;
+
+
+void IMLS::sampleSphere(const TV& center, T radius, 
+    int n_samples, std::vector<TV>& samples)
+{
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::mt19937 generator (seed);
+    std::uniform_real_distribution<T> uniform01(0.0, 1.0);
+    samples.resize(n_samples);
+    tbb::parallel_for(0, n_samples, [&](int i){
+        T r = radius * uniform01(generator);
+        T theta = 2 * M_PI * uniform01(generator);
+        T phi = std::acos(1 - 2 * uniform01(generator));
+        T x = r * std::sin(phi) * std::cos(theta);
+        T y = r * std::sin(phi) * std::sin(theta);
+        T z = r * std::cos(phi);
+        samples[i] = center + TV(x, y, z);
+    });
+
+}
 
 void IMLS::computeBBox()
 {
@@ -37,13 +60,45 @@ void IMLS::initializedMeshData(const VectorXT& vertices, const VectorXi& indices
     T h = ref_dis;
     radii = VectorXT::Ones(n_points) * h;
     data_points += normals * epsilon;
-    hash.build(h * 2.0, data_points); 
+    hash.build(2.0 * h, data_points); 
     computeBBox();
 }   
 
 void IMLS::initializeFromMeshFile(const std::string& filename)
 {
 
+}
+
+void IMLS::sampleZeroLevelset(VectorXT& points)
+{
+    int n_pt = data_points.rows() / 3;
+    int n_samples_per_cell = 500;
+    std::vector<std::vector<TV>> on_surface_points(n_pt);
+    tbb::parallel_for(0, n_pt, [&](int i)
+    {
+        TV pt = data_points.segment<3>(i * 3);
+        std::vector<TV> samples;
+        sampleSphere(pt, 2.0 * hash.h, n_samples_per_cell, samples);
+        samples.push_back(pt);
+        std::vector<TV> valid;
+        for (TV& sample : samples)
+            if (std::abs(value(sample)) < 1e-4)
+                valid.push_back(sample);
+        on_surface_points[i] = valid;
+    });
+    int n_valid_point = 0;
+    for (auto& vec : on_surface_points)
+        n_valid_point += vec.size();
+    points.resize(n_valid_point * 3);
+    int cnt = 0;
+    for (auto& vec : on_surface_points)
+    {
+        for (TV& pt : vec)
+        {
+            points.segment<3>(cnt * 3) = pt;
+            cnt ++;
+        }
+    }
 }
 
 T IMLS::value(const TV& test_point)
@@ -56,8 +111,6 @@ T IMLS::value(const TV& test_point)
     else 
         for (int i = 0; i < n_points; i++) 
             neighbors.push_back(i);
-    // std::cout << "#neighbors" << neighbors.size() << std::endl;
-    // std::getchar();
     for (int i : neighbors)
     {
         TV pi = data_points.segment<3>(i * 3);
@@ -68,6 +121,9 @@ T IMLS::value(const TV& test_point)
         T dot_term = (test_point - pi).dot(ni);
         value += wi * dot_term;
     }
+    // std::cout << "#neighbors" << neighbors.size() << std::endl;
+    // std::cout << weights_sum << std::endl;
+    // std::getchar();
     if (weights_sum >= 1e-6)
         value /= weights_sum;
     else
@@ -104,7 +160,8 @@ void IMLS::gradient(const TV& test_point, TV& dphidx)
         sum_dg += wi * dot_term;
         sum_dtheta += dtheta_dx;
     }
-    dphidx = (theta_sum * sum_df - sum_dg * sum_dtheta) / theta_sum / theta_sum; 
+    if (theta_sum > 1e-8)
+        dphidx = (theta_sum * sum_df - sum_dg * sum_dtheta) / theta_sum / theta_sum; 
 }
 
 void IMLS::hessian(const TV& test_point, TM& d2phidx2)
@@ -148,10 +205,12 @@ void IMLS::hessian(const TV& test_point, TM& d2phidx2)
         sum_c += dtheta_dx * dot_term + niwi;
         sum_d += wi * dot_term;
     }
-
-    d2phidx2 += (sum_theta * sum_b - sum_dtheta_dx * sum_a.transpose()) / sum_theta / sum_theta;
-    d2phidx2 -= (sum_theta * sum_theta * (sum_c * sum_dtheta_dx.transpose() + sum_d * sum_d2theta_dx2) - 
-        2.0 * sum_d * sum_theta * sum_dtheta_dx * sum_dtheta_dx.transpose()) / std::pow(sum_theta, 4);
+    if (sum_theta > 1e-8)
+    {
+        d2phidx2 += (sum_theta * sum_b - sum_dtheta_dx * sum_a.transpose()) / sum_theta / sum_theta;
+        d2phidx2 -= (sum_theta * sum_theta * (sum_c * sum_dtheta_dx.transpose() + sum_d * sum_d2theta_dx2) - 
+            2.0 * sum_d * sum_theta * sum_dtheta_dx * sum_dtheta_dx.transpose()) / std::pow(sum_theta, 4);
+    }
 }
 
      

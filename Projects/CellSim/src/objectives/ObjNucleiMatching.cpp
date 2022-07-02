@@ -89,7 +89,8 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename, bool
     //     out << "v " << data_points.segment<3>(i * 3).transpose() << std::endl;
     // }
     // out.close();
-    
+    TV max_corner, min_corner;
+    simulation.cells.computeBoundingBox(min_corner, max_corner);
 
     if (success)
     {
@@ -110,9 +111,12 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename, bool
             }
             // if (!flag[cell_idx])
             //     continue;
+            
             if (data_point_idx > data_points.rows() / 3)
                 continue;
             TV target = data_points.segment<3>(data_point_idx * 3);
+            // if (target[1] > min_corner[1] + 0.3 * (max_corner[1] - min_corner[1]))
+            //     continue;
             if ((target - invalid_point).norm() < 1e-6)
                 continue;
             if ((target - TV::Constant(-1)).norm() < 1e-6)
@@ -1445,7 +1449,7 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
     updateDesignParameters(p_curr);
 
     T offset = 0.2 * (bound[1] - bound[0]);
-    std::cout << p_curr.maxCoeff()<< " " << bound[1] + offset << " " << p_curr.minCoeff() << " " << bound[0] - offset << std::endl;
+    // std::cout << p_curr.maxCoeff()<< " " << bound[1] + offset << " " << p_curr.minCoeff() << " " << bound[0] - offset << std::endl;
     if (p_curr.maxCoeff() > bound[1] + offset || p_curr.minCoeff() < bound[0] - offset)
         return 1e10;
     // if (p_wrap.maxCoeff() > bound[1] + offset || p_wrap.minCoeff() < -1)
@@ -1461,7 +1465,15 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
             // simulation.loadDeformedState("current_mesh.obj");
             bool forward_simulation_converged = simulation.staticSolve();
             if (!forward_simulation_converged)
+            {
+                saveDesignParameters("failed.txt", p_curr);
+                simulation.deformed = simulation.undeformed + equilibrium_prev;
+                std::cout << "use_prev_equil " << use_prev_equil << std::endl;
+                std::cout << equilibrium_prev.norm() << std::endl;
+                simulation.saveState("failed.obj", false, false);
+                std::exit(0);
                 return 1e3;
+            }
             if (!perturb)
                 break;
             VectorXT negative_eigen_vector;
@@ -1581,10 +1593,6 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     T Op; computeOp(p_curr, Op);
     dOdp += partialO_partialp;
     energy += Op;
-    for (int i = 0; i < n_dof_design; i++)
-    {
-        dOdp[i] *= wrapper<1>(p_curr[i]);
-    }
     
     return dOdp.norm();
 }

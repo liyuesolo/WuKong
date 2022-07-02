@@ -218,6 +218,10 @@ void Simulation::initializeCells()
     }
     else if (cells.resolution == 3)
     {
+        surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_3k_remesh.obj";
+    }
+    else if (cells.resolution == 4)
+    {
         surface_mesh_file = "/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/drosophila_real_6k_remesh.obj";
     }
     else if (cells.resolution == -1)
@@ -249,7 +253,7 @@ void Simulation::initializeCells()
     cells.print_force_norm = true;
     // save_mesh = true;
     // cells.project_block_hessian_PD = true;
-    cells.lower_triangular = true;
+    // cells.lower_triangular = true;
     
 }
 void Simulation::reinitializeCells()
@@ -479,12 +483,12 @@ void Simulation::appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& ed
     });
 }
 
-void Simulation::saveState(const std::string& filename, bool save_edges)
+void Simulation::saveState(const std::string& filename, bool save_rest_state, bool save_edges)
 {
     std::ofstream out(filename);
     Eigen::MatrixXd V, C;
     Eigen::MatrixXi F;
-    cells.generateMeshForRendering(V, F, C, false);
+    cells.generateMeshForRendering(V, F, C, save_rest_state);
     if (save_edges)
     {
         int cnt = 0;
@@ -667,12 +671,12 @@ bool Simulation::staticSolve()
                 min_compression = delta;
         }
     }
-    std::cout << compressed_cell_cnt << "/" << cells.basal_face_start 
-        << " cells are compressed. avg compression: " 
-        << compression / T(compressed_cell_cnt) 
-        << " max compression: " << max_compression
-        << " min compression: " << min_compression
-        << std::endl;
+    // std::cout << compressed_cell_cnt << "/" << cells.basal_face_start 
+    //     << " cells are compressed. avg compression: " 
+    //     << compression / T(compressed_cell_cnt) 
+    //     << " max compression: " << max_compression
+    //     << " min compression: " << min_compression
+    //     << std::endl;
     if (cells.has_rest_shape)
     {
         VectorXT edge_compression(cells.edges.size()); 
@@ -690,9 +694,9 @@ bool Simulation::staticSolve()
                 edge_compression[i] = l1 - l0;
             }
         });
-        std::cout << "edge compression sum " << edge_compression.sum()
-                    << " edge compression max " << edge_compression.maxCoeff() 
-                    << " edge compression min " << edge_compression.minCoeff() << std::endl;
+        // std::cout << "edge compression sum " << edge_compression.sum()
+        //             << " edge compression max " << edge_compression.maxCoeff() 
+        //             << " edge compression min " << edge_compression.minCoeff() << std::endl;
     }
 
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
@@ -918,7 +922,9 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     // out << K;
     // out.close();
     // std::exit(0);
+    
     Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     solver.pardisoParameterArray()[6] = 0;
     // solver.pardisoParameterArray()[59] = 1;
     auto& iparm = solver.pardisoParameterArray();
@@ -950,7 +956,6 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     for (; i < 50; i++)
     {
         // std::cout << i << std::endl;
-
         solver.factorize(K);
         // T time_factorize = t.elapsed_sec() - time_analyze;
         // std::cout << "\t factorize takes " << time_factorize << "s" << std::endl;
@@ -1010,7 +1015,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
             invalid_search_dir_cnt++;
         
         bool solve_success = true;//(K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
-
+        
         if (!solve_success)
             invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 
@@ -1029,6 +1034,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
                     << " invalid search dir " << invalid_search_dir_cnt
                     << " invalid solve " << invalid_residual_cnt << std::endl;
                 std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << (K.selfadjointView<Eigen::Lower>() * du + UV * UV.transpose()*du - residual).norm() << std::endl;
                 std::cout << "\t======================== " << std::endl;
             }
             return true;

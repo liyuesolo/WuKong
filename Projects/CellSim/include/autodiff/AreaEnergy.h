@@ -29,6 +29,15 @@ void computeHexFaceAreaEnergy(double stiffness, const Matrix<double,18,1> & face
 void computeHexFaceAreaEnergyGradient(double stiffness, const Matrix<double,18,1> & face_vertices, Matrix<double, 18, 1>& energygradient);
 void computeHexFaceAreaEnergyHessian(double stiffness, const Matrix<double,18,1> & face_vertices, Matrix<double, 18, 18>& energyhessian);
 
+void computeSepFaceAreaSquaredSum(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, double& energy);
+void computeSepFaceAreaSquaredSumGradient(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, Eigen::Matrix<double, 21, 1>& energygradient);
+void computeSepFaceAreaSquaredSumHessian(double stiffness, const Eigen::Matrix<double,21,1> & face_vertices, Eigen::Matrix<double, 21, 21>& energyhessian);
+
+void computeOctFaceAreaSquaredSum(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, double& energy);
+void computeOctFaceAreaSquaredSumGradient(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, Eigen::Matrix<double, 24, 1>& energygradient);
+void computeOctFaceAreaSquaredSumHessian(double stiffness, const Eigen::Matrix<double,24,1> & face_vertices, Eigen::Matrix<double, 24, 24>& energyhessian);
+
+
 double computeAreaFourPoints(const Matrix<double,3,1> & r0, const Matrix<double,3,1> & r1, const Matrix<double,3,1> & r2, const Matrix<double,3,1> & r3);
 void computeAreaFourPointsGradient(const Matrix<double,3,1> & r0, const Matrix<double,3,1> & r1, const Matrix<double,3,1> & r2, const Matrix<double,3,1> & r3, Matrix<double, 12, 1>& energygradient);
 void computeAreaFourPointsHessian(const Matrix<double,3,1> & r0, const Matrix<double,3,1> & r1, const Matrix<double,3,1> & r2, const Matrix<double,3,1> & r3, Matrix<double, 12, 12>& energyhessian);

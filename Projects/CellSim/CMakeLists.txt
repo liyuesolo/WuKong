@@ -1,4 +1,4 @@
-set(DEPS cholmod_solver solver partio Half openvdb tbb tbbmalloc tbbmalloc_proxy mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis cholmod amd camd ccolamd colamd spqr igl::mosek)
+set(DEPS lbfgsb_solver cholmod_solver solver partio Half openvdb tbb tbbmalloc tbbmalloc_proxy mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis cholmod amd camd ccolamd colamd spqr igl::mosek igl::tetgen)
 
 file(GLOB HEADERS "include/*.h" "include/*.hpp" "icp/*.h")
 file(GLOB SOURCES "*.c" "*.cpp" "src/*.cpp" "src/autodiff/*.cpp" "icp/*.cpp" "src/objectives/*.cpp")
@@ -6,10 +6,6 @@ file(GLOB SOURCES "*.c" "*.cpp" "src/*.cpp" "src/autodiff/*.cpp" "icp/*.cpp" "sr
 
 add_executable(CellSim ${HEADERS} ${SOURCES})
 
-set(SuiteSparse_ROOT "/home/yueli/Documents/SuiteSparse-5.9.0")
-include_directories(${SuiteSparse_ROOT})
-include_directories(${SuiteSparse_ROOT}/include)
-link_directories(${SuiteSparse_ROOT}/lib)
 
 
 target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/libipc_toolkit.a)
@@ -21,9 +17,10 @@ target_link_libraries(CellSim /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/
 
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/nanoflann/include)
 target_include_directories(CellSim PUBLIC ../../Libs/spectra/include)
-target_include_directories(CellSim PUBLIC ../../Libs/lbfgs)
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/mosek/9.2/tools/platform/linux64x86/h)
 target_include_directories(CellSim PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
+
+target_include_directories(CellSim PUBLIC ../../Libs/lbfgsb-Jonas)
 
 find_package (IPOPT REQUIRED)
 if(IPOPT_FOUND)

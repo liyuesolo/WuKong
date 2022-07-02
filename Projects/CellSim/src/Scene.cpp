@@ -591,6 +591,34 @@ void VertexModel::constructAnnulusScene()
 
 void VertexModel::vertexModelFromMesh(const std::string& filename)
 {
+    for (auto& data : tet_index_quad_prism)
+    {
+        T cp = data[0];
+        data[0] = data[1];
+        data[1] = cp;
+    }
+    for (auto& data : tet_index_oct_prism)
+    {
+        T cp = data[0];
+        data[0] = data[1];
+        data[1] = cp;
+    }
+    for (auto& data : tet_index_sept_prism)
+    {
+        T cp = data[0];
+        data[0] = data[1];
+        data[1] = cp;
+    }
+    //     std::reverse(data.begin(), data.end());
+    // for (auto& data : tet_index_sept_prism)
+    //     std::reverse(data.begin(), data.end());
+    // for (auto& data : tet_index_oct_prism)
+    //     std::reverse(data.begin(), data.end());
+    // for (auto& data : tet_index_penta_prism)
+    //     std::reverse(data.begin(), data.end());
+    // for (auto& data : tet_index_hexa_prism)
+    //     std::reverse(data.begin(), data.end());
+
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
@@ -708,9 +736,9 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     // tbb::parallel_for(0, (int)basal_vtx_start, [&](int i)
     VectorXT percentage(basal_vtx_start);
-    T a = 14.0, c = 4.0;
+    // T a = 14.0, c = 4.0;
     // T a = 10.0, c = 3.5;
-    // T a = 8.0, c = 3.0;
+    T a = 8.0, c = 3.0;
     
     if (resolution < 2)
     {
@@ -820,6 +848,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
 
     use_face_centroid = use_cell_centroid;
+    // use_face_centroid = false;
     edge_weight_mask.resize(edges.size());
     edge_weight_mask.setOnes();
 
@@ -861,18 +890,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
             Gamma = 1.0;
         else 
         {
-            if (use_cell_centroid)
-            {
-                Gamma = 20; 
-                if (has_rest_shape)
-                {
-                    Gamma = 20;
-                    sigma = 1.0;
-                    gamma = 0.2;
-                    alpha = 4.0;
-                }
-                
-            }
+            Gamma = 20; 
+            sigma = 1.0;
+            gamma = 0.2;
+            alpha = 4.0;
         }
     }
     // Gamma *= 0.01;
@@ -951,8 +972,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     pressure_constant = 0.1;
     
 
-    // preserve_tet_vol = !use_cell_centroid;
-    tet_vol_penalty = 1e10;
+    preserve_tet_vol = false;
+    tet_vol_penalty = 1e4;
 
     if (preserve_tet_vol)
         computeTetVolInitial();
@@ -1018,7 +1039,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     add_tet_vol_barrier = true;
 
     add_log_tet_barrier = false;
-    tet_vol_barrier_dhat = 1e-6;
+    tet_vol_barrier_dhat = 1e-2;
     if (use_cell_centroid && !add_log_tet_barrier)
         // tet_vol_barrier_w = 1e-25;
         tet_vol_barrier_w = 1e-34;
@@ -1044,11 +1065,20 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
 
     use_sdf_boundary = true;
 
+    VectorXT edge_norm(edges.size());
+    tbb::parallel_for(0, (int)edges.size(), [&](int i){
+        TV vi = undeformed.segment<3>(edges[i][0] * 3);
+        TV vj = undeformed.segment<3>(edges[i][1] * 3);
+        edge_norm[i] = (vj - vi).norm();
+    });
+    
+    
     if (use_sdf_boundary && use_sphere_radius_bound)
     {
         bound_coeff = 1e2;
         
         T normal_offset = 1e-3;// * unit;
+        // T normal_offset = 0;
         // T normal_offset = 0.1;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
@@ -1066,7 +1096,10 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         
         TV v0 = deformed.segment<3>(edges[0][0] * 3);
         TV v1 = deformed.segment<3>(edges[0][1] * 3);
-        T ref_spacing = (v1 - v0).norm();
+        // T ref_spacing = (v1 - v0).norm() * 0.5;
+        T ref_spacing = edge_norm.sum() / edge_norm.rows();
+        std::cout << ref_spacing << std::endl;
+        
         // ref_spacing = 0.4;
         // std::cout << ref_spacing << std::endl;
         // std::getchar();

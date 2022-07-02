@@ -30,7 +30,6 @@ using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 
 int main(int argc, char** argv)
 {
-    
     Simulation simulation;
     ObjNucleiTracking obj(simulation);
     // ObjFindInit obj_find_init(simulation);
@@ -101,6 +100,12 @@ int main(int argc, char** argv)
         simulation.cells.resolution = -1;
         simulation.initializeCells();
         simulation.max_newton_iter = 300;
+        if (simulation.cells.use_cell_centroid)
+            simulation.cells.tet_vol_barrier_w = 1e-10;
+        else
+            simulation.cells.tet_vol_barrier_w = 1e3;
+        simulation.cells.add_perivitelline_liquid_volume = false;
+        simulation.cells.Bp = 0.0;
         std::string data_file = data_folder;
         if (simulation.cells.resolution == -1)
             data_file += "centroids_56.txt";
@@ -139,6 +144,7 @@ int main(int argc, char** argv)
         sa.saveConfig();
         // sa.optimizeIPOPT();
         // runSA();
+        // obj.diffTestGradientScale();
         // simulation.cells.edge_weights.setConstant(10.0);
         // simulation.cells.edge_weights.array() += 2;
         // sa.checkStatesAlongGradient();
@@ -147,16 +153,24 @@ int main(int argc, char** argv)
     {
         simulation.cells.resolution = 1;
         simulation.initializeCells();
+        simulation.cells.lower_triangular = true;
         simulation.cells.edge_weights.setConstant(0.01);
         simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
-        simulation.cells.tet_vol_barrier_w = 1e-10;
+        if (simulation.cells.use_cell_centroid)
+            simulation.cells.tet_vol_barrier_w = 1e-10;
+        else
+            simulation.cells.tet_vol_barrier_w = 1e3;
         simulation.cells.add_perivitelline_liquid_volume = false;
         simulation.cells.Bp = 0.0;
+        simulation.cells.B = 1e6;
+        simulation.cells.By = 1e3;
+        simulation.cells.bound_coeff = 1e6;
 
+        // simulation.cells.print_force_norm = false;
+        // simulation.cells.checkTotalGradientScale();
         // simulation.cells.checkTotalHessianScale();
-
-        // simulation.cells.bound_coeff = 1e6;
+        
         obj.setFrame(40);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
         
@@ -221,12 +235,18 @@ int main(int argc, char** argv)
         // sa.design_parameters = simulation.cells.edge_weights;
         // sa.checkStatesAlongGradientSGN();
         // obj.diffTestGradientScale();
+        // obj.diffTestGradientScale();
         
     }
     else if (test_case == 4)
     {
-        simulation.cells.resolution = 1;
-        simulation.initializeCells();   
+        simulation.cells.resolution = 3;
+        simulation.initializeCells();
+        simulation.cells.tet_vol_barrier_w = 1e-10;
+        simulation.cells.add_perivitelline_liquid_volume = false;
+        simulation.cells.Bp = 0.0;
+        simulation.cells.bound_coeff = 1e8;
+        simulation.cells.B = 1e6;
     }
     else if (test_case == 5)
     {
@@ -266,6 +286,9 @@ int main(int argc, char** argv)
         int exp_id = 838;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".obj");
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
+        simulation.loadEdgeWeights("failed.txt", simulation.cells.edge_weights);
+        std::cout << simulation.cells.edge_weights.minCoeff() << " " << simulation.cells.edge_weights.maxCoeff() << std::endl;
+        simulation.loadDeformedState("failed.obj");
         // simulation.newton_tol = 1e-8;
         // simulation.cells.edge_weights.setConstant(0.1);
         sim_app.setViewer(viewer, menu);
@@ -327,7 +350,7 @@ int main(int argc, char** argv)
     auto generateWeights = [&]()
     {
         obj.setFrame(0);
-        simulation.cells.edge_weights.setConstant(0.01);
+        // simulation.cells.edge_weights.setConstant(0.0);
         simulation.verbose = true;
         simulation.save_mesh = false;
         simulation.cells.print_force_norm = false;
@@ -341,6 +364,10 @@ int main(int argc, char** argv)
             weights_filename += "weights_463.txt";
         else if (simulation.cells.resolution == 2)
             weights_filename += "weights_1500.txt";
+        else if (simulation.cells.resolution == 3)
+            weights_filename += "weights_3000.txt";
+        else if (simulation.cells.resolution == 4)
+            weights_filename += "weights_6300.txt";
         obj.computeCellTargetsFromDatapoints(weights_filename);
     };
 
@@ -458,8 +485,8 @@ int main(int argc, char** argv)
         // renderData();
         // processDrosophilaData();
         // visualizeData();
-        runSA();
-        // runSim();
+        // runSA();
+        runSim();
         // generateNucleiGT();
         // generateWeights();
         // renderScene();
@@ -468,7 +495,10 @@ int main(int argc, char** argv)
     {
         // sa.saveConfig();
         // sa.optimizeIPOPT();
+        
+        // sa.optimizeLBFGSB();
         runSA();
+        // runSim();
         // sa.runTracking(28, 45, /*load weights = */false, /*weigts_file = */"");
     }
 

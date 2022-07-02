@@ -1748,6 +1748,12 @@ void DataViewerApp::loadFrameData(int frame, VectorXT& frame_data)
         else if (simulation.cells.resolution == 2)
             // frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
             valid_points.push_back(updated * 0.9 * simulation.cells.unit);
+        else if (simulation.cells.resolution == 3)
+            // frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+            valid_points.push_back(updated * 0.92 * simulation.cells.unit);
+        else if (simulation.cells.resolution == 4)
+            // frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
+            valid_points.push_back(updated * 0.95 * simulation.cells.unit);
         // frame_data.segment<3>(i * 3) = updated * 0.9 * simulation.cells.unit; 
     }
     frame_data.resize(valid_points.size() * 3);

@@ -435,7 +435,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         
         if (optimizer == SQP || optimizer == SSQP)
         {
-            T epsilon = 1e-5;
+            T epsilon = 1e-12;
             VectorXT feasible_point_gradients = dOdp;
             for (int i = 0; i < n_dof_design; i++)
             {
@@ -454,7 +454,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         T tol_opt = abs_tol ? tol_g : rel_tol_g * initial_gradient_norm;
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
             << " |g_init| " << initial_gradient_norm << " tol " << tol_opt << " obj: " << E0 << std::endl;
-        std::cout << "forward simulation hessian eigen values: "; simulation.checkHessianPD(false);
+        // std::cout << "forward simulation hessian eigen values: "; simulation.checkHessianPD(false);
         // simulation.checkInfoForSA();
         if (g_norm < tol_opt || step > max_num_iter)
             return true;

@@ -37,6 +37,14 @@ void computeHexConeVolume(const Eigen::Matrix<double,18,1> & vertices, const Eig
 void computeHexConeVolumeGradient(const Eigen::Matrix<double,18,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 18, 1>& energygradient);
 void computeHexConeVolumeHessian(const Eigen::Matrix<double,18,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 18, 18>& energyhessian);
 
+void computeSepConeVolume(const Eigen::Matrix<double,21,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, double& energy);
+void computeSepConeVolumeGradient(const Eigen::Matrix<double,21,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 21, 1>& energygradient);
+void computeSepConeVolumeHessian(const Eigen::Matrix<double,21,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 21, 21>& energyhessian);
+
+void computeOctConeVolume(const Eigen::Matrix<double,24,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, double& energy);
+void computeOctConeVolumeGradient(const Eigen::Matrix<double,24,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 24, 1>& energygradient);
+void computeOctConeVolumeHessian(const Eigen::Matrix<double,24,1> & vertices, const Eigen::Matrix<double,3,1> & reference_point, Eigen::Matrix<double, 24, 24>& energyhessian);
+
 void computeConeVolume9Points(const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, double& energy);
 void computeConeVolume9PointsGradient(const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 27, 1>& energygradient);
 void computeConeVolume9PointsHessian(const Eigen::Matrix<double,27,1> & face_vertices, const Eigen::Matrix<double,3,1> & centroid, Eigen::Matrix<double, 27, 27>& energyhessian);

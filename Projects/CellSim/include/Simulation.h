@@ -123,7 +123,7 @@ public:
     void computeEigenValueSpectraSparse(StiffnessMatrix& A, int nmodes, VectorXT& modes, T shift = 1e-4);
     void loadDeformedState(const std::string& filename);
     void loadEdgeWeights(const std::string& filename, VectorXT& weights);
-    void saveState(const std::string& filename, bool save_edges = false);
+    void saveState(const std::string& filename, bool save_rest_state = false, bool save_edges = false);
     void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
         T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F);
     void loadVector(const std::string& filename, VectorXT& vector);

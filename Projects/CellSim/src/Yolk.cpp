@@ -141,6 +141,20 @@ T VertexModel::computeYolkVolume(bool verbose)
             else if (face_vtx_list.size() == 9) 
                 computeConeVolume9Points(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
         }
+        else
+        {
+            if (face_vtx_list.size() == 4) 
+                computeQuadConeVolume(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            else if (face_vtx_list.size() == 5) 
+                computePentaConeVolume(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            else if (face_vtx_list.size() == 6) 
+                computeHexConeVolume(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            else if (face_vtx_list.size() == 7) 
+                computeSepConeVolume(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            else if (face_vtx_list.size() == 8) 
+                computeOctConeVolume(positions, mesh_centroid, volumes[face_idx - basal_face_start]);
+            
+        }
     });
     return volumes.sum();
 
@@ -253,67 +267,6 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                     else
                         computePentaConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
-                    // bool trouble_tet = false;
-                    // for (int i = 0; i < 5; i++)
-                    // {
-                    //     TV xi = positions.segment<3>(i * 3);
-                    //     if (dedx.norm() < 1e-8)
-                    //         continue;
-                    //     if (dedx.segment<3>(i * 3).dot(xi - mesh_centroid) > 0)
-                    //     {
-                    //         trouble_tet = true;
-                    //         break;
-                    //     }
-                    // }
-                    // if (trouble_tet)
-                    // {
-                    //     saveBasalSurfaceMesh("trouble_surface.obj");
-                    //     std::exit(0);
-                    //     VectorXT rest_positions;
-                    //     positionsFromIndices(rest_positions, face_vtx_list, true);
-                    //     std::ofstream out("trouble_tet_rest.obj");
-                    //     for (int i = 0; i < 5; i++)
-                    //     {
-                    //         TV xi = rest_positions.segment<3>(i * 3);
-                    //         out << "v " <<  xi.transpose() << std::endl;
-                    //     }
-                    //     out << "v " <<  mesh_centroid.transpose() << std::endl;
-                    //     for (int i = 0; i < 5; i++)
-                    //     {
-                            
-                    //         out << "f 1 2 3" << std::endl; 
-                    //         out << "f 1 3 4" << std::endl; 
-                    //         out << "f 1 4 5" << std::endl; 
-                    //         out << "f 2 1 6" << std::endl; 
-                    //         out << "f 3 2 6" << std::endl; 
-                    //         out << "f 4 3 6" << std::endl; 
-                    //         out << "f 5 4 6" << std::endl; 
-                    //         out << "f 1 5 6" << std::endl; 
-                    //     }
-                    //     out.close();
-
-                    //     out.open("trouble_tet.obj");
-                    //     for (int i = 0; i < 5; i++)
-                    //     {
-                    //         TV xi = positions.segment<3>(i * 3);
-                    //         out << "v " <<  xi.transpose() << std::endl;
-                    //     }
-                    //     out << "v " <<  mesh_centroid.transpose() << std::endl;
-                    //     for (int i = 0; i < 5; i++)
-                    //     {
-                            
-                    //         out << "f 1 2 3" << std::endl; 
-                    //         out << "f 1 3 4" << std::endl; 
-                    //         out << "f 1 4 5" << std::endl; 
-                    //         out << "f 2 1 6" << std::endl; 
-                    //         out << "f 3 2 6" << std::endl; 
-                    //         out << "f 4 3 6" << std::endl; 
-                    //         out << "f 5 4 6" << std::endl; 
-                    //         out << "f 1 5 6" << std::endl; 
-                    //     }
-                    //     out.close();
-                    //     std::getchar();
-                    // }
                     addForceEntry<15>(residual, face_vtx_list, dedx);
                 }
                 else if (face_vtx_list.size() == 6)
@@ -324,72 +277,6 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                     else
                         computeHexConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
-                    // bool trouble_tet = false;
-                    // for (int i = 0; i < 6; i++)
-                    // {
-                    //     TV xi = positions.segment<3>(i * 3);
-                    //     if (dedx.norm() < 1e-8)
-                    //         continue;
-                    //     if (dedx.segment<3>(i * 3).dot(xi - mesh_centroid) > 0)
-                    //     {
-                    //         trouble_tet = true;
-                    //         break;
-                    //     }
-                    // }
-                    // if (trouble_tet)
-                    // {
-                    //     saveAPrism("trouble_prism.obj", face_vtx_list);
-                    //     saveBasalSurfaceMesh("trouble_surface.obj");
-                    //     // std::exit(0);
-                    //     VectorXT rest_positions;
-                    //     positionsFromIndices(rest_positions, face_vtx_list, true);
-                    //     std::ofstream out("trouble_tet_rest.obj");
-                    //     for (int i = 0; i < 6; i++)
-                    //     {
-                    //         TV xi = rest_positions.segment<3>(i * 3);
-                    //         out << "v " <<  xi.transpose() << std::endl;
-                    //     }
-                    //     out << "v " <<  mesh_centroid.transpose() << std::endl;
-                    //     for (int i = 0; i < 6; i++)
-                    //     {
-                            
-                    //         out << "f 1 2 3" << std::endl; 
-                    //         out << "f 1 3 4" << std::endl; 
-                    //         out << "f 1 4 6" << std::endl; 
-                    //         out << "f 6 4 5" << std::endl; 
-                    //         out << "f 2 1 7" << std::endl; 
-                    //         out << "f 3 2 7" << std::endl; 
-                    //         out << "f 4 3 7" << std::endl; 
-                    //         out << "f 5 4 7" << std::endl; 
-                    //         out << "f 6 5 7" << std::endl; 
-                    //         out << "f 1 6 7" << std::endl; 
-                    //     }
-                    //     out.close();
-
-                    //     out.open("trouble_tet.obj");
-                    //     for (int i = 0; i < 6; i++)
-                    //     {
-                    //         TV xi = positions.segment<3>(i * 3);
-                    //         out << "v " <<  xi.transpose() << std::endl;
-                    //     }
-                    //     out << "v " <<  mesh_centroid.transpose() << std::endl;
-                    //     for (int i = 0; i < 6; i++)
-                    //     {
-                            
-                    //         out << "f 1 2 3" << std::endl; 
-                    //         out << "f 1 3 4" << std::endl; 
-                    //         out << "f 1 4 6" << std::endl; 
-                    //         out << "f 6 4 5" << std::endl; 
-                    //         out << "f 2 1 7" << std::endl; 
-                    //         out << "f 3 2 7" << std::endl; 
-                    //         out << "f 4 3 7" << std::endl; 
-                    //         out << "f 5 4 7" << std::endl; 
-                    //         out << "f 6 5 7" << std::endl; 
-                    //         out << "f 1 6 7" << std::endl; 
-                    //     }
-                    //     out.close();
-                    //     std::getchar();
-                    // }
                     addForceEntry<18>(residual, face_vtx_list, dedx);
                 }
                 else if (face_vtx_list.size() == 7)
@@ -397,6 +284,8 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 21> dedx;
                     if (use_cell_centroid)
                         computeConeVolume7PointsGradient(positions, mesh_centroid, dedx);
+                    else 
+                        computeSepConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
                     addForceEntry<21>(residual, face_vtx_list, dedx);
                 }
@@ -405,6 +294,8 @@ void VertexModel::addYolkVolumePreservationForceEntries(VectorXT& residual)
                     Vector<T, 24> dedx;
                     if (use_cell_centroid)
                         computeConeVolume8PointsGradient(positions, mesh_centroid, dedx);
+                    else
+                        computeOctConeVolumeGradient(positions, mesh_centroid, dedx);
                     dedx *= -coeff;
                     addForceEntry<24>(residual, face_vtx_list, dedx);
                 }
@@ -476,6 +367,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         Vector<T, 21> dedx;
                         if (use_cell_centroid)
                             computeConeVolume7PointsGradient(positions, mesh_centroid, dedx);
+                        else
+                            computeSepConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<21>(dVdx_full, face_vtx_list, dedx);
                     }
                     else if (face_vtx_list.size() == 8)
@@ -483,6 +376,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         Vector<T, 24> dedx;
                         if (use_cell_centroid)
                             computeConeVolume8PointsGradient(positions, mesh_centroid, dedx);
+                        else
+                            computeOctConeVolumeGradient(positions, mesh_centroid, dedx);
                         addForceEntry<24>(dVdx_full, face_vtx_list, dedx);
                     }
                     else if (face_vtx_list.size() == 9)
@@ -551,6 +446,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         Matrix<T, 21, 21> d2Vdx2;
                         if (use_cell_centroid)
                             computeConeVolume7PointsHessian(positions, mesh_centroid, d2Vdx2);
+                        else
+                            computeSepConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
                         Matrix<T, 21, 21> hessian;
                         hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
                         if(projectPD)
@@ -562,6 +459,8 @@ void VertexModel::addYolkVolumePreservationHessianEntries(std::vector<Entry>& en
                         Matrix<T, 24, 24> d2Vdx2;
                         if (use_cell_centroid)
                             computeConeVolume8PointsHessian(positions, mesh_centroid, d2Vdx2);
+                        else
+                            computeOctConeVolumeHessian(positions, mesh_centroid, d2Vdx2);
                         Matrix<T, 24, 24> hessian;
                         hessian = By * (yolk_vol_curr - yolk_vol_init) * d2Vdx2;
                         if(projectPD)

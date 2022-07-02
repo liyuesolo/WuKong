@@ -261,12 +261,15 @@ public:
                 std::vector<std::vector<int>> prism_tet_indexing;
 
                 if (cell_face.size() == 4)
-                    continue;
+                    prism_tet_indexing = tet_index_quad_prism;
                 else if (cell_face.size() == 5)
                     prism_tet_indexing = tet_index_penta_prism;
                 else if (cell_face.size() == 6)
                     prism_tet_indexing = tet_index_hexa_prism;
-
+                else if (cell_face.size() == 7)
+                    prism_tet_indexing = tet_index_sept_prism;
+                else if (cell_face.size() == 8)
+                    prism_tet_indexing = tet_index_oct_prism;
                 for (auto tet : prism_tet_indexing)
                 {
                     
@@ -434,6 +437,15 @@ public:
     }
 
 public:
+    std::vector<std::vector<int>> tet_index_quad_prism = 
+    {
+        {6, 0, 5, 1},
+        {7, 2, 0, 6},
+        {4, 6, 0, 5},
+        {4, 6, 7, 0},
+        {7, 2, 3, 0},
+        {2, 0, 6, 1}
+    };
 
     std::vector<std::vector<int>> tet_index_penta_prism = 
     {
@@ -462,6 +474,47 @@ public:
         {1, 11, 5, 0},
         {10, 1, 8, 7},
         {10, 1, 11, 4}
+    };
+
+    std::vector<std::vector<int>> tet_index_sept_prism = 
+    {
+        {5, 13, 12, 4},
+        {13, 4, 11, 12},
+        {13, 4, 1, 11},
+        {9, 1, 2, 10},
+        {0, 8, 7, 13},
+        {0, 1, 13, 6},
+        {11, 3, 1, 10},
+        {9, 1, 10, 8},
+        {1, 11, 10, 8},
+        {5, 13, 4, 6},
+        {4, 13, 1, 6},
+        {10, 1, 2, 3},
+        {11, 3, 4, 1},
+        {13, 8, 11, 1},
+        {0, 8, 13, 1}
+    };
+
+    std::vector<std::vector<int>> tet_index_oct_prism = 
+    {
+        {12, 2, 10, 11},
+        {5, 14, 4, 6},
+        {15, 14, 0, 8},
+        {0, 10, 2, 1},
+        {6, 15, 0, 7},
+        {12, 0, 4, 14},
+        {8, 12, 14, 0},
+        {3, 12, 11, 2},
+        {6, 15, 14, 0},
+        {14, 13, 4, 12},
+        {5, 14, 13, 4},
+        {4, 0, 6, 14},
+        {12, 0, 2, 4},
+        {3, 12, 2, 4},
+        {12, 0, 10, 2},
+        {8, 12, 0, 10},
+        {9, 0, 1, 10},
+        {9, 0, 10, 8}
     };
 
     int scene_type = 0;
@@ -931,7 +984,6 @@ public:
         }
         else
         {
-            // cnt = 0;
             for (int i = 0; i < vtx_idx.size(); i++)
             {
                 int dof_i = vtx_idx[i];
@@ -945,12 +997,7 @@ public:
                         {
                             if (lower_triangular && (dof_i == dof_j))
                                 if (l > k) continue;
-                            // if (lower_triangular)
-                            //     if (dof_j * 3 + l > dof_i * 3 + k) continue;
-                            // if (std::abs(hessian(i * 3 + k, j * 3 + l)) > 1e-8)
                             {
-                                // triplets[n_curr + cnt] = Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l));
-                                // cnt++;
                                 triplets.push_back(Entry(dof_i * 3 + k, dof_j * 3 + l, hessian(i * 3 + k, j * 3 + l)));                
                             }
                         }
