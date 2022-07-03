@@ -699,7 +699,7 @@ bool Simulation::staticSolve()
         //             << " edge compression min " << edge_compression.minCoeff() << std::endl;
     }
 
-    if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
+    if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1e-4)
         return false;
     return true;
 }

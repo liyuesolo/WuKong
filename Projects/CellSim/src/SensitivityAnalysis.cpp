@@ -532,18 +532,18 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             }
             
             T alpha_reg = 10e-6;
-            while (true)
-            {
-                Eigen::LLT<Eigen::MatrixXd> lltOfA(H_GN);
-                if(lltOfA.info() == Eigen::NumericalIssue)
-                {
-                    std::cout << "add reg to H_GN" << std::endl;
-                    H_GN.diagonal().array() += alpha_reg;
-                    alpha_reg *= 10.0;
-                }
-                else
-                    break;
-            }
+            // while (true)
+            // {
+            //     Eigen::LLT<Eigen::MatrixXd> lltOfA(H_GN);
+            //     if(lltOfA.info() == Eigen::NumericalIssue)
+            //     {
+            //         std::cout << "add reg to H_GN" << std::endl;
+            //         H_GN.diagonal().array() += alpha_reg;
+            //         alpha_reg *= 10.0;
+            //     }
+            //     else
+            //         break;
+            // }
             
             T reg_alpha = 1e-6;
             StiffnessMatrix A;

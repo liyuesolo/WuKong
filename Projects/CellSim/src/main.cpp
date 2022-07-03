@@ -155,7 +155,7 @@ int main(int argc, char** argv)
         simulation.initializeCells();
         simulation.cells.lower_triangular = true;
         simulation.cells.edge_weights.setConstant(0.01);
-        simulation.max_newton_iter = 300;
+        simulation.max_newton_iter = 500;
         // simulation.newton_tol = 1e-9;
         if (simulation.cells.use_cell_centroid)
             simulation.cells.tet_vol_barrier_w = 1e-10;
@@ -165,7 +165,7 @@ int main(int argc, char** argv)
         simulation.cells.Bp = 0.0;
         simulation.cells.B = 1e6;
         simulation.cells.By = 1e3;
-        simulation.cells.bound_coeff = 1e6;
+        simulation.cells.bound_coeff = 1e4;
 
         // simulation.cells.print_force_norm = false;
         // simulation.cells.checkTotalGradientScale();
@@ -486,9 +486,9 @@ int main(int argc, char** argv)
         // processDrosophilaData();
         // visualizeData();
         // runSA();
-        runSim();
+        // runSim();
         // generateNucleiGT();
-        // generateWeights();
+        generateWeights();
         // renderScene();
     }
     else if (argc > 1)
