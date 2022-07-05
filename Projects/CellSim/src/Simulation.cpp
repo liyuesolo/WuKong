@@ -95,7 +95,7 @@ void Simulation::checkHessianPD(bool save_txt)
     buildSystemMatrix(u, d2edx2);
     bool use_Spectra = true;
 
-    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2); 
     solver.factorize(d2edx2);
     bool indefinite = false;
@@ -244,8 +244,8 @@ void Simulation::initializeCells()
     // cells.vtx_vel.setRandom();
     // cells.vtx_vel/=cells.vtx_vel.norm();
     // cells.checkTotalGradient(true);
-    // cells.checkTotalGradientScale(true);
-    // cells.checkTotalHessianScale(true);
+    // cells.checkTotalGradientScale(false);
+    // cells.checkTotalHessianScale(false);
     // cells.checkTotalHessian(true);
     
     max_newton_iter = FOREVER;
@@ -417,6 +417,7 @@ bool Simulation::advanceOneStep(int step)
             return true;
 
         T dq_norm = lineSearchNewton(u, residual);
+        cells.updateALMData(u);
         step_timer.stop();
         if (verbose)
             std::cout << "[Newton] step takes " << step_timer.elapsed_sec() << "s" << std::endl;

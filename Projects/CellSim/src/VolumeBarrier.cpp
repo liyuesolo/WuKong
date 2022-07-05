@@ -199,6 +199,8 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
                         cell_vtx_list.push_back(idx + basal_vtx_start);
 
                     positionsFromIndices(positions, cell_vtx_list);
+                    
+                    T scaling_factor = cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
 
                     TV cell_centroid = TV::Zero();
                     TV apical_centroid = TV::Zero();
@@ -220,7 +222,7 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
                         int j = (i + 1) % face_vtx_list.size();
                         TV r0 = positions.segment<3>(i * 3);
                         TV r1 = positions.segment<3>(j * 3);
-                        if (-computeTetVolume(apical_centroid, r1, r0, cell_centroid) < TET_VOL_MIN)
+                        if (-computeTetVolume(apical_centroid, r1, r0, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
@@ -228,29 +230,29 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
 
                         TV r2 = positions.segment<3>((i + face_vtx_list.size()) * 3);
                         TV r3 = positions.segment<3>((j + face_vtx_list.size()) * 3);
-                        if (computeTetVolume(basal_centroid, r3, r2, cell_centroid) < TET_VOL_MIN)
+                        if (computeTetVolume(basal_centroid, r3, r2, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
                         }
 
                         TV lateral_centroid = T(0.25) * (r0 + r1 + r2 + r3);
-                        if (computeTetVolume(lateral_centroid, r1, r0, cell_centroid) < TET_VOL_MIN)
+                        if (computeTetVolume(lateral_centroid, r1, r0, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
                         }
-                        if (computeTetVolume(lateral_centroid, r3, r1, cell_centroid) < TET_VOL_MIN)
+                        if (computeTetVolume(lateral_centroid, r3, r1, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
                         }
-                        if (computeTetVolume(lateral_centroid, r2, r3, cell_centroid) < TET_VOL_MIN)
+                        if (computeTetVolume(lateral_centroid, r2, r3, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
                         }
-                        if (computeTetVolume(lateral_centroid, r0, r2, cell_centroid) < TET_VOL_MIN)
+                        if (computeTetVolume(lateral_centroid, r0, r2, cell_centroid) / scaling_factor < TET_VOL_MIN)
                         {
                             constraint_violated = true;
                             break;
@@ -268,7 +270,9 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
                 if (constraint_violated)
                     return;
                 
-                T d = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+                T d_cur = computeTetVolume(x_deformed.col(0), x_deformed.col(1), x_deformed.col(2), x_deformed.col(3));
+                T d_bar = computeTetVolume(x_undeformed.col(0), x_undeformed.col(1), x_undeformed.col(2), x_undeformed.col(3));
+                T d = d_cur / d_bar;
                 if (d < TET_VOL_MIN) constraint_violated = true;
             });
         }

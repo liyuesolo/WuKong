@@ -742,7 +742,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     
     if (resolution < 2)
     {
-        a = 3.0; c = 1;
+        a = 3.0; c = 1.0;
     }
         
     // else if (resolution == 2)
@@ -891,6 +891,7 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
         else 
         {
             Gamma = 20; 
+            // Gamma = 5.0; 
             sigma = 1.0;
             gamma = 0.2;
             alpha = 4.0;
@@ -996,8 +997,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     if (use_alm_on_cell_volume)
     {
         lambda_cell_vol = VectorXT::Zero(deformed.rows());
-        kappa = 1e6;
-        kappa_max = 1e3 * kappa;
+        kappa = 1e4;
+        kappa_max = 1e4;
     }
 
     use_fixed_centroid = false;
@@ -1077,8 +1078,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         bound_coeff = 1e2;
         
-        T normal_offset = 1e-3;// * unit;
-        // T normal_offset = 0;
+        // T normal_offset = 1e-3;// * unit;
+        T normal_offset = 0;
         // T normal_offset = 0.1;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;
