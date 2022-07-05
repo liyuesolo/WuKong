@@ -230,6 +230,7 @@ void VertexModel::computeVolumeAllCells(VectorXT& cell_volume_list)
                 else if (face_vtx_list.size() == 8)
                     computeOctBasePrismVolume(positions, cell_volume_list[cell_idx]);
             }
+
         });
         
         
@@ -431,8 +432,17 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                         computeVolume7PointsGradient(positions, dedx);
                     else
                         computeSepBasePrismVolumeGradient(positions, dedx);
-                    dedx *= -B * ci;
-                    addForceEntry<42>(residual, cell_vtx_list, dedx);
+                    if (use_alm_on_cell_volume)
+                    {
+                        Vector<T, 42> negative_gradient =  
+                            lambda_cell_vol[face_idx] * dedx - kappa * ci * dedx;
+                        addForceEntry<42>(residual, cell_vtx_list, negative_gradient);
+                    }
+                    else
+                    {
+                        dedx *= -B * ci;
+                        addForceEntry<42>(residual, cell_vtx_list, dedx);
+                    }
                 }
                 else if (face_vtx_list.size() == 8)
                 {
@@ -441,8 +451,17 @@ void VertexModel::addCellVolumePreservationForceEntries(VectorXT& residual)
                         computeVolume8PointsGradient(positions, dedx);
                     else
                         computeOctBasePrismVolumeGradient(positions, dedx);
-                    dedx *= -B * ci;
-                    addForceEntry<48>(residual, cell_vtx_list, dedx);
+                    if (use_alm_on_cell_volume)
+                    {
+                        Vector<T, 48> negative_gradient =  
+                            lambda_cell_vol[face_idx] * dedx - kappa * ci * dedx;
+                        addForceEntry<48>(residual, cell_vtx_list, negative_gradient);
+                    }
+                    else
+                    {
+                        dedx *= -B * ci;
+                        addForceEntry<48>(residual, cell_vtx_list, dedx);
+                    }
                 }
                 else if (face_vtx_list.size() == 9)
                 {
@@ -749,10 +768,18 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 
                 // break it down here to avoid super long autodiff code
                 Matrix<T, 42, 42> hessian;
-
                 hessian.setZero();
-                hessian += B * dVdx * dVdx.transpose();
-                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {
+                    hessian += B * dVdx * dVdx.transpose();
+                    hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                }
                 
                 if(projectPD)
                     projectBlockPD<42>(hessian);
@@ -778,8 +805,17 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 48, 48> hessian;
                 hessian.setZero();
                 
-                hessian += B * dVdx * dVdx.transpose();
-                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {
+                    hessian += B * dVdx * dVdx.transpose();
+                    hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                }
                 
                 if(projectPD)
                     projectBlockPD<48>(hessian);
@@ -802,8 +838,17 @@ void VertexModel::addCellVolumePreservationHessianEntries(std::vector<Entry>& en
                 Matrix<T, 54, 54> hessian;
                 hessian.setZero();
                 
-                hessian += B * dVdx * dVdx.transpose();
-                hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                if (use_alm_on_cell_volume)
+                {
+                    hessian = -lambda_cell_vol[face_idx] * d2Vdx2 + 
+                            kappa * (dVdx * dVdx.transpose() + 
+                            (V - cell_volume_init[face_idx]) * d2Vdx2);
+                }
+                else
+                {
+                    hessian += B * dVdx * dVdx.transpose();
+                    hessian += B * (V - cell_volume_init[face_idx]) * d2Vdx2;
+                }
                 
                 if(projectPD)
                     projectBlockPD<54>(hessian);

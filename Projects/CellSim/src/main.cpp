@@ -9,11 +9,11 @@
 #include <imgui/imgui.h>
 
 
+#include "../include/Misc.h"
 #include "../include/Simulation.h"
 #include "../include/VertexModel.h"
 #include "../include/SensitivityAnalysis.h"
 #include "../include/Objectives.h"
-#include "../include/Misc.h"
 #include "../include/app.h"
 #include "../include/DataIO.h"
 #include "../include/GeometryHelper.h"
@@ -30,6 +30,7 @@ using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 
 int main(int argc, char** argv)
 {
+    // testBiharmonicBasisFunction();
     Simulation simulation;
     ObjNucleiTracking obj(simulation);
     // ObjFindInit obj_find_init(simulation);
@@ -151,27 +152,35 @@ int main(int argc, char** argv)
     }
     else if (test_case == 2)
     {
-        simulation.cells.resolution = 1;
+        simulation.cells.resolution = 2;
         simulation.initializeCells();
         simulation.cells.lower_triangular = true;
         simulation.cells.edge_weights.setConstant(0.01);
-        simulation.max_newton_iter = 300;
+        simulation.max_newton_iter = 500;
         // simulation.newton_tol = 1e-9;
         if (simulation.cells.use_cell_centroid)
             simulation.cells.tet_vol_barrier_w = 1e-10;
         else
-            simulation.cells.tet_vol_barrier_w = 1e3;
+            simulation.cells.tet_vol_barrier_w = 1e1;
+        
         simulation.cells.add_perivitelline_liquid_volume = false;
+        // simulation.cells.alpha *= 0.01;
+        // simulation.cells.gamma *= 0.01;
+        // simulation.cells.sigma *= 0.01;
+        // simulation.cells.edge_weights *= 0.01;
+        // simulation.cells.Gamma *= 0.01;
         simulation.cells.Bp = 0.0;
-        simulation.cells.B = 1e6;
+        simulation.cells.B = 1e5;
         simulation.cells.By = 1e3;
-        simulation.cells.bound_coeff = 1e6;
+        simulation.cells.add_tet_vol_barrier = true;
+        simulation.cells.bound_coeff = 1e4;
+        // simulation.cells.use_alm_on_cell_volume = true;
 
         // simulation.cells.print_force_norm = false;
         // simulation.cells.checkTotalGradientScale();
         // simulation.cells.checkTotalHessianScale();
         
-        obj.setFrame(40);
+        obj.setFrame(30);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
         
         std::string weights_filename = data_folder;
@@ -227,7 +236,7 @@ int main(int argc, char** argv)
         sa.initialize(); 
         sa.saveConfig();
         // sa.optimizeIPOPT();
-        // sa.optimizeLBFGSB();
+        sa.optimizeLBFGSB();
         int iter = 449;
         int exp_id = 606;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/x_ipopt.obj");
@@ -282,13 +291,13 @@ int main(int argc, char** argv)
     {
         SimulationApp sim_app(simulation);
         
-        int iter = 3;
-        int exp_id = 838;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
-        simulation.loadEdgeWeights("failed.txt", simulation.cells.edge_weights);
-        std::cout << simulation.cells.edge_weights.minCoeff() << " " << simulation.cells.edge_weights.maxCoeff() << std::endl;
-        simulation.loadDeformedState("failed.obj");
+        int iter = 91;
+        int exp_id = 985;
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
+        // simulation.loadEdgeWeights("failed.txt", simulation.cells.edge_weights);
+        // std::cout << simulation.cells.edge_weights.minCoeff() << " " << simulation.cells.edge_weights.maxCoeff() << std::endl;
+        // simulation.loadDeformedState("failed.obj");
         // simulation.newton_tol = 1e-8;
         // simulation.cells.edge_weights.setConstant(0.1);
         sim_app.setViewer(viewer, menu);
@@ -486,7 +495,7 @@ int main(int argc, char** argv)
         // processDrosophilaData();
         // visualizeData();
         // runSA();
-        runSim();
+        // runSim();
         // generateNucleiGT();
         // generateWeights();
         // renderScene();

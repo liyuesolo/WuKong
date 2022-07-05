@@ -1471,7 +1471,8 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
                 std::cout << "use_prev_equil " << use_prev_equil << std::endl;
                 std::cout << equilibrium_prev.norm() << std::endl;
                 simulation.saveState("failed.obj", false, false);
-                std::exit(0);
+                simulation.deformed = simulation.undeformed + simulation.u;
+                // std::exit(0);
                 return 1e3;
             }
             if (!perturb)

@@ -1,11 +1,87 @@
 #ifndef MISC_H
 #define MISC_H
-
+#include <igl/biharmonic_coordinates.h>
+#include <igl/point_mesh_squared_distance.h>
 #include "VecMatDef.h"
 
 #include <utility>
 #include <iostream>
 #include <fstream>
+
+void testBiharmonicBasisFunction()
+{
+    using TV = Vector<double, 3>;
+    using IV = Vector<int, 3>;
+    int n_edge = 4;
+
+
+    Eigen::MatrixXd V, W;
+    Eigen::MatrixXi F, T;
+
+    if (n_edge == 4)
+    {
+        std::vector<std::vector<int>> tet_index_quad_prism = 
+        {
+            {6, 0, 5, 1},
+            {7, 2, 0, 6},
+            {4, 6, 0, 5},
+            {4, 6, 7, 0},
+            {7, 2, 3, 0},
+            {2, 0, 6, 1}
+        };
+        T.resize(6, 4);
+        for (int i = 0; i < tet_index_quad_prism.size(); i++)
+            for (int j = 0; j < 4; j++)
+                T(i, j) = tet_index_quad_prism[i][j];
+
+        V.resize(8, 3);
+        F.resize(12, 3);
+        
+        V.row(0) = TV(0, 0, 0); V.row(1) = TV(1, 0, 0); 
+        V.row(2) = TV(1, 0, 1); V.row(3) = TV(0, 0, 1);
+        V.row(4) = TV(0, 1, 0); V.row(5) = TV(1, 1, 0); 
+        V.row(6) = TV(1, 1, 1); V.row(7) = TV(0, 1, 1);
+
+        F.row(0) = IV(1, 3, 0);
+        F.row(1) = IV(2, 3, 1);
+        F.row(2) = IV(4, 7, 5);
+        F.row(3) = IV(5, 7, 6);
+
+        for (int i = 0; i < n_edge; i++)
+        {
+            int j = (i + 1) % n_edge;
+            F.row(4 + i * 2) = IV(j, i, n_edge + i);
+            F.row(4 + i * 2 + 1) = IV(j, n_edge + i, n_edge + j);
+        }
+        
+        std::vector<std::vector<int> > S;
+        std::vector<int> all_vtx_indices;
+        for (int i = 0; i < 8; i++)
+            all_vtx_indices.push_back(i);
+        
+        S.push_back({0}); 
+        for (int i = 1; i < 8; i++)
+            S.push_back({i});
+        for (int i = 0; i < 8; i++)
+            S.push_back({i});
+        //     S.push_back(all_vtx_indices);
+
+        Eigen::VectorXi b;
+        
+        // this will create a vector from 0 to V.rows()-1 where the gap is 1
+        Eigen::VectorXi J = Eigen::VectorXi::LinSpaced(V.rows(),0,V.rows()-1);
+        Eigen::VectorXd sqrD;
+        Eigen::MatrixXd _2;
+        igl::point_mesh_squared_distance(V,V,J,sqrD,b,_2);  
+        // std::cout << b << std::endl;
+        // igl::matrix_to_list(b,S);
+        
+
+        igl::biharmonic_coordinates(V, F, S, 2, W);
+        std::cout << W << std::endl;
+        std::exit(0);
+    }
+}
 
 void saveOBJPrism(int edge)
 {
