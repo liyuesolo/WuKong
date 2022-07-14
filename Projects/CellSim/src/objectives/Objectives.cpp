@@ -609,33 +609,6 @@ void Objectives::diffTestPartial2OPartialp2Scale()
     }
 }
 
-void Objectives::diffTestGradient()
-{
-    T epsilon = 1e-4;
-    VectorXT dOdp(n_dof_design);
-    dOdp.setZero();
-    VectorXT p;
-    getDesignParameters(p);
-    T _dummy;
-    gradient(p, dOdp, _dummy);
-
-    for(int _dof_i = 0; _dof_i < n_dof_design; _dof_i++)
-    {
-        int dof_i = _dof_i;
-        p[dof_i] += epsilon;
-        std::cout << "p_i+1: " << p[dof_i] << " ";
-        T E1 = value(p);
-        saveState("debug_p_i_plus_1.obj");
-        p[dof_i] -= 2.0 * epsilon;
-        std::cout << "p_i-1: " << p[dof_i] << std::endl;
-        T E0 = value(p);
-        saveState("debug_p_i_minus_1.obj");
-        p[dof_i] += epsilon;
-        T fd = (E1 - E0) / (2.0 *epsilon);
-        std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
-        std::getchar();
-    }
-}
 
 void Objectives::diffTestPartialOPartialp()
 {
@@ -701,6 +674,47 @@ void Objectives::diffTestPartialOPartialpScale()
         }
         previous = dE;
         dp *= 0.5;
+    }
+}
+
+void Objectives::diffTestGradient()
+{
+    T epsilon = 1e-4;
+    VectorXT dOdp(n_dof_design);
+    dOdp.setZero();
+    VectorXT p;
+    getDesignParameters(p);
+    T _dummy;
+    // simulation.newton_tol = 1e-9;
+    simulation.staticSolve();
+    VectorXT init = simulation.u;
+    equilibrium_prev = init;
+    // target_obj_weights.setZero();
+    // w_reg_spacial = 0.0;
+    gradient(p, dOdp, _dummy, true, true);
+
+    for(int _dof_i = 0; _dof_i < n_dof_design; _dof_i++)
+    {
+        std::cout << "dof i " << _dof_i << std::endl;
+        int dof_i = _dof_i;
+        p[dof_i] += epsilon;
+        // std::cout << "p_i+1: " << p[dof_i] << " ";
+        equilibrium_prev = init;
+        T E1 = value(p, true, true);
+        // saveState("debug_p_i_plus_1.obj");
+        p[dof_i] -= 2.0 * epsilon;
+        // std::cout << "p_i-1: " << p[dof_i] << std::endl;
+        equilibrium_prev = init;
+        T E0 = value(p, true, true);
+        // saveState("debug_p_i_minus_1.obj");
+        p[dof_i] += epsilon;
+        T fd = (E1 - E0) / (2.0 *epsilon);
+        // if(dOdp[dof_i] == 0 && fd == 0)
+        //     continue;
+        // if (std::abs(dOdp[dof_i] - fd) < 1e-3 * std::abs(dOdp[dof_i]))
+        //     continue;
+        std::cout << "dof " << dof_i << " symbolic " << dOdp[dof_i] << " fd " << fd << std::endl;
+        std::getchar();
     }
 }
 
@@ -819,7 +833,7 @@ void Objectives::diffTestdOdx()
 
 void Objectives::diffTestd2Odx2Scale()
 {
-    std::cout << "###################### CHECK dOdx SCALE ######################" << std::endl; 
+    std::cout << "###################### CHECK d2Odx2 SCALE ######################" << std::endl; 
     running_diff_test = true;   
     VectorXT x = simulation.deformed;
     StiffnessMatrix A(x.rows(), x.rows());

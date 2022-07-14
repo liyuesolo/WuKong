@@ -138,6 +138,7 @@ void SimulationApp::setMenu(igl::opengl::glfw::Viewer& viewer,
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
             simulation.staticSolve();
+            // simulation.staticSolveLBFGS();
             updateScreen(viewer);
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
@@ -397,6 +398,9 @@ void DiffSimApp::setViewer(igl::opengl::glfw::Viewer& viewer, igl::opengl::glfw:
         case 'a':
             viewer.core().is_animating = !viewer.core().is_animating;
             return true;
+        case 'c':
+            simulation.cells.computeCellInfo();
+            return true;
         case 'n':
             load_obj_iter_cnt++;
             std::cout << "state: " << load_obj_iter_cnt << std::endl;
@@ -540,7 +544,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         if (sa.objective.match_centroid)
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                     target_positions_std_vec.push_back(target + shift);
                     // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
@@ -548,7 +552,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                     target_positions_std_vec.push_back(target + shift);
                     // appendSphereToPosition(target + shift, sphere_radius, color, V, F, C);
             });
@@ -568,7 +572,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         {
             sa.objective.iterateTargets([&](int cell_idx, TV& target){
                 TV current;
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
                     // appendSphereToPosition(current + shift, sphere_radius, color, V, F, C);
@@ -581,7 +585,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     VectorXT positions;
                     std::vector<int> indices;
@@ -614,7 +618,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateTargets([&](int cell_idx, TV& target)
             {
                 TV current;
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     sa.simulation.cells.computeCellCentroid(simulation.cells.faces[cell_idx], current);
                     // appendCylinderToEdge(current + shift, target + shift, color, sphere_radius * 0.25, V, F, C);
@@ -628,7 +632,7 @@ void DiffSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
             sa.objective.iterateWeightedTargets([&](int cell_idx, int data_point_idx, 
                 const TV& target, const VectorXT& weights)
             {
-                if (sa.objective.target_obj_weights[cell_idx] > 1e-4)
+                if (sa.objective.target_obj_weights[cell_idx] > 1e-2)
                 {
                     VectorXT positions;
                     std::vector<int> indices;

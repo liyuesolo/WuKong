@@ -21,7 +21,7 @@ class Simulation;
 
 enum Optimizer
 {
-    GradientDescent, GaussNewton, MMA, Newton, SGN, SQP, SSQP
+    GradientDescent, GaussNewton, MMA, Newton, SGN, SQP, SSQP, TrustRegion
 };
 
 enum PenaltyType
@@ -80,15 +80,21 @@ public:
     PenaltyType penalty_type = Qubic;
     bool perturb = true;
     bool add_reg = false;
+    bool add_cell_reg = false;
     int power = 2;
     bool add_forward_potential = false;
     bool add_spatial_regularizor = false;
-    
+    std::string obj_data_folder = "";
+    int iter_cnt = 0;
     T w_reg_spacial = 1e-3;
     T w_fp = 1e-3;
     T w_data = 1.0;
+    T w_cell = 1e-3;
     std::string target_filename;
     T reg_w = 1e-6;
+    T w_reg_x_spacial = 1e-6;
+    bool add_spatial_x = false;
+
     T target_perturbation = 0.0;
     VectorXT rest_configuration;
     VectorXT prev_params;
@@ -238,6 +244,7 @@ public:
     T w_min_act = 1.0;
     
     std::vector<std::vector<int>> vtx_edges;
+    std::vector<std::vector<int>> cell_neighbors;
 
     bool add_Hessian_PD_term = false;
     Vector<T, 2> bound;
@@ -246,6 +253,7 @@ public:
     
 public:
     void buildVtxEdgeStructure();
+    void buildCentroidStructure();
     T simHessianPDEnergy(const VectorXT& p_curr);
     void simHessianPDGradient(const VectorXT& p_curr, T& energy, VectorXT& grad);
     void simHessianPDHessian(const VectorXT& p_curr, StiffnessMatrix& hess);

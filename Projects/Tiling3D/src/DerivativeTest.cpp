@@ -2,7 +2,7 @@
 
 void FEMSolver::checkTotalGradientScale(bool perturb)
 {
-    
+    project_block_PD = false;
     run_diff_test = true;
     
     std::cout << "======================== CHECK GRADIENT 2nd Scale ========================" << std::endl;

@@ -61,12 +61,12 @@ void FEMSolver::initializeElementData(Eigen::MatrixXd& TV,
     // std::cout << max_corner.transpose() << " " << min_corner.transpose() << std::endl;
     // std::getchar();
 
-    // use_ipc = true;
+    use_ipc = true;
     if (use_ipc)
     {
         add_friction = false;
         barrier_distance = 1e-3;
-        barrier_weight = 1e10;
+        barrier_weight = 1e3;
         computeIPCRestData();
     }
 
@@ -75,12 +75,13 @@ void FEMSolver::initializeElementData(Eigen::MatrixXd& TV,
     E_steel = 2 * 10e11;
     nu = 0.48;
     
-    penalty_weight = 1e8;
+    penalty_weight = 1e6;
     use_penalty = false;
     bending_direction = 90.0 / 180.0 * M_PI;
     curvature = 1;
+    verbose = true;
     // max_newton_iter = 10000;
-    // project_block_PD = false;
+    project_block_PD = true;
 
     cylinder_tet_start = num_ele;
     cylinder_face_start = num_surface_faces;

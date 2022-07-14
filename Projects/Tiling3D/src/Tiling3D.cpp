@@ -1303,16 +1303,16 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         V.col(1) = tmp;
         igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
         // igl::copyleft::tetgen::tetrahedralize(V,F, "Y", TV,TT,TF);
-        solver.use_ipc = true;
-        solver.project_block_PD = false;
-        solver.compute_bending_stiffness = true;
+        
+        // solver.project_block_PD = true;
+        // solver.compute_bending_stiffness = true;
         solver.initializeElementData(TV, TF, TT);
 
         Vector<bool, 4> flag;
         flag.setConstant(false);
         flag[0] = true; flag[2] = true;
         flag[1] = true; flag[3] = true;
-        solver.addCornerVtxToDirichletVertices(flag);
+        // solver.addCornerVtxToDirichletVertices(flag);
         // if (flag[1])
         //     solver.bending_direction = 45.0 / 180.0 * M_PI;
         // else

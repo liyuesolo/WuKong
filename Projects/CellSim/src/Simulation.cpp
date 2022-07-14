@@ -7,6 +7,8 @@
 #include "../include/Simulation.h"
 #include "../../../Solver/CHOLMODSolver.hpp"
 #include <igl/readOBJ.h>
+#include <LBFGSB.h>
+#include "../include/IpoptForwardSolver.h"
 
 #include <iomanip>
 #include <ipc/ipc.hpp>
@@ -39,11 +41,12 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
     computeResidual(u, residual);
     if (residual.norm() > newton_tol)
         return false;
-        
+    
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
     
-    Eigen::PardisoLLT<StiffnessMatrix> solver;
+    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2); 
     solver.factorize(d2edx2);
     
@@ -51,14 +54,22 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
     {
         return false;
     }
-
-    Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
+    else
+    {
+        std::cout << "forward hessian indefinite" << std::endl;
+        negative_eigen_vector.setRandom(n_dof_sim);
+        negative_eigen_vector /= negative_eigen_vector.maxCoeff();
+        return true;
+        // std::getchar();
+    }
+    std::cout << "Perforing eigen decomposition now..." << std::endl;
+    Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(d2edx2);
 
         //0 cannot cannot be used as a shift
     T shift = -10;
     Spectra::SymEigsShiftSolver<T, 
         Spectra::LARGEST_MAGN, 
-        Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
         eigs(&op, nmodes, 2 * nmodes, shift);
 
     eigs.init();
@@ -67,6 +78,7 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
 
     if (eigs.info() == Spectra::SUCCESSFUL)
     {
+        std::cout << "eigen decomposition now done" << std::endl;
         // std::cout << "Spectra successful" << std::endl;
         Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
         Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
@@ -95,27 +107,33 @@ void Simulation::checkHessianPD(bool save_txt)
     buildSystemMatrix(u, d2edx2);
     bool use_Spectra = true;
 
-    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2); 
+    // std::cout << "analyzePattern" << std::endl;
     solver.factorize(d2edx2);
+    // std::cout << "factorize" << std::endl;
     bool indefinite = false;
     if (solver.info() == Eigen::NumericalIssue)
     {
         std::cout << "!!!indefinite matrix!!!" << std::endl;
         indefinite = true;
+        
+    }
+    else
+    {
+        // std::cout << "indefinite" << std::endl;
     }
     
     if (use_Spectra)
     {
-
-        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(d2edx2);
-
-        //0 cannot cannot be used as a shift
+        
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(d2edx2);
         // T shift = indefinite ? -1e2 : -1e-4;
         T shift = -1e-4;
         Spectra::SymEigsShiftSolver<T, 
-            Spectra::LARGEST_MAGN, 
-            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
             eigs(&op, nmodes, 2 * nmodes, shift);
 
         eigs.init();
@@ -545,6 +563,56 @@ void Simulation::initializeDynamicsData(T _dt, T total_time)
     cells.computeNodalMass();
 }
 
+bool Simulation::staticSolveLBFGS()
+{
+    VectorXT cell_volume_initial;
+    cells.computeVolumeAllCells(cell_volume_initial);
+
+    T yolk_volume_init = 0.0;
+    if (cells.add_yolk_volume)
+    {
+        yolk_volume_init = cells.computeYolkVolume(false);
+        // std::cout << "yolk volume initial: " << yolk_volume_init << std::endl;
+    }
+
+    T total_volume_apical_surface = cells.computeTotalVolumeFromApicalSurface();
+
+    LBFGSB lbfgsb_solver;
+    int n_dof_sim = deformed.rows();
+    VectorXT lower_bounds = VectorXT::Constant(n_dof_sim, -1e5);
+    VectorXT upper_bounds = VectorXT::Constant(n_dof_sim, 1e5);
+    cells.iterateDirichletDoF([&](int dof, T target){
+        lower_bounds[dof] = target;
+        upper_bounds[dof] = target;
+    });
+
+    lbfgsb_solver.setBounds(lower_bounds, upper_bounds);
+
+    int cnt = 0;
+    auto computeObjAndGradient = [&](const VectorXT& x, VectorXT& grad)
+    {
+        T energy = computeTotalEnergy(x);
+        grad.setZero(n_dof_sim);
+        computeResidual(x, grad);
+        if (cells.use_ipc_contact)
+            cells.updateIPCVertices(x);
+        grad *= -1.0;
+        std::cout << grad.norm() << std::endl;
+        cnt++;
+        // if (cnt == 500)
+        // {
+        //     saveState("lbfgs_forward.obj");
+        //     std::exit(0);
+        // }
+        return energy;
+    };
+
+    lbfgsb_solver.setObjective(computeObjAndGradient);
+    lbfgsb_solver.setHistorySize(25);
+    lbfgsb_solver.setX(u);
+    lbfgsb_solver.solve();
+}
+
 bool Simulation::staticSolve()
 {
     
@@ -699,7 +767,14 @@ bool Simulation::staticSolve()
         //             << " edge compression max " << edge_compression.maxCoeff() 
         //             << " edge compression min " << edge_compression.minCoeff() << std::endl;
     }
-
+    VectorXT edge_lengths(cells.edges.size());
+    tbb::parallel_for(0, (int)cells.edges.size(), [&](int i)
+    {
+        TV vi = deformed.segment<3>(cells.edges[i][0] * 3);
+        TV vj = deformed.segment<3>(cells.edges[i][1] * 3);
+        edge_lengths[i] = (vj - vi).norm();
+    });
+    std::cout << "min edge length " << edge_lengths.minCoeff() << std::endl;
     if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1e-4)
         return false;
     return true;
@@ -771,61 +846,60 @@ void Simulation::checkInfoForSA()
 bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
          VectorXT& residual, VectorXT& du)
 {
+    MatrixXT UVT= UV.transpose();
     
-    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = K;
     Timer t(true);
-    Noether::CHOLMODSolver<long int> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    
     T alpha = 10e-6;
-    solver.set_pattern(K_prime);
-    
-    solver.analyze_pattern();    
-    
+    solver.analyzePattern(K);
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
     int i = 0;
     int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
     for (; i < 50; i++)
     {
-        if (!solver.factorize())
+        // std::cout << i << std::endl;
+        solver.factorize(K);
+        // T time_factorize = t.elapsed_sec() - time_analyze;
+        // std::cout << "\t factorize takes " << time_factorize << "s" << std::endl;
+        // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
         {
-            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            // {
-            //     K_prime.coeffRef(row, row) += alpha;
-            // }); 
-            K_prime.diagonal().array() += alpha; 
+            K.diagonal().array() += alpha;
             alpha *= 10;
             indefinite_count_reg_cnt++;
             continue;
         }
-        
+
         // sherman morrison
         if (UV.cols() == 1)
         {
             VectorXT v = UV.col(0);
-            VectorXT A_inv_g = VectorXT::Zero(du.rows());
-            VectorXT A_inv_u = VectorXT::Zero(du.rows());
-            solver.solve(residual.data(), A_inv_g.data(), true);
-            solver.solve(v.data(), A_inv_u.data(), true);
+            MatrixXT rhs(K.rows(), 2); rhs.col(0) = residual; rhs.col(1) = v;
+            // VectorXT A_inv_g = solver.solve(residual);
+            // VectorXT A_inv_u = solver.solve(v);
+            MatrixXT A_inv_gu = solver.solve(rhs);
 
-            T dem = 1.0 + v.dot(A_inv_u);
+            T dem = 1.0 + v.dot(A_inv_gu.col(1));
 
-            du.noalias() = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+            du.noalias() = A_inv_gu.col(0) - (A_inv_gu.col(0).dot(v)) * A_inv_gu.col(1) / dem;
         }
         // UV is actually only U, since UV is the same in the case
         // C is assume to be Identity
         else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
         {
-            VectorXT A_inv_g = VectorXT::Zero(du.rows());
-            solver.solve(residual.data(), A_inv_g.data(), true);
-            // VectorXT A_inv_g = solver.solve(residual);
+            VectorXT A_inv_g = solver.solve(residual);
 
             MatrixXT A_inv_U(UV.rows(), UV.cols());
-            for (int col = 0; col < UV.cols(); col++)
-                solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
+            // for (int col = 0; col < UV.cols(); col++)
                 // A_inv_U.col(col) = solver.solve(UV.col(col));
-            
+            A_inv_U = solver.solve(UV);
+
             MatrixXT C(UV.cols(), UV.cols());
             C.setIdentity();
-            C += UV.transpose() * A_inv_U;
-            du.noalias() = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+            C += UVT * A_inv_U;
+            du = A_inv_g - A_inv_U * C.inverse() * UVT * A_inv_g;
         }
         
 
@@ -835,10 +909,12 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
         int num_zero_eigen_value = 0;
 
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        bool search_dir_correct_sign = dot_dx_g > 1e-3;
         if (!search_dir_correct_sign)
             invalid_search_dir_cnt++;
-        bool solve_success = true;
+        
+        bool solve_success = true;//(K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        
         if (!solve_success)
             invalid_residual_cnt++;
         // std::cout << "PD: " << positive_definte << " direction " 
@@ -850,18 +926,17 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
             if (verbose)
             {
                 std::cout << "\t===== Linear Solve ===== " << std::endl;
-                std::cout << "\tnnz: " << K_prime.nonZeros() << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
                 std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
                 std::cout << "\t# regularization step " << i 
                     << " indefinite " << indefinite_count_reg_cnt 
                     << " invalid search dir " << invalid_search_dir_cnt
                     << " invalid solve " << invalid_residual_cnt << std::endl;
                 std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << (K.selfadjointView<Eigen::Lower>() * du + UV * UV.transpose()*du - residual).norm() << std::endl;
                 std::cout << "\t======================== " << std::endl;
-                
             }
             return true;
-            
         }
         else
         {
@@ -870,11 +945,114 @@ bool Simulation::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
             // {
             //     K.coeffRef(row, row) += alpha;
             // });  
-            K.diagonal().array() += alpha; 
+            K.diagonal().array() += alpha;
             alpha *= 10;
         }
     }
     return false;
+    // Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = K;
+    // Timer t(true);
+    // Noether::CHOLMODSolver<long int> solver;
+    // T alpha = 10e-6;
+    // solver.set_pattern(K_prime);
+    
+    // solver.analyze_pattern();    
+    
+    // int i = 0;
+    // int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    // for (; i < 50; i++)
+    // {
+    //     if (!solver.factorize())
+    //     {
+    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+    //         // {
+    //         //     K_prime.coeffRef(row, row) += alpha;
+    //         // }); 
+    //         K_prime.diagonal().array() += alpha; 
+    //         alpha *= 10;
+    //         indefinite_count_reg_cnt++;
+    //         continue;
+    //     }
+        
+    //     // sherman morrison
+    //     if (UV.cols() == 1)
+    //     {
+    //         VectorXT v = UV.col(0);
+    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
+    //         VectorXT A_inv_u = VectorXT::Zero(du.rows());
+    //         solver.solve(residual.data(), A_inv_g.data(), true);
+    //         solver.solve(v.data(), A_inv_u.data(), true);
+
+    //         T dem = 1.0 + v.dot(A_inv_u);
+
+    //         du.noalias() = A_inv_g - (A_inv_g.dot(v)) * A_inv_u / dem;
+    //     }
+    //     // UV is actually only U, since UV is the same in the case
+    //     // C is assume to be Identity
+    //     else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+    //     {
+    //         VectorXT A_inv_g = VectorXT::Zero(du.rows());
+    //         solver.solve(residual.data(), A_inv_g.data(), true);
+    //         // VectorXT A_inv_g = solver.solve(residual);
+
+    //         MatrixXT A_inv_U(UV.rows(), UV.cols());
+    //         for (int col = 0; col < UV.cols(); col++)
+    //             solver.solve(UV.col(col).data(), A_inv_U.col(col).data(), true);
+    //             // A_inv_U.col(col) = solver.solve(UV.col(col));
+            
+    //         MatrixXT C(UV.cols(), UV.cols());
+    //         C.setIdentity();
+    //         C += UV.transpose() * A_inv_U;
+    //         du.noalias() = A_inv_g - A_inv_U * C.inverse() * UV.transpose() * A_inv_g;
+    //     }
+        
+
+    //     T dot_dx_g = du.normalized().dot(residual.normalized());
+
+    //     int num_negative_eigen_values = 0;
+    //     int num_zero_eigen_value = 0;
+
+    //     bool positive_definte = num_negative_eigen_values == 0;
+    //     bool search_dir_correct_sign = dot_dx_g > 1e-6;
+    //     if (!search_dir_correct_sign)
+    //         invalid_search_dir_cnt++;
+    //     bool solve_success = true;
+    //     if (!solve_success)
+    //         invalid_residual_cnt++;
+    //     // std::cout << "PD: " << positive_definte << " direction " 
+    //     //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+    //     if (positive_definte && search_dir_correct_sign && solve_success)
+    //     {
+    //         t.stop();
+    //         if (verbose)
+    //         {
+    //             std::cout << "\t===== Linear Solve ===== " << std::endl;
+    //             std::cout << "\tnnz: " << K_prime.nonZeros() << std::endl;
+    //             std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+    //             std::cout << "\t# regularization step " << i 
+    //                 << " indefinite " << indefinite_count_reg_cnt 
+    //                 << " invalid search dir " << invalid_search_dir_cnt
+    //                 << " invalid solve " << invalid_residual_cnt << std::endl;
+    //             std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+    //             std::cout << "\t======================== " << std::endl;
+                
+    //         }
+    //         return true;
+            
+    //     }
+    //     else
+    //     {
+    //         // K = H + alpha * I;       
+    //         // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+    //         // {
+    //         //     K.coeffRef(row, row) += alpha;
+    //         // });  
+    //         K.diagonal().array() += alpha; 
+    //         alpha *= 10;
+    //     }
+    // }
+    // return false;
 }
 
 
@@ -1482,4 +1660,59 @@ void Simulation::loadVector(const std::string& filename, VectorXT& vector)
     for (int i = 0; i < n_entry; i++)
         in >> vector[i];
     in.close();
+}
+
+void Simulation::solveIPOPT()
+{
+    std::string sim_data_folder = "./";
+    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+
+    app->RethrowNonIpoptException(true);
+
+    app->Options()->SetNumericValue("tol", 1e-4);
+    app->Options()->SetNumericValue("acceptable_tol", 1e-4);
+    app->Options()->SetStringValue("mu_strategy", "monotone");
+    app->Options()->SetNumericValue("acceptable_obj_change_tol",  1e-4);
+    app->Options()->SetIntegerValue("max_iter",  300);
+    app->Options()->SetStringValue("output_file", sim_data_folder + ".out");
+
+    bool use_full_hessian = false;
+    if (!use_full_hessian)
+    {
+        app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+        app->Options()->SetIntegerValue("limited_memory_max_history", 25);
+    }
+    app->Options()->SetIntegerValue("accept_after_max_steps", 25);
+
+    Ipopt::ApplicationReturnStatus status;
+    status = app->Initialize();
+    if (status != Ipopt::Solve_Succeeded) 
+    {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** Error during initialization!" << std::endl;
+    }
+    
+    // Ask Ipopt to solve the problem
+    std::cout << "Solving problem using IPOPT" << std::endl;
+    
+    // objective.bound[0] = 1e-5;
+    // objective.bound[1] = 12.0 * simulation.cells.unit;
+
+    Ipopt::SmartPtr<IpoptForwardSolver> mynlp = new IpoptForwardSolver(*this, 
+                                                    sim_data_folder, 
+                                                    use_full_hessian, false);
+    
+    status = app->OptimizeTNLP(mynlp);
+
+    if (status == Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** The problem solved!" << std::endl;
+    }
+    else {
+        std::cout << std::endl
+                    << std::endl
+                    << "*** The problem FAILED!" << std::endl;
+    }
 }

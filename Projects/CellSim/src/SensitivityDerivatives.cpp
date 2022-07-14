@@ -3,6 +3,7 @@
 #include "../include/autodiff/EdgeEnergy.h"
 #include "../../../Solver/CHOLMODSolver.hpp"
 #include <Eigen/PardisoSupport>
+#include <Eigen/CholmodSupport>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -205,27 +206,38 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
             dfdp(data.first, i) = 0;
     
     dxdp.resize(num_nodes * 3, edge_weights.rows());
-    dxdp.setZero(); 
+    // dxdp.setZero(); 
     StiffnessMatrix d2edx2(num_nodes*3, num_nodes*3);
-    buildSystemMatrix(u, d2edx2);
-    // Timer ttt(true);
-    StiffnessMatrix full_hessian = d2edx2.selfadjointView<Eigen::Lower>();
-    Eigen::SparseMatrix<T, Eigen::RowMajor, long int> K_prime = full_hessian;
-    Noether::CHOLMODSolver<long int> solver;
-    solver.set_pattern(K_prime);
-    solver.analyze_pattern();
-    solver.factorize();
-    for (int i = 0; i < cnt; i++)
+    // buildSystemMatrix(u, d2edx2);
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // solver.compute(d2edx2);
+    // dxdp.noalias() = solver.solve(dfdp);
+    // StiffnessMatrix full_hessian = d2edx2;   
+    // if (lower_triangular) 
+    //     full_hessian = d2edx2.selfadjointView<Eigen::Lower>();
+    MatrixXT UV;
+    buildSystemMatrixWoodbury(u, d2edx2, UV);
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    solver.analyzePattern(d2edx2);
+    solver.factorize(d2edx2);
+    if (solver.info() == Eigen::NumericalIssue)
     {
-        VectorXT res = VectorXT::Zero(dfdp.rows()), rhs = dfdp.col(i);
-        solver.solve(rhs.data(), res.data(), true);
-        dxdp.col(i) = res;
+        std::cout << "forward hessian indefinite when computing dxdp" << std::endl;
     }
-        
-    // Eigen::PardisoLLT<StiffnessMatrix> solver;
-    // solver.analyzePattern(d2edx2);
-    // solver.factorize(d2edx2);
-    // dxdp = solver.solve(dfdp);
+    
+    // solver.compute(d2edx2);
+    
+    dxdp.noalias() = solver.solve(dfdp);
+    VectorXT A_inv_u = solver.solve(UV.col(0));
+    // std::cout << "hree" << std::endl;
+    tbb::parallel_for(0, (int)dxdp.cols(), [&](int i)
+    {
+        T dem = 1.0 + UV.col(0).dot(A_inv_u);
+        dxdp.col(i) = dxdp.col(i) - (dxdp.col(i).dot(UV.col(0))) * A_inv_u / dem;
+    });
+
+    
     
     for (int i = 0; i < cnt; i++)
         for (auto data : dirichlet_data)

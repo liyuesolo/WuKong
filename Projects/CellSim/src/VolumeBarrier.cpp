@@ -201,7 +201,8 @@ T VertexModel::computeInversionFreeStepSize(const VectorXT& _u, const VectorXT& 
                     positionsFromIndices(positions, cell_vtx_list);
                     
                     T scaling_factor = cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
-
+                    if (!scaled_barrier)
+                        scaling_factor = 1.0;
                     TV cell_centroid = TV::Zero();
                     TV apical_centroid = TV::Zero();
                     TV basal_centroid = TV::Zero();
@@ -303,30 +304,36 @@ void VertexModel::addSingleTetVolBarrierEnergy(T& energy)
             T volume_barrier_energy = 0.0;
             positionsFromIndices(positions, cell_vtx_list);
             T scaling_factor = cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
-            if(face_vtx_list.size() == 4)
-                computeVolumeBarrier4PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            else if(face_vtx_list.size() == 5)
-                computeVolumeBarrier5PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            else if(face_vtx_list.size() == 6)
-                computeVolumeBarrier6PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            else if(face_vtx_list.size() == 7)
-                computeVolumeBarrier7PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            else if(face_vtx_list.size() == 8)
-                computeVolumeBarrier8PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            else if(face_vtx_list.size() == 9)
-                computeVolumeBarrier9PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
-            // if(face_vtx_list.size() == 4)
-            //     computeVolumeBarrier4Points(tet_vol_barrier_w, positions, energies[face_idx]);
-            // else if(face_vtx_list.size() == 5)
-            //     computeVolumeBarrier5Points(tet_vol_barrier_w, positions, energies[face_idx]);
-            // else if(face_vtx_list.size() == 6)
-            //     computeVolumeBarrier6Points(tet_vol_barrier_w, positions, energies[face_idx]);
-            // else if(face_vtx_list.size() == 7)
-            //     computeVolumeBarrier7Points(tet_vol_barrier_w, positions, energies[face_idx]);
-            // else if(face_vtx_list.size() == 8)
-            //     computeVolumeBarrier8Points(tet_vol_barrier_w, positions, energies[face_idx]);
-            // else if(face_vtx_list.size() == 9)
-            //     computeVolumeBarrier9Points(tet_vol_barrier_w, positions, energies[face_idx]);
+            if (scaled_barrier)
+            {
+                if(face_vtx_list.size() == 4)
+                    computeVolumeBarrier4PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 5)
+                    computeVolumeBarrier5PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 6)
+                    computeVolumeBarrier6PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 7)
+                    computeVolumeBarrier7PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 8)
+                    computeVolumeBarrier8PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 9)
+                    computeVolumeBarrier9PointsScaled(tet_vol_barrier_w, scaling_factor, positions, energies[face_idx]);
+            }
+            else
+            {
+                if(face_vtx_list.size() == 4)
+                    computeVolumeBarrier4Points(tet_vol_barrier_w, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 5)
+                    computeVolumeBarrier5Points(tet_vol_barrier_w, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 6)
+                    computeVolumeBarrier6Points(tet_vol_barrier_w, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 7)
+                    computeVolumeBarrier7Points(tet_vol_barrier_w, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 8)
+                    computeVolumeBarrier8Points(tet_vol_barrier_w, positions, energies[face_idx]);
+                else if(face_vtx_list.size() == 9)
+                    computeVolumeBarrier9Points(tet_vol_barrier_w, positions, energies[face_idx]);
+            }
         }
     });
     energy += energies.sum();
@@ -346,9 +353,9 @@ void VertexModel::addSingleTetVolBarrierEnergy(T& energy)
     //         T log_term_active_vol = log_active_percentage * cell_volume_init[face_idx] / T(face_vtx_list.size() * 6);
 
     //         if(face_vtx_list.size() == 4)
-    //         {
-    //             if (add_log_tet_barrier)
+    //         {_log_tet_barrier)
     //                 return;
+    //             if (add
     //             else
     //                 computeVolumeBarrier4Points(tet_vol_barrier_w, positions, volume_barrier_energy);
     //             energy += volume_barrier_energy;
@@ -437,16 +444,20 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
             if (face_vtx_list.size() == 4)
             {
                 Vector<T, 24> dedx;
-                // computeVolumeBarrier4PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier4PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier4PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier4PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<24>(residual, cell_vtx_list, -dedx);
                 
             }
             else if (face_vtx_list.size() == 5)
             {
                 Vector<T, 30> dedx;
-                // computeVolumeBarrier5PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier5PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier5PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier5PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<30>(residual, cell_vtx_list, -dedx);
                 if (add_qubic_unilateral_term)
                 {
@@ -486,8 +497,10 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
             else if (face_vtx_list.size() == 6)
             {
                 Vector<T, 36> dedx;
-                // computeVolumeBarrier6PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier6PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier6PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier6PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<36>(residual, cell_vtx_list, -dedx);
                 if (add_qubic_unilateral_term)
                 {
@@ -505,8 +518,10 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
             else if (face_vtx_list.size() == 7)
             {
                 Vector<T, 42> dedx;
-                // computeVolumeBarrier7PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier7PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier7PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier7PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<42>(residual, cell_vtx_list, -dedx);
                 // if (dedx.norm() > 1)
                 // {
@@ -518,8 +533,10 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
             else if (face_vtx_list.size() == 8)
             {
                 Vector<T, 48> dedx;
-                // computeVolumeBarrier8PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier8PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier8PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier8PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<48>(residual, cell_vtx_list, -dedx);
                 // if (dedx.norm() > 1)
                 // {
@@ -531,8 +548,10 @@ void VertexModel::addSingleTetVolBarrierForceEntries(VectorXT& residual)
             else if (face_vtx_list.size() == 9)
             {
                 Vector<T, 54> dedx;
-                // computeVolumeBarrier9PointsGradient(tet_vol_barrier_w, positions, dedx);
-                computeVolumeBarrier9PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                if (scaled_barrier)
+                    computeVolumeBarrier9PointsScaledGradient(tet_vol_barrier_w, scaling_factor, positions, dedx);
+                else
+                    computeVolumeBarrier9PointsGradient(tet_vol_barrier_w, positions, dedx);
                 addForceEntry<54>(residual, cell_vtx_list, -dedx);
                 // if (dedx.norm() > 1)
                 // {
@@ -568,8 +587,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             if (face_vtx_list.size() == 4)
             {
                 Matrix<T, 24, 24> hessian;
-                // computeVolumeBarrier4PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier4PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier)
+                    computeVolumeBarrier4PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier4PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<24>(hessian);
                 addHessianEntry<24>(entries, cell_vtx_list, hessian);
@@ -577,8 +598,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             else if (face_vtx_list.size() == 5)
             {
                 Matrix<T, 30, 30> hessian;
-                // computeVolumeBarrier5PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier5PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier)
+                    computeVolumeBarrier5PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier5PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<30>(hessian);
                 addHessianEntry<30>(entries, cell_vtx_list, hessian);
@@ -595,8 +618,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             else if (face_vtx_list.size() == 6)
             {
                 Matrix<T, 36, 36> hessian;
-                // computeVolumeBarrier6PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier6PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier)
+                    computeVolumeBarrier6PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier6PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<36>(hessian);
                 addHessianEntry<36>(entries, cell_vtx_list, hessian);
@@ -613,8 +638,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             else if (face_vtx_list.size() == 7)
             {
                 Matrix<T, 42, 42> hessian;
-                // computeVolumeBarrier7PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier7PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier) 
+                    computeVolumeBarrier7PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier7PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<42>(hessian);
                 addHessianEntry<42>(entries, cell_vtx_list, hessian);
@@ -622,8 +649,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             else if (face_vtx_list.size() == 8)
             {
                 Matrix<T, 48, 48> hessian;
-                // computeVolumeBarrier8PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier8PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier)
+                    computeVolumeBarrier8PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier8PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<48>(hessian);
                 addHessianEntry<48>(entries, cell_vtx_list, hessian);
@@ -631,8 +660,10 @@ void VertexModel::addSingleTetVolBarrierHessianEntries(std::vector<Entry>& entri
             else if (face_vtx_list.size() == 9)
             {
                 Matrix<T, 54, 54> hessian;
-                // computeVolumeBarrier9PointsHessian(tet_vol_barrier_w, positions, hessian);
-                computeVolumeBarrier9PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                if (scaled_barrier)
+                    computeVolumeBarrier9PointsScaledHessian(tet_vol_barrier_w, scaling_factor, positions, hessian);
+                else
+                    computeVolumeBarrier9PointsHessian(tet_vol_barrier_w, positions, hessian);
                 if (projectPD)
                     projectBlockPD<54>(hessian);
                 addHessianEntry<54>(entries, cell_vtx_list, hessian);

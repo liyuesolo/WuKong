@@ -50,6 +50,7 @@ public:
     bool add_reg = false;
     T reg_w_H = 1e-6;
     bool save_results = true;
+    int ls_max = 10;
 
     bool fd_dfdp;
     Vector<T, 2> design_parameter_bound;
@@ -73,6 +74,8 @@ public:
     void initialize();
 
     void optimizeLBFGSB();
+
+    int optimizeKnitro();
 
     int optimizeIPOPT();
 

@@ -10,6 +10,7 @@
 #include <LBFGSB.h>
 #include <filesystem>
 #include "../include/IpoptSolver.h"
+#include "../include/KinitroSolver.h"
 
 void SensitivityAnalysis::setSimulationEnergyWeights()
 {
@@ -35,7 +36,7 @@ void SensitivityAnalysis::initialize()
     objective.getSimulationAndDesignDoF(n_dof_sim, n_dof_design);
     objective.bound[0] = 0.0;
     // objective.bound[1] = 20.0 * simulation.cells.unit;
-    objective.bound[1] = 50;
+    objective.bound[1] = 30;
     objective.mask[0] = true;
     objective.mask[1] = true;
     objective.equilibrium_prev = VectorXT::Zero(simulation.deformed.rows());
@@ -399,6 +400,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         method = "SQP";
     else if (optimizer == SSQP)
         method = "SSQP";
+    else if (optimizer == TrustRegion)
+        method = "TrustRegion";
     else
         std::cout << "optimizer undefined" << std::endl;
     
@@ -419,7 +422,8 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
     
     if (optimizer == GradientDescent || optimizer == GaussNewton || 
         optimizer == Newton || optimizer == SGN || 
-        optimizer == SQP || optimizer == SSQP)
+        optimizer == SQP || optimizer == SSQP ||
+        optimizer == TrustRegion)
     {
         if (step == 0 && !resume)
         {
@@ -435,7 +439,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         
         if (optimizer == SQP || optimizer == SSQP)
         {
-            T epsilon = 1e-12;
+            T epsilon = 1e-5;
             VectorXT feasible_point_gradients = dOdp;
             for (int i = 0; i < n_dof_design; i++)
             {
@@ -445,6 +449,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                     feasible_point_gradients[i] = 0.0;
             }
             g_norm = feasible_point_gradients.norm();
+            // g_norm = feasible_point_gradients.maxCoeff();
         }
 
         if (step == 0)
@@ -455,9 +460,13 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         std::cout << "[" << method << "] iter " << step << " |g| " << g_norm 
             << " |g_init| " << initial_gradient_norm << " tol " << tol_opt << " obj: " << E0 << std::endl;
         // std::cout << "forward simulation hessian eigen values: "; simulation.checkHessianPD(false);
+        
         // simulation.checkInfoForSA();
         if (g_norm < tol_opt || step > max_num_iter)
+        {
             return true;
+        }
+            
 
         dp = dOdp;
 
@@ -482,11 +491,11 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
                     break;
             }
 
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
-            VectorXT Sigma = svd.singularValues();
+            // Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            // VectorXT Sigma = svd.singularValues();
             
-            std::cout << "\tGN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
-            std::cout << "\tGN Hessian singular values first: " << Sigma.head<5>().transpose() << std::endl;            
+            // std::cout << "\tGN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
+            // std::cout << "\tGN Hessian singular values first: " << Sigma.head<5>().transpose() << std::endl;            
 
             VectorXT rhs = -dOdp;
             dp = H_GN.llt().solve(rhs);
@@ -512,16 +521,59 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             std::cout << "min " << (design_parameters + dp).minCoeff() << " max " << (design_parameters + dp).maxCoeff() << std::endl;
             
         }
+        else if (optimizer == TrustRegion)
+        {
+            T delta_max = 100.0;
+            gn_timer.start();
+            MatrixXT H_GN;
+            objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
+            std::cout << "\tconstruct GN Hessian takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            gn_timer.restart();
+            if (add_reg)
+            {
+                std::cout << "add reg " << reg_w_H << std::endl;
+                H_GN.diagonal().array() += reg_w_H;
+            }
+
+            while (true)
+            {
+                StiffnessMatrix A;
+                VectorXT lc;
+                VectorXT uc;
+                VectorXT lx(n_dof_design); 
+                lx.setConstant(lower_bound);
+                lx -= design_parameters;
+                
+                VectorXT ux(n_dof_design); 
+                ux.setConstant(upper_bound);
+                ux -= design_parameters;
+                
+                StiffnessMatrix Q = H_GN.sparseView();
+                std::cout << "\tcomvert dense to sparse takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+                gn_timer.restart();
+                igl::mosek::MosekData mosek_data;
+                std::vector<VectorXT> lagrange_multipliers;
+                std::cout << "\tMosek starts" << std::endl;
+                bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, dp, lagrange_multipliers);
+                std::cout << "\tMosek takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+                gn_timer.restart();
+
+
+            }
+            
+        }
         else if (optimizer == SQP)
         {
             gn_timer.start();
             MatrixXT H_GN;
             objective.hessianGN(design_parameters, H_GN, /*simulate = */false);
-
+            std::cout << "\tconstruct GN Hessian takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            gn_timer.restart();
+            // std::getchar();
             // Eigen::JacobiSVD<Eigen::MatrixXd> svd(H_GN, Eigen::ComputeThinU | Eigen::ComputeThinV);
-            // MatrixXT U = svd.matrixU();
+            // // MatrixXT U = svd.matrixU();
             // VectorXT Sigma = svd.singularValues();
-            // MatrixXT V = svd.matrixV();
+            // // MatrixXT V = svd.matrixV();
             // std::cout << "\t[SQP] GN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
             // std::cout << "\t[SQP] GN Hessian singular values first: " << Sigma.head<5>().transpose() << std::endl;
 
@@ -532,18 +584,21 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             }
             
             T alpha_reg = 10e-6;
-            // while (true)
-            // {
-            //     Eigen::LLT<Eigen::MatrixXd> lltOfA(H_GN);
-            //     if(lltOfA.info() == Eigen::NumericalIssue)
-            //     {
-            //         std::cout << "add reg to H_GN" << std::endl;
-            //         H_GN.diagonal().array() += alpha_reg;
-            //         alpha_reg *= 10.0;
-            //     }
-            //     else
-            //         break;
-            // }
+            if (objective.add_forward_potential)
+            {
+                while (true)
+                {
+                    Eigen::LLT<Eigen::MatrixXd> lltOfA(H_GN);
+                    if(lltOfA.info() == Eigen::NumericalIssue)
+                    {
+                        std::cout << "add reg to H_GN" << std::endl;
+                        H_GN.diagonal().array() += alpha_reg;
+                        alpha_reg *= 10.0;
+                    }
+                    else
+                        break;
+                }
+            }
             
             T reg_alpha = 1e-6;
             StiffnessMatrix A;
@@ -556,22 +611,32 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             VectorXT ux(n_dof_design); 
             ux.setConstant(upper_bound);
             ux -= design_parameters;
-
-            
             
             StiffnessMatrix Q = H_GN.sparseView();
+            std::cout << "\tcomvert dense to sparse takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+            gn_timer.restart();
+            while (true)
+            {
+                igl::mosek::MosekData mosek_data;
+                std::vector<VectorXT> lagrange_multipliers;
+                std::cout << "\tMosek starts" << std::endl;
+                bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, dp, lagrange_multipliers);
+                std::cout << "\tMosek takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+                gn_timer.restart();    
+                if (solve_success)
+                    break;
+                else
+                    Q.setIdentity();
+            }
             
-            igl::mosek::MosekData mosek_data;
-            std::vector<VectorXT> lagrange_multipliers;
-            bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, dp, lagrange_multipliers);
             
             T dot_search_grad = -dp.normalized().dot(dOdp.normalized());
 
-            VectorXT dLdp = dOdp + H_GN * dp;
+            // VectorXT dLdp = dOdp + H_GN * dp;
         
-            dLdp -= lagrange_multipliers[2];
-            dLdp += lagrange_multipliers[3];
-            std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
+            // dLdp -= lagrange_multipliers[2];
+            // dLdp += lagrange_multipliers[3];
+            // std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
             std::cout << "dot(search_dir, -gradient) " << dot_search_grad << std::endl;
             dp *= -1.0;
             
@@ -696,7 +761,7 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             // std::exit(0);
         }
         gn_timer.stop();
-        std::cout << "\t" << method <<" takes " << gn_timer.elapsed_sec() << "s" << std::endl;
+        // std::cout << "\t" << method <<" takes " << gn_timer.elapsed_sec() << "s" << std::endl;
         // std::cout << "here" << std::endl;
         VectorXT search_direction = -dp;
         T alpha = objective.maximumStepSize(search_direction);
@@ -707,52 +772,66 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
         if (search_direction.norm() < 1e-5)
             return true;
 
-        int ls_max = 15;
+        
         bool use_gradient = false;
         T c1 = 10e-4, c2 = 0.9;
         bool wolfe_condition = false;
         int ls_cnt = 0;
-
+        T E1;
         while (true)
         {
+            if (optimizer == TrustRegion)
+            {
+                VectorXT p_ls = design_parameters + alpha * search_direction;
+                break;    
+            }
             ls_cnt++;
             VectorXT p_ls = design_parameters + alpha * search_direction;
             
-            T E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
+            E1 = objective.value(p_ls, /*simulate=*/true, /*use_previous_equil=*/true);
             
             std::cout << "[" << method << "]\t ls " << ls_cnt << " alpha " << alpha << " E1: " << E1 << " E0: " << E0 << std::endl;
 
             if (E1 < E0 || ls_cnt == ls_max)
             {
-                if (ls_cnt == ls_max && !use_gradient)
+                if (ls_cnt == ls_max)
                 {
-                    std::cout << "\t[" << method << "] taking gradient step" << std::endl;
-                    StiffnessMatrix Q(n_dof_design, n_dof_design);
-                    Q.setIdentity();
-                
-                    StiffnessMatrix A;
-                    VectorXT lc, uc;
-                    VectorXT lx(n_dof_design); 
-                    lx.setConstant(lower_bound);
-                    lx -= design_parameters;
-                    
-                    VectorXT ux(n_dof_design); 
-                    ux.setConstant(upper_bound);
-                    ux -= design_parameters;
-                    
-                    igl::mosek::MosekData mosek_data;
-                    std::vector<VectorXT> lagrange_multipliers;
-                    bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, search_direction, lagrange_multipliers);
-                    
-                    VectorXT dLdp = dOdp + search_direction;
-
-                    dLdp -= lagrange_multipliers[2];
-                    dLdp += lagrange_multipliers[3];
-                    std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
-                    ls_cnt = 0;
-                    alpha = 1.0;
-                    use_gradient = true;
+                    // if (ls_max == 1)
+                    //     ls_max = 5;
+                    // else
+                    //     ls_max = 1;
+                    design_parameters = p_ls;
+                    break; 
                 }
+                // if (ls_cnt == ls_max && !use_gradient && ls_cnt != 1)
+                // {
+                //     std::cout << "\t[" << method << "] taking gradient step" << std::endl;
+                //     StiffnessMatrix Q(n_dof_design, n_dof_design);
+                //     Q.setIdentity();
+                
+                //     StiffnessMatrix A;
+                //     VectorXT lc, uc;
+                //     VectorXT lx(n_dof_design); 
+                //     lx.setConstant(lower_bound);
+                //     lx -= design_parameters;
+                    
+                //     VectorXT ux(n_dof_design); 
+                //     ux.setConstant(upper_bound);
+                //     ux -= design_parameters;
+                    
+                //     igl::mosek::MosekData mosek_data;
+                //     std::vector<VectorXT> lagrange_multipliers;
+                //     bool solve_success = igl::mosek::mosek_quadprog(Q, dOdp, E0, A, lc, uc, lx, ux, mosek_data, search_direction, lagrange_multipliers);
+                    
+                //     VectorXT dLdp = dOdp + search_direction;
+
+                //     dLdp -= lagrange_multipliers[2];
+                //     dLdp += lagrange_multipliers[3];
+                //     std::cout << "\t[SQP] |dL/dp|: " << dLdp.norm() << std::endl;
+                //     ls_cnt = 0;
+                //     alpha = 1.0;
+                //     use_gradient = true;
+                // }
                 else
                 {
                     std::cout << "[" << method << "]\tfinal |dp|: " << (p_ls - design_parameters).norm() << " # ls " << ls_cnt << std::endl;
@@ -763,8 +842,16 @@ bool SensitivityAnalysis::optimizeOneStep(int step, Optimizer optimizer)
             }
             alpha *= 0.5;
         }
-        
-        
+        // T rel_energy_change = std::abs(E0 - E1);
+        // if (rel_energy_change/std::abs(std::max(std::abs(E0), std::abs(E1)), 1.0) < 1e-5)
+        // {
+        //     objective.saveState(data_folder + "/" + method + "_iter_" + std::to_string(step) + ".obj");
+        //     objective.updateDesignParameters(design_parameters);
+        //     std::string filename = data_folder + "/" + method + "_iter_" + std::to_string(step) + ".txt";
+        //     VectorXT final_parameters = design_parameters;
+            
+        //     saveDesignParameters(filename, final_parameters);
+        // } 
         // for (int ls_cnt = 0; ls_cnt < ls_max; ls_cnt++)
         // {
         //     VectorXT p_ls = design_parameters + alpha * search_direction;
@@ -1705,6 +1792,216 @@ void SensitivityAnalysis::sampleEnergyWithSearchAndGradientDirection(const Vecto
     }
     std::cout << std::endl;
 }
+static int callbackEvalFCGA(KN_context_ptr kc,
+                          CB_context_ptr cb,
+                          KN_eval_request_ptr const evalRequest,
+                          KN_eval_result_ptr const evalResult,
+                          void *const userParams){
+    const double *x;
+    double *obj;
+    double *objGrad;
+    
+    if (evalRequest->type != KN_RC_EVALFCGA) {
+        printf("*** callbackEvalFC incorrectly called with eval type %d\n", evalRequest->type);
+        return (-1);
+    }
+    
+    x = evalRequest->x;
+
+    obj = evalResult->obj;
+    objGrad = evalResult->objGrad;
+
+    Objectives* objective = (Objectives*) userParams;
+    int n_dof_design = objective->n_dof_design;
+
+    Eigen::VectorXd p_curr(n_dof_design);
+    for (int i = 0; i < n_dof_design; i++)
+        p_curr[i] = x[i];
+
+    double O;
+    Eigen::VectorXd dOdp;
+    objective->gradient(p_curr, dOdp, O, true, true);
+    objective->equilibrium_prev = objective->simulation.u;
+    tbb::parallel_for(0, n_dof_design, [&](int i) 
+    {
+        objGrad[i] = dOdp[i];
+    });
+    *obj = O;
+    
+    return( 0 );
+}
+
+static int callbackEvalH(KN_context_ptr             kc,
+                         CB_context_ptr             cb,
+                         KN_eval_request_ptr const  evalRequest,
+                         KN_eval_result_ptr  const  evalResult,
+                         void              * const  userParams){
+    const double *x;
+    const double *lambda;
+    double sigma;
+    double *hess;
+    if (   evalRequest->type != KN_RC_EVALH
+        && evalRequest->type != KN_RC_EVALH_NO_F )
+    {
+        printf ("*** callbackEvalHess incorrectly called with eval type %d\n",
+               evalRequest->type);
+        return( -1 );
+    }
+
+    x = evalRequest->x;
+    lambda = evalRequest->lambda;
+    /** Scale objective component of the Hessian by sigma */
+    sigma = *(evalRequest->sigma);
+    hess = evalResult->hess;
+
+    Objectives* objective = (Objectives*) userParams;
+    int n_dof_design = objective->n_dof_design;
+
+    Eigen::VectorXd p_curr(n_dof_design);
+    for (int i = 0; i < n_dof_design; i++)
+        p_curr[i] = x[i];
+    Eigen::MatrixXd HGN(n_dof_design, n_dof_design);
+    objective->hessianGN(p_curr, HGN, true, true);
+    objective->equilibrium_prev = objective->simulation.u;
+    int cnt = 0;
+    for( int row = 0; row < n_dof_design; row++ )
+    {
+        for( int col = row; col < n_dof_design; col++ )
+        {
+            hess[cnt] = HGN(row, col);
+            cnt++;
+        }
+    }
+    return( 0 );
+}
+
+static int newPointCBFct (KN_context_ptr  kc,
+                         const double * const  x,
+                         const double * const  lambda,
+                         void   * const  userParams)
+                         {
+
+    // KN_context_ptr kc = (KN_context_ptr) userParams;
+    // std::vector<double> xdata;
+    std::cout << "newPointCBFct" << std::endl;
+    double obj_value;
+    int nV = 0;
+    KN_get_number_vars(kc, &nV);
+    KN_get_obj_value(kc, &obj_value);
+    // std::cout << nV << " " << obj_value << std::endl;
+    Objectives* objective = (Objectives*) userParams;
+    
+    Eigen::VectorXd p_curr(nV);
+    for (int i = 0; i < nV; i++)
+        p_curr[i] = x[i];
+    std::cout << objective->obj_data_folder << std::endl;
+    objective->saveDesignParameters(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".txt", p_curr);
+    std::cout << "save p" << std::endl;
+    objective->saveState(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".obj");
+    std::cout << "save x" << std::endl;
+    objective->iter_cnt++;
+    std::cout << "[knitro]: iter " << objective->iter_cnt << " obj " << obj_value << std::endl;
+    return 0;
+}
+
+int SensitivityAnalysis::optimizeKnitro()
+{
+    
+    bool use_GN_hessian = true;
+    objective.obj_data_folder = data_folder;
+    objective.iter_cnt = 0;
+    int  i, nStatus, error;
+
+    KN_context   *kc;
+
+    error = KN_new(&kc);
+    if (error) exit(-1);
+    if (kc == NULL)
+    {
+        printf ("Failed to find a valid license.\n");
+        return( -1 );
+    }
+
+    KN_set_int_param_by_name(kc, "numthreads", 6);
+    if (error) exit(-1);
+
+    KN_set_int_param_by_name(kc, "algorithm", 2);
+    if (error) exit(-1);
+
+    KN_set_int_param_by_name(kc, "honorbnds", 0);
+    if (error) exit(-1);
+    
+
+    int n = objective.n_dof_design;
+    error = KN_add_vars(kc, n, NULL);
+    if (error) exit(-1);
+    
+    for (int i=0; i<n; i++) 
+    {
+        error = KN_set_var_primal_init_value(kc, i, design_parameters[i]);
+        if (error) exit(-1);
+    }
+    VectorXT lb = VectorXT::Constant(n_dof_design, 0.0);
+    VectorXT ub = VectorXT::Constant(n_dof_design, 30.0);
+
+    error = KN_set_var_lobnds_all(kc, lb.data());  if (error) exit(-1);
+    error = KN_set_var_upbnds_all(kc, ub.data());  if (error) exit(-1);
+
+    error = KN_add_cons(kc, 0, NULL);
+    if (error) exit(-1);
+
+
+    CB_context   *cb;
+
+    // error = KN_set_int_param(kc, KN_PARAM_BLASOPTION, 0);
+
+    error = KN_add_eval_callback (kc, KNTRUE, 0, NULL, callbackEvalFCGA, &cb);
+    error = KN_set_cb_grad(kc, cb, KN_DENSE, NULL, 0, NULL, NULL, callbackEvalFCGA);
+
+    if (use_GN_hessian)
+    {
+        error = KN_set_cb_hess (kc, cb, KN_DENSE_ROWMAJOR, NULL, NULL, callbackEvalH);
+        // error = KN_set_cb_hess(kc, cb, hessianIndex.size(), hessRow.data(), hessCol.data(), callbackEvalH);
+        if (error) exit(-1);
+    }
+
+    error = KN_set_obj_goal(kc, KN_OBJGOAL_MINIMIZE);
+    if (error) exit(-1);
+    
+    if (!use_GN_hessian)
+        error = KN_set_int_param (kc, KN_PARAM_HESSOPT, KN_HESSOPT_BFGS);
+
+    error = KN_set_cb_user_params(kc, cb, &objective);
+
+    if(error) exit(-1);
+
+    KN_set_int_param(kc, KN_PARAM_EVAL_FCGA, KN_EVAL_FCGA_YES);
+    error = KN_set_int_param (kc, KN_PARAM_OUTLEV, 5);
+    // error = KN_set_newpt_callback(kc, &newPointCBFct, kc);
+    if(error) exit(-1); 
+    nStatus = KN_solve (kc);
+    std::vector<double> x(objective.n_dof_design);
+    double objSol;
+    double feasError, optError;
+    /** An example of obtaining solution information. */
+    error = KN_get_solution(kc, &nStatus, &objSol, x.data(), NULL);
+    error = KN_get_abs_feas_error (kc, &feasError);
+    error = KN_get_abs_opt_error (kc, &optError);
+
+    /** Delete the Knitro solver instance. */
+    KN_free (&kc);
+
+    VectorXT p_final = Eigen::VectorXd(x.size());
+    p_final.setZero();
+    for(int id = 0; id < x.size(); id++){
+        p_final[id] = x[id];
+    }
+
+    objective.saveDesignParameters(data_folder + "/" + "knitro_lbfgs.txt", p_final);
+    objective.saveState(data_folder + "/" + "knitro_lbfgs.obj");
+
+    return 0;
+}
 
 int SensitivityAnalysis::optimizeIPOPT()
 {
@@ -1722,7 +2019,7 @@ int SensitivityAnalysis::optimizeIPOPT()
     // app->Options()->SetStringValue("mu_strategy", "adaptive");
     app->Options()->SetStringValue("output_file", data_folder + "/ipopt_frame_" + std::to_string(objective.frame) + ".out");
 
-    bool use_GN_hessian = true;
+    bool use_GN_hessian = false;
     if (!use_GN_hessian)
     {
         app->Options()->SetStringValue("hessian_approximation", "limited-memory");

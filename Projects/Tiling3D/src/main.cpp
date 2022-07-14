@@ -10,78 +10,79 @@
 #define T double 
 #define dim 3
 
-Eigen::MatrixXd V;
-Eigen::MatrixXi F;
-Eigen::MatrixXd C;
 
-static bool enable_selection = false;
-static bool show_cylinder = false;
-static bool show_bc = false;
-static bool incremental = false;
-static bool tetgen = false;
-static int modes = 0;
-
-bool static_solve = false;
-
-bool check_modes = false;
-double t = 0.0;
-using TV = Vector<double, 3>;
-using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
-
-Tiling3D tiling;
-
-Eigen::MatrixXd evectors;
-Eigen::VectorXd evalues;
-
-int static_solve_step = 0;
-
-auto loadEigenVectors = [&]()
-{
-    std::ifstream in("/home/yueli/Documents/ETH/WuKong/fem_eigen_vectors.txt");
-    int row, col;
-    in >> row >> col;
-    evectors.resize(row, col);
-    evalues.resize(col);
-    double entry;
-    for (int i = 0; i < col; i++)
-        in >> evalues[i];
-    for (int i = 0; i < row; i++)
-        for (int j = 0; j < col; j++)
-            in >> evectors(i, j);
-    in.close();
-};
-
-auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
-{
-    tiling.solver.generateMeshForRendering(V, F, C);
-    
-    if (show_cylinder)
-    {
-        T radius = 1.0 / tiling.solver.curvature;
-        TV K1_dir(std::cos(tiling.solver.bending_direction), 0.0, -std::sin(tiling.solver.bending_direction));
-        tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, radius, 0), K1_dir, radius);
-    }
-
-    if (show_bc)
-    {
-        int nf_current = F.rows();
-        tiling.solver.updateSphere();
-        tiling.solver.appendMesh(V, F, tiling.solver.sphere_vertices, tiling.solver.sphere_faces);
-        int nf_sphere = tiling.solver.sphere_faces.rows();
-        MatrixXd sphere_color(nf_sphere, 3);
-        sphere_color.setZero();
-        sphere_color.col(0).setConstant(1.0);
-        C.conservativeResize(F.rows(), 3);
-        C.block(nf_current, 0, nf_sphere, 3) = sphere_color;
-    }
-
-    viewer.data().clear();
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_colors(C);
-};
 
 int main()
 {
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+    Eigen::MatrixXd C;
+
+    static bool enable_selection = false;
+    static bool show_cylinder = false;
+    static bool show_bc = false;
+    static bool incremental = false;
+    static bool tetgen = false;
+    static int modes = 0;
+
+    bool static_solve = false;
+
+    bool check_modes = false;
+    double t = 0.0;
+    using TV = Vector<double, 3>;
+    using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
+
+    Tiling3D tiling;
+
+    Eigen::MatrixXd evectors;
+    Eigen::VectorXd evalues;
+
+    int static_solve_step = 0;
+
+    auto loadEigenVectors = [&]()
+    {
+        std::ifstream in("/home/yueli/Documents/ETH/WuKong/fem_eigen_vectors.txt");
+        int row, col;
+        in >> row >> col;
+        evectors.resize(row, col);
+        evalues.resize(col);
+        double entry;
+        for (int i = 0; i < col; i++)
+            in >> evalues[i];
+        for (int i = 0; i < row; i++)
+            for (int j = 0; j < col; j++)
+                in >> evectors(i, j);
+        in.close();
+    };
+
+    auto updateScreen = [&](igl::opengl::glfw::Viewer& viewer)
+    {
+        tiling.solver.generateMeshForRendering(V, F, C);
+        
+        if (show_cylinder)
+        {
+            T radius = 1.0 / tiling.solver.curvature;
+            TV K1_dir(std::cos(tiling.solver.bending_direction), 0.0, -std::sin(tiling.solver.bending_direction));
+            tiling.solver.appendCylinder(V, F, C, tiling.solver.center  - TV(0, radius, 0), K1_dir, radius);
+        }
+
+        if (show_bc)
+        {
+            int nf_current = F.rows();
+            tiling.solver.updateSphere();
+            tiling.solver.appendMesh(V, F, tiling.solver.sphere_vertices, tiling.solver.sphere_faces);
+            int nf_sphere = tiling.solver.sphere_faces.rows();
+            MatrixXd sphere_color(nf_sphere, 3);
+            sphere_color.setZero();
+            sphere_color.col(0).setConstant(1.0);
+            C.conservativeResize(F.rows(), 3);
+            C.block(nf_current, 0, nf_sphere, 3) = sphere_color;
+        }
+
+        viewer.data().clear();
+        viewer.data().set_mesh(V, F);
+        viewer.data().set_colors(C);
+    };
     
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
@@ -170,6 +171,9 @@ int main()
         {
         default: 
             return false;
+        case 's':
+            tiling.solver.staticSolveStep(static_solve_step);
+            return true;
         case ' ':
             if (incremental)
                 tiling.solver.incrementalLoading();
@@ -226,7 +230,7 @@ int main()
 
     tiling.initializeSimulationData(tetgen);
     // tiling.solver.runForceCurvatureExperiment();
-    tiling.solver.runForceDisplacementExperiment();
+    // tiling.solver.runForceDisplacementExperiment();
     // tiling.solver.checkTotalGradientScale(true);
     // tiling.solver.checkTotalHessianScale(true);
     // tiling.solver.runBendingHomogenization();

@@ -1,6 +1,7 @@
 #include <igl/mosek/mosek_quadprog.h>
 #include "../../include/Objectives.h"
 #include <Eigen/PardisoSupport>
+#include <Eigen/CholmodSupport>
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
@@ -72,7 +73,7 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename, bool
     data_points = data_point_unfiltered;
     std::vector<bool> flag(data_point_unfiltered.rows()/ 3, false);
     std::string base_folder = "/home/yueli/Documents/ETH/WuKong/output/cells/stats/data/";
-    std::string dis_threshold_string = "1.4";
+    std::string dis_threshold_string = "1.2";
     std::ifstream in(base_folder + "valid_points_frame_" + std::to_string(frame) +"_thres_"+dis_threshold_string+".txt");
     int idx;
     while(in >> idx)
@@ -164,18 +165,25 @@ void ObjNucleiTracking::loadWeightedCellTarget(const std::string& filename, bool
         {
             if (visited[i] == 0)
             {
-                VectorXT positions;
-                std::vector<int> indices;
-                simulation.cells.getCellVtxAndIdx(i, positions, indices);
-                VectorXT w(indices.size());
-                T avg = 1.0 / T(indices.size());
-                w.setConstant(avg);
-                TV centroid = TV::Zero();
-                for (int j  = 0; j < indices.size(); j++)
-                    centroid += positions.segment<3>(j * 3);
-                centroid *= avg;
-                weight_targets.push_back(TargetData(w, data_point_idx, i, centroid));
-                target_obj_weights[i] = 1e-3;
+                if (add_spatial_x)
+                {
+                    target_obj_weights[i] = 0.0;
+                }
+                else
+                {
+                    VectorXT positions;
+                    std::vector<int> indices;
+                    simulation.cells.getCellVtxAndIdx(i, positions, indices);
+                    VectorXT w(indices.size());
+                    T avg = 1.0 / T(indices.size());
+                    w.setConstant(avg);
+                    TV centroid = TV::Zero();
+                    for (int j  = 0; j < indices.size(); j++)
+                        centroid += positions.segment<3>(j * 3);
+                    centroid *= avg;
+                    // weight_targets.push_back(TargetData(w, data_point_idx, i, centroid));
+                    // target_obj_weights[i] = 1e-3;
+                }
             }
         }
         
@@ -964,6 +972,36 @@ void ObjNucleiTracking::rotateTarget(T angle)
     
 }
 
+void ObjNucleiTracking::buildCentroidStructure()
+{
+    cell_neighbors;
+    VectorXT cell_centroids;
+    simulation.cells.getAllCellCentroids(cell_centroids);
+    TV min_corner, max_corner;
+    simulation.cells.computeBoundingBox(min_corner, max_corner);
+    
+    VectorXT edge_norm(simulation.cells.edges.size());
+    tbb::parallel_for(0, (int)simulation.cells.edges.size(), [&](int i){
+        TV vi = simulation.cells.undeformed.segment<3>(simulation.cells.edges[i][0] * 3);
+        TV vj = simulation.cells.undeformed.segment<3>(simulation.cells.edges[i][1] * 3);
+        edge_norm[i] = (vj - vi).norm();
+    });
+
+    T spacing = 1.5 * edge_norm.sum() / edge_norm.rows();
+
+    SpatialHash hash_temp;
+    hash_temp.build(spacing, cell_centroids);
+    cell_neighbors.resize(simulation.cells.n_cells);
+    tbb::parallel_for(0, simulation.cells.n_cells, [&](int i)
+    {
+        TV ci = cell_centroids.segment<3>(i * 3);
+        std::vector<int> neighbors;
+        hash_temp.getOneRingNeighbors(ci, neighbors);
+        cell_neighbors[i] = neighbors;
+    });
+
+}
+
 void ObjNucleiTracking::buildVtxEdgeStructure()
 {
     int cnt = 0;
@@ -1068,6 +1106,50 @@ void ObjNucleiTracking::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2O
                 }
         });
     }
+    
+    if (add_spatial_x)
+    {
+        // auto addd2Cdx2 = [&](T _coeff, int cell_idx)
+        // {
+        //     VectorXT positions;
+        //     VtxList indices;
+        //     simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+        //     T dcdx = 1.0 / T(indices.size());
+        //     TM local_hessian = _coeff * TM::Identity() * dcdx;
+
+        //     for (int idx_i : indices)
+        //         for (int idx_j : indices)
+        //             for (int d = 0; d < 3; d++)
+        //                 for (int dd = 0; dd < 3; dd++)
+        //                     d2Odx2_entries.push_back(Entry(idx_i * 3 + d, idx_j * 3 + dd, local_hessian(d, dd)));
+        // };
+
+        
+
+        // VectorXT cell_terms(simulation.cells.n_cells);
+        // for (int i = 0; i < simulation.cells.n_cells; i++)
+        // {
+        //     TV ci = cell_centroids.segment<3>(i * 3);
+        //     TV avg = TV::Zero();
+        //     for (int idx : cell_neighbors[i])
+        //     {
+        //         if (idx == i)
+        //             continue;
+        //         avg += cell_centroids.segment<3>(idx * 3);
+        //     }
+        //     avg /= T(cell_neighbors[i].size() - 1);
+            
+        //     T coeff = 1.0 / T(cell_neighbors[i].size() - 1);
+        //     addd2Cdx2(w_reg_x_spacial, i);
+        //     for (int idx : cell_neighbors[i])
+        //     {
+        //         if (idx == i)
+        //             continue;
+        //         addd2Cdx2(-w_reg_x_spacial * coeff, idx);
+        //     }
+        // }
+    }
+
     if (add_forward_potential)
     {
         VectorXT dx = simulation.deformed - simulation.undeformed;
@@ -1200,6 +1282,29 @@ void ObjNucleiTracking::computeOx(const VectorXT& x, T& Ox)
         });
         avg_dis /= T(cnt);
     }
+    if (add_spatial_x)
+    {
+        VectorXT cell_centroids;
+        simulation.cells.getAllCellCentroids(cell_centroids);
+
+        VectorXT cell_terms(simulation.cells.n_cells);
+        cell_terms.setZero();
+        tbb::parallel_for(0, simulation.cells.n_cells, [&](int i){
+            if (target_obj_weights[i] > 1e-6)
+                return;
+            TV ci = cell_centroids.segment<3>(i * 3);
+            TV avg = TV::Zero();
+            for (int idx : cell_neighbors[i])
+            {
+                if (idx == i)
+                    continue;
+                avg += cell_centroids.segment<3>(idx * 3);
+            }
+            avg /= T(cell_neighbors[i].size() - 1);
+            cell_terms[i] = 0.5 * w_reg_x_spacial * (ci - avg).dot(ci - avg);
+        });
+        Ox += cell_terms.sum();
+    }
     // std::cout << "======================================" << std::endl;
     // std::cout << "min dis " << min_dis << " max_dis " << max_dis << " avg_dis " << avg_dis << std::endl;
     // std::cout << "min dis power" << std::pow(min_dis, power) << " max_dis power " 
@@ -1264,6 +1369,58 @@ void ObjNucleiTracking::computedOdx(const VectorXT& x, VectorXT& dOdx)
                 dOdx.segment<3>(indices[i] * 3) += dOdc * dcdx * target_obj_weights[cell_idx];
             }
         });
+    }
+
+    if (add_spatial_x)
+    {
+        auto adddCdx = [&](const TV& dOdc, int cell_idx)
+        {
+            VectorXT positions;
+            VtxList indices;
+            simulation.cells.getCellVtxAndIdx(cell_idx, positions, indices);
+            T dcdx = 1.0 / T(indices.size());
+            for (int i = 0; i < indices.size(); i++)
+            {
+                dOdx.segment<3>(indices[i] * 3) += dOdc * dcdx;
+            }
+        };
+
+        VectorXT cell_centroids;
+        simulation.cells.getAllCellCentroids(cell_centroids);
+
+        VectorXT cell_terms(simulation.cells.n_cells);
+        for (int i = 0; i < simulation.cells.n_cells; i++)
+        {
+            if (target_obj_weights[i] > 1e-6)
+                continue;
+
+            TV ci = cell_centroids.segment<3>(i * 3);
+            TV avg = TV::Zero();
+            // std::cout << cell_neighbors[i].size() << std::endl;
+            // std::ofstream out("neighbor_test.obj");
+            // out << "v " << ci.transpose() << std::endl;
+            for (int idx : cell_neighbors[i])
+            {
+                if (idx == i)
+                    continue;
+                avg += cell_centroids.segment<3>(idx * 3);
+                // out << "v " << cell_centroids.segment<3>(idx * 3).transpose() << std::endl;
+            }
+            avg /= T(cell_neighbors[i].size() - 1);
+            // out << "v " << avg.transpose() << std::endl;
+            // out.close();
+            // std::exit(0);
+            T coeff = 1.0 / T(cell_neighbors[i].size() - 1);
+            TV dOdci = w_reg_x_spacial * (ci - avg);
+            
+            adddCdx(dOdci, i);
+            for (int idx : cell_neighbors[i])
+            {
+                if (idx == i)
+                    continue;
+                adddCdx(dOdci * -coeff, idx);
+            }
+        }
     }
     
     if (add_forward_potential)
@@ -1466,13 +1623,13 @@ T ObjNucleiTracking::value(const VectorXT& p_curr, bool simulate, bool use_prev_
             bool forward_simulation_converged = simulation.staticSolve();
             if (!forward_simulation_converged)
             {
-                saveDesignParameters("failed.txt", p_curr);
-                VectorXT deformed_curr = simulation.deformed;
-                simulation.deformed = simulation.undeformed + equilibrium_prev;
-                std::cout << "use_prev_equil " << use_prev_equil << std::endl;
-                std::cout << equilibrium_prev.norm() << std::endl;
-                simulation.saveState("failed.obj", false, false);
-                simulation.deformed = simulation.undeformed + simulation.u;
+                // saveDesignParameters("failed.txt", p_curr);
+                // VectorXT deformed_curr = simulation.deformed;
+                // simulation.deformed = simulation.undeformed + equilibrium_prev;
+                // std::cout << "use_prev_equil " << use_prev_equil << std::endl;
+                // std::cout << equilibrium_prev.norm() << std::endl;
+                // simulation.saveState("failed.obj", false, false);
+                // simulation.deformed = simulation.undeformed + simulation.u;
                 // std::exit(0);
                 return 1e3;
             }
@@ -1553,21 +1710,9 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     });
     
     VectorXT lambda;
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
-    solver.analyzePattern(d2edx2);
-    T alpha = 1.0;
-    for (int i = 0; i < 50; i++)
-    {
-        solver.factorize(d2edx2);
-        if (solver.info() == Eigen::NumericalIssue)
-        { 
-            std::cout << "[ERROR] simulation Hessian indefinite" << std::endl;
-            d2edx2.diagonal().array() += alpha;
-            alpha *= 10;
-            continue;
-        }
-        break;    
-    }
+    solver.compute(d2edx2);
     lambda = solver.solve(dOdx);
 
     
@@ -1798,16 +1943,77 @@ void ObjNucleiTracking::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simu
     d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
     simulation.cells.projectDirichletDoFMatrix(d2Odx2_matrix, simulation.cells.dirichlet_data);
     
+    // Eigen::JacobiSVD<Eigen::MatrixXd> svd(dxdp, Eigen::ComputeThinU | Eigen::ComputeThinV);
+	// MatrixXT U = svd.matrixU();
+	// VectorXT Sigma = svd.singularValues();
+	// MatrixXT V = svd.matrixV();
+
+    // std::cout << Sigma.tail<10>().transpose() << std::endl;
+    // Eigen::SparseMatrix<T, Eigen::RowMajor, long int> d2Odx2_cholmod = d2Odx2_matrix.triangularView<Eigen::Upper>();
+    // std::ofstream out("d2Odx2_cholmod.txt");
+    // out << d2Odx2_cholmod << std::endl;
+    // out.close();
     // MatrixXT d2Odx2_dense = d2Odx2_matrix;
     // std::cout << d2Odx2_dense.minCoeff() << " " << d2Odx2_dense.maxCoeff() << std::endl;
     
     // d2Odx2_matrix.setIdentity();
     // H.noalias() = dxdp.transpose() * d2Odx2_matrix * dxdp;
     tt.restart();
-    H.noalias() = dxdp.transpose() * d2Odx2_matrix * dxdp;
-    std::cout << "dxdpT H dxdp takes " << tt.elapsed_sec() << "s" << std::endl;
 
+    // cholmod_common cm;
+    // cholmod_l_defaults(&cm);
+    // cholmod_l_start(&cm);
+
+    // cm.useGPU = false;
+
+    // cholmod_sparse* A = NULL;
+    // cholmod_dense* B = NULL;
+    // cholmod_dense* AB = NULL;
+    // int numRows = d2Odx2_cholmod.rows();
     
+    // if (!A) {
+    //     A = cholmod_l_allocate_sparse(numRows, numRows, d2Odx2_cholmod.nonZeros(),
+    //         true, true, -1, CHOLMOD_REAL, &cm);
+    //     A->p = d2Odx2_cholmod.outerIndexPtr();
+    //     A->i = d2Odx2_cholmod.innerIndexPtr();
+    //     A->x = d2Odx2_cholmod.valuePtr();
+    // }
+    // if (!B)
+    // {
+    //     B = cholmod_l_allocate_dense(dxdp.rows(), dxdp.cols(), dxdp.rows(), CHOLMOD_REAL, &cm);
+    //     B->x = (void*)dxdp.data();
+    // }
+
+    // double alpha[2] = { 1.0, 1.0 }, beta[2] = { 0.0, 0.0 };
+
+    // AB = cholmod_l_allocate_dense(dxdp.rows(), dxdp.cols(), dxdp.rows(), CHOLMOD_REAL, &cm);
+    
+    // cholmod_l_sdmult(A, 0, alpha, beta, B, AB, &cm);
+    
+    // MatrixXT d2Odx2_dxdp(dxdp.rows(), dxdp.cols());
+    // memcpy(d2Odx2_dxdp.data(), AB->x, dxdp.rows() * dxdp.cols() * sizeof(double));
+    
+    // // std::cout << "memcpy" << std::endl;
+    // cholmod_l_free_dense(&AB, &cm);
+    // // MatrixXT gt = d2Odx2_matrix * dxdp;
+    // // std::ofstream out("gt.txt");
+    // // out << gt << std::endl;
+    
+    // // out.close();
+    // // out.open("mine.txt");
+    // // out << d2Odx2_dxdp;
+    // // out.close();
+    // // std::cout << gt.col(0).segment<20>(0) << std::endl << d2Odx2_dxdp.col(0).segment<20>(0) << std::endl;
+    // // std::cout << (gt.col(0) - d2Odx2_dxdp.col(0)).norm() << std::endl; 
+    
+    // // std::cout << "ERROR " << (d2Odx2_dxdp - gt).norm() << std::endl;
+
+    // if (A) cholmod_l_free_sparse(&A, &cm);
+    // // if (B) cholmod_l_free_dense(&B, &cm);    
+    // cholmod_l_finish(&cm);
+    // H.noalias() = dxdp.transpose() * d2Odx2_dxdp;
+    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
+    std::cout << "dxdpT H dxdp takes " << tt.elapsed_sec() << "s" << std::endl;
 
     // 2 dx/dp^T d2O/dxdp
     if (add_forward_potential)

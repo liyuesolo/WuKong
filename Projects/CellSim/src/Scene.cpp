@@ -1078,8 +1078,8 @@ void VertexModel::vertexModelFromMesh(const std::string& filename)
     {
         bound_coeff = 1e2;
         
-        // T normal_offset = 1e-3;// * unit;
-        T normal_offset = 0;
+        T normal_offset = 1e-3;// * unit;
+        // T normal_offset = 0;
         // T normal_offset = 0.1;
         // T normal_offset = -1e-2;
         VectorXT vertices; VectorXi indices;

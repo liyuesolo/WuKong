@@ -250,7 +250,7 @@ public:
             grad_f[i] = dOdp[i];
         });
 
-        T epsilon = 1e-5;
+        T epsilon = 1e-8;
         VectorXT feasible_point_gradients = dOdp;
         if (has_bound)
         {

@@ -296,7 +296,9 @@ void FEMSolver::addElastsicPotential(T& energy)
     iterateTetsParallel([&](const TetNodes& x_deformed, 
         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
     {
-        T ei = computeNeoHookeanStrainEnergy(x_deformed, x_undeformed);
+        // T ei = computeNeoHookeanStrainEnergy(x_deformed, x_undeformed);
+        T ei;
+        computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
         energies_neoHookean[tet_idx] += ei;
     });
     energy += energies_neoHookean.sum();
@@ -308,7 +310,9 @@ void FEMSolver::addElasticForceEntries(VectorXT& residual)
         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
     {
         Vector<T, 12> dedx;
-        computeNeoHookeanStrainEnergyGradient(x_deformed, x_undeformed, dedx);
+        // computeNeoHookeanStrainEnergyGradient(x_deformed, x_undeformed, dedx);
+        computeLinearTet3DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
+        
         addForceEntry<12>(residual, indices, -dedx);
     });
 }
@@ -319,8 +323,8 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
     {
         Matrix<T, 12, 12> hessian, hessian_ad;
-        computeNeoHookeanStrainEnergyHessian(x_deformed, x_undeformed, hessian);
-
+        // computeNeoHookeanStrainEnergyHessian(x_deformed, x_undeformed, hessian);
+        computeLinearTet3DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
         if (project_block_PD)
             projectBlockPD<12>(hessian);
         

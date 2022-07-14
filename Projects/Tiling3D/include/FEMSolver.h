@@ -27,8 +27,8 @@ public:
     using TM = Matrix<T, 3, 3>;
 
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    typedef long StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::RowMajor, StorageIndex>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
 
     using Entry = Eigen::Triplet<T>;
 

@@ -151,7 +151,8 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
     StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance, project_PD);
 
-    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
+    // std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
+    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
     
     entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
 

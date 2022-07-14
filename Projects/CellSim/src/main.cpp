@@ -8,7 +8,6 @@
 #include <igl/trackball.h>
 #include <imgui/imgui.h>
 
-
 #include "../include/Misc.h"
 #include "../include/Simulation.h"
 #include "../include/VertexModel.h"
@@ -18,7 +17,9 @@
 #include "../include/DataIO.h"
 #include "../include/GeometryHelper.h"
 
-
+#include <stdio.h>
+#include <stdlib.h>
+#include "mkl.h"
 
 using TV = Vector<double, 3>;
 using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
@@ -30,6 +31,7 @@ using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 
 int main(int argc, char** argv)
 {
+
     // testBiharmonicBasisFunction();
     Simulation simulation;
     ObjNucleiTracking obj(simulation);
@@ -98,24 +100,35 @@ int main(int argc, char** argv)
 
     if (test_case == 0)
     {
-        simulation.cells.resolution = -1;
+        simulation.cells.resolution = 1;
         simulation.initializeCells();
+        simulation.cells.lower_triangular = true;
         simulation.max_newton_iter = 300;
         if (simulation.cells.use_cell_centroid)
-            simulation.cells.tet_vol_barrier_w = 1e-10;
+            simulation.cells.tet_vol_barrier_w = 1e-12;
         else
             simulation.cells.tet_vol_barrier_w = 1e3;
         simulation.cells.add_perivitelline_liquid_volume = false;
         simulation.cells.Bp = 0.0;
+        simulation.max_newton_iter = 300;
+        simulation.cells.B = 1e4;
+        simulation.cells.By = 1e4;
+        
+        simulation.cells.bound_coeff = 1e2;
+
         std::string data_file = data_folder;
         if (simulation.cells.resolution == -1)
             data_file += "centroids_56.txt";
+        else if (simulation.cells.resolution == 1)
+            data_file += "centroids_463.txt";
+        else if (simulation.cells.resolution == 2)
+            data_file += "centroids_1500.txt";
         
         obj.power = 2;
         
         if (obj.power == 4)
             obj.w_data *= 1e3;
-        obj.loadTarget(data_file, 0.05);
+        obj.loadTarget(data_file, 0.0);
         // obj.rotateTarget(0.025);
         // obj.optimizeForStableTargetSpring(0.05);
         // obj.optimizeForStableTargetDeformationGradient(0.05);
@@ -144,42 +157,56 @@ int main(int argc, char** argv)
         sa.initialize();
         sa.saveConfig();
         // sa.optimizeIPOPT();
+        // obj.diffTestPartial2OPartialp2();
         // runSA();
         // obj.diffTestGradientScale();
         // simulation.cells.edge_weights.setConstant(10.0);
-        // simulation.cells.edge_weights.array() += 2;
+        VectorXT perturbance = VectorXT::Random(simulation.cells.edge_weights.rows());
+        perturbance /= perturbance.maxCoeff();
+        // simulation.cells.edge_weights.setConstant(5.0);
+        // simulation.cells.edge_weights.array() += 0.1;
+        // simulation.cells.edge_weights += 2.0 * perturbance;
         // sa.checkStatesAlongGradient();
+        int exp_id = 1063;
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_29.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_29.txt", simulation.cells.edge_weights);
+        // sa.design_parameters = simulation.cells.edge_weights;
+        // MatrixXT H;
+        // obj.hessianGN(sa.design_parameters, H, false);
+        // Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        // MatrixXT U = svd.matrixU();
+        // VectorXT Sigma = svd.singularValues();
+        // MatrixXT V = svd.matrixV();
+        // std::cout << "\t[SQP] GN Hessian singular values last: " << Sigma.tail<5>().transpose() << std::endl;
+        // std::cout << "\t[SQP] GN Hessian singular values first: " << Sigma.head<5>().transpose() << std::endl;
     }
     else if (test_case == 2)
     {
         simulation.cells.resolution = 2;
         simulation.initializeCells();
-        simulation.cells.lower_triangular = true;
-        simulation.cells.edge_weights.setConstant(0.01);
-        simulation.max_newton_iter = 500;
+        simulation.cells.lower_triangular = false;
+        simulation.cells.scaled_barrier = true;
+        // simulation.cells.edge_weights.setConstant(0.1);
+        simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
+        sa.max_num_iter = 400;
         if (simulation.cells.use_cell_centroid)
-            simulation.cells.tet_vol_barrier_w = 1e-10;
+        {
+            if (simulation.cells.scaled_barrier)
+                simulation.cells.tet_vol_barrier_w = 1e-10;
+            else
+                simulation.cells.tet_vol_barrier_w = 1e-22;
+        }
         else
             simulation.cells.tet_vol_barrier_w = 1e1;
         
         simulation.cells.add_perivitelline_liquid_volume = false;
-        // simulation.cells.alpha *= 0.01;
-        // simulation.cells.gamma *= 0.01;
-        // simulation.cells.sigma *= 0.01;
-        // simulation.cells.edge_weights *= 0.01;
-        // simulation.cells.Gamma *= 0.01;
-        simulation.cells.Bp = 0.0;
-        simulation.cells.B = 1e5;
-        simulation.cells.By = 1e3;
-        simulation.cells.add_tet_vol_barrier = true;
-        simulation.cells.bound_coeff = 1e4;
-        // simulation.cells.use_alm_on_cell_volume = true;
-
-        // simulation.cells.print_force_norm = false;
-        // simulation.cells.checkTotalGradientScale();
-        // simulation.cells.checkTotalHessianScale();
         
+        simulation.cells.Bp = 0.0;
+        simulation.cells.B = 1e4;
+        simulation.cells.By = 1e4;
+        simulation.cells.bound_coeff = 1e2;
+                
         obj.setFrame(30);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
         
@@ -192,6 +219,14 @@ int main(int argc, char** argv)
         {
             weights_filename += "weights_1500.txt";
             // simulation.cells.tet_vol_barrier_w = 1e-31;
+        }
+
+        obj.add_spatial_x = false;
+        
+        if (obj.add_spatial_x)
+        {
+            obj.w_reg_x_spacial = 1.0;
+            obj.buildCentroidStructure();
         }
 
         obj.loadWeightedCellTarget(weights_filename, /*use_all_points = */ false);
@@ -219,7 +254,7 @@ int main(int argc, char** argv)
         obj.add_reg = false;
         obj.reg_w = 1e-5;
         sa.add_reg = !obj.add_reg;
-        // sa.add_reg = false;
+        sa.add_reg = true;
         sa.reg_w_H = 1e-6;
         obj.use_penalty = false;
         obj.penalty_type = Qubic;
@@ -236,14 +271,24 @@ int main(int argc, char** argv)
         sa.initialize(); 
         sa.saveConfig();
         // sa.optimizeIPOPT();
-        sa.optimizeLBFGSB();
+        // sa.optimizeLBFGSB();
+        // obj.diffTestdOdxScale();
+        // obj.diffTestd2Odx2Scale();
         int iter = 449;
-        int exp_id = 606;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/x_ipopt.obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/p_ipopt.txt", simulation.cells.edge_weights);
+        int exp_id = 1042;
+        // simulation.loadDeformedState("current_mesh.obj");
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_84.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_84.txt", simulation.cells.edge_weights);
+        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/1096_lbfgs_40_highres/lbfgs_iter_58.obj");
+        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/1096_lbfgs_40_highres/lbfgs_iter_58.txt", simulation.cells.edge_weights);
         // sa.design_parameters = simulation.cells.edge_weights;
+        // MatrixXT H_GN;
+        // std::cout << "hessianGN" << std::endl;
+        // obj.getDesignParameters(sa.design_parameters);
+        // obj.hessianGN(sa.design_parameters, H_GN, /*simulate = */false);
         // sa.checkStatesAlongGradientSGN();
         // obj.diffTestGradientScale();
+        // obj.diffTestGradient();
         // obj.diffTestGradientScale();
         
     }
@@ -291,8 +336,8 @@ int main(int argc, char** argv)
     {
         SimulationApp sim_app(simulation);
         
-        int iter = 91;
-        int exp_id = 985;
+        int iter = 32;
+        int exp_id = 1021;
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".obj");
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
         // simulation.loadEdgeWeights("failed.txt", simulation.cells.edge_weights);
@@ -349,6 +394,10 @@ int main(int argc, char** argv)
         std::string data_file = data_folder;
         if (simulation.cells.resolution == -1)
             data_file += "centroids_56.txt";
+        else if (simulation.cells.resolution == 1)
+            data_file += "centroids_463.txt";
+        else if (simulation.cells.resolution == 2)
+            data_file += "centroids_1500.txt";
         sa.generateNucleiDataSingleFrame(data_file);
 
         // sa.generateNucleiDataSingleFrame("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/low_res_dense.txt");
@@ -359,7 +408,7 @@ int main(int argc, char** argv)
     auto generateWeights = [&]()
     {
         obj.setFrame(0);
-        // simulation.cells.edge_weights.setConstant(0.0);
+        simulation.cells.edge_weights.setConstant(0.01);
         simulation.verbose = true;
         simulation.save_mesh = false;
         simulation.cells.print_force_norm = false;
@@ -489,15 +538,36 @@ int main(int argc, char** argv)
         
     };
 
+    auto runSimIPOPT = [&]()
+    {
+        simulation.solveIPOPT();
+    };
+
+    auto testCholmod = [&]()
+    {
+        int exp_id = 1017;
+        simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_200.obj");
+        simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_200.txt", simulation.cells.edge_weights);
+        sa.design_parameters = simulation.cells.edge_weights;
+        MatrixXT H_GN;
+        std::cout << "hessianGN" << std::endl;
+        obj.hessianGN(sa.design_parameters, H_GN, /*simulate = */false);
+    };
+
+
     if (argc == 1)
     {
+        // sa.optimizeKnitro();
+        // testCholmod();
         // renderData();
         // processDrosophilaData();
         // visualizeData();
+        // sa.optimizeKnitro();
         // runSA();
-        // runSim();
+        runSim();
+        // runSimIPOPT();
         // generateNucleiGT();
-        generateWeights();
+        // generateWeights();
         // renderScene();
     }
     else if (argc > 1)
@@ -506,7 +576,8 @@ int main(int argc, char** argv)
         // sa.optimizeIPOPT();
         
         // sa.optimizeLBFGSB();
-        runSA();
+        sa.optimizeKnitro();
+        // runSA();    
         // runSim();
         // sa.runTracking(28, 45, /*load weights = */false, /*weigts_file = */"");
     }

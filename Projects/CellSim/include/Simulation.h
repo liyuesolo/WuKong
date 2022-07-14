@@ -80,7 +80,8 @@ public:
     void sampleBoundingSurface(Eigen::MatrixXd& V);
 
     bool staticSolve();
-
+    bool staticSolveLBFGS();
+    
     void initializeDynamicsData(T _dt, T total_time);
 
     void reset();
@@ -127,6 +128,8 @@ public:
     void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
         T radius, Eigen::MatrixXd& _V, Eigen::MatrixXi& _F);
     void loadVector(const std::string& filename, VectorXT& vector);
+
+    void solveIPOPT();
 
 public:
     Simulation() {}

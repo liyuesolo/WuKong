@@ -648,6 +648,7 @@ public:
     bool print_force_norm = false;
     bool profile = false;
     bool lower_triangular = false;
+    bool scaled_barrier = true;
 
     bool use_test_mesh = false;
 
@@ -896,7 +897,7 @@ public:
     std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A, bool lower_tri_only = false)
     {
         std::vector<Entry> triplets;
-
+        triplets.reserve(A.nonZeros());
         for (int k=0; k < A.outerSize(); ++k)
             for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
             {

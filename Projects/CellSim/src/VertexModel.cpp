@@ -226,13 +226,29 @@ void VertexModel::computeCellInfo()
     print_force_norm = _print;
     std::cout << "\t |g_norm|: " << residual.norm() << " total energy: " << total_energy << std::endl;
 
+    VectorXT edge_norm(edges.size());
+    tbb::parallel_for(0, (int)edges.size(), [&](int i){
+        TV vi = deformed.segment<3>(edges[i][0] * 3);
+        TV vj = deformed.segment<3>(edges[i][1] * 3);
+        edge_norm[i] = (vj - vi).norm();
+    });
+    std::cout << "min edge length " << edge_norm.minCoeff() << " max " << edge_norm.maxCoeff() 
+        << " avg " << edge_norm.sum() / T(edge_norm.rows()) << std::endl;
     bool all_inside = true;
     int inside_cnt = 0;
+    T penetration = 0.0;
     for (int i = 0; i < num_nodes; i++)
     {
         TV xi = deformed.segment<3>(i * 3);
         if (sdf.inside(xi))
+        {
             inside_cnt++;
+        }
+        else
+        {
+            penetration += sdf.value(xi);
+        }
+
             // continue;
         // std::cout << sdf.value(xi) << std::endl;
         // all_inside = false;
@@ -241,7 +257,9 @@ void VertexModel::computeCellInfo()
     // if (!all_inside)
         // std::cout << "NOT ALL VERTICES ARE INSIDE THE SDF" << std::endl;
     std::cout << num_nodes - inside_cnt << "/" << num_nodes << " are not inside the SDF" << std::endl;
-
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    std::cout << "total penetration " << penetration << " embryo ap length: " << max_corner[0] - min_corner[1] << std::endl;
 }
 
 T VertexModel::computeTotalEnergy(const VectorXT& _u, bool verbose, bool add_to_deform)

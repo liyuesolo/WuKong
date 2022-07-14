@@ -2,7 +2,7 @@
 #include "../include/autodiff/FEMEnergy.h"
 #include "../include/Timer.h"
 #include <Eigen/PardisoSupport>
-
+#include <Eigen/CholmodSupport>
 #include "../../Solver/CHOLMODSolver.hpp"
 
 #include <Spectra/SymEigsShiftSolver.h>
@@ -179,8 +179,7 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
             projected[offset] = target;
         });
     }
-    if (use_ipc)
-        updateIPCVertices(_u);
+    
 
     deformed = undeformed + projected;
 
@@ -194,12 +193,16 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     residual_backup = residual;
 
     if (use_penalty)
+    {
         addBCPenaltyForceEntries(residual);
+        std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
+        residual_backup = residual;
+    }
 
     if (use_ipc)
     {
         addIPCForceEntries(residual);
-        std::cout << "contact + penalty force " << (residual - residual_backup).norm() << std::endl;
+        std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
         residual_backup = residual;
     }
 
@@ -341,7 +344,6 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     
     std::vector<Entry> entries;
 
-
     addElasticHessianEntries(entries);
 
     if (use_penalty)
@@ -375,136 +377,74 @@ void FEMSolver::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unorder
 bool FEMSolver::linearSolve(StiffnessMatrix& K, 
     VectorXT& residual, VectorXT& du)
 {
-// #define USE_CHOLMOD_SOLVER
     Timer t(true);
-    // StiffnessMatrix I(K.rows(), K.cols());
-    // I.setIdentity();
-    T alpha = 10e-6;
-    // StiffnessMatrix H = K;
-    std::unordered_map<int, int> diagonal_entry_location;
-    
-#ifdef USE_CHOLMOD_SOLVER
-    
-    
-    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
-    Noether::CHOLMODSolver<typename StiffnessMatrix::StorageIndex> cholmod_solver;
-    cholmod_solver.set_pattern(K);
-    cholmod_solver.analyze_pattern();
-
-    for (int i = 0; i < 50; i++)
-    {
-        
-        if (!cholmod_solver.factorize())
-        {
-            // std::cout << "indefinite" << std::endl;
-            indefinite_count_reg_cnt++;
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)
-            {
-                K.coeffRef(row, row) += alpha;
-            });    
-            alpha *= 10;
-            // cholmod_solver.A->x = K.valuePtr();
-            continue;
-        }
-        
-        cholmod_solver.solve(residual.data(), du.data(), true);
-        
-        VectorXT linSys_error = VectorXT::Zero(du.rows());
-        VectorXT ones = VectorXT::Ones(du.rows());
-        cholmod_solver.multiply(du.data(), linSys_error.data());
-        linSys_error -= residual;
-        bool solve_success = linSys_error.norm() < 1e-6;
-        if (!solve_success)
-            invalid_residual_cnt++;
-        if (solve_success)
-        {
-            t.stop();
-            std::cout << "\t===== Linear Solve ===== " << std::endl;
-            
-            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-            std::cout << "\t# regularization step " << i 
-                << " indefinite " << indefinite_count_reg_cnt 
-                << " invalid solve " << invalid_residual_cnt << std::endl;
-            std::cout << "\t======================== " << std::endl;
-            return true;
-        }
-        else
-        {
-            std::cout << "|Ax-b|: " << linSys_error.norm() << std::endl;
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)
-            {
-                K.coeffRef(row, row) += alpha;
-            });
-            // cholmod_solver.A->x = K.valuePtr();
-            // cholmod_solver.A->x[0] += alpha;
-            // std::cout << mat_value[0] << std::endl;
-            alpha *= 10;
-        }
-
-    }
-    du = residual.normalized();
-    std::cout << "linear solve failed" << std::endl;
-    return true;
-#else
-    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::RowMajor, int>> solver;
-    
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    T alpha = 1e-6;
     solver.analyzePattern(K);
-    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
     
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+
     for (int i = 0; i < 50; i++)
     {
         solver.factorize(K);
         if (solver.info() == Eigen::NumericalIssue)
         {
-            indefinite_count_reg_cnt++;
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)
-            {
-                K.coeffRef(row, row) += alpha;
-            });
-            
-            // K = H + alpha * I;        
+            K.diagonal().array() += alpha;
             alpha *= 10;
+            indefinite_count_reg_cnt++;
             continue;
         }
-        du = solver.solve(residual);
 
+        du = solver.solve(residual);
+        
         T dot_dx_g = du.normalized().dot(residual.normalized());
 
         int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-5;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
         if (!search_dir_correct_sign)
+        {   
             invalid_search_dir_cnt++;
-        bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        }
+        
+        bool solve_success = true;
+        // solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        
         if (!solve_success)
             invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
             t.stop();
-            std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-            std::cout << "\t# regularization step " << i 
-                << " indefinite " << indefinite_count_reg_cnt 
-                << " invalid search dir " << invalid_search_dir_cnt
-                << " invalid solve " << invalid_residual_cnt << std::endl;
-            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            std::cout << "\t======================== " << std::endl;
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << (K.selfadjointView<Eigen::Lower>() * du + UV * UV.transpose()*du - residual).norm() << std::endl;
+                std::cout << "\t======================== " << std::endl;
+            }
             return true;
         }
         else
         {
-            // K = H + alpha * I;      
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });  
+            K.diagonal().array() += alpha;
             alpha *= 10;
         }
     }
     return false;
-#endif
 }
 
 T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
@@ -540,7 +480,7 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     {
         VectorXT u_ls = _u + alpha * du;
         T E1 = computeTotalEnergy(u_ls);
-        if (E1 - E0 < 0 || cnt > 15)
+        if (E1 - E0 < 0 || cnt > 10)
         {
             // if (cnt > 15)
             //     std::cout << "cnt > 15" << std::endl;
@@ -608,15 +548,17 @@ bool FEMSolver::staticSolveStep(int step)
         {
             f[offset] = 0;
         });
-        u.setRandom();
-        u *= 1.0 / u.norm();
-        u *= 0.001;
+        // u.setRandom();
+        // u *= 1.0 / u.norm();
+        // u *= 0.001;
     }
 
     VectorXT residual(deformed.rows());
     residual.setZero();
 
     T residual_norm = computeResidual(u, residual);
+    if (use_ipc)
+        updateIPCVertices(u);
     // saveIPCMesh("/home/yueli/Documents/ETH/WuKong/output/ThickShell/IPC_mesh_iter_" + std::to_string(step) + ".obj");
     // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
     std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
@@ -661,6 +603,8 @@ bool FEMSolver::staticSolve()
         residual.setZero();
 
         residual_norm = computeResidual(u, residual);
+        if (use_ipc)
+            updateIPCVertices(u);
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
         if (verbose)
