@@ -20,9 +20,8 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libigl/cmake)
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0 -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wconversion -Wshadow -Wpedantic -fsanitize=undefined,address")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O3 -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O3 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 
 # libigl
 option(LIBIGL_WITH_OPENGL            "Use OpenGL"         ON)
@@ -53,14 +52,13 @@ if(CUDA_FOUND)
 	add_definitions(-DENABLE_AMGCL_CUDA)
 endif()
 
-add_definitions(-DEIGEN_USE_MKL_ALL)
+# add_definitions(-DEIGEN_USE_MKL_ALL)
+# add_definitions(-DMKL_LP64)
+
 add_definitions(-DUSE_CHOLMOD)
-add_definitions(-DMKL_LP64)
 
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${MKLROOT}/include)
-# include_directories(/home/yueli/Documents/ETH/WuKong/build/amgcl-src/)
-# add_library(${MKLROOT}/lib/intel64)
 add_subdirectory(Libs)
 add_subdirectory(Solver)
 add_subdirectory(Projects)
