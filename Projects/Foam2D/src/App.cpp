@@ -21,6 +21,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         
     };
+    
+    foam.createRectangleScene();
 
     updateScreen(viewer);
 
@@ -33,10 +35,13 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().set_colors(C);
 
     viewer.core().align_camera_center(V);
-    viewer.core().toggle(viewer.data().show_lines);
+    // viewer.core().toggle(viewer.data().show_lines);
 }
 
 void Foam2DApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
-
+    foam.generateMeshForRendering(V, F, C);
+    viewer.data().clear();
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);
 }

@@ -20,8 +20,8 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libigl/cmake)
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O3 -fopenmp")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O3 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0 -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -fopenmp -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 
 # libigl
 option(LIBIGL_WITH_OPENGL            "Use OpenGL"         ON)
@@ -32,10 +32,10 @@ option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"                    ON)
 option(LIBIGL_WITH_PNG               "Use PNG"                      ON)
 option(LIBIGL_WITH_XML               "Use XML"                      ON)
 
-option(LIBIGL_WITH_MOSEK             "Use MOSEK"          ON)
+option(LIBIGL_WITH_MOSEK             "Use MOSEK"          OFF)
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
-find_package (SuiteSparse REQUIRED)
+# find_package (SuiteSparse REQUIRED)
 find_package (OpenMP REQUIRED)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")

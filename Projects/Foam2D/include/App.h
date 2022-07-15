@@ -10,13 +10,12 @@
 
 #include "Foam2D.h"
 
-template <int dim>
 class Foam2D;
 
 class Foam2DApp
 {
 public:
-    Foam2D<2>& foam;
+    Foam2D& foam;
 
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
@@ -27,7 +26,7 @@ public:
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
 
-    Foam2DApp(Foam2D<2>& _foam) : foam(_foam) {}
+    Foam2DApp(Foam2D& _foam) : foam(_foam) {}
     ~Foam2DApp() {}
 };
 

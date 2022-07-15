@@ -1,4 +1,4 @@
-set(DEPS Half tbb tbbmalloc tbbmalloc_proxy mkl_intel_lp64 mkl_sequential mkl_core igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis cholmod amd camd ccolamd colamd spqr)
+set(DEPS Half tbb tbbmalloc tbbmalloc_proxy igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis)
 
 file(GLOB HEADERS "include/*.h" "include/*.hpp" )
 file(GLOB SOURCES "src/*.cpp" )

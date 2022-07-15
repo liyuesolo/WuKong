@@ -7,7 +7,7 @@ int main()
 
     viewer.plugins.push_back(&menu);
 
-    Foam2D<2> foam;
+    Foam2D foam;
     Foam2DApp foam2d_app(foam);
     foam2d_app.setViewer(viewer, menu);
     viewer.launch();
