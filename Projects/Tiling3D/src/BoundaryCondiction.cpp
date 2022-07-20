@@ -64,7 +64,7 @@ void FEMSolver::penaltyInPlaneCompression(int dir, T percent)
     use_penalty = true;
     penalty_pairs.clear();
     
-    T region = 0.05;
+    T region = 0.01;
     for (int i = 0; i < num_nodes; i++)
     {
         T dx = max_corner[0] - min_corner[0];

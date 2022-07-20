@@ -2,6 +2,7 @@
 #define TILING3D_H
 
 #include "../tactile/tiling.hpp"
+#include "../../Libs/clipper/clipper.hpp"
 
 #include <utility>
 #include <iostream>
@@ -15,6 +16,11 @@
 #include "VecMatDef.h"
 
 #include "FEMSolver.h"
+#include <random>
+#include <cmath>
+#include <fstream>
+
+#include <gmsh.h>
 
 template <int dim>
 struct VectorHash
@@ -42,12 +48,20 @@ public:
     using IdList = std::vector<int>;
     using Face = Vector<int, 3>;
     using Edge = Vector<int, 2>;
+    using EdgeList = std::vector<Edge>;
+    using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
     
-    FEMSolver solver;
-
+    FEMSolver& solver;
 public:
-    Tiling3D() {}
+    Tiling3D(FEMSolver& _solver) : solver(_solver) {}
     ~Tiling3D() {}
+
+
+    void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
+    void fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, int n_unit = 1, bool random = false);
+
+    void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
 
     void initializeSimulationData(bool tetgen);
 

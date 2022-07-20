@@ -9,18 +9,17 @@
 #include <cmath>
 #include <fstream>
 
-
 #include "../include/Util.h"
 
+
 std::random_device rd;
-std::mt19937 gen( rd() );
-std::uniform_real_distribution<> dis( 0.0, 1.0 );
+    std::mt19937 gen( rd() );
+    std::uniform_real_distribution<> dis( 0.0, 1.0 );
 
-static double zeta()
-{
-	return dis(gen);
-}
-
+    static double zeta()
+    {
+        return dis(gen);
+    }
 
 void Tiling3D::fetchOneFamilyFillRegion(int IH, T* params, 
     std::vector<PointLoops>& raw_points, T width, T height)
@@ -174,6 +173,8 @@ void Tiling3D::fetchOneFamilyFillRegion(int IH, T* params,
 
     }
 }
+
+
 
 void Tiling3D::fetchOneFamily(int IH, T* params, TV2& T1, TV2& T2, 
     PointLoops& raw_points, T width, T height)
@@ -1335,7 +1336,7 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         // solver.ThreePointBendingTest();
         // solver.addForceMiddleTop();
         // solver.fixNodes(dirichlet_vertices);
-        solver.penaltyInPlaneCompression(0, 0.1);
+        solver.penaltyInPlaneCompression(1, 0.3);
 
     }
     else
@@ -1346,3 +1347,4 @@ void Tiling3D::initializeSimulationData(bool tetgen)
 
 
 }
+
