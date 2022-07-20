@@ -1,0 +1,19 @@
+add_definitions(-DEIGEN_USE_MKL_ALL)
+add_definitions(-DMKL_LP64)
+set(DEPS clipper tbb tbbmalloc tbbmalloc_proxy Eigen3::Eigen igl::core igl::opengl_glfw igl::opengl_glfw_imgui igl::tetgen igl::triangle igl::png mkl_intel_lp64 mkl_sequential mkl_core cholmod_solver)
+
+file(GLOB HEADERS "include/*.h" "include/autodiff/*.h" "tactile/.*h" "tactile/.*hpp" )
+file(GLOB SOURCES "src/*.cpp" "tactile/*.cpp" "src/autodiff/*.cpp")
+
+add_executable(Tiling2D ${HEADERS} ${SOURCES})
+target_link_libraries(Tiling2D /home/yueli/Documents/gmsh/build/libgmsh.so)  
+target_link_libraries(Tiling2D /home/yueli/Documents/ETH/ipc-toolkit/build/libipc_toolkit.a)
+target_link_libraries(Tiling2D /home/yueli/Documents/ETH/ipc-toolkit/build/predicates/libpredicates.a)
+target_link_libraries(Tiling2D /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/spdlog-build/libspdlog.a)
+target_link_libraries(Tiling2D /home/yueli/Documents/ETH/ipc-toolkit/install/collisiondetection/build/libcollisiondetection.a)
+target_link_libraries(Tiling2D /home/yueli/Documents/ETH/ipc-toolkit/build/_deps/tight_inclusion-build/libtight_inclusion.a)
+
+target_include_directories(Tiling2D PUBLIC ../../Libs/spectra/include)
+target_include_directories(Tiling2D PUBLIC /home/yueli/Documents/ETH/ipc-toolkit/build/include)
+target_include_directories(Tiling2D PUBLIC /home/yueli/Documents/gmsh/api)  
+target_link_libraries(Tiling2D ${DEPS})

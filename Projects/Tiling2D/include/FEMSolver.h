@@ -1,0 +1,241 @@
+#ifndef FEM_SOLVER_H
+#define FEM_SOLVER_H
+
+#include <utility>
+#include <iostream>
+#include <fstream>
+#include <Eigen/Geometry>
+#include <Eigen/Core>
+#include <Eigen/Sparse>
+#include <Eigen/Dense>
+#include <tbb/tbb.h>
+#include <unordered_map>
+#include <complex>
+
+#include "VecMatDef.h"
+
+using Eigen::MatrixXd;
+using Eigen::MatrixXi;
+
+class FEMSolver
+{
+public:
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using VectorXi = Vector<int, Eigen::Dynamic>;
+    using TV = Vector<T, 3>;
+    using IV = Vector<int, 3>;
+    using TM = Matrix<T, 3, 3>;
+
+    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
+    typedef int StorageIndex;
+    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
+
+    using Entry = Eigen::Triplet<T>;
+
+    using EleNodes = Matrix<T, 3, 2>;
+    using EleIdx = Vector<int, 3>;
+
+    using Face = Vector<int, 3>;
+    using Edge = Vector<int, 2>;
+
+public:
+
+    T E = 1e5;
+    T nu = 0.48;
+
+    int dim = 2;
+
+    VectorXT u;
+    VectorXT f;
+    VectorXT deformed, undeformed;
+    VectorXi indices;
+
+    std::unordered_map<int, T> dirichlet_data;
+
+    int num_nodes;   
+    int num_ele;
+
+    bool verbose = false;
+    bool run_diff_test = false;
+
+    T newton_tol = 1e-6;
+    int max_newton_iter = 1000;
+
+    bool use_ipc = false;
+    Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXi ipc_edges;
+    Eigen::MatrixXi ipc_faces;
+
+    template <class OP>
+    void iterateDirichletDoF(const OP& f) {
+        for (auto dirichlet: dirichlet_data){
+            f(dirichlet.first, dirichlet.second);
+        } 
+    }
+
+    template <typename OP>
+    void iterateElementsSerial(const OP& f)
+    {
+        for (int i = 0; i < int(indices.size()/3); i++)
+        {
+            EleIdx tet_idx = indices.segment<3>(i * 3);
+            EleNodes ele_deformed = getEleNodesDeformed(tet_idx);
+            EleNodes ele_undeformed = getEleNodesUndeformed(tet_idx);
+            f(ele_deformed, ele_undeformed, tet_idx, i);
+        }
+    }
+
+    template <typename OP>
+    void iterateElementsParallel(const OP& f)
+    {
+        tbb::parallel_for(0, int(indices.size()/3), [&](int i)
+        {
+            EleIdx ele_idx = indices.segment<3>(i * 3);
+            EleNodes ele_deformed = getEleNodesDeformed(ele_idx);
+            EleNodes ele_undeformed = getEleNodesUndeformed(ele_idx);
+            f(ele_deformed, ele_undeformed, ele_idx, i);
+        });
+    }
+
+private:
+
+    template<int size>
+    bool isHessianBlockPD(const Matrix<T, size, size> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        // sorted from the smallest to the largest
+        if (eigenSolver.eigenvalues()[0] >= 0.0) 
+            return true;
+        else
+            return false;
+        
+    }
+
+    template<int size>
+    VectorXT computeHessianBlockEigenValues(const Matrix<T, size, size> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        return eigenSolver.eigenvalues();
+    }
+
+    template <int size>
+    void projectBlockPD(Eigen::Matrix<T, size, size>& symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        if (eigenSolver.eigenvalues()[0] >= 0.0) {
+            return;
+        }
+        Eigen::DiagonalMatrix<T, size> D(eigenSolver.eigenvalues());
+        int rows = ((size == Eigen::Dynamic) ? symMtr.rows() : size);
+        for (int i = 0; i < rows; i++) {
+            if (D.diagonal()[i] < 0.0) {
+                D.diagonal()[i] = 0.0;
+            }
+            else {
+                break;
+            }
+        }
+        symMtr = eigenSolver.eigenvectors() * D * eigenSolver.eigenvectors().transpose();
+    }
+
+    template<int size>
+    void addForceEntry(VectorXT& residual, 
+        const VectorXi& vtx_idx, 
+        const Vector<T, size>& gradent)
+    {
+        if (vtx_idx.size() * 2 != size)
+            std::cout << "wrong gradient block size in addForceEntry" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+            residual.segment<2>(vtx_idx[i] * 2) += gradent.template segment<2>(i * 2);
+    }
+
+    template<int size>
+    void addHessianEntry(
+        std::vector<Entry>& triplets,
+        const VectorXi& vtx_idx, 
+        const Matrix<T, size, size>& hessian)
+    {
+        if (vtx_idx.size() * 2 != size)
+            std::cout << "wrong hessian block size" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 2; k++)
+                    for (int l = 0; l < 2; l++)
+                    {
+                        if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
+                            triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                    }
+            }
+        }
+    }
+
+    std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
+    {
+        std::vector<Entry> triplets;
+
+        for (int k=0; k < A.outerSize(); ++k)
+            for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
+                triplets.push_back(Entry(it.row(), it.col(), it.value()));
+        return triplets;
+    }
+
+    EleNodes getEleNodesDeformed(const EleIdx& nodal_indices)
+    {
+        EleNodes ele_x;
+        for (int i = 0; i < 3; i++)
+        {
+            ele_x.row(i) = deformed.segment<2>(nodal_indices[i]*dim);
+        }
+        return ele_x;
+    }
+
+    EleNodes getEleNodesUndeformed(const EleIdx& nodal_indices)
+    {
+        EleNodes ele_x;
+        for (int i = 0; i < 3; i++)
+        {
+            ele_x.row(i) = undeformed.segment<2>(nodal_indices[i]*dim);
+        }
+        return ele_x;
+    }
+public:
+
+
+    void addElastsicPotential(T& energy);
+    void addElasticForceEntries(VectorXT& residual);
+    void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
+
+    T computeTotalEnergy(const VectorXT& _u);
+
+    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
+
+    T computeResidual(const VectorXT& _u, VectorXT& residual);
+
+    T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
+
+    bool staticSolve();
+
+    bool staticSolveStep(int step);
+
+    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
+
+
+    void updateIPCVertices(const VectorXT& _u);
+    T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+
+    void reset();
+
+    FEMSolver() {}
+    ~FEMSolver() {}
+
+};
+
+#endif
