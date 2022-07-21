@@ -417,13 +417,13 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
     //Surface
     for (int i = 0; i < polygons.size(); i++)
     {
-        // if (i == 2)
-        //     continue;
-        // if (i == 1)
-        //     gmsh::model::occ::addPlaneSurface({i+1, i+2}, i + 1);
-        // else
-        //     gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
-        gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
+        if (i == 2)
+            continue;
+        if (i == 1)
+            gmsh::model::occ::addPlaneSurface({i+1, i+2}, i + 1);
+        else
+            gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
+        // gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
     }
 
     std::cout << "add surface" << std::endl;
@@ -446,7 +446,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
 
     std::vector<std::pair<int, int>> sleft;
     gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t2[0])-eps, std::min(0.0,t2[1])-eps, -eps, std::max(0.0,t2[0])+eps, std::max(0.0,t2[1])+eps, eps, sleft, 1);
-
+    // std::ofstream pbc_output(data_folder + "pbc_data.txt");
     for(auto i : sleft) {
         T xmin, ymin, zmin, xmax, ymax, zmax;
         gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
@@ -465,6 +465,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
                 std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
             {
                 gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_hor);
+                // pbc_output << "X " << j.second << " " << i.second << std::endl;
             }
         }
     }
@@ -490,6 +491,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
                 std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
             {
                 gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_ver);
+                // pbc_output << "Y " << j.second << " " << i.second << std::endl;
             }
         }
     }
@@ -497,10 +499,22 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
     gmsh::model::occ::synchronize();
 
     gmsh::model::mesh::generate(2);
-    
-    gmsh::write("thickshell.msh");
-    gmsh::write("thickshell.vtk");
 
+    // std::vector<std::size_t> pbc_nodes_a, pbc_nodes_b;
+    // int tagMaster;
+    // std::vector<T> affineTransform;
+    // gmsh::model::mesh::getPeriodicNodes(1, 1, tagMaster, pbc_nodes_a, pbc_nodes_b, affineTransform);
+    // for (int i = 0; i < pbc_nodes_a.size(); i++)
+    // {
+    //     pbc_output << pbc_nodes_a[i] << " " << pbc_nodes_b[i] << std::endl;
+    // }
+    // pbc_output.close();
+    gmsh::write(data_folder + "thickshell.msh");
+    gmsh::write(data_folder + "thickshell.vtk");
+    std::ofstream translation(data_folder + "translation.txt");
+    translation << t1.transpose() << std::endl;
+    translation << t2.transpose() << std::endl;
+    translation.close();
     gmsh::finalize();
 }
 
@@ -511,6 +525,6 @@ void Tiling2D::getPBCUnit(VectorXT& vertices, EdgeList& edge_list)
     //10 is good
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners;
-    fetchUnitCellFromOneFamily(0, polygons, pbc_corners, 1, false);
+    fetchUnitCellFromOneFamily(0, polygons, pbc_corners, 2, false);
     generatePeriodicMesh(polygons, pbc_corners);
 }

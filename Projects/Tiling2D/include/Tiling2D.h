@@ -43,7 +43,8 @@ public:
     using TV2 = Vector<double, 2>;
     using TV3 = Vector<double, 3>;
     using TM2 = Matrix<double, 2, 2>;
-    using IV = Vector<int, 3>;
+    using IV3 = Vector<int, 3>;
+    using IV = Vector<int, 2>;
 
     using PointLoops = std::vector<TV2>;
     using IdList = std::vector<int>;
@@ -53,6 +54,8 @@ public:
     using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
     
     FEMSolver& solver;
+
+    std::string data_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/data/";
 public:
     Tiling2D(FEMSolver& _solver) : solver(_solver) {}
     ~Tiling2D() {}

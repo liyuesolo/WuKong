@@ -14,17 +14,16 @@
 
 #include "VecMatDef.h"
 
-using Eigen::MatrixXd;
-using Eigen::MatrixXi;
-
 class FEMSolver
 {
 public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
-    using TV = Vector<T, 3>;
-    using IV = Vector<int, 3>;
-    using TM = Matrix<T, 3, 3>;
+    using TV = Vector<T, 2>;
+    using IV = Vector<int, 2>;
+    using IV3 = Vector<int, 3>;
+    using TV3 = Vector<T, 3>;
+    using TM = Matrix<T, 2, 2>;
 
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
     typedef int StorageIndex;
@@ -49,6 +48,13 @@ public:
     VectorXT f;
     VectorXT deformed, undeformed;
     VectorXi indices;
+
+    bool add_pbc = false;
+    T pbc_w = 1e6;
+    TV t1, t2;
+    std::vector<std::vector<IV>> pbc_pairs;
+    T uniaxial_strain = 1.1;
+    T strain_theta = 0.0;
 
     std::unordered_map<int, T> dirichlet_data;
 
@@ -206,10 +212,17 @@ private:
     }
 public:
 
-
+    // Elasticity.cpp
     void addElastsicPotential(T& energy);
     void addElasticForceEntries(VectorXT& residual);
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
+
+    //PBC.cpp
+    void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);
+    void reorderPBCPairs();
+    void addPBCEnergy(T w, T& energy);
+    void addPBCForceEntries(T w, VectorXT& residual);
+    void addPBCHessianEntries(T w, std::vector<Entry>& entries, bool project_PD = false);
 
     T computeTotalEnergy(const VectorXT& _u);
 

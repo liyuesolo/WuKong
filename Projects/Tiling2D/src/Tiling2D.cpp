@@ -5,7 +5,12 @@ void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
     Eigen::MatrixXd V; Eigen::MatrixXi F;
     loadMeshFromVTKFile(filename, V, F);
     
+    loadPBCDataFromMSHFile(data_folder + "thickshell.msh", solver.pbc_pairs);
+    std::ifstream translation(data_folder + "translation.txt");
+    translation >> solver.t1[0] >> solver.t1[1] >> solver.t2[0] >> solver.t2[1];
+    translation.close();
     int n_vtx = V.rows(), n_ele = F.rows();
+    solver.num_nodes = n_vtx; solver.num_ele = n_ele;
     solver.undeformed.resize(n_vtx * 2);
     solver.deformed.resize(n_vtx * 2);
     solver.u.resize(n_vtx * 2); solver.u.setZero();
@@ -22,6 +27,15 @@ void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
         solver.indices.segment<3>(i * 3) = F.row(i);
     });
     
+    solver.add_pbc = true;
+    if (solver.add_pbc)
+    {
+        solver.reorderPBCPairs();
+        solver.pbc_w = 1e6;
+        solver.uniaxial_strain = 1.1;
+    }
+
+    solver.use_ipc = false;
 }
 
 void Tiling2D::generateMeshForRendering(Eigen::MatrixXd& V, 

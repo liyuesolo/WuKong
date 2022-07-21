@@ -53,3 +53,39 @@ void loadMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, Eigen:
     });
     in.close();
 }
+
+
+void loadPBCDataFromMSHFile(const std::string& filename, 
+    std::vector<std::vector<Vector<int ,2>>>& pbc_pairs)
+    // std::vector<Vector<int, 3>>& pbc_pairs)
+{
+    pbc_pairs.clear();
+    pbc_pairs.resize(2, std::vector<Vector<int ,2>>());
+    std::ifstream in(filename);
+    
+    std::string token;
+    
+	while(token != "$Periodic")
+    {
+        in >> token;
+    }
+
+    int n_pairs;
+    in >> n_pairs;
+    std::cout << "n_pairs " << n_pairs << std::endl;
+    int dir, node0, node1;
+    for (int i = 0; i < n_pairs; i++)
+    {
+        in >> dir >> node0 >> node1;
+        pbc_pairs[dir].push_back(Vector<int, 2>(node0 - 1, node1 - 1));
+        // pbc_pairs.push_back(Vector<int, 3>(dir, node0, node1));
+        int n_entry;
+        in >> n_entry;
+        for (int j = 0; j < n_entry; j++)
+            in >> token;
+        in >> n_entry;
+        for (int j = 0; j < n_entry * 2; j++)
+            in >> token;
+    }
+    in.close();
+}

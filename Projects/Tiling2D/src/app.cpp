@@ -1,5 +1,63 @@
 #include "../include/app.h"
 
+void App::appendCylindersToEdges(const std::vector<std::pair<TV3, TV3>>& edge_pairs, 
+        const std::vector<TV3>& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    int n_div = 10;
+    T theta = 2.0 * EIGEN_PI / T(n_div);
+    VectorXT points = VectorXT::Zero(n_div * 3);
+    for(int i = 0; i < n_div; i++)
+        points.segment<3>(i * 3) = TV3(radius * std::cos(theta * T(i)), 
+        0.0, radius * std::sin(theta*T(i)));
+
+    int offset_v = n_div * 2;
+    int offset_f = n_div * 2;
+
+    int n_row_V = _V.rows();
+    int n_row_F = _F.rows();
+
+    int n_edge = edge_pairs.size();
+
+    _V.conservativeResize(n_row_V + offset_v * n_edge, 3);
+    _F.conservativeResize(n_row_F + offset_f * n_edge, 3);
+    _C.conservativeResize(n_row_F + offset_f * n_edge, 3);
+
+    tbb::parallel_for(0, n_edge, [&](int ei)
+    {
+        TV3 axis_world = edge_pairs[ei].second - edge_pairs[ei].first;
+        TV3 axis_local(0, axis_world.norm(), 0);
+
+        Matrix<T, 3, 3> R = Eigen::Quaternion<T>().setFromTwoVectors(axis_world, axis_local).toRotationMatrix();
+
+        for(int i = 0; i < n_div; i++)
+        {
+            for(int d = 0; d < 3; d++)
+            {
+                _V(n_row_V + ei * offset_v + i, d) = points[i * 3 + d];
+                _V(n_row_V + ei * offset_v + i+n_div, d) = points[i * 3 + d];
+                if (d == 1)
+                    _V(n_row_V + ei * offset_v + i+n_div, d) += axis_world.norm();
+            }
+
+            // central vertex of the top and bottom face
+            _V.row(n_row_V + ei * offset_v + i) = (_V.row(n_row_V + ei * offset_v + i) * R).transpose() + edge_pairs[ei].first;
+            _V.row(n_row_V + ei * offset_v + i + n_div) = (_V.row(n_row_V + ei * offset_v + i + n_div) * R).transpose() + edge_pairs[ei].first;
+
+            _F.row(n_row_F + ei * offset_f + i*2 ) = IV3(n_row_V + ei * offset_v + i, 
+                                    n_row_V + ei * offset_v + i+n_div, 
+                                    n_row_V + ei * offset_v + (i+1)%(n_div));
+
+            _F.row(n_row_F + ei * offset_f + i*2 + 1) = IV3(n_row_V + ei * offset_v + (i+1)%(n_div), 
+                                        n_row_V + ei * offset_v + i+n_div, 
+                                        n_row_V + + ei * offset_v + (i+1)%(n_div) + n_div);
+
+            _C.row(n_row_F + ei * offset_f + i*2 ) = color[ei];
+            _C.row(n_row_F + ei * offset_f + i*2 + 1) = color[ei];
+        }
+    });
+}
+
 void App::loadDisplacementVectors(const std::string& filename)
 {
     std::ifstream in(filename);
@@ -19,7 +77,16 @@ void App::loadDisplacementVectors(const std::string& filename)
 void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     tiling.generateMeshForRendering(V, F, C);
-        
+
+    if (connect_pbc_pairs)
+    {
+        std::vector<std::pair<TV3, TV3>> end_points;
+        tiling.solver.getPBCPairs3D(end_points);
+        std::vector<TV3> colors;
+        for (int i = 0; i < end_points.size(); i++)
+            colors.push_back(TV3(1.0, 0.3, 0.0));
+        appendCylindersToEdges(end_points, colors, 0.1, V, F, C);
+    }    
     
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -37,15 +104,27 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            
+            if (ImGui::Checkbox("PBC", &tiling.solver.add_pbc))
+            {
+
+            } 
+            if (tiling.solver.add_pbc)
+            {
+                if (ImGui::Checkbox("ConnectPBC", &connect_pbc_pairs))
+                {
+                    updateScreen(viewer);
+                }
+            }
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
-            
+            tiling.solver.staticSolve();
+            updateScreen(viewer);
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
-            
+            tiling.solver.reset();
+            updateScreen(viewer);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
@@ -68,6 +147,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     {
         if(viewer.core().is_animating && !check_modes)
         {
+            
             bool finished = tiling.solver.staticSolveStep(static_solve_step);
             if (finished)
             {
@@ -90,11 +170,10 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return false;
         case 's':
             tiling.solver.staticSolveStep(static_solve_step);
+            updateScreen(viewer);
             return true;
         case ' ':
             viewer.core().is_animating = true;
-            
-            updateScreen(viewer);
             return true;
         case '1':
             check_modes = true;
@@ -117,7 +196,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         }
     };
-    tiling.initializeSimulationDataFromVTKFile("thickshell.vtk");
+    tiling.initializeSimulationDataFromVTKFile(tiling.data_folder + "thickshell.vtk");
 
     updateScreen(viewer);
     viewer.core().background_color.setOnes();

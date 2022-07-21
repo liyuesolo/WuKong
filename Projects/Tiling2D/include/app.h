@@ -17,10 +17,12 @@ public:
     Tiling2D& tiling;
     
 public:
-    using TV = Vector<double, 3>;
+    using TV = Vector<double, 2>;
+    using TV3 = Vector<double, 3>;
     using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
     using VectorXi = Matrix<int, Eigen::Dynamic, 1>;
-    using IV = Vector<int, 3>;
+    using IV = Vector<int, 2>;
+    using IV3 = Vector<int, 3>;
     using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
 
@@ -29,9 +31,7 @@ public:
     Eigen::MatrixXd C;
 
     bool enable_selection = false;
-    bool show_cylinder = false;
     bool show_bc = false;
-    bool incremental = false;
     bool tetgen = false;
     int modes = 0;
 
@@ -52,6 +52,10 @@ public:
 
     virtual void loadDisplacementVectors(const std::string& filename);
 
+    virtual void appendCylindersToEdges(const std::vector<std::pair<TV3, TV3>>& edge_pairs, 
+        const std::vector<TV3>& color, T radius,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+
     App(Tiling2D& _tiling) : tiling(_tiling) {}
     ~App() {}
 };
@@ -59,6 +63,7 @@ public:
 class SimulationApp : public App
 {
 public:
+    bool connect_pbc_pairs = false;
 
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
     void setViewer(igl::opengl::glfw::Viewer& viewer,

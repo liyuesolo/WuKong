@@ -145,6 +145,14 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
     addElastsicPotential(e_NH);
     total_energy += e_NH;
 
+    if (add_pbc)
+    {
+        T e_pbc = 0.0;
+        addPBCEnergy(pbc_w, e_pbc);
+        total_energy += e_pbc;
+    }
+        
+
     total_energy -= _u.dot(f);
 
 
@@ -154,7 +162,7 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
 
 T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
 {
-    
+    std::cout << "compute residual " << std::endl;
     VectorXT projected = _u;
 
     if (!run_diff_test)
@@ -177,6 +185,13 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
     residual_backup = residual;
 
+    if (add_pbc)
+    {
+        addPBCForceEntries(pbc_w, residual);
+        std::cout << "pbc force " << (residual - residual_backup).norm() << std::endl;
+        residual_backup = residual;
+    }
+
     // std::getchar();
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -192,9 +207,9 @@ void FEMSolver::reset()
     deformed = undeformed;
     u.setZero();
     
-    ipc_vertices.resize(num_nodes, 2);
-    for (int i = 0; i < num_nodes; i++)
-        ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+    // ipc_vertices.resize(num_nodes, 2);
+    // for (int i = 0; i < num_nodes; i++)
+    //     ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
     
 }
 
@@ -240,6 +255,9 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     std::vector<Entry> entries;
 
     addElasticHessianEntries(entries);
+
+    if (add_pbc)
+        addPBCHessianEntries(pbc_w, entries, false);
 
     K.setFromTriplets(entries.begin(), entries.end());
 
@@ -429,6 +447,7 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
 
 bool FEMSolver::staticSolveStep(int step)
 {
+    
     if (step == 0)
     {
         iterateDirichletDoF([&](int offset, T target)
