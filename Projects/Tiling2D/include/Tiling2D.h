@@ -37,7 +37,7 @@ struct VectorHash
 
 class Tiling2D
 {
-public:
+public: 
     using T = double;
     using TV = Vector<double, 2>;
     using TV2 = Vector<double, 2>;
@@ -62,15 +62,22 @@ public:
 
     // ########################## Tiling2D.cpp ########################## 
     void initializeSimulationDataFromVTKFile(const std::string& filename);
+    void initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
+    void generateForceDisplacementCurve(const std::string& result_folder);
+
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
     void fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, int n_unit = 1, bool random = false);
-
     void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
+
+    void fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, bool random = false);
+    void generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
+    void generatePatch();
 };
 
 

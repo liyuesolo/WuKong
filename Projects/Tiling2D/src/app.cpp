@@ -128,7 +128,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
-            igl::writeOBJ("current_mesh.obj", V, F);
+            igl::writeOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/current_mesh.obj", V, F);
         }
     };    
 
@@ -196,8 +196,10 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         }
     };
-    tiling.initializeSimulationDataFromVTKFile(tiling.data_folder + "thickshell.vtk");
-
+    // tiling.initializeSimulationDataFromVTKFile(tiling.data_folder + "thickshell.vtk");
+    tiling.initializeSimulationDataFromFiles("thickshellPatch", false);
+    // tiling.generateForceDisplacementCurve("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/");
+    
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
@@ -231,10 +233,10 @@ void TilingViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             }
         }
     };   
-    VectorXT vertices;
-    std::vector<Vector<int, 2>> edge_list;
-    
-    tiling.getPBCUnit(vertices, edge_list);
+    // VectorXT vertices;
+    // std::vector<Vector<int, 2>> edge_list;
+    // tiling.getPBCUnit(vertices, edge_list);
+    tiling.generatePatch();
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);

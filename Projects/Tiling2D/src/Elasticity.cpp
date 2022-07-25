@@ -44,3 +44,31 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
     });
 }
 
+T FEMSolver::computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    Matrix<T, 3, 2> dNdb;
+        dNdb << -1.0, -1.0, 
+            1.0, 0.0,
+            0.0, 1.0;
+           
+    VectorXT step_sizes = VectorXT::Zero(num_ele);
+
+    iterateElementsParallel([&](const EleNodes& x_deformed, 
+        const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
+    {
+        TM dXdb = x_undeformed.transpose() * dNdb;
+        TM dxdb = x_deformed.transpose() * dNdb;
+        TM A = dxdb * dXdb.inverse();
+        T a, b, c, d;
+        a = A.determinant();
+        b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
+        c = A.diagonal().sum();
+        d = 0.8;
+
+        T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
+        if (t < 0 || t > 1) t = 1;
+            step_sizes(tet_idx) = t;
+    });
+    return step_sizes.minCoeff();
+}
+

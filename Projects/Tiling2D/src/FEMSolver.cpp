@@ -151,7 +151,20 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
         addPBCEnergy(pbc_w, e_pbc);
         total_energy += e_pbc;
     }
-        
+    
+    if (use_ipc)
+    {
+        T ipc = 0.0;
+        addIPCEnergy(ipc);
+        total_energy += ipc;
+    }
+
+    if (penalty_pairs.size())
+    {
+        T penalty = 0.0;
+        addBCPenaltyEnergy(penalty_weight, penalty);
+        total_energy += penalty;
+    }
 
     total_energy -= _u.dot(f);
 
@@ -162,7 +175,7 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
 
 T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
 {
-    std::cout << "compute residual " << std::endl;
+    
     VectorXT projected = _u;
 
     if (!run_diff_test)
@@ -192,6 +205,20 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
         residual_backup = residual;
     }
 
+    if (use_ipc)
+    {
+        addIPCForceEntries(residual);
+        std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
+        residual_backup = residual;
+    }
+
+    if (penalty_pairs.size())
+    {
+        addBCPenaltyForceEntries(penalty_weight, residual);
+        std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
+        residual_backup = residual;
+    }
+
     // std::getchar();
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -207,38 +234,11 @@ void FEMSolver::reset()
     deformed = undeformed;
     u.setZero();
     
-    // ipc_vertices.resize(num_nodes, 2);
-    // for (int i = 0; i < num_nodes; i++)
-    //     ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+    ipc_vertices.resize(num_nodes, 2);
+    for (int i = 0; i < num_nodes; i++)
+        ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
     
 }
-
-// void FEMSolver::runForceCurvatureExperiment()
-// {
-//     T dkappa = 0.1;
-//     std::vector<T> curvature_values;
-//     std::vector<T> force_norms;
-//     for (T kappa = 1.0; kappa < 4; kappa += dkappa)
-//     {
-//         curvature = kappa;
-//         bending_direction = 45.0 / 180.0 * M_PI;
-//         computeCylindricalBendingBCPenaltyPairs();
-//         staticSolve();
-//         VectorXT elastic_force(num_nodes * dim);
-//         elastic_force.setZero();
-//         addElasticForceEntries(elastic_force);
-//         // std::cout << elastic_force.norm() << std::endl;
-//         // std::getchar();
-//         curvature_values.push_back(kappa);
-//         force_norms.push_back(elastic_force.norm() * 0.1);
-//     }
-//     for (T v : curvature_values)
-//         std::cout << v << " ";
-//     std::cout << std::endl;
-//     for (T v : force_norms)
-//         std::cout << v << " ";
-//     std::cout << std::endl;
-// }
 
 void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 {
@@ -257,7 +257,11 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     addElasticHessianEntries(entries);
 
     if (add_pbc)
-        addPBCHessianEntries(pbc_w, entries, false);
+        addPBCHessianEntries(pbc_w, entries, project_block_PD);
+    if (use_ipc)
+        addIPCHessianEntries(entries, project_block_PD);
+    if (penalty_pairs.size())
+        addBCPenaltyHessianEntries(penalty_weight, entries);
 
     K.setFromTriplets(entries.begin(), entries.end());
 
@@ -366,11 +370,11 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     if (!success)
         return 1e16;
     T norm = du.norm();
-    std::cout << du.norm() << std::endl;
+    // std::cout << du.norm() << std::endl;
     
-    T alpha = 1.0;
-    // std::cout << "** step size **" << std::endl;
-    // std::cout << "after tet inv step size: " << alpha << std::endl;
+    T alpha = computeInversionFreeStepsize(_u, du);
+    std::cout << "** step size **" << std::endl;
+    std::cout << "after tet inv step size: " << alpha << std::endl;
     if (use_ipc)
     {
         T ipc_step_size = computeCollisionFreeStepsize(_u, du);
@@ -399,51 +403,6 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     return norm;
 }
 
-// T FEMSolver::computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du)
-// {
-//     Matrix<T, 4, 3> dNdb;
-//         dNdb << -1.0, -1.0, -1.0, 
-//             1.0, 0.0, 0.0,
-//             0.0, 1.0, 0.0,
-//             0.0, 0.0, 1.0;
-           
-//     VectorXT step_sizes = VectorXT::Zero(num_ele);
-
-//     iterateTetsParallel([&](const TetNodes& x_deformed, 
-//         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
-//     {
-//         TM dXdb = x_undeformed.transpose() * dNdb;
-//         TM dxdb = x_deformed.transpose() * dNdb;
-//         TM A = dxdb * dXdb.inverse();
-//         T a, b, c, d;
-//         a = A.determinant();
-//         b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
-//         c = A.diagonal().sum();
-//         d = 0.8;
-
-//         T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
-//         if (t < 0 || t > 1) t = 1;
-//             step_sizes(tet_idx) = t;
-//     });
-//     return step_sizes.minCoeff();
-// }
-
-// void FEMSolver::incrementalLoading()
-// {
-//     std::unordered_map<int, T> dirichlet_bc_target = dirichlet_data;
-
-//     int n_step = 50;
-//     for (int step = 1; step <= n_step; step++)
-//     {
-//         for (auto& data : dirichlet_data)
-//             data.second = T(1) / T(n_step) * dirichlet_bc_target[data.first];
-//         staticSolve();
-//         // saveToOBJ("iter_" + std::to_string(step) + ".obj");
-//         undeformed = deformed;
-//         u.setZero();
-//     }
-    
-// }
 
 bool FEMSolver::staticSolveStep(int step)
 {
@@ -476,7 +435,7 @@ bool FEMSolver::staticSolveStep(int step)
     // });
     // deformed = undeformed + u;
 
-    if(step == max_newton_iter || dq_norm > 1e10)
+    if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-10)
         return true;
     
     return false;
@@ -486,7 +445,7 @@ bool FEMSolver::staticSolveStep(int step)
 bool FEMSolver::staticSolve()
 {
     int cnt = 0;
-    T residual_norm = 1e10, dq_norm = 1e10;
+    T residual_norm = 1e10, du_norm = 1e10;
 
     iterateDirichletDoF([&](int offset, T target)
     {
@@ -511,9 +470,9 @@ bool FEMSolver::staticSolve()
         if (residual_norm < newton_tol)
             break;
         
-        dq_norm = lineSearchNewton(u, residual);
+        du_norm = lineSearchNewton(u, residual);
 
-        if(cnt == max_newton_iter || dq_norm > 1e10)
+        if(cnt == max_newton_iter || du_norm > 1e10 || du_norm < 1e-8)
             break;
         cnt++;
     }
@@ -525,9 +484,9 @@ bool FEMSolver::staticSolve()
     deformed = undeformed + u;
 
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
-        << residual_norm << "|ddu|: " << dq_norm  << std::endl;
+        << residual_norm << "|ddu|: " << du_norm  << std::endl;
     // std::cout << u.norm() << std::endl;
-    if (cnt == max_newton_iter || dq_norm > 1e10 || residual_norm > 1)
+    if (cnt == max_newton_iter || du_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
     

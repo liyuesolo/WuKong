@@ -39,7 +39,7 @@ public:
 
 public:
 
-    T E = 1e5;
+    T E = 2.6 * 1e7;
     T nu = 0.48;
 
     int dim = 2;
@@ -57,10 +57,12 @@ public:
     T strain_theta = 0.0;
 
     std::unordered_map<int, T> dirichlet_data;
+    std::unordered_map<int, T> penalty_pairs;
 
     int num_nodes;   
     int num_ele;
 
+    bool project_block_PD = false;
     bool verbose = false;
     bool run_diff_test = false;
 
@@ -68,15 +70,32 @@ public:
     int max_newton_iter = 1000;
 
     bool use_ipc = false;
+    bool add_friction = false;
+    T friction_mu = 0.5;
+    T epsv_times_h = 1e-5;
+    int num_ipc_vtx = 0;
+    T barrier_distance = 1e-5;
+    T barrier_weight = 1e6;
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
+
+    T penalty_weight = 1e6;
 
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
         for (auto dirichlet: dirichlet_data){
             f(dirichlet.first, dirichlet.second);
         } 
+    }
+
+    template <class OP>
+    void iterateBCPenaltyPairs(const OP& f)
+    {
+        for (auto pair : penalty_pairs)
+        {
+            f(pair.first, pair.second);
+        }
     }
 
     template <typename OP>
@@ -181,10 +200,67 @@ private:
         }
     }
 
+    inline T getSmallestPositiveRealQuadRoot(T a, T b, T c, T tol)
+    {
+        // return negative value if no positive real root is found
+        using std::abs;
+        using std::sqrt;
+        T t;
+        if (abs(a) <= tol) {
+            if (abs(b) <= tol) // f(x) = c > 0 for all x
+                t = -1;
+            else
+                t = -c / b;
+        }
+        else {
+            T desc = b * b - 4 * a * c;
+            if (desc > 0) {
+                t = (-b - sqrt(desc)) / (2 * a);
+                if (t < 0)
+                    t = (-b + sqrt(desc)) / (2 * a);
+            }
+            else // desv<0 ==> imag
+                t = -1;
+        }
+        return t;
+    }
+
+    inline T getSmallestPositiveRealCubicRoot(T a, T b, T c, T d, T tol = 1e-10)
+    {
+        // return negative value if no positive real root is found
+        using std::abs;
+        using std::complex;
+        using std::pow;
+        using std::sqrt;
+        T t = -1;
+        if (abs(a) <= tol)
+            t = getSmallestPositiveRealQuadRoot(b, c, d, tol);
+        else {
+            complex<T> i(0, 1);
+            complex<T> delta0(b * b - 3 * a * c, 0);
+            complex<T> delta1(2 * b * b * b - 9 * a * b * c + 27 * a * a * d, 0);
+            complex<T> C = pow((delta1 + sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0, 1.0 / 3.0);
+            if (abs(C) < tol)
+                C = pow((delta1 - sqrt(delta1 * delta1 - 4.0 * delta0 * delta0 * delta0)) / 2.0, 1.0 / 3.0);
+            complex<T> u2 = (-1.0 + sqrt(3.0) * i) / 2.0;
+            complex<T> u3 = (-1.0 - sqrt(3.0) * i) / 2.0;
+            complex<T> t1 = (b + C + delta0 / C) / (-3.0 * a);
+            complex<T> t2 = (b + u2 * C + delta0 / (u2 * C)) / (-3.0 * a);
+            complex<T> t3 = (b + u3 * C + delta0 / (u3 * C)) / (-3.0 * a);
+            if ((abs(imag(t1)) < tol) && (real(t1) > 0))
+                t = real(t1);
+            if ((abs(imag(t2)) < tol) && (real(t2) > 0) && ((real(t2) < t) || (t < 0)))
+                t = real(t2);
+            if ((abs(imag(t3)) < tol) && (real(t3) > 0) && ((real(t3) < t) || (t < 0)))
+                t = real(t3);
+        }
+        return t;
+    }
+
     std::vector<Entry> entriesFromSparseMatrix(const StiffnessMatrix& A)
     {
         std::vector<Entry> triplets;
-
+        triplets.reserve(A.nonZeros());
         for (int k=0; k < A.outerSize(); ++k)
             for (StiffnessMatrix::InnerIterator it(A,k); it; ++it)
                 triplets.push_back(Entry(it.row(), it.col(), it.value()));
@@ -213,38 +289,51 @@ private:
 public:
 
     // Elasticity.cpp
+    T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void addElastsicPotential(T& energy);
     void addElasticForceEntries(VectorXT& residual);
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
-    //PBC.cpp
+    // PBC.cpp
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);
     void reorderPBCPairs();
     void addPBCEnergy(T w, T& energy);
     void addPBCForceEntries(T w, VectorXT& residual);
     void addPBCHessianEntries(T w, std::vector<Entry>& entries, bool project_PD = false);
 
-    T computeTotalEnergy(const VectorXT& _u);
-
-    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
-
-    T computeResidual(const VectorXT& _u, VectorXT& residual);
-
-    T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
-
-    bool staticSolve();
-
-    bool staticSolveStep(int step);
-
-    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
-
-    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
-
-
+    // IPC.cpp
     void updateIPCVertices(const VectorXT& _u);
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+    void computeIPCRestData();
+    void addIPCEnergy(T& energy);
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries, 
+        bool project_PD = false);
 
+    // BoundaryCondition.cpp
+    void addForceBox(const TV& min_corner, const TV& max_corner, const TV& force);
+    void addDirichletBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
+    void addPenaltyPairsBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
+
+    // Penalty.cpp
+    void addBCPenaltyEnergy(T w, T& energy);
+    void addBCPenaltyForceEntries(T w, VectorXT& residual);
+    void addBCPenaltyHessianEntries(T w, std::vector<Entry>& entries);
+
+    // FEMSolver.cpp
+    T computeTotalEnergy(const VectorXT& _u);
+    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
+    T computeResidual(const VectorXT& _u, VectorXT& residual);
+    T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
+    bool staticSolve();
+    bool staticSolveStep(int step);
+    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
     void reset();
+
+    // Scene.cpp
+    void saveToOBJ(const std::string& filename);
+    void computeBoundingBox(TV& min_corner, TV& max_corner);
 
     FEMSolver() {}
     ~FEMSolver() {}
