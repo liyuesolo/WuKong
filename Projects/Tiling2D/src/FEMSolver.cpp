@@ -148,7 +148,7 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
     if (add_pbc)
     {
         T e_pbc = 0.0;
-        addPBCEnergy(pbc_w, e_pbc);
+        addPBCEnergy(e_pbc);
         total_energy += e_pbc;
     }
     
@@ -200,7 +200,7 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
 
     if (add_pbc)
     {
-        addPBCForceEntries(pbc_w, residual);
+        addPBCForceEntries(residual);
         std::cout << "pbc force " << (residual - residual_backup).norm() << std::endl;
         residual_backup = residual;
     }
@@ -257,7 +257,7 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     addElasticHessianEntries(entries);
 
     if (add_pbc)
-        addPBCHessianEntries(pbc_w, entries, project_block_PD);
+        addPBCHessianEntries(entries, project_block_PD);
     if (use_ipc)
         addIPCHessianEntries(entries, project_block_PD);
     if (penalty_pairs.size())
@@ -370,7 +370,7 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     if (!success)
         return 1e16;
     T norm = du.norm();
-    // std::cout << du.norm() << std::endl;
+    std::cout << "|du| " <<  du.norm() << std::endl;
     
     T alpha = computeInversionFreeStepsize(_u, du);
     std::cout << "** step size **" << std::endl;

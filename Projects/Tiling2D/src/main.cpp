@@ -36,7 +36,8 @@ int main(int argc, char** argv)
     }
     else
     {
-        SimulationApp app(tiling);
+        // SimulationApp app(tiling);
+        TilingViewerApp app(tiling);
         app.setViewer(viewer, menu);
         viewer.launch();
     }

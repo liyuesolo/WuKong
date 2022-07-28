@@ -39,9 +39,9 @@ void FEMSolver::computeIPCRestData()
         Edge edge = ipc_edges.row(i);
         TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
         if ((vi - vj).norm() < barrier_distance)
-            std::cout << "edge " << edge.transpose() << " has length < 1e-6 " << std::endl;
+            std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
     }
-    
+    std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
 }
 
 T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)

@@ -68,6 +68,8 @@ void loadPBCDataFromMSHFile(const std::string& filename,
 	while(token != "$Periodic")
     {
         in >> token;
+        if (in.eof())
+            break;
     }
 
     int n_pairs;

@@ -48,17 +48,19 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     solver.add_pbc = periodic;
     if (solver.add_pbc)
     {
-        solver.reorderPBCPairs();
-        solver.pbc_w = 1e4;
+        // solver.reorderPBCPairs();
+        solver.addPBCPairInX();
+        solver.pbc_w = 1e8;
         solver.strain_theta = M_PI / 2.0;
-        solver.uniaxial_strain = 0.2;
+        solver.add_pbc_strain = false;
+        solver.uniaxial_strain = 1.0;
     }
     solver.use_ipc = true;
     if (solver.use_ipc)
     {
         solver.computeIPCRestData();
         solver.add_friction = false;
-        solver.barrier_distance = 2e-3;
+        solver.barrier_distance = 1e-3;
         solver.barrier_weight = 1e6;
     }
     solver.penalty_weight = 1e8;
@@ -72,15 +74,15 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
     TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
     // solver.addForceBox(min1, max1, TV(0, -1));
-    // solver.addPenaltyPairsBox(min1, max1, TV(0, -0.04));
+    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.005));
 
-    Eigen::MatrixXd _V; Eigen::MatrixXi _F;
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/0.059000.obj", _V, _F);
-    for (int i = 0; i < _V.rows(); i++)
-    {
-        solver.deformed.segment<2>(i*2) = _V.row(i).segment<2>(0);
-        solver.u = solver.deformed - solver.undeformed;
-    }
+    // Eigen::MatrixXd _V; Eigen::MatrixXi _F;
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/0.059000.obj", _V, _F);
+    // for (int i = 0; i < _V.rows(); i++)
+    // {
+    //     solver.deformed.segment<2>(i*2) = _V.row(i).segment<2>(0);
+    //     solver.u = solver.deformed - solver.undeformed;
+    // }
     
     solver.project_block_PD = true;
 }
@@ -131,7 +133,7 @@ void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
     {
         solver.computeIPCRestData();
         solver.add_friction = false;
-        solver.barrier_distance = 1e-3;
+        solver.barrier_distance = 1e-4;
         solver.barrier_weight = 1e3;
     }
 }
@@ -195,4 +197,34 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
         out << v << " ";
     out << std::endl;
     out.close();
+}
+
+void Tiling2D::tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+{
+    Eigen::MatrixXd V_tile(V.rows() * 3, 3);
+    Eigen::MatrixXi F_tile(F.rows() * 3, 3);
+    Eigen::MatrixXd C_tile(F.rows() * 3, 3);
+
+    TV min_corner, max_corner;
+    solver.computeBoundingBox(min_corner, max_corner);
+    T dx = max_corner[0] - min_corner[0];
+    int n_face = F.rows(), n_vtx = V.rows();
+    V_tile.block(0, 0, n_vtx, 3) = V;
+    V_tile.block(n_vtx, 0, n_vtx, 3) = V;
+    V_tile.block(2 * n_vtx, 0, n_vtx, 3) = V;
+    V_tile.block(0, 0, n_vtx, 1).array() -= dx;
+    V_tile.block(2 * n_vtx, 0, n_vtx, 1).array() += dx;
+
+    V = V_tile;
+    Eigen::MatrixXi offset(n_face, 3);
+    offset.setConstant(n_vtx);
+    F_tile.block(0, 0, n_face, 3) = F;
+    F_tile.block(n_face, 0, n_face, 3) = F + offset;
+    F_tile.block(2 * n_face, 0, n_face, 3) = F + 2 * offset;
+    F = F_tile;
+
+    C_tile.block(0, 0, n_face, 3) = C;
+    C_tile.block(n_face, 0, n_face, 3) = C;
+    C_tile.block(2 * n_face, 0, n_face, 3) = C;
+    C = C_tile;
 }

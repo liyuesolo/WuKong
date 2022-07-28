@@ -9,8 +9,8 @@ void FEMSolver::computeBoundingBox(TV& min_corner, TV& max_corner)
     {
         for (int d = 0; d < dim; d++)
         {
-            max_corner[d] = std::max(max_corner[d], deformed[i * dim + d]);
-            min_corner[d] = std::min(min_corner[d], deformed[i * dim + d]);
+            max_corner[d] = std::max(max_corner[d], undeformed[i * dim + d]);
+            min_corner[d] = std::min(min_corner[d], undeformed[i * dim + d]);
         }
     }
 }

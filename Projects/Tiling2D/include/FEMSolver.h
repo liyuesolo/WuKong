@@ -51,6 +51,8 @@ public:
 
     bool add_pbc = false;
     T pbc_w = 1e6;
+    T pbc_strain_w = 1e6;
+    bool add_pbc_strain = false;
     TV t1, t2;
     std::vector<std::vector<IV>> pbc_pairs;
     T uniaxial_strain = 1.1;
@@ -295,11 +297,12 @@ public:
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     // PBC.cpp
+    void addPBCPairInX();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);
     void reorderPBCPairs();
-    void addPBCEnergy(T w, T& energy);
-    void addPBCForceEntries(T w, VectorXT& residual);
-    void addPBCHessianEntries(T w, std::vector<Entry>& entries, bool project_PD = false);
+    void addPBCEnergy(T& energy);
+    void addPBCForceEntries(VectorXT& residual);
+    void addPBCHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     // IPC.cpp
     void updateIPCVertices(const VectorXT& _u);

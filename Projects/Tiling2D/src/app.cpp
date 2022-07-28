@@ -78,6 +78,9 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     tiling.generateMeshForRendering(V, F, C);
 
+    if (tile_in_x_only)
+        tiling.tilingMeshInX(V, F, C);
+
     if (connect_pbc_pairs)
     {
         std::vector<std::pair<TV3, TV3>> end_points;
@@ -85,7 +88,7 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         std::vector<TV3> colors;
         for (int i = 0; i < end_points.size(); i++)
             colors.push_back(TV3(1.0, 0.3, 0.0));
-        appendCylindersToEdges(end_points, colors, 0.1, V, F, C);
+        appendCylindersToEdges(end_points, colors, 0.0001, V, F, C);
     }    
     
     viewer.data().clear();
@@ -111,6 +114,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             if (tiling.solver.add_pbc)
             {
                 if (ImGui::Checkbox("ConnectPBC", &connect_pbc_pairs))
+                {
+                    // tiling.solver.addPBCPairInX();
+                    updateScreen(viewer);
+                }
+                if (ImGui::Checkbox("TileInXOnly", &tile_in_x_only))
                 {
                     updateScreen(viewer);
                 }
@@ -197,7 +205,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
     };
     // tiling.initializeSimulationDataFromVTKFile(tiling.data_folder + "thickshell.vtk");
-    tiling.initializeSimulationDataFromFiles("thickshellPatch", false);
+    tiling.initializeSimulationDataFromFiles("thickshellPatchPeriodicInX", true);
     // tiling.generateForceDisplacementCurve("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/");
     
     updateScreen(viewer);
@@ -236,7 +244,8 @@ void TilingViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     // VectorXT vertices;
     // std::vector<Vector<int, 2>> edge_list;
     // tiling.getPBCUnit(vertices, edge_list);
-    tiling.generatePatch();
+    // tiling.generatePatch();
+    tiling.generateSandwichStructureBatch();
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);

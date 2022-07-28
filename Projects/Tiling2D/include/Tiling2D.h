@@ -64,6 +64,7 @@ public:
     void initializeSimulationDataFromVTKFile(const std::string& filename);
     void initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
     void generateForceDisplacementCurve(const std::string& result_folder);
 
@@ -74,10 +75,15 @@ public:
         std::vector<TV2>& eigen_base, int n_unit = 1, bool random = false);
     void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
 
-    void fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base, bool random = false);
-    void generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
-    void generatePatch();
+    
+    void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
+
+    void generateSandwichStructureBatch();
+    void fetchSandwichFromOneFamilyFromParamsDilation(int IH, 
+        std::vector<T> params,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, bool random = false,
+        bool save_to_file = false, std::string filename = "");
 };
 
 

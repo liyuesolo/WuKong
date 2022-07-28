@@ -1,35 +1,44 @@
 #include "../include/Tiling2D.h"
 
+std::random_device rd;
+std::mt19937 gen( rd() );
+std::uniform_real_distribution<> dis( 0.0, 1.0 );
 
-void Tiling2D::generatePatch()
+static double zeta()
 {
-    std::vector<std::vector<TV2>> polygons;
-    std::vector<TV2> pbc_corners;
-    fetchSandwichFromOneFamily(0, polygons, pbc_corners, false);
-    generatePatchMesh(polygons, pbc_corners);
+    return dis(gen);
 }
 
-void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base, bool random)
+void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH, 
+        std::vector<T> params,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, bool random,
+        bool save_to_file, std::string filename)
 {
     using namespace csk;
     using namespace std;
     using namespace glm;
 
-    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
     
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+
     size_t num_params = a_tiling.numParameters();
-    if( num_params > 1 ) {
-        double params[ num_params ];
-        // Get the parameters out of the tiling
-        a_tiling.getParameters( params );
+
+    if (num_params != params.size() && !random)
+        return;    
+    if( num_params > 1 ) 
+    {
+        double new_params[ num_params ];
+        
+        a_tiling.getParameters( new_params );
         // Change a parameter
         for( size_t idx = 0; idx < a_tiling.numParameters(); ++idx ) {
-            // if (random)
-            //     params[idx] += zeta()*0.2 - 0.1;
+            if (random)
+                new_params[idx] += zeta()*0.2 - 0.1;
+            else
+                new_params[idx] = params[idx];
         }
-        // Send the parameters back to the tiling
-        a_tiling.setParameters( params );
+        a_tiling.setParameters( new_params );
     }
 
     vector<dvec2> edges[ a_tiling.numEdgeShapes() ];
@@ -41,11 +50,11 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
         // Start by making a random Bezier segment.
         if (random)
         {
-            // ej.push_back( dvec2( 0, 0 ) );
-            // ej.push_back( dvec2( zeta() * 0.75, zeta() * 0.6 - 0.3 ) );
-            // ej.push_back( 
-            //     dvec2( zeta() * 0.75 + 0.25, zeta() * 0.6 - 0.3 ) );
-            // ej.push_back( dvec2( 1, 0 ) );
+            ej.push_back( dvec2( 0, 0 ) );
+            ej.push_back( dvec2( zeta() * 0.75, zeta() * 0.6 - 0.3 ) );
+            ej.push_back( 
+                dvec2( zeta() * 0.75 + 0.25, zeta() * 0.6 - 0.3 ) );
+            ej.push_back( dvec2( 1, 0 ) );
         }
         else
         {
@@ -76,14 +85,8 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
         edges[idx] = ej;
     }
 
-    // Use a vector to hold the control points of the final tile outline.
+    
     std::vector<dvec2> shape;
-
-    // Iterate over the edges of a single tile, asking the tiling to
-    // tell you about the geometric information needed to transform 
-    // the edge shapes into position.  Note that this iteration is over
-    // whole tiling edges.  It's also to iterator over partial edges
-    // (i.e., halves of U and S edges) using t.parts() instead of t.shape().
     for( auto i : a_tiling.shape() ) {
         // Get the relevant edge shape created above using i->getId().
         const vector<dvec2>& ed = edges[ i->getId() ];
@@ -141,15 +144,8 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
 	T depth = 5.0;
     int ii=0;
     dmat3 M = centrePSRect( -width, -depth, width, depth );
-    for( auto i : a_tiling.fillRegion( -width, -depth, width, depth ) ) 
+    for( auto i : a_tiling.fillRegion( -2 * width, -2 * depth, 2 * width, 2 * depth ) ) 
     {
-    //for(auto i : t.shape()) {
-    //	
-        //if(ii++==10)
-        //	break;
-
-        //std::cout << "Ts " << i->getT1() << " " << i->getT2() << " " << i->getAspect() << std::endl;
-
         dmat3 T = M * i->getTransform();
 
         std::vector<dvec2> outv = outShapeVec( shape, T );
@@ -171,7 +167,7 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
 
     TV2 xy, x1y, xy1, x1y1;
 
-    for( auto i : a_tiling.fillRegion( -width, -depth, width, depth ) ) {
+    for( auto i : a_tiling.fillRegion( -2 * width, -2 * depth, 2 * width, 2 * depth ) ) {
 
         dmat3 T = M * i->getTransform();
         vector<dvec2> outv = outShapeVec( shape, T );
@@ -197,17 +193,14 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     transf.head<2>() = x1y - xy;
     transf.tail<2>() = xy1 - xy;
     
-    // if(transf[0]==0 && transf[3]==0)
-    {
-        T temp1 = transf[0];
-        T temp2 = transf[3];
+    T temp1 = transf[0];
+    T temp2 = transf[3];
 
-        transf[0] = transf[2];
-        transf[3] = transf[1];
+    transf[0] = transf[2];
+    transf[3] = transf[1];
 
-        transf[1] = temp2;
-        transf[2] = temp1;
-    }
+    transf[1] = temp2;
+    transf[2] = temp1;
 
     if(transf[0]<0)
         transf.head<2>() *= -1;
@@ -219,19 +212,22 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     transf[1] = temp;
 
     Vector<T, 8> periodic;
+    int n_unit = 3;
+    periodic.head<2>() = TV2(0,0);
+    periodic.segment<2>(2) = periodic.head<2>() + T(n_unit) * TV2(transf[0],transf[2]);
+    periodic.segment<2>(4) = periodic.head<2>() + T(n_unit) * TV2(transf[0],transf[2]) + T(n_unit) * TV2(transf[1],transf[3]);
+    periodic.segment<2>(6) = periodic.head<2>() + T(n_unit) * TV2(transf[1],transf[3]);
 
-    periodic << -width, -depth, width, -depth, width, depth , -width, depth;
-    for (int i = 0; i < 8; i += 2)
-    {
-        periodic[i] += 0.1 * width;
-    }
-    periodic *= 25;
-    T shift_x = periodic[0], shift_y = periodic[1];
+    TV t1 = periodic.segment<2>(2);
+    TV t2 = periodic.segment<2>(6);
+    TV t1_unit = t1.normalized();
+    TV x_axis(1, 0);
 
-    periodic[0] -= shift_x; periodic[1] -= shift_y;
-    periodic[2] -= shift_x; periodic[3] -= shift_y;
-    periodic[4] -= shift_x; periodic[5] -= shift_y;
-    periodic[6] -= shift_x; periodic[7] -= shift_y;
+    T theta_to_x = -std::acos(t1_unit.dot(x_axis));
+    if (TV3(t1_unit[0], t1_unit[1], 0).cross(TV3(1, 0, 0)).dot(TV3(0, 0, 1)) > 0.0)
+        theta_to_x *= -1.0;
+    TM2 R;
+    R << std::cos(theta_to_x), -std::sin(theta_to_x), std::sin(theta_to_x), std::cos(theta_to_x);
 
     ClipperLib::Paths polygons(polygons_v.size());
     T mult = 10000000.0;
@@ -239,60 +235,26 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     {
         for(int j=0; j<polygons_v[i].size(); ++j)
         {
-            polygons[i] << ClipperLib::IntPoint((polygons_v[i][j][0]-xy[0] -shift_x)*mult, (polygons_v[i][j][1]-xy[1]-shift_y)*mult);
-            // std::cout << " " << polygons[i][j];
+            TV curr = R * TV(polygons_v[i][j][0]-xy[0], polygons_v[i][j][1]-xy[1]);
+            polygons[i] << ClipperLib::IntPoint(curr[0]*mult, curr[1]*mult);
         }
-        // std::cout << std::endl;
     }
-    
+    periodic.segment<2>(2) = R * periodic.segment<2>(2);
+    periodic.segment<2>(6) = TV(0, 1) * (R * periodic.segment<2>(6)).dot(TV(0, 1));
+    periodic[4] = periodic[2]; periodic[5] = periodic[7];
+
+
     T distance = -2.0;
-    ClipperLib::Paths clip(1);
-	clip[0] << ClipperLib::IntPoint(periodic[0]*mult,periodic[1]*mult) << ClipperLib::IntPoint(periodic[2]*mult, periodic[3]*mult) << ClipperLib::IntPoint(periodic[4]*mult, periodic[5]*mult) << ClipperLib::IntPoint(periodic[6]*mult, periodic[7]*mult);
-    ClipperLib::Paths final_shape;
 
     ClipperLib::ClipperOffset c;
+    ClipperLib::Paths final_shape;
     c.AddPaths(polygons, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
-    ClipperLib::Paths offset_polygons;
-    c.Execute(offset_polygons, distance*mult);
-    
-    ClipperLib::Clipper cl;
-    cl.AddPaths(clip, ClipperLib::ptSubject, true);
-    cl.AddPaths(offset_polygons, ClipperLib::ptClip, true);
-    
-    cl.Execute(ClipperLib::ctDifference, final_shape, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
-    
-
-    ClipperLib::Paths top_box(1);
-    T box_height = width;
-	top_box[0] << ClipperLib::IntPoint((periodic[6])*mult, (periodic[7] - 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[4]*mult, (periodic[7] - 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[4]*mult, (periodic[7] + 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[6]*mult, (periodic[7] + 0.5 * box_height)*mult);
-    
-    ClipperLib::Clipper cl_top_box;
-    cl_top_box.AddPaths(top_box, ClipperLib::ptSubject, true);
-    cl_top_box.AddPaths(final_shape, ClipperLib::ptSubject, true);
-    
-    cl_top_box.Execute(ClipperLib::ctUnion, final_shape, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+    c.Execute(final_shape, distance*mult);
 
 
-    ClipperLib::Paths bottom_box(1);
-    
-	bottom_box[0] << ClipperLib::IntPoint((periodic[0])*mult, (periodic[1] - 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[2]*mult, (periodic[1] - 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[2]*mult, (periodic[1] + 0.5 * box_height)*mult) 
-        << ClipperLib::IntPoint(periodic[0]*mult, (periodic[1] + 0.5 * box_height)*mult);
-    
-    ClipperLib::Clipper cl_bottom_box;
-    cl_bottom_box.AddPaths(bottom_box, ClipperLib::ptSubject, true);
-    cl_bottom_box.AddPaths(final_shape, ClipperLib::ptSubject, true);
-    
-    cl_bottom_box.Execute(ClipperLib::ctUnion, final_shape, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
-
-
-    std::ofstream out("tiling_unit_clip.obj");
-    // for (int i = 0; i < 4; i++)
-    //     out << "v " <<  periodic.segment<2>(i * 2).transpose() << " 0" << std::endl;
+    std::ofstream out("tiling_unit_clip_in_x.obj");
+    for (int i = 0; i < 4; i++)
+        out << "v " <<  periodic.segment<2>(i * 2).transpose() << " 0" << std::endl;
     for (auto polygon : final_shape)
     {
         for (auto vtx : polygon)
@@ -300,11 +262,12 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
             out << "v " << vtx.X / mult << " " << vtx.Y / mult << " 0" << std::endl;
         }
     }
-    // out << "l 1 2" << std::endl;
-    // out << "l 2 3" << std::endl;
-    // out << "l 3 4" << std::endl;
-    // out << "l 4 1" << std::endl;
-    int cnt = 1;
+    out << "l 1 2" << std::endl;
+    out << "l 2 3" << std::endl;
+    out << "l 3 4" << std::endl;
+    out << "l 4 1" << std::endl;
+    int cnt = 5;
+    // int cnt = 1;
     for (auto polygon : final_shape)
     {
         for (int i = 0; i < polygon.size(); i++)
@@ -348,6 +311,35 @@ void Tiling2D::fetchSandwichFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     eigen_base.push_back(TV2(periodic[4], periodic[5]));
     eigen_base.push_back(TV2(periodic[6], periodic[7]));
 }
+
+void Tiling2D::generateSandwichStructureBatch()
+{
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners;
+
+    int IH = 0;
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    size_t num_params = a_tiling.numParameters();
+    T params[ num_params ];
+    a_tiling.getParameters( params );
+    std::vector<T> default_params(num_params);
+    for (int i = 0; i < num_params; i++)
+        default_params[i] = params[i];
+
+    IH = 0;
+    std::vector<T> IH00 = {0.3333, 0.7576, 0.2364, 0.8182};
+
+    // IH = 1;
+    // std::vector<T> IH01 = {0.1636, 0.5, 0.3576, 0};
+
+    IH = 6;
+    std::vector<T> IH07 = {0.7343, 0.2191};
+    
+    IH = 12;
+    fetchSandwichFromOneFamilyFromParamsDilation(IH, {}, polygons, pbc_corners, true, false);
+    generateSandwichMeshPerodicInX(polygons, pbc_corners);
+}
+
 
 void Tiling2D::fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
     std::vector<TV2>& eigen_base, int n_unit, bool random)
@@ -589,22 +581,6 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>&
         // std::cout << std::endl;
     }
     
-    // std::ofstream out("tiling_unit.obj");
-    // for (int i = 0; i < 4; i++)
-    //     out << "v " <<  periodic.segment<2>(i * 2).transpose() << " 0" << std::endl;
-    // for (auto polygon : polygons)
-    // {
-    //     for (auto vtx : polygon)
-    //     {
-    //         out << "v " << vtx.X << " " << vtx.Y << " 0" << std::endl;
-    //     }
-    // }
-    // out << "l 1 2" << std::endl;
-    // out << "l 2 3" << std::endl;
-    // out << "l 3 4" << std::endl;
-    // out << "l 4 1" << std::endl;
-    // out.close();
-    
     T distance = -2.0;
     ClipperLib::Paths clip(1);
 	clip[0] << ClipperLib::IntPoint(periodic[0]*mult,periodic[1]*mult) 
@@ -714,12 +690,10 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     
 }
 
-void Tiling2D::generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners)
+void Tiling2D::generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners)
 {
     T eps = 1e-5;
     gmsh::initialize();
-
-    T mult = 10000000.0;
 
     gmsh::model::add("tiling");
     gmsh::logger::start();
@@ -728,20 +702,60 @@ void Tiling2D::generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::v
     gmsh::option::setNumber("Geometry.Tolerance", eps);
     gmsh::option::setNumber("Mesh.ElementOrder", 1);
 
+    // disable set resolution from point option
+    gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
+
+ 
     //Points
     int acc = 1;
+    // clamping box 1 2 3 4
+    for (int i = 0; i < pbc_corners.size(); ++i)
+		gmsh::model::occ::addPoint(pbc_corners[i][0], pbc_corners[i][1], 0, 2, acc++);
+    
+    // sandwich boxes bottom 5 6 the other two points already exist
+    T dx = 0.02 * (pbc_corners[1][0] - pbc_corners[0][0]);
+    gmsh::model::occ::addPoint(pbc_corners[0][0],  pbc_corners[0][1] - dx, 0, 2, acc++);
+    gmsh::model::occ::addPoint(pbc_corners[1][0], pbc_corners[1][1] - dx, 0, 2, acc++);
+    
+    // sandwich boxes top 7 8 
+    gmsh::model::occ::addPoint(pbc_corners[2][0], pbc_corners[2][1] + dx, 0, 2, acc++);
+    gmsh::model::occ::addPoint(pbc_corners[3][0], pbc_corners[3][1] + dx, 0, 2, acc++);
 
-    for(int i=0; i<polygons.size(); ++i)
+    // inner lattice
+    for (int i=0; i<polygons.size(); ++i)
     {
         for(int j=0; j<polygons[i].size(); ++j)
         {
             gmsh::model::occ::addPoint(polygons[i][j][0], polygons[i][j][1], 0, 2, acc++);
         }
     }
-    gmsh::model::occ::synchronize();
+    
     //Lines
     acc = 1;
+
     int acc_line = 1;
+    
+    // add clipping box
+    gmsh::model::occ::addLine(1, 2, acc++); 
+    gmsh::model::occ::addLine(2, 3, acc++); 
+    gmsh::model::occ::addLine(3, 4, acc++); 
+    gmsh::model::occ::addLine(4, 1, acc++);
+    
+    // bottom box
+    gmsh::model::occ::addLine(5, 6, acc++); 
+    gmsh::model::occ::addLine(6, 2, acc++); 
+    gmsh::model::occ::addLine(2, 1, acc++); 
+    gmsh::model::occ::addLine(1, 5, acc++);
+
+    // top box
+    gmsh::model::occ::addLine(4, 3, acc++); 
+    gmsh::model::occ::addLine(3, 7, acc++); 
+    gmsh::model::occ::addLine(7, 8, acc++); 
+    gmsh::model::occ::addLine(8, 4, acc++);
+
+    acc_line = 9;
 
     for (int i = 0; i < polygons.size(); i++)
     {
@@ -752,11 +766,15 @@ void Tiling2D::generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::v
         gmsh::model::occ::addLine(acc_line, acc_line-polygons[i].size()+1, acc++);
         ++acc_line;
     }
-    gmsh::model::occ::synchronize();
+    
     acc = 1;
     int acc_loop = 1;
-
-    std::cout << "#polygons " << polygons.size() << std::endl;
+    // clipping box
+    gmsh::model::occ::addCurveLoop({1, 2, 3, 4}, acc++);
+    gmsh::model::occ::addCurveLoop({5, 6, 7, 8}, acc++);
+    gmsh::model::occ::addCurveLoop({9, 10, 11, 12}, acc++);
+    acc_loop = 13;
+    // std::cout << "#polygons " << polygons.size() << std::endl;
     for (int i = 0; i < polygons.size(); i++)
     {
         std::vector<int> polygon_loop;
@@ -765,23 +783,39 @@ void Tiling2D::generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::v
         gmsh::model::occ::addCurveLoop(polygon_loop, acc++);
     }
     
-    gmsh::model::occ::synchronize();
-    //Surface
-    // std::cout << polygons.size() << std::endl;
-    std::vector<int> curve_list;
-    for (int i = 0; i < polygons.size(); i++)
+    for (int i = 0; i < polygons.size()+3; i++)
     {
-        curve_list.push_back(i + 1);
+        gmsh::model::occ::addPlaneSurface({i+1});
     }
-    gmsh::model::occ::addPlaneSurface(curve_list, 1);
-
-
-    // for (int i = 0; i < polygons.size(); i++)
-    // {
-    //     gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
-    // }
     
-    std::cout << "add surface" << std::endl;
+
+    std::vector<std::pair<int ,int>> poly_idx;
+    for(int i=0; i<polygons.size(); ++i)
+        poly_idx.push_back(std::make_pair(2, i+4));
+    
+    std::vector<std::pair<int, int>> ov;
+    std::vector<std::vector<std::pair<int, int> > > ovv;
+    gmsh::model::occ::cut({{2, 1}}, poly_idx, ov, ovv);
+
+    std::vector<std::pair<int, int>> fuse_bottom_block;
+    std::vector<std::vector<std::pair<int, int> > > _dummy;
+    gmsh::model::occ::fragment({{2, 2}}, ov, fuse_bottom_block, _dummy);
+
+    std::vector<std::pair<int, int>> fuse_top_block;
+    std::vector<std::vector<std::pair<int, int> > > _dummy2;
+    gmsh::model::occ::fragment({{2, 3}}, fuse_bottom_block, fuse_top_block, _dummy2);
+
+    
+
+    gmsh::model::mesh::field::add("Distance", 1);
+
+    gmsh::model::mesh::field::add("Threshold", 2);
+    gmsh::model::mesh::field::setNumber(2, "InField", 1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.5);
+    gmsh::model::mesh::field::setAsBackgroundMesh(2);
+
+    gmsh::model::occ::synchronize();
 
     int zero_idx;
     for(int i=0; i < pbc_corners.size(); i++)
@@ -793,16 +827,47 @@ void Tiling2D::generatePatchMesh(std::vector<std::vector<TV2>>& polygons, std::v
         }
     }
 
-    gmsh::model::occ::synchronize();
+    TV2 t1 = pbc_corners[(zero_idx+1)%pbc_corners.size()];
+    TV2 t2 = pbc_corners[(zero_idx+3)%pbc_corners.size()];
 
+    std::vector<T> translation_hor({1, 0, 0, t1[0], 0, 1, 0, t1[1], 0, 0, 1, 0, 0, 0, 0, 1});
+	std::vector<T> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, 0, 0, 0, 0, 1});
+    int x_pair_cnt = 0;
+    std::vector<std::pair<int, int>> sleft;
+    gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t2[0])-eps, std::min(0.0,t2[1])-eps, -eps, std::max(0.0,t2[0])+eps, std::max(0.0,t2[1])+eps, eps, sleft, 1);
+    // std::ofstream pbc_output(data_folder + "pbc_data.txt");
+    for(auto i : sleft) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > sright;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t1[0], ymin-eps+t1[1], zmin - eps, xmax+eps+t1[0], ymax+eps+t1[1], zmax + eps, sright, 1);
+
+        for(auto j : sright) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t1[0];
+            ymin2 -= t1[1];
+            xmax2 -= t1[0];
+            ymax2 -= t1[1];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_hor);
+                x_pair_cnt++;
+            }
+        }
+    }
+    gmsh::model::occ::synchronize();
     gmsh::model::mesh::generate(2);
 
-    gmsh::write(data_folder + "thickshellPatch.msh");
-    gmsh::write(data_folder + "thickshellPatch.vtk");
-    // std::ofstream translation(data_folder + "translationPatchTranslation.txt");
-    // translation << t1.transpose() << std::endl;
-    // translation << t2.transpose() << std::endl;
-    // translation.close();
+    std::cout << "# of periodic pairs in x " << x_pair_cnt << std::endl;
+    gmsh::write(data_folder + "thickshellPatchPeriodicInX.msh");
+    gmsh::write(data_folder + "thickshellPatchPeriodicInX.vtk");
+    std::ofstream translation(data_folder + "thickshellPatchPeriodicInXTranslation.txt");
+    translation << t1.transpose() << std::endl;
+    translation << t2.transpose() << std::endl;
+    translation.close();
     gmsh::finalize();
 }
 
@@ -857,7 +922,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
             polygon_loop.push_back(acc_loop++);
         gmsh::model::occ::addCurveLoop(polygon_loop, acc++);
     }
-    
+
     gmsh::model::occ::synchronize();
     //Surface
     for (int i = 0; i < polygons.size(); i++)
