@@ -76,7 +76,8 @@ public:
     void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
 
     
-    void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
+    void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
 
     void generateSandwichStructureBatch();
     void fetchSandwichFromOneFamilyFromParamsDilation(int IH, 

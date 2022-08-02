@@ -73,16 +73,23 @@ public:
 
     bool use_ipc = false;
     bool add_friction = false;
+    bool unilateral_qubic = false;
+    T penalty_weight = 1e6;
+    T y_bar = 0.0;
+
+
+    // IPC
+    T max_barrier_weight = 1e8;
     T friction_mu = 0.5;
     T epsv_times_h = 1e-5;
     int num_ipc_vtx = 0;
     T barrier_distance = 1e-5;
     T barrier_weight = 1e6;
+    T ipc_min_dis = 1e-6;
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
 
-    T penalty_weight = 1e6;
 
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
@@ -103,7 +110,7 @@ public:
     template <typename OP>
     void iterateElementsSerial(const OP& f)
     {
-        for (int i = 0; i < int(indices.size()/3); i++)
+        for (int i = 0; i < num_ele; i++)
         {
             EleIdx tet_idx = indices.segment<3>(i * 3);
             EleNodes ele_deformed = getEleNodesDeformed(tet_idx);
@@ -115,7 +122,7 @@ public:
     template <typename OP>
     void iterateElementsParallel(const OP& f)
     {
-        tbb::parallel_for(0, int(indices.size()/3), [&](int i)
+        tbb::parallel_for(0, num_ele, [&](int i)
         {
             EleIdx ele_idx = indices.segment<3>(i * 3);
             EleNodes ele_deformed = getEleNodesDeformed(ele_idx);
@@ -290,6 +297,11 @@ private:
     }
 public:
 
+    // DerivativeTest.cpp
+    void checkTotalGradient(bool perturb);
+    void checkTotalGradientScale(bool perturb);
+    void checkTotalHessianScale(bool perturb);
+
     // Elasticity.cpp
     T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void addElastsicPotential(T& energy);
@@ -308,6 +320,7 @@ public:
     void updateIPCVertices(const VectorXT& _u);
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void computeIPCRestData();
+    void updateBarrierInfo(bool first_step);
     void addIPCEnergy(T& energy);
     void addIPCForceEntries(VectorXT& residual);
     void addIPCHessianEntries(std::vector<Entry>& entries, 
@@ -322,6 +335,9 @@ public:
     void addBCPenaltyEnergy(T w, T& energy);
     void addBCPenaltyForceEntries(T w, VectorXT& residual);
     void addBCPenaltyHessianEntries(T w, std::vector<Entry>& entries);
+    void addUnilateralQubicPenaltyEnergy(T w, T& energy);
+    void addUnilateralQubicPenaltyForceEntries(T w, VectorXT& residuals);
+    void addUnilateralQubicPenaltyHessianEntries(T w, std::vector<Entry>& entries);
 
     // FEMSolver.cpp
     T computeTotalEnergy(const VectorXT& _u);
@@ -333,7 +349,8 @@ public:
     bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
     void reset();
-
+    void checkHessianPD(bool save_txt = false);
+    
     // Scene.cpp
     void saveToOBJ(const std::string& filename);
     void computeBoundingBox(TV& min_corner, TV& max_corner);

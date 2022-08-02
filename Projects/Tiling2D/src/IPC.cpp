@@ -1,8 +1,31 @@
 #include <ipc/ipc.hpp>
+#include <ipc/barrier/adaptive_stiffness.hpp>
 #include "../include/FEMSolver.h"
 
 // #include <igl/writeOBJ.h>
 
+void FEMSolver::updateBarrierInfo(bool first_step)
+{
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
+    for (int i = 0; i < num_nodes; i++) 
+        ipc_vertices_deformed.row(i) = deformed.segment<2>(i * 2);
+
+    ipc::Constraints ipc_constraints;
+    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+        
+    T current_min_dis = ipc::compute_minimum_distance(ipc_vertices, ipc_edges, ipc_faces, ipc_constraints);
+    if (first_step)
+        ipc_min_dis = current_min_dis;
+    else
+    {
+        TV min_corner, max_corner;
+        computeBoundingBox(min_corner, max_corner);
+        T bb_diag = (max_corner - min_corner).norm();
+        ipc::update_barrier_stiffness(ipc_min_dis, current_min_dis, max_barrier_weight, barrier_weight, bb_diag);
+        ipc_min_dis = current_min_dis;
+    }
+}
 
 void FEMSolver::computeIPCRestData()
 {
@@ -42,6 +65,17 @@ void FEMSolver::computeIPCRestData()
             std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
     }
     std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
+
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    T bb_diag = (max_corner - min_corner).norm();
+    VectorXT dedx(num_nodes * 2), dbdx(num_nodes * 2);
+    dedx.setZero(); dbdx.setZero();
+    addIPCForceEntries(dbdx); dbdx *= -1.0;
+    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
+    barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
+    std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
+    
 }
 
 T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)

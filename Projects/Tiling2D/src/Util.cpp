@@ -2,6 +2,9 @@
 
 void loadMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, Eigen::MatrixXi& F)
 {
+    using TV3 = Vector<T, 3>;
+    using IV3 = Vector<int, 3>;
+
     std::ifstream in(filename);
     std::string token;
 
@@ -33,7 +36,7 @@ void loadMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, Eigen:
 
 		if(cell_type == 3)
 		{
-            Vector<int, 3> face;
+            IV3 face;
 			for(int j = 0; j < 3; j++)
 				in >> face[j];
             faces.push_back(face);
@@ -49,7 +52,12 @@ void loadMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, Eigen:
     F.resize(n_faces, 3);
     tbb::parallel_for(0, n_faces, [&](int i)
     {
-        F.row(i) = faces[i];
+        TV3 ei = V.row(faces[i][0]) - V.row(faces[i][1]);
+        TV3 ej = V.row(faces[i][2]) - V.row(faces[i][1]);
+        if (ej.cross(ei).dot(TV3(0, 0, 1)) < 0)
+            F.row(i) = IV3(faces[i][1], faces[i][0], faces[i][2]);
+        else
+            F.row(i) = faces[i];
     });
     in.close();
 }

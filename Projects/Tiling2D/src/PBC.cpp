@@ -28,7 +28,7 @@ void FEMSolver::addPBCPairInX()
     if (left_nodes.size() != right_nodes.size())
     {
         std::cout << left_nodes.size() << " " << right_nodes.size() << std::endl;
-        std::exit(0);
+        // std::exit(0);
     }
 
     pbc_pairs = {std::vector<IV>(), std::vector<IV>()};
@@ -146,6 +146,8 @@ void FEMSolver::addPBCEnergy(T& energy)
             TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
+            if (pair_dis_vec.norm() < 1e-6)
+                continue;
             energy_pbc += 0.5 * pbc_w * pair_dis_vec.dot(pair_dis_vec);
         }
     };
@@ -189,7 +191,8 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
             TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            
+            if (pair_dis_vec.norm() < 1e-6)
+                continue;
             // std::cout << (xj_ref - xi_ref).norm() << " " << (xj - xi).norm() << std::endl;
             // std::cout << pair_dis_vec.norm() << std::endl;
             // std::getchar();
@@ -244,6 +247,12 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             if (cnt == 1)
                 continue;
 
+            TV xi_ref = deformed.segment<2>(pbc_pairs[dir][0][0] * 2);
+            TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
+            TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
+            if (pair_dis_vec.norm() < 1e-6)
+                continue;
+                
             std::vector<int> nodes = {idx0, idx1, pbc_pairs[dir][0][0], pbc_pairs[dir][0][1]};
             std::vector<T> sign_J = {-1, 1, 1, -1};
             std::vector<T> sign_F = {1, -1, -1, 1};

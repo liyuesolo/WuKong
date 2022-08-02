@@ -5,10 +5,10 @@ void FEMSolver::addElastsicPotential(T& energy)
 {
     VectorXT energies_neoHookean(num_ele);
     energies_neoHookean.setZero();
+    
     iterateElementsParallel([&](const EleNodes& x_deformed, 
         const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
     {
-        // T ei = computeNeoHookeanStrainEnergy(x_deformed, x_undeformed);
         T ei;
         computeLinear2DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
         energies_neoHookean[tet_idx] += ei;
@@ -22,7 +22,6 @@ void FEMSolver::addElasticForceEntries(VectorXT& residual)
         const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
     {
         Vector<T, 6> dedx;
-        // computeNeoHookeanStrainEnergyGradient(x_deformed, x_undeformed, dedx);
         computeLinear2DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
         
         addForceEntry<6>(residual, indices, -dedx);
@@ -35,7 +34,6 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
         const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
     {
         Matrix<T, 6, 6> hessian;
-        // computeNeoHookeanStrainEnergyHessian(x_deformed, x_undeformed, hessian);
         computeLinear2DNeoHookeanEnergyHessian(E, nu, x_deformed, x_undeformed, hessian);
         if (project_PD)
             projectBlockPD<6>(hessian);
@@ -60,8 +58,8 @@ T FEMSolver::computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du
         TM dxdb = x_deformed.transpose() * dNdb;
         TM A = dxdb * dXdb.inverse();
         T a, b, c, d;
-        a = A.determinant();
-        b = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0) + A(0, 0) * A(2, 2) - A(0, 2) * A(2, 0) + A(1, 1) * A(2, 2) - A(1, 2) * A(2, 1);
+        a = 0;
+        b = A.determinant();
         c = A.diagonal().sum();
         d = 0.8;
 

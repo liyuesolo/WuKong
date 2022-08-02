@@ -2,7 +2,12 @@
 // #include "../include/autodiff/FEMEnergy.h"
 #include "../include/Timer.h"
 #include <Eigen/CholmodSupport>
-
+#include <Eigen/PardisoSupport>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
+#include "../include/IpoptSolver.h"
 // #include <Spectra/SymEigsShiftSolver.h>
 // #include <Spectra/MatOp/SparseSymShiftSolve.h>
 // #include <Spectra/SymEigsSolver.h>
@@ -10,122 +15,6 @@
 
 // #include <fstream>
 // #include <iomanip>
-
-// void FEMSolver::computeLinearModes()
-// {
-//     int nmodes = 20;
-
-//     StiffnessMatrix K(deformed.rows(), deformed.rows());
-//     run_diff_test = true;
-//     buildSystemMatrix(u, K);
-
-//     bool use_Spectra = true;
-
-//     if (use_Spectra)
-//     {
-
-//         Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
-
-//         //0 cannot cannot be used as a shift
-//         T shift = -1e-4;
-//         Spectra::SymEigsShiftSolver<T, 
-//             Spectra::LARGEST_MAGN, 
-//             Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
-//             eigs(&op, nmodes, 2 * nmodes, shift);
-
-//         eigs.init();
-
-//         int nconv = eigs.compute();
-
-//         if (eigs.info() == Spectra::SUCCESSFUL)
-//         {
-//             Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
-//             Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
-//             std::cout << eigen_values << std::endl;
-//             std::ofstream out("fem_eigen_vectors.txt");
-//             out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
-//             for (int i = 0; i < eigen_vectors.cols(); i++)
-//                 out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
-//             out << std::endl;
-//             for (int i = 0; i < eigen_vectors.rows(); i++)
-//             {
-//                 // for (int j = 0; j < eigen_vectors.cols(); j++)
-//                 for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
-//                     out << eigen_vectors(i, j) << " ";
-//                 out << std::endl;
-//             }       
-//             out << std::endl;
-//             out.close();
-//         }
-//         else
-//         {
-//             std::cout << "Eigen decomposition failed" << std::endl;
-//         }
-//     }
-//     else
-//     {
-//         Eigen::MatrixXd A_dense = K;
-//         Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
-//         eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
-//         auto eigen_values = eigen_solver.eigenvalues();
-//         auto eigen_vectors = eigen_solver.eigenvectors();
-        
-//         std::vector<T> ev_all(A_dense.cols());
-//         for (int i = 0; i < A_dense.cols(); i++)
-//         {
-//             ev_all[i] = eigen_values[i].real();
-//         }
-        
-//         std::vector<int> indices;
-//         for (int i = 0; i < A_dense.cols(); i++)
-//         {
-//             indices.push_back(i);    
-//         }
-//         std::sort(indices.begin(), indices.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
-//         // std::sort(ev_all.begin(), ev_all.end());
-
-//         for (int i = 0; i < nmodes; i++)
-//             std::cout << ev_all[indices[i]] << std::endl;
-        
-
-//         std::ofstream out("fem_eigen_vectors.txt");
-//         out << nmodes << " " << A_dense.cols() << std::endl;
-//         for (int i = 0; i < nmodes; i++)
-//             out << ev_all[indices[i]] << " ";
-//         out << std::endl;
-//         for (int i = 0; i < nmodes; i++)
-//         {
-//             out << eigen_vectors.col(indices[i]).real() << std::endl;
-//         }
-
-//         out.close();
-//     }
-// }
-
-// T FEMSolver::computeInteralEnergy(const VectorXT& _u)
-// {
-//     VectorXT projected = _u;
-//     if (!run_diff_test)
-//     {
-//         iterateDirichletDoF([&](int offset, T target)
-//         {
-//             projected[offset] = target;
-//         });
-//     }
-//     deformed = undeformed + projected;
-
-//     VectorXT energies_neoHookean = VectorXT::Zero(num_ele);
-
-//     iterateTetsParallel([&](const TetNodes& x_deformed, 
-//         const TetNodes& x_undeformed, const TetIdx& indices, int tet_idx)
-//     {
-//         T ei;
-//         computeLinearTet3DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
-//         energies_neoHookean[tet_idx] += ei;
-//     });
-
-//     return energies_neoHookean.sum();
-// }
 
 T FEMSolver::computeTotalEnergy(const VectorXT& _u)
 {
@@ -157,6 +46,13 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
         T ipc = 0.0;
         addIPCEnergy(ipc);
         total_energy += ipc;
+    }
+
+    if (unilateral_qubic)
+    {
+        T uni_qubic = 0.0;
+        addUnilateralQubicPenaltyEnergy(penalty_weight, uni_qubic);
+        total_energy += uni_qubic;
     }
 
     if (penalty_pairs.size())
@@ -195,28 +91,50 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
 
     addElasticForceEntries(residual);
 
-    std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
-    residual_backup = residual;
+    if (verbose)
+    {
+        std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
+        residual_backup = residual;
+    }
 
     if (add_pbc)
     {
         addPBCForceEntries(residual);
-        std::cout << "pbc force " << (residual - residual_backup).norm() << std::endl;
-        residual_backup = residual;
+        if (verbose)
+        {
+            std::cout << "pbc force " << (residual - residual_backup).norm() << std::endl;
+            residual_backup = residual;
+        }
     }
 
     if (use_ipc)
     {
         addIPCForceEntries(residual);
-        std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
-        residual_backup = residual;
+        if (verbose)
+        {
+            std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
+            residual_backup = residual;
+        }
+    }
+
+    if (unilateral_qubic)
+    {
+        addUnilateralQubicPenaltyForceEntries(penalty_weight, residual);
+        if (verbose)
+        {
+            std::cout << "qubic penalty force " << (residual - residual_backup).norm() << std::endl;
+            residual_backup = residual;
+        }
     }
 
     if (penalty_pairs.size())
     {
         addBCPenaltyForceEntries(penalty_weight, residual);
-        std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
-        residual_backup = residual;
+        if (verbose)
+        {
+            std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
+            residual_backup = residual;
+        }
     }
 
     // std::getchar();
@@ -240,6 +158,77 @@ void FEMSolver::reset()
     
 }
 
+void FEMSolver::checkHessianPD(bool save_txt)
+{
+    int nmodes = 10;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    buildSystemMatrix(u, d2edx2);
+    bool use_Spectra = true;
+
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    solver.analyzePattern(d2edx2); 
+    // std::cout << "analyzePattern" << std::endl;
+    solver.factorize(d2edx2);
+    // std::cout << "factorize" << std::endl;
+    bool indefinite = false;
+    if (solver.info() == Eigen::NumericalIssue)
+    {
+        std::cout << "!!!indefinite matrix!!!" << std::endl;
+        indefinite = true;
+        
+    }
+    else
+    {
+        // std::cout << "indefinite" << std::endl;
+    }
+    
+    if (use_Spectra)
+    {
+        
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(d2edx2);
+        // T shift = indefinite ? -1e2 : -1e-4;
+        T shift = -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values.transpose() << std::endl;
+            if (save_txt)
+            {
+                std::ofstream out("eigen_vectors.txt");
+                out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+                for (int i = 0; i < eigen_vectors.cols(); i++)
+                    out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+                out << std::endl;
+                for (int i = 0; i < eigen_vectors.rows(); i++)
+                {
+                    // for (int j = 0; j < eigen_vectors.cols(); j++)
+                    for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                        out << eigen_vectors(i, j) << " ";
+                    out << std::endl;
+                }       
+                out << std::endl;
+                out.close();
+            }
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+}
+
 void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 {
     VectorXT projected = _u;
@@ -254,12 +243,14 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
     
     std::vector<Entry> entries;
 
-    addElasticHessianEntries(entries);
+    addElasticHessianEntries(entries, project_block_PD);
 
     if (add_pbc)
         addPBCHessianEntries(entries, project_block_PD);
     if (use_ipc)
         addIPCHessianEntries(entries, project_block_PD);
+    if (unilateral_qubic)
+        addUnilateralQubicPenaltyHessianEntries(penalty_weight, entries);
     if (penalty_pairs.size())
         addBCPenaltyHessianEntries(penalty_weight, entries);
 
@@ -321,8 +312,8 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
             invalid_search_dir_cnt++;
         }
         
-        bool solve_success = true;
-        // solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        // bool solve_success = true;
+        bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
         
         if (!solve_success)
             invalid_residual_cnt++;
@@ -364,24 +355,30 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     StiffnessMatrix K(residual.rows(), residual.rows());
     Timer ti(true);
     buildSystemMatrix(_u, K);
-    std::cout << "build system takes " <<  ti.elapsed_sec() << std::endl;
+    // std::cout << "\tbuild system takes " <<  ti.elapsed_sec() << std::endl;
     bool success = linearSolve(K, residual, du);
     
     if (!success)
         return 1e16;
     T norm = du.norm();
-    std::cout << "|du| " <<  du.norm() << std::endl;
+    if (verbose)
+        std::cout << "\t|du| " <<  du.norm() << std::endl;
     
     T alpha = computeInversionFreeStepsize(_u, du);
-    std::cout << "** step size **" << std::endl;
-    std::cout << "after tet inv step size: " << alpha << std::endl;
+    if (verbose)
+    {
+        std::cout << "\t** step size **" << std::endl;
+        std::cout << "\tafter tet inv step size: " << alpha << std::endl;
+    }
     if (use_ipc)
     {
         T ipc_step_size = computeCollisionFreeStepsize(_u, du);
         alpha = std::min(alpha, ipc_step_size);
-        std::cout << "after ipc step size: " << alpha << std::endl;
+        if (verbose)
+            std::cout << "\tafter ipc step size: " << alpha << std::endl;
     }
-    std::cout << "**       **" << std::endl;
+    if (verbose)
+        std::cout << "\t**       **" << std::endl;
 
     T E0 = computeTotalEnergy(_u);
     int cnt = 0;
@@ -399,7 +396,8 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
         alpha *= 0.5;
         cnt += 1;
     }
-    std::cout << "#ls " << cnt << " alpha = " << alpha << std::endl;
+    if (verbose)
+        std::cout << "#ls " << cnt << " alpha = " << alpha << std::endl;
     return norm;
 }
 
@@ -413,6 +411,8 @@ bool FEMSolver::staticSolveStep(int step)
         {
             f[offset] = 0;
         });
+        if (use_ipc) 
+            computeIPCRestData();
     }
 
     VectorXT residual(deformed.rows());
@@ -420,8 +420,13 @@ bool FEMSolver::staticSolveStep(int step)
 
     T residual_norm = computeResidual(u, residual);
     if (use_ipc)
+    {
+        updateBarrierInfo(step == 0);
+        std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+        // std::getchar();
         updateIPCVertices(u);
-    std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
+    }
+    std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol)
         return true;
@@ -435,7 +440,7 @@ bool FEMSolver::staticSolveStep(int step)
     // });
     // deformed = undeformed + u;
 
-    if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-10)
+    if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
         return true;
     
     return false;
@@ -451,7 +456,8 @@ bool FEMSolver::staticSolve()
     {
         f[offset] = 0;
     });
-
+    if (use_ipc) 
+        computeIPCRestData();
     while (true)
     {
         
@@ -460,10 +466,14 @@ bool FEMSolver::staticSolve()
 
         residual_norm = computeResidual(u, residual);
         if (use_ipc)
+        {
+            updateBarrierInfo(cnt == 0);
             updateIPCVertices(u);
+            std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+        }
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
-        if (verbose)
+        // if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter 
             << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
         
@@ -472,7 +482,7 @@ bool FEMSolver::staticSolve()
         
         du_norm = lineSearchNewton(u, residual);
 
-        if(cnt == max_newton_iter || du_norm > 1e10 || du_norm < 1e-8)
+        if(cnt == max_newton_iter || du_norm > 1e10 || du_norm < 1e-12)
             break;
         cnt++;
     }
@@ -491,4 +501,3 @@ bool FEMSolver::staticSolve()
     return true;
     
 }
-

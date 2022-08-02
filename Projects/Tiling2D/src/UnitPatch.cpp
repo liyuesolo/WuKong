@@ -19,11 +19,11 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
     using namespace std;
     using namespace glm;
 
-    
+    std::ofstream out(filename);
     csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
 
     size_t num_params = a_tiling.numParameters();
-
+    out << "num_params " << num_params << " ";
     if (num_params != params.size() && !random)
         return;    
     if( num_params > 1 ) 
@@ -37,12 +37,14 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
                 new_params[idx] += zeta()*0.2 - 0.1;
             else
                 new_params[idx] = params[idx];
+            out << new_params[idx] << " ";
         }
         a_tiling.setParameters( new_params );
     }
-
+    out << std::endl;
     vector<dvec2> edges[ a_tiling.numEdgeShapes() ];
 
+    out << "numEdgeShapes " << int(a_tiling.numEdgeShapes()) << " ";
     // Generate some random edge shapes.
     for( U8 idx = 0; idx < a_tiling.numEdgeShapes(); ++idx ) {
         vector<dvec2> ej;
@@ -63,7 +65,7 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
             ej.push_back( dvec2( 0.75, 0 ) );
             ej.push_back( dvec2( 1, 0 ) );
         }
-
+        
         // Now, depending on the edge shape class, enforce symmetry 
         // constraints on edges.
         switch( a_tiling.getEdgeShape( idx ) ) {
@@ -83,8 +85,13 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
             break;
         }
         edges[idx] = ej;
+        for (dvec2 e : ej)
+        {
+            out << e[0] << " " << e[1] << " ";
+        }
+        out << std::endl;
     }
-
+    out.close();
     
     std::vector<dvec2> shape;
     for( auto i : a_tiling.shape() ) {
@@ -252,32 +259,32 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
     c.Execute(final_shape, distance*mult);
 
 
-    std::ofstream out("tiling_unit_clip_in_x.obj");
-    for (int i = 0; i < 4; i++)
-        out << "v " <<  periodic.segment<2>(i * 2).transpose() << " 0" << std::endl;
-    for (auto polygon : final_shape)
-    {
-        for (auto vtx : polygon)
-        {
-            out << "v " << vtx.X / mult << " " << vtx.Y / mult << " 0" << std::endl;
-        }
-    }
-    out << "l 1 2" << std::endl;
-    out << "l 2 3" << std::endl;
-    out << "l 3 4" << std::endl;
-    out << "l 4 1" << std::endl;
-    int cnt = 5;
-    // int cnt = 1;
-    for (auto polygon : final_shape)
-    {
-        for (int i = 0; i < polygon.size(); i++)
-        {
-            int j = (i + 1) % polygon.size();
-            out << "l " << cnt + i << " " << cnt + j << std::endl;
-        }
-        cnt += polygon.size();
-    }
-    out.close();
+    // std::ofstream out("tiling_unit_clip_in_x.obj");
+    // for (int i = 0; i < 4; i++)
+    //     out << "v " <<  periodic.segment<2>(i * 2).transpose() << " 0" << std::endl;
+    // for (auto polygon : final_shape)
+    // {
+    //     for (auto vtx : polygon)
+    //     {
+    //         out << "v " << vtx.X / mult << " " << vtx.Y / mult << " 0" << std::endl;
+    //     }
+    // }
+    // out << "l 1 2" << std::endl;
+    // out << "l 2 3" << std::endl;
+    // out << "l 3 4" << std::endl;
+    // out << "l 4 1" << std::endl;
+    // int cnt = 5;
+    // // int cnt = 1;
+    // for (auto polygon : final_shape)
+    // {
+    //     for (int i = 0; i < polygon.size(); i++)
+    //     {
+    //         int j = (i + 1) % polygon.size();
+    //         out << "l " << cnt + i << " " << cnt + j << std::endl;
+    //     }
+    //     cnt += polygon.size();
+    // }
+    // out.close();
     
     eigen_polygons.resize(final_shape.size());
 
@@ -314,30 +321,46 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
 
 void Tiling2D::generateSandwichStructureBatch()
 {
-    std::vector<std::vector<TV2>> polygons;
-    std::vector<TV2> pbc_corners;
-
-    int IH = 0;
-    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
-    size_t num_params = a_tiling.numParameters();
-    T params[ num_params ];
-    a_tiling.getParameters( params );
-    std::vector<T> default_params(num_params);
-    for (int i = 0; i < num_params; i++)
-        default_params[i] = params[i];
-
-    IH = 0;
-    std::vector<T> IH00 = {0.3333, 0.7576, 0.2364, 0.8182};
-
-    // IH = 1;
-    // std::vector<T> IH01 = {0.1636, 0.5, 0.3576, 0};
-
-    IH = 6;
-    std::vector<T> IH07 = {0.7343, 0.2191};
+    // 81 tiling families
+    data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTK/";
+    for (int i = 0; i < 81; i++)
+    {
+        int IH = csk::tiling_types[i];
+        int n_tiling_this_family = 10;
+        for (int j = 0; j < n_tiling_this_family; j++)
+        {
+            std::vector<std::vector<TV2>> polygons;
+            std::vector<TV2> pbc_corners; 
+            fetchSandwichFromOneFamilyFromParamsDilation(IH, {}, polygons, pbc_corners, true, 
+                true, data_folder + std::to_string(i * n_tiling_this_family + j) + ".txt");
+            generateSandwichMeshPerodicInX(polygons, pbc_corners, true, 
+                data_folder + std::to_string(i * n_tiling_this_family + j) + ".vtk");   
+            
+        }
+    }
     
-    IH = 12;
-    fetchSandwichFromOneFamilyFromParamsDilation(IH, {}, polygons, pbc_corners, true, false);
-    generateSandwichMeshPerodicInX(polygons, pbc_corners);
+
+    // int IH = 0;
+    // csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    // size_t num_params = a_tiling.numParameters();
+    // T params[ num_params ];
+    // a_tiling.getParameters( params );
+    // std::vector<T> default_params(num_params);
+    // for (int i = 0; i < num_params; i++)
+    //     default_params[i] = params[i];
+
+    // IH = 0;
+    // std::vector<T> IH00 = {0.3333, 0.7576, 0.2364, 0.8182};
+
+    // // IH = 1;
+    // // std::vector<T> IH01 = {0.1636, 0.5, 0.3576, 0};
+
+    // IH = 6;
+    // std::vector<T> IH07 = {0.7343, 0.2191};
+    
+    // IH = 12;
+    // fetchSandwichFromOneFamilyFromParamsDilation(IH, {}, polygons, pbc_corners, true, false);
+    // generateSandwichMeshPerodicInX(polygons, pbc_corners);
 }
 
 
@@ -690,7 +713,8 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>&
     
 }
 
-void Tiling2D::generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners)
+void Tiling2D::generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
+    std::vector<TV2>& pbc_corners, bool save_to_file, std::string filename)
 {
     T eps = 1e-5;
     gmsh::initialize();
@@ -861,13 +885,17 @@ void Tiling2D::generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& pol
     gmsh::model::occ::synchronize();
     gmsh::model::mesh::generate(2);
 
-    std::cout << "# of periodic pairs in x " << x_pair_cnt << std::endl;
-    gmsh::write(data_folder + "thickshellPatchPeriodicInX.msh");
-    gmsh::write(data_folder + "thickshellPatchPeriodicInX.vtk");
-    std::ofstream translation(data_folder + "thickshellPatchPeriodicInXTranslation.txt");
-    translation << t1.transpose() << std::endl;
-    translation << t2.transpose() << std::endl;
-    translation.close();
+    // std::cout << "# of periodic pairs in x " << x_pair_cnt << std::endl;
+    // gmsh::write(data_folder + "thickshellPatchPeriodicInX.msh");
+    // gmsh::write(data_folder + "thickshellPatchPeriodicInX.vtk");
+    // std::ofstream translation(data_folder + "thickshellPatchPeriodicInXTranslation.txt");
+    // translation << t1.transpose() << std::endl;
+    // translation << t2.transpose() << std::endl;
+    // translation.close();
+    if (save_to_file)
+    {
+        gmsh::write(filename);
+    }
     gmsh::finalize();
 }
 

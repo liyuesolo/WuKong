@@ -39,7 +39,7 @@ void FEMSolver::addPenaltyPairsBox(const TV& min_corner, const TV& max_corner, c
         bool valid_y = xi[1] >= min_corner[1] && xi[1] <= max_corner[1];
         if (valid_x && valid_y)
         {
-            for (int d = 0; d < dim; d++)
+            for (int d = 1; d < dim; d++)
             {
                 penalty_pairs[i * dim + d] = xi[d] + displacement[d];
             }

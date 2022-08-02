@@ -85,10 +85,11 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     {
         std::vector<std::pair<TV3, TV3>> end_points;
         tiling.solver.getPBCPairs3D(end_points);
+        T ref_dis = (end_points[0].first - end_points[1].second).norm();
         std::vector<TV3> colors;
         for (int i = 0; i < end_points.size(); i++)
             colors.push_back(TV3(1.0, 0.3, 0.0));
-        appendCylindersToEdges(end_points, colors, 0.0001, V, F, C);
+        appendCylindersToEdges(end_points, colors, 0.001 * ref_dis, V, F, C);
     }    
     
     viewer.data().clear();
@@ -101,10 +102,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 {
     menu.callback_draw_viewer_menu = [&]()
     {
-        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            
-        }
+        
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::Checkbox("PBC", &tiling.solver.add_pbc))
@@ -123,6 +121,10 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                     updateScreen(viewer);
                 }
             }
+        }
+        if (ImGui::Button("Generate", ImVec2(-1,0)))
+        {
+            tiling.generateSandwichStructureBatch();
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
@@ -144,7 +146,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     {
         if(viewer.core().is_animating && check_modes)
         {
-            // tiling.solver.deformed = tiling.solver.undeformed + tiling.solver.u + evectors.col(modes) * std::sin(t);
+            tiling.solver.deformed = tiling.solver.undeformed + tiling.solver.u + evectors.col(modes) * std::sin(t);
             updateScreen(viewer);
             t += 0.1;
         }
@@ -182,11 +184,13 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         case ' ':
             viewer.core().is_animating = true;
+            // tiling.solver.optimizeIPOPT();
             return true;
         case '1':
             check_modes = true;
+            tiling.solver.checkHessianPD(true);
             // tiling.solver.computeLinearModes();
-            // loadDisplacementVectors("/home/yueli/Documents/ETH/WuKong/fem_eigen_vectors.txt");
+            loadDisplacementVectors("eigen_vectors.txt");
             
             for (int i = 0; i < evalues.rows(); i++)
             {
@@ -202,10 +206,20 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             modes = (modes + evectors.cols()) % evectors.cols();
             std::cout << "modes " << modes << std::endl;
             return true;
+        case 'a':
+            viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case 'd':
+            // tiling.solver.checkTotalGradient(false);
+            tiling.solver.checkTotalGradientScale(true);
+            tiling.solver.checkTotalHessianScale(true);
+            return true;
+
         }
     };
     // tiling.initializeSimulationDataFromVTKFile(tiling.data_folder + "thickshell.vtk");
-    tiling.initializeSimulationDataFromFiles("thickshellPatchPeriodicInX", true);
+    // tiling.initializeSimulationDataFromFiles("thickshellPatchPeriodicInX", true);
+    // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTK/50.vtk", true);
     // tiling.generateForceDisplacementCurve("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/");
     
     updateScreen(viewer);
@@ -215,6 +229,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().point_size = 25.0;
 
     viewer.core().align_camera_center(V);
+    // viewer.core().toggle(viewer.data().show_lines);
     viewer.core().animation_max_fps = 24.;
     // key_down(viewer,'0',0);
     viewer.core().is_animating = false;
@@ -241,10 +256,8 @@ void TilingViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             }
         }
     };   
-    // VectorXT vertices;
-    // std::vector<Vector<int, 2>> edge_list;
-    // tiling.getPBCUnit(vertices, edge_list);
-    // tiling.generatePatch();
+    
+    
     tiling.generateSandwichStructureBatch();
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
