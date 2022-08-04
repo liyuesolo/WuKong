@@ -1,5 +1,6 @@
 #include "../include/FEMSolver.h"
 
+
 void FEMSolver::addPBCPairInX()
 {
     TV min_corner, max_corner;
@@ -146,8 +147,11 @@ void FEMSolver::addPBCEnergy(T& energy)
             TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            if (pair_dis_vec.norm() < 1e-6)
-                continue;
+            // if (pair_dis_vec.norm() < 1e-6)
+            //     continue;
+            // T e_pbc;
+            // compute2DPBCEnergy(pbc_w, xj, xi, xj_ref, xi_ref, e_pbc);
+            // energy_pbc += e_pbc;
             energy_pbc += 0.5 * pbc_w * pair_dis_vec.dot(pair_dis_vec);
         }
     };
@@ -191,11 +195,17 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
             TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            if (pair_dis_vec.norm() < 1e-6)
-                continue;
+            // if (pair_dis_vec.norm() < 1e-6)
+            //     continue;
             // std::cout << (xj_ref - xi_ref).norm() << " " << (xj - xi).norm() << std::endl;
             // std::cout << pair_dis_vec.norm() << std::endl;
             // std::getchar();
+            // Vector<T, 8> dedx;
+            // compute2DPBCEnergyGradient(pbc_w, xj, xi, xj_ref, xi_ref, dedx);
+            // residual.segment<2>(idx0 * 2) += -dedx.segment<2>(2);
+            // residual.segment<2>(idx1 * 2) += -dedx.segment<2>(0);
+            // residual.segment<2>(pbc_pairs[dir][0][0] * 2) += -dedx.segment<2>(6);
+            // residual.segment<2>(pbc_pairs[dir][0][1] * 2) += -dedx.segment<2>(4);
 
             residual.segment<2>(idx0 * 2) += pbc_w * pair_dis_vec;
             residual.segment<2>(idx1 * 2) += -pbc_w * pair_dis_vec;
@@ -250,9 +260,18 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             TV xi_ref = deformed.segment<2>(pbc_pairs[dir][0][0] * 2);
             TV xj_ref = deformed.segment<2>(pbc_pairs[dir][0][1] * 2);
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            if (pair_dis_vec.norm() < 1e-6)
-                continue;
+            // if (pair_dis_vec.norm() < 1e-6)
+            //     continue;
                 
+            // Matrix<T, 8, 8> d2edx2;
+            // compute2DPBCEnergyHessian(pbc_w, xj, xi, xj_ref, xi_ref, d2edx2);
+            // std::vector<int> nodes = {idx1, idx0, pbc_pairs[dir][0][1], pbc_pairs[dir][0][0]};
+            // for(int k = 0; k < 4; k++)
+            //     for(int l = 0; l < 4; l++)
+            //         for(int i = 0; i < 2; i++)
+            //             for(int j = 0; j < 2; j++)
+            //                 entries.push_back(Entry(nodes[k]*2 + i, nodes[l] * 2 + j, d2edx2(k * 2 + i, l * 2 + j)));
+
             std::vector<int> nodes = {idx0, idx1, pbc_pairs[dir][0][0], pbc_pairs[dir][0][1]};
             std::vector<T> sign_J = {-1, 1, 1, -1};
             std::vector<T> sign_F = {1, -1, -1, 1};

@@ -7,7 +7,6 @@
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
 #include <Spectra/SymEigsSolver.h>
 #include <Spectra/MatOp/SparseSymMatProd.h>
-#include "../include/IpoptSolver.h"
 // #include <Spectra/SymEigsShiftSolver.h>
 // #include <Spectra/MatOp/SparseSymShiftSolve.h>
 // #include <Spectra/SymEigsSolver.h>
@@ -160,10 +159,13 @@ void FEMSolver::reset()
 
 void FEMSolver::checkHessianPD(bool save_txt)
 {
+    bool backup = project_block_PD;
+    project_block_PD = false;
     int nmodes = 10;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
+    project_block_PD = backup;
     bool use_Spectra = true;
 
     // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;

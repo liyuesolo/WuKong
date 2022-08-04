@@ -25,7 +25,7 @@ int main(int argc, char** argv)
         SimulationApp app(tiling);
 
         app.setViewer(viewer, menu);
-        std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingRendering/";
+        std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingRenderingNew/";
         int width = 2000, height = 2000;
         CMat R(width,height), G(width,height), B(width,height), A(width,height);
         viewer.core().background_color.setOnes();
@@ -34,9 +34,16 @@ int main(int argc, char** argv)
         viewer.data().point_size = 10.0;
         viewer.core().camera_zoom *= 1.4;
         viewer.launch_init();
-        for (int i = 160; i < 180; i++)
+        for (int i = 0; i < 994; i++)
         {
-            tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTK/"+std::to_string(i)+".vtk", true);
+            std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".vtk");
+            if (!in.good())
+                continue;
+            else
+                in.close();
+
+                
+            tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".vtk", true);
             app.updateScreen(viewer);
             viewer.core().align_camera_center(app.V);
             app.updateScreen(viewer);
@@ -50,7 +57,7 @@ int main(int argc, char** argv)
     auto simApp = [&]()
     {
         SimulationApp app(tiling);
-        tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTK/7.vtk", true);
+        tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/a_structure.vtk", true);
         app.setViewer(viewer, menu);
         viewer.launch();
     };
@@ -84,10 +91,38 @@ int main(int argc, char** argv)
         }
     };
 
-    generateForceDisplacementCurve();
+    auto generateFDCurveSingleStructure = [&]()
+    {
+        std::string base_folder = "/home/yueli/Documents/ETH/SandwichStructure/";
+        std::string vtk_file = base_folder + "TilingVTKNew/res1.vtk";
+        tiling.generateForceDisplacementCurveSingleStructure(vtk_file, base_folder + "convergence_test/res1/");
+    };
+    // generateForceDisplacementCurve();
     // simApp();
     // renderScene();    
 
-
+    if (argc > 1)
+    {
+        int candidate = std::stoi(argv[1]);
+        std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(candidate)+".vtk");
+        if (!in.good())
+            return 0;
+        else
+            in.close();
+        std::string base_folder = "/home/yueli/Documents/ETH/SandwichStructure/";
+        bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + std::to_string(candidate)+ ".vtk", true);
+        if (!valid_structure)
+            return 0;
+        std::string sub_dir = base_folder + "ForceDisplacementCurve/" + std::to_string(candidate);
+        boost::filesystem::create_directories(sub_dir);
+        std::string result_folder = sub_dir;
+        tiling.generateForceDisplacementCurve(result_folder + "/");
+    }
+    else
+    {
+        // simApp();
+        // renderScene();
+        generateFDCurveSingleStructure();
+    }
     return 0;
 }

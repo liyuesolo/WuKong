@@ -31,6 +31,9 @@ public:
 
     using Entry = Eigen::Triplet<T>;
 
+    using QuadEleNodes = Matrix<T, 6, 2>;
+    using QuadEleIdx = Vector<int, 6>;
+
     using EleNodes = Matrix<T, 3, 2>;
     using EleIdx = Vector<int, 3>;
 
@@ -47,7 +50,10 @@ public:
     VectorXT u;
     VectorXT f;
     VectorXT deformed, undeformed;
-    VectorXi indices;
+    VectorXi indices, surface_indices;
+
+    bool use_quadratic_triangle = false;
+
 
     bool add_pbc = false;
     T pbc_w = 1e6;
@@ -128,6 +134,55 @@ public:
             EleNodes ele_deformed = getEleNodesDeformed(ele_idx);
             EleNodes ele_undeformed = getEleNodesUndeformed(ele_idx);
             f(ele_deformed, ele_undeformed, ele_idx, i);
+        });
+    }
+
+    /*
+Triangle:               Triangle6:          
+
+v
+^                                           
+|                                           
+2                       2                   
+|`\                     |`\                 
+|  `\                   |  `\               
+|    `\                 4    `3             
+|      `\               |      `\           
+|        `\             |        `\         
+0----------1 --> u      0-----5----1        
+
+*/
+
+    template <typename OP>
+    void iterateQuadElementsSerial(const OP& f)
+    {
+        for (int i = 0; i < num_ele; i++)
+        {
+            QuadEleIdx ele_idx = indices.segment<6>(i * 6);
+            QuadEleIdx ele_idx_reorder = ele_idx;
+            ele_idx_reorder[3] = ele_idx[4];
+            ele_idx_reorder[4] = ele_idx[5];
+            ele_idx_reorder[5] = ele_idx[3];
+            QuadEleNodes ele_deformed = getQuadEleNodesDeformed(ele_idx_reorder);
+            QuadEleNodes ele_undeformed = getQuadEleNodesUndeformed(ele_idx_reorder);
+
+            f(ele_deformed, ele_undeformed, ele_idx_reorder, i);
+        }
+    }
+
+    template <typename OP>
+    void iterateQuadElementsParallel(const OP& f)
+    {
+        tbb::parallel_for(0, num_ele, [&](int i)
+        {
+            QuadEleIdx ele_idx = indices.segment<6>(i * 6);
+            QuadEleIdx ele_idx_reorder = ele_idx;
+            ele_idx_reorder[3] = ele_idx[4];
+            ele_idx_reorder[4] = ele_idx[5];
+            ele_idx_reorder[5] = ele_idx[3];
+            QuadEleNodes ele_deformed = getQuadEleNodesDeformed(ele_idx_reorder);
+            QuadEleNodes ele_undeformed = getQuadEleNodesUndeformed(ele_idx_reorder);
+            f(ele_deformed, ele_undeformed, ele_idx_reorder, i);
         });
     }
 
@@ -295,6 +350,26 @@ private:
         }
         return ele_x;
     }
+
+    QuadEleNodes getQuadEleNodesDeformed(const QuadEleIdx& nodal_indices)
+    {
+        QuadEleNodes ele_x;
+        for (int i = 0; i < 6; i++)
+        {
+            ele_x.row(i) = deformed.segment<2>(nodal_indices[i]*dim);
+        }
+        return ele_x;
+    }
+
+    QuadEleNodes getQuadEleNodesUndeformed(const QuadEleIdx& nodal_indices)
+    {
+        QuadEleNodes ele_x;
+        for (int i = 0; i < 6; i++)
+        {
+            ele_x.row(i) = undeformed.segment<2>(nodal_indices[i]*dim);
+        }
+        return ele_x;
+    }
 public:
 
     // DerivativeTest.cpp
@@ -307,6 +382,8 @@ public:
     void addElastsicPotential(T& energy);
     void addElasticForceEntries(VectorXT& residual);
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
+    void computeFirstPiola(VectorXT& PKStress);
+    void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
     void addPBCPairInX();
@@ -329,6 +406,7 @@ public:
     // BoundaryCondition.cpp
     void addForceBox(const TV& min_corner, const TV& max_corner, const TV& force);
     void addDirichletBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
+    void addDirichletBoxY(const TV& min_corner, const TV& max_corner, const TV& displacement);
     void addPenaltyPairsBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
 
     // Penalty.cpp

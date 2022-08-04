@@ -1,11 +1,37 @@
 #include <igl/readOBJ.h>
+#include <igl/jet.h>
 #include "../include/Tiling2D.h"
+/*
+Triangle:               Triangle6:          Triangle9/10:          Triangle12/15:
 
-void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bool periodic)
+v
+^                                                                   2
+|                                                                   | \
+2                       2                    2                      9   8
+|`\                     |`\                  | \                    |     \
+|  `\                   |  `\                7   6                 10 (14)  7
+|    `\                 5    `4              |     \                |         \
+|      `\               |      `\            8  (9)  5             11 (12) (13) 6
+|        `\             |        `\          |         \            |             \
+0----------1 --> u      0-----3----1         0---3---4---1          0---3---4---5---1
+
+*/
+bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bool periodic)
 {
-    Eigen::MatrixXd V; Eigen::MatrixXi F;
+    Eigen::MatrixXd V; Eigen::MatrixXi F, V_quad;
     // loadMeshFromVTKFile(data_folder + filename + ".vtk", V, F);
-    loadMeshFromVTKFile(filename, V, F);
+    // loadMeshFromVTKFile(filename, V, F);
+    solver.use_quadratic_triangle = false;
+    if (solver.use_quadratic_triangle)
+    {
+        loadQuadraticTriangleMeshFromVTKFile(filename, V, F, V_quad);
+        F.resize(V_quad.rows(), 3);
+        F.col(0) = V_quad.col(0); F.col(1) = V_quad.col(1); F.col(2) = V_quad.col(2);
+    }
+    else
+    {
+        loadMeshFromVTKFile(filename, V, F);
+    }
     // if (periodic)
     //     loadPBCDataFromMSHFile(data_folder + filename + ".msh", solver.pbc_pairs);
     // if (periodic)
@@ -20,7 +46,12 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     solver.deformed.resize(n_vtx * 2);
     solver.u.resize(n_vtx * 2); solver.u.setZero();
     solver.f.resize(n_vtx * 2); solver.f.setZero();
-    solver.indices.resize(n_ele * 3);
+    solver.surface_indices.resize(n_ele * 3);
+    if (solver.use_quadratic_triangle)
+        solver.indices.resize(n_ele * 6);
+    else
+        solver.indices.resize(n_ele * 3);
+
     tbb::parallel_for(0, n_vtx, [&](int i)
     {
         solver.undeformed.segment<2>(i * 2) = V.row(i).head<2>();
@@ -46,7 +77,11 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
 
     tbb::parallel_for(0, n_ele, [&](int i)
     {
-        solver.indices.segment<3>(i * 3) = F.row(i);
+        solver.surface_indices.segment<3>(i * 3) = F.row(i);
+        if (solver.use_quadratic_triangle)
+            solver.indices.segment<6>(i * 6) = V_quad.row(i);
+        else
+            solver.indices.segment<3>(i * 3) = F.row(i);
     });
     
     solver.add_pbc = periodic;
@@ -60,26 +95,24 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
         solver.uniaxial_strain = 1.0;
     }
     
-    
-
-    
     TV min0(min_corner[0] - 1e-6, min_corner[1] - 1e-6);
     TV max0(max_corner[0] + 1e-6, min_corner[1] + 1e-6);
     // solver.addForceBox(min0, max0, TV(0, 1));
-    solver.addDirichletBox(min0, max0, TV::Zero());
+    solver.addDirichletBoxY(min0, max0, TV::Zero());
+    solver.addDirichletBox(min0, min0 + TV(2e-6, 2e-6), TV::Zero());
 
     TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
     TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
     // solver.addForceBox(min1, max1, TV(0, -1));
     T dy = max_corner[1] - min_corner[1];
-    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.2 * dy));
+    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.02 * dy));
 
     // solver.unilateral_qubic = true;
-    // solver.penalty_weight = 1e6;
+    solver.penalty_weight = 1e4;
     // solver.y_bar = max_corner[1] - 0.2 * dy;
 
     // Eigen::MatrixXd _V; Eigen::MatrixXi _F;
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/results/0.059000.obj", _V, _F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/current_mesh.obj", _V, _F);
     // for (int i = 0; i < _V.rows(); i++)
     // {
     //     solver.deformed.segment<2>(i*2) = _V.row(i).segment<2>(0);
@@ -89,13 +122,19 @@ void Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     solver.use_ipc = true;
     solver.add_friction = false;
     solver.barrier_distance = 1e-3;
-    // if (solver.use_ipc)
-    // {
-    //     solver.computeIPCRestData();
-    // }
+    
+    if (solver.use_ipc)
+    {
+        VectorXT contact_force(solver.num_nodes * 2); contact_force.setZero();
+        solver.addPBCForceEntries(contact_force);
+        if (contact_force.norm() > 1e-8)
+            return false;
+    }
 
     solver.project_block_PD = true;
     solver.verbose = true;
+    solver.max_newton_iter = 1000;
+    return true;
 }
 // barrier below a line / pusinig not pulll
 void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
@@ -150,10 +189,13 @@ void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
 }
 
 void Tiling2D::generateMeshForRendering(Eigen::MatrixXd& V, 
-    Eigen::MatrixXi& F, Eigen::MatrixXd& C)
+    Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool show_PKstress)
 {
+    
+    
     int n_vtx = solver.deformed.rows() / 2;
-    int n_ele = solver.indices.rows() / 3;
+    
+    int n_ele = solver.surface_indices.rows() / 3;
     V.resize(n_vtx, 3); V.setZero();
     F.resize(n_ele, 3); C.resize(n_ele, 3);
     
@@ -164,9 +206,70 @@ void Tiling2D::generateMeshForRendering(Eigen::MatrixXd& V,
 
     tbb::parallel_for(0, n_ele, [&](int i)
     {
-        F.row(i) = solver.indices.segment<3>(i * 3);
+        F.row(i) = solver.surface_indices.segment<3>(i * 3);
         C.row(i) = TV3(0.0, 0.3, 1.0);
     });
+    
+    if (show_PKstress)
+    {
+        VectorXT PK_stress;
+        solver.computeFirstPiola(PK_stress);
+        Eigen::MatrixXd C_jet(n_ele, 3);
+        Eigen::MatrixXd value(n_ele, 3);
+        value.col(0) = PK_stress; value.col(1) = PK_stress; value.col(2) = PK_stress;
+        std::cout << PK_stress.minCoeff() << " " << PK_stress.maxCoeff() << std::endl;
+        igl::jet(value, PK_stress.minCoeff(), PK_stress.maxCoeff(), C_jet);
+        C = C_jet;
+    }
+}
+
+void Tiling2D::generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, 
+    const std::string& result_folder)
+{
+    initializeSimulationDataFromFiles(vtk_file, true);
+    
+    T dp = 0.02;
+    solver.penalty_weight = 1e5;
+    std::vector<T> displacements;
+    std::vector<T> force_norms;
+    VectorXT u_prev = solver.u;
+    // solver.unilateral_qubic = true;
+    TV min_corner, max_corner;
+    solver.computeBoundingBox(min_corner, max_corner);
+    TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
+    TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
+
+    T dy = max_corner[1] - min_corner[1];
+    for (T dis = 0.0; dis < 0.5  + dp; dis += dp)
+    {
+        std::cout << "\t---------pencent " << dp << std::endl;
+        std::cout << dis << std::endl;
+        T displacement_sum = 0.0;
+        solver.penalty_pairs.clear();
+        solver.addPenaltyPairsBox(min1, max1, TV(0, -dis * dy));
+        // solver.y_bar = max_corner[1] - dis * dy;
+        solver.u = u_prev;
+        solver.staticSolve();
+        u_prev = solver.u;
+        VectorXT interal_force(solver.num_nodes * 2);
+        interal_force.setZero();
+        solver.addBCPenaltyForceEntries(solver.penalty_weight, interal_force);
+        displacements.push_back(dis * dy);
+        force_norms.push_back(interal_force.norm());
+
+        solver.saveToOBJ(result_folder + std::to_string(dis) + ".obj");
+        // break;
+    }
+    std::ofstream out(result_folder + "log.txt");
+    out << "displacement in cm" << std::endl;
+    for (T v : displacements)
+        out << v << " ";
+    out << std::endl;
+    out << "force in N" << std::endl;
+    for (T v : force_norms)
+        out << v << " ";
+    out << std::endl;
+    out.close();
 }
 
 void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
@@ -188,6 +291,7 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
         std::cout << "\t---------pencent " << dp << std::endl;
         std::cout << dis << std::endl;
         T displacement_sum = 0.0;
+        solver.penalty_pairs.clear();
         solver.addPenaltyPairsBox(min1, max1, TV(0, -dis * dy));
         // solver.y_bar = max_corner[1] - dis * dy;
         solver.u = u_prev;
@@ -222,7 +326,10 @@ void Tiling2D::tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Matr
 
     TV min_corner, max_corner;
     solver.computeBoundingBox(min_corner, max_corner);
-    T dx = max_corner[0] - min_corner[0];
+    // T dx = max_corner[0] - min_corner[0];
+    TV left0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][0] * 2);
+    TV right0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][1] * 2);
+    T dx = (right0 - left0).norm();
     int n_face = F.rows(), n_vtx = V.rows();
     V_tile.block(0, 0, n_vtx, 3) = V;
     V_tile.block(n_vtx, 0, n_vtx, 3) = V;

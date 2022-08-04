@@ -7,4 +7,8 @@ void computeLinear2DNeoHookeanEnergy(double E, double nu, const Eigen::Matrix<do
 void computeLinear2DNeoHookeanEnergyGradient(double E, double nu, const Eigen::Matrix<double,3,2> & x, const Eigen::Matrix<double,3,2> & X, Eigen::Matrix<double, 6, 1>& energygradient);
 void computeLinear2DNeoHookeanEnergyHessian(double E, double nu, const Eigen::Matrix<double,3,2> & x, const Eigen::Matrix<double,3,2> & X, Eigen::Matrix<double, 6, 6>& energyhessian);
 
+void computeQuadratic2DNeoHookeanEnergy(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, double& energy);
+void computeQuadratic2DNeoHookeanEnergyGradient(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, Eigen::Matrix<double, 12, 1>& energygradient);
+void computeQuadratic2DNeoHookeanEnergyHessian(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, Eigen::Matrix<double, 12, 12>& energyhessian);
+
 #endif

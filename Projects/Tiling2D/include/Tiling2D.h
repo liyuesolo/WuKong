@@ -62,11 +62,13 @@ public:
 
     // ########################## Tiling2D.cpp ########################## 
     void initializeSimulationDataFromVTKFile(const std::string& filename);
-    void initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    bool initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
+        Eigen::MatrixXd& C, bool show_train = false);
     void tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     
     void generateForceDisplacementCurve(const std::string& result_folder);
+    void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
@@ -74,17 +76,24 @@ public:
     void fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, int n_unit = 1, bool random = false);
     void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
-
-    
     void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
 
     void generateSandwichStructureBatch();
+    void generateOneStructure();
+    
+    void sampleSandwichFromOneFamilyFromParamsDilation(int IH, 
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, const Vector<T, 4>& eij,
+        bool save_to_file, std::string filename);
+
     void fetchSandwichFromOneFamilyFromParamsDilation(int IH, 
         std::vector<T> params,
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, bool random = false,
         bool save_to_file = false, std::string filename = "");
+
+    void loadTilingStructureFromTxt(const std::string& filename);
 };
 
 

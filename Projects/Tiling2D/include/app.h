@@ -31,8 +31,7 @@ public:
     Eigen::MatrixXd C;
 
     bool enable_selection = false;
-    bool show_bc = false;
-    bool tetgen = false;
+    bool show_PKstress = false;
     int modes = 0;
 
     bool static_solve = false;

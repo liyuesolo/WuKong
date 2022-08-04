@@ -76,7 +76,7 @@ void App::loadDisplacementVectors(const std::string& filename)
 
 void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
-    tiling.generateMeshForRendering(V, F, C);
+    tiling.generateMeshForRendering(V, F, C, show_PKstress);
 
     if (tile_in_x_only)
         tiling.tilingMeshInX(V, F, C);
@@ -102,7 +102,13 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 {
     menu.callback_draw_viewer_menu = [&]()
     {
-        
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("ShowStrain", &show_PKstress))
+            {
+                updateScreen(viewer);
+            } 
+        }
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::Checkbox("PBC", &tiling.solver.add_pbc))
@@ -122,7 +128,12 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 }
             }
         }
-        if (ImGui::Button("Generate", ImVec2(-1,0)))
+        if (ImGui::Button("GenerateOne", ImVec2(-1,0)))
+        {
+            tiling.generateOneStructure();
+            updateScreen(viewer);
+        }
+        if (ImGui::Button("GenerateBatch", ImVec2(-1,0)))
         {
             tiling.generateSandwichStructureBatch();
         }
@@ -134,6 +145,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
             tiling.solver.reset();
+            static_solve_step = 0;
             updateScreen(viewer);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
@@ -211,6 +223,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         case 'd':
             // tiling.solver.checkTotalGradient(false);
+            if (tiling.solver.use_ipc && tiling.solver.ipc_vertices.rows() == 0)
+            {
+                tiling.solver.computeIPCRestData();
+            }
+
             tiling.solver.checkTotalGradientScale(true);
             tiling.solver.checkTotalHessianScale(true);
             return true;
