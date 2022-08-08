@@ -458,8 +458,8 @@ bool FEMSolver::staticSolve()
     {
         f[offset] = 0;
     });
-    if (use_ipc) 
-        computeIPCRestData();
+    // if (use_ipc) 
+    //     computeIPCRestData();
     while (true)
     {
         
@@ -471,7 +471,8 @@ bool FEMSolver::staticSolve()
         {
             updateBarrierInfo(cnt == 0);
             updateIPCVertices(u);
-            std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+            if (verbose)
+                std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
         }
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         

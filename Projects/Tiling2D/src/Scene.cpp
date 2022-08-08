@@ -19,7 +19,7 @@ void FEMSolver::saveToOBJ(const std::string& filename)
 {
     std::ofstream out(filename);
     for (int i = 0; i < num_nodes; i++)
-        out << std::setprecision(12) << "v " << deformed.segment<2>(i * dim).transpose() << " 0" << std::endl;
+        out << std::setprecision(20) << "v " << deformed.segment<2>(i * dim).transpose() << " 0" << std::endl;
     for (int i = 0; i < num_ele; i++)
         out << "f " << (indices.segment<3>(i * 3) + IV3::Ones()).transpose() << std::endl;
     out.close();

@@ -1,4 +1,5 @@
 #include <igl/readOBJ.h>
+#include <igl/readMSH.h>
 #include <igl/jet.h>
 #include "../include/Tiling2D.h"
 /*
@@ -22,16 +23,24 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     // loadMeshFromVTKFile(data_folder + filename + ".vtk", V, F);
     // loadMeshFromVTKFile(filename, V, F);
     solver.use_quadratic_triangle = false;
-    if (solver.use_quadratic_triangle)
+    if (filename.substr(filename.find_last_of(".") + 1) == "vtk")
     {
-        loadQuadraticTriangleMeshFromVTKFile(filename, V, F, V_quad);
-        F.resize(V_quad.rows(), 3);
-        F.col(0) = V_quad.col(0); F.col(1) = V_quad.col(1); F.col(2) = V_quad.col(2);
+        if (solver.use_quadratic_triangle)
+        {
+            loadQuadraticTriangleMeshFromVTKFile(filename, V, F, V_quad);
+            F.resize(V_quad.rows(), 3);
+            F.col(0) = V_quad.col(0); F.col(1) = V_quad.col(1); F.col(2) = V_quad.col(2);
+        }
+        else
+        {
+            loadMeshFromVTKFile(filename, V, F);
+        }
     }
-    else
+    else if(filename.substr(filename.find_last_of(".") + 1) == "msh")
     {
-        loadMeshFromVTKFile(filename, V, F);
+        igl::readMSH(filename, V, F);
     }
+    
     // if (periodic)
     //     loadPBCDataFromMSHFile(data_folder + filename + ".msh", solver.pbc_pairs);
     // if (periodic)
@@ -125,10 +134,14 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     
     if (solver.use_ipc)
     {
+        solver.computeIPCRestData();
         VectorXT contact_force(solver.num_nodes * 2); contact_force.setZero();
-        solver.addPBCForceEntries(contact_force);
+        solver.addIPCForceEntries(contact_force);
         if (contact_force.norm() > 1e-8)
+        {
+            // std::cout << contact_force.norm() << std::endl;
             return false;
+        }
     }
 
     solver.project_block_PD = true;
@@ -184,7 +197,7 @@ void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
         solver.computeIPCRestData();
         solver.add_friction = false;
         solver.barrier_distance = 1e-4;
-        solver.barrier_weight = 1e3;
+        solver.barrier_weight = 1.0;
     }
 }
 

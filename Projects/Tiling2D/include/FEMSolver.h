@@ -90,7 +90,7 @@ public:
     T epsv_times_h = 1e-5;
     int num_ipc_vtx = 0;
     T barrier_distance = 1e-5;
-    T barrier_weight = 1e6;
+    T barrier_weight = 1.0;
     T ipc_min_dis = 1e-6;
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;

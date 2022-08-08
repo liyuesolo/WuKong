@@ -61,11 +61,14 @@ void FEMSolver::computeIPCRestData()
     {
         Edge edge = ipc_edges.row(i);
         TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
-        if ((vi - vj).norm() < barrier_distance)
-            std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
+        if (verbose)
+        {
+            if ((vi - vj).norm() < barrier_distance)
+                std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
+        }
     }
     std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
-
+    
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
     T bb_diag = (max_corner - min_corner).norm();
@@ -74,7 +77,8 @@ void FEMSolver::computeIPCRestData()
     addIPCForceEntries(dbdx); dbdx *= -1.0;
     computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
-    std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
+    if (verbose)
+        std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
     
 }
 
@@ -125,19 +129,7 @@ void FEMSolver::addIPCEnergy(T& energy)
 
     energy += contact_energy;
 
-    if (add_friction)
-    {
-        ipc::FrictionConstraints ipc_friction_constraints;
-        ipc::construct_friction_constraint_set(
-            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
-            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
-        );
-        T friction_energy = ipc::compute_friction_potential<T>(
-            ipc_vertices, ipc_vertices_deformed, ipc_edges,
-            ipc_faces, ipc_friction_constraints, epsv_times_h
-        );
-        energy += friction_energy;
-    }
+    
 }
 void FEMSolver::addIPCForceEntries(VectorXT& residual)
 {
@@ -150,25 +142,30 @@ void FEMSolver::addIPCForceEntries(VectorXT& residual)
     ipc::Constraints ipc_constraints;
     ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
         ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+    // std::cout << ipc_constraints.num_constraints() << std::endl;
+    // for (int i = 0; i < ipc_constraints.vv_constraints.size(); i++)
+    // {
+    //     std::vector<long> idx = ipc_constraints.vv_constraints[i].vertex_indices(ipc_edges, ipc_faces);
+    //     {
+    //         for (int j = 0; j < idx.size(); j++)
+    //         {
+    //             std::cout << idx[j] << " ";
+    //         }
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << ipc_constraints.vv_constraints.size() << std::endl;
+    // std::cout << ipc_constraints.ev_constraints.size() << std::endl;
+    // std::cout << ipc_constraints.ee_constraints.size() << std::endl;
+    // std::cout << ipc_constraints.fv_constraints.size() << std::endl;
+    // std::cout << ipc_constraints.pv_constraints.size() << std::endl;
+    // std::exit(0);
 
     VectorXT contact_gradient = barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
     // std::cout << "contact force norm: " << contact_gradient.norm() << std::endl;
-    residual.segment(0, num_nodes * dim) += -contact_gradient.segment(0, num_nodes * dim);
+    residual += -contact_gradient;
 
-    if (add_friction)
-    {
-        ipc::FrictionConstraints ipc_friction_constraints;
-        ipc::construct_friction_constraint_set(
-            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
-            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
-        );
-        VectorXT friction_energy_gradient = ipc::compute_friction_potential_gradient(
-            ipc_vertices, ipc_vertices_deformed, ipc_edges,
-            ipc_faces, ipc_friction_constraints, epsv_times_h
-        );
-        residual.segment(0, num_nodes * dim) += -friction_energy_gradient;
-    }
 }
 void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD)
 {
@@ -190,19 +187,6 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
     
     entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
 
-    if (add_friction)
-    {
-        ipc::FrictionConstraints ipc_friction_constraints;
-        ipc::construct_friction_constraint_set(
-            ipc_vertices_deformed, ipc_edges, ipc_faces, ipc_constraints,
-            barrier_distance, barrier_weight, friction_mu, ipc_friction_constraints
-        );
-        StiffnessMatrix friction_energy_hessian = ipc::compute_friction_potential_hessian(
-            ipc_vertices, ipc_vertices_deformed, ipc_edges,
-            ipc_faces, ipc_friction_constraints, epsv_times_h, project_PD
-        );
-        std::vector<Entry> friction_entries = entriesFromSparseMatrix(friction_energy_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
-        entries.insert(entries.end(), friction_entries.begin(), friction_entries.end());
-    }
+    
 }
 

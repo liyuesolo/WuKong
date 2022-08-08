@@ -81,6 +81,11 @@ public:
 
     void generateSandwichStructureBatch();
     void generateOneStructure();
+
+    void extrudeToMesh(const std::string& tiling_param,
+        const std::string& mesh3d);
+    void generate3DSandwichMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
     
     void sampleSandwichFromOneFamilyFromParamsDilation(int IH, 
         std::vector<std::vector<TV2>>& eigen_polygons,
@@ -93,7 +98,9 @@ public:
         std::vector<TV2>& eigen_base, bool random = false,
         bool save_to_file = false, std::string filename = "");
 
-    void loadTilingStructureFromTxt(const std::string& filename);
+    void loadTilingStructureFromTxt(const std::string& filename,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base);
 };
 
 

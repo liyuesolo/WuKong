@@ -30,16 +30,16 @@ if(HALF_FOUND)
           )
 endif()
 
-find_package(OpenVDB QUIET)
-if(OPENVDB_FOUND AND TBB_FOUND AND HALF_FOUND)
-  add_library(openvdb SHARED IMPORTED GLOBAL)
-  set_target_properties(openvdb PROPERTIES
-          INTERFACE_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
-          INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
-          IMPORTED_LOCATION ${OPENVDB_LIBRARIES}
-          INTERFACE_COMPILE_DEFINITIONS "OPENVDB_USE_BLOSC"
-          )
-endif()
+# find_package(OpenVDB QUIET)
+# if(OPENVDB_FOUND AND TBB_FOUND AND HALF_FOUND)
+#   add_library(openvdb SHARED IMPORTED GLOBAL)
+#   set_target_properties(openvdb PROPERTIES
+#           INTERFACE_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
+#           INTERFACE_SYSTEM_INCLUDE_DIRECTORIES ${OPENVDB_INCLUDE_DIRS}
+#           IMPORTED_LOCATION ${OPENVDB_LIBRARIES}
+#           INTERFACE_COMPILE_DEFINITIONS "OPENVDB_USE_BLOSC"
+#           )
+# endif()
 
 find_package(CUDA QUIET)
 if(CUDA_FOUND)
@@ -47,71 +47,72 @@ if(CUDA_FOUND)
   set(CUDA_SEPARABLE_COMPILATION ON PARENT_SCOPE)
 endif()
 
-find_package(Git)
-# Enable DownloadProject CMake module
-include(DownloadProject)
-include(ExternalProject)
+# find_package(Git)
+# # Enable DownloadProject CMake module
+# include(DownloadProject)
+# include(ExternalProject)
 
-download_project(
-        PROJ kdtree
-        GIT_REPOSITORY https://github.com/nvmd/libkdtree.git
-        GIT_TAG 7bb7e830d6899214e9e896f920483ddb39c43f7b
-        UPDATE_DISCONNECTED 1
-)
-add_library(kdtree INTERFACE)
-target_include_directories(kdtree SYSTEM INTERFACE ${kdtree_SOURCE_DIR})
+# download_project(
+#         PROJ kdtree
+#         GIT_REPOSITORY https://github.com/nvmd/libkdtree.git
+#         GIT_TAG 7bb7e830d6899214e9e896f920483ddb39c43f7b
+#         UPDATE_DISCONNECTED 1
+# )
+# add_library(kdtree INTERFACE)
+# target_include_directories(kdtree SYSTEM INTERFACE ${kdtree_SOURCE_DIR})
 
-download_project(
-        PROJ amgcl
-        GIT_REPOSITORY https://github.com/ddemidov/amgcl.git
-        # GIT_TAG 4e3db9225b3d54c00c94d9df26dbd1b430f9a3ac
-        UPDATE_DISCONNECTED 1
-)
-add_library(amgcl INTERFACE)
-target_include_directories(amgcl SYSTEM INTERFACE ${amgcl_SOURCE_DIR})
-find_package(OpenMP REQUIRED)
-if (OPENMP_FOUND)
-  target_compile_options(amgcl INTERFACE ${OpenMP_CXX_FLAGS})
-  target_link_libraries(amgcl INTERFACE
-          $<$<CXX_COMPILER_ID:GNU>:${OpenMP_CXX_FLAGS}>
-          $<$<CXX_COMPILER_ID:Clang>:${OpenMP_CXX_FLAGS}>
-          $<$<CXX_COMPILER_ID:Intel>:${OpenMP_CXX_FLAGS}>
-          )
-endif ()
+# download_project(
+#         PROJ amgcl
+#         GIT_REPOSITORY https://github.com/ddemidov/amgcl.git
+#         # GIT_TAG 4e3db9225b3d54c00c94d9df26dbd1b430f9a3ac
+#         UPDATE_DISCONNECTED 1
+# )
 
-if(CUDA_FOUND)
-  download_project(
-          PROJ VexCL
-          GIT_REPOSITORY https://github.com/ddemidov/vexcl
-          UPDATE_DISCONNECTED 1
-  )
-  add_subdirectory(${VexCL_SOURCE_DIR} ${VexCL_BINARY_DIR})
-endif()
+# add_library(amgcl INTERFACE)
+# target_include_directories(amgcl SYSTEM INTERFACE ${amgcl_SOURCE_DIR})
+# find_package(OpenMP REQUIRED)
+# if (OPENMP_FOUND)
+#   target_compile_options(amgcl INTERFACE ${OpenMP_CXX_FLAGS})
+#   target_link_libraries(amgcl INTERFACE
+#           $<$<CXX_COMPILER_ID:GNU>:${OpenMP_CXX_FLAGS}>
+#           $<$<CXX_COMPILER_ID:Clang>:${OpenMP_CXX_FLAGS}>
+#           $<$<CXX_COMPILER_ID:Intel>:${OpenMP_CXX_FLAGS}>
+#           )
+# endif ()
 
-download_project(
-        PROJ partio
-        GIT_REPOSITORY https://github.com/wdas/partio.git
-        GIT_TAG v1.1.0
-        UPDATE_DISCONNECTED 1
-        PATCH_COMMAND ${GIT_EXECUTABLE} apply ${CMAKE_CURRENT_SOURCE_DIR}/partio.patch
-)
+# if(CUDA_FOUND)
+#   download_project(
+#           PROJ VexCL
+#           GIT_REPOSITORY https://github.com/ddemidov/vexcl
+#           UPDATE_DISCONNECTED 1
+#   )
+#   add_subdirectory(${VexCL_SOURCE_DIR} ${VexCL_BINARY_DIR})
+# endif()
 
-add_subdirectory(${partio_SOURCE_DIR} ${partio_BINARY_DIR})
-set_target_properties(partio PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${partio_SOURCE_DIR}/src/lib"
-        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${partio_SOURCE_DIR}/src/lib"
-        INTERFACE_LINK_LIBRARIES "z"
-        )
+# download_project(
+#         PROJ partio
+#         GIT_REPOSITORY https://github.com/wdas/partio.git
+#         GIT_TAG v1.1.0
+#         UPDATE_DISCONNECTED 1
+#         PATCH_COMMAND ${GIT_EXECUTABLE} apply ${CMAKE_CURRENT_SOURCE_DIR}/partio.patch
+# )
 
-download_project(
-        PROJ Tick
-        GIT_REPOSITORY https://github.com/pfultz2/Tick.git
-        GIT_TAG b82af5461e95ddc6b652ac2456976cc912ab2f01
-        UPDATE_DISCONNECTED 1
-)
+# add_subdirectory(${partio_SOURCE_DIR} ${partio_BINARY_DIR})
+# set_target_properties(partio PROPERTIES
+#         INTERFACE_INCLUDE_DIRECTORIES "${partio_SOURCE_DIR}/src/lib"
+#         INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${partio_SOURCE_DIR}/src/lib"
+#         INTERFACE_LINK_LIBRARIES "z"
+#         )
 
-add_library(Tick INTERFACE)
-target_include_directories(Tick SYSTEM INTERFACE ${Tick_SOURCE_DIR})
+# download_project(
+#         PROJ Tick
+#         GIT_REPOSITORY https://github.com/pfultz2/Tick.git
+#         GIT_TAG b82af5461e95ddc6b652ac2456976cc912ab2f01
+#         UPDATE_DISCONNECTED 1
+# )
+
+# add_library(Tick INTERFACE)
+# target_include_directories(Tick SYSTEM INTERFACE ${Tick_SOURCE_DIR})
 
 
 find_package(Metis)
