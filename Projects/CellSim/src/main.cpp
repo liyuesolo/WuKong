@@ -65,14 +65,18 @@ int main(int argc, char** argv)
     auto processDrosophilaData = [&]()
     {
         // data_io.loadDataFromTxt("/home/yueli/Downloads/drosophila_data/drosophila_side_2_tracks_071621.txt");
-        data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
-            "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
-            "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
+        // data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
+        //     "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
+        //     "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
+        data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side1_time_xyz.dat", 
+            "/home/yueli/Downloads/drosophila_data/drosophila_side1_ids.dat",
+            "/home/yueli/Downloads/drosophila_data/drosophila_side1_scores.dat");
+        // data_io.loadDataFromTxt("/home/yueli/Downloads/drosophila_data/drosophila_side_1_tracks_071621.txt");
         // data_io.trackCells();
         // data_io.processData();
-        data_io.filterWithVelocity();
+        // data_io.filterWithVelocity();
     };
-
+    
     auto registerMesh = [&]()
     {
         MatrixXT cell_trajectories;
@@ -186,7 +190,7 @@ int main(int argc, char** argv)
         simulation.initializeCells();
         simulation.cells.lower_triangular = false;
         simulation.cells.scaled_barrier = true;
-        // simulation.cells.edge_weights.setConstant(0.1);
+        simulation.cells.edge_weights.setConstant(0.1);
         simulation.max_newton_iter = 300;
         // simulation.newton_tol = 1e-9;
         sa.max_num_iter = 400;
@@ -203,9 +207,9 @@ int main(int argc, char** argv)
         simulation.cells.add_perivitelline_liquid_volume = false;
         
         simulation.cells.Bp = 0.0;
-        simulation.cells.B = 1e4;
+        simulation.cells.B = 1e6;
         simulation.cells.By = 1e4;
-        simulation.cells.bound_coeff = 1e2;
+        simulation.cells.bound_coeff = 1e4;
                 
         obj.setFrame(30);
         obj.loadTargetTrajectory("/home/yueli/Documents/ETH/WuKong/Projects/CellSim/data/trajectories.dat", true);
@@ -217,8 +221,8 @@ int main(int argc, char** argv)
             weights_filename += "weights_463.txt";
         else if (simulation.cells.resolution == 2)
         {
-            weights_filename += "weights_1500.txt";
-            // simulation.cells.tet_vol_barrier_w = 1e-31;
+            // weights_filename += "weights_1500.txt";
+            weights_filename += "weights_1500_stiff.txt";
         }
 
         obj.add_spatial_x = false;
@@ -279,9 +283,9 @@ int main(int argc, char** argv)
         // simulation.loadDeformedState("current_mesh.obj");
         // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_84.obj");
         // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/SQP_iter_84.txt", simulation.cells.edge_weights);
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/1096_lbfgs_40_highres/lbfgs_iter_58.obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/1096_lbfgs_40_highres/lbfgs_iter_58.txt", simulation.cells.edge_weights);
-        // sa.design_parameters = simulation.cells.edge_weights;
+        simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/1125_lbfgs_30_highres/lbfgs_iter_96.obj");
+        simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/1125_lbfgs_30_highres/lbfgs_iter_96.txt", simulation.cells.edge_weights);
+        sa.design_parameters = simulation.cells.edge_weights;
         // MatrixXT H_GN;
         // std::cout << "hessianGN" << std::endl;
         // obj.getDesignParameters(sa.design_parameters);
@@ -336,10 +340,10 @@ int main(int argc, char** argv)
     {
         SimulationApp sim_app(simulation);
         
-        int iter = 32;
-        int exp_id = 1021;
-        // simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".obj");
-        // simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
+        int iter = 5;
+        int exp_id = 1119;
+        simulation.loadDeformedState("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".obj");
+        simulation.loadEdgeWeights("/home/yueli/Documents/ETH/WuKong/output/cells/"+std::to_string(exp_id)+"/lbfgs_iter_"+std::to_string(iter)+".txt", simulation.cells.edge_weights);
         // simulation.loadEdgeWeights("failed.txt", simulation.cells.edge_weights);
         // std::cout << simulation.cells.edge_weights.minCoeff() << " " << simulation.cells.edge_weights.maxCoeff() << std::endl;
         // simulation.loadDeformedState("failed.obj");
@@ -421,7 +425,8 @@ int main(int argc, char** argv)
         else if (simulation.cells.resolution == 1)
             weights_filename += "weights_463.txt";
         else if (simulation.cells.resolution == 2)
-            weights_filename += "weights_1500.txt";
+            // weights_filename += "weights_1500.txt";
+            weights_filename += "weights_1500_stiff.txt";
         else if (simulation.cells.resolution == 3)
             weights_filename += "weights_3000.txt";
         else if (simulation.cells.resolution == 4)
@@ -561,10 +566,11 @@ int main(int argc, char** argv)
         // testCholmod();
         // renderData();
         // processDrosophilaData();
-        // visualizeData();
+        visualizeData();
         // sa.optimizeKnitro();
         // runSA();
-        runSim();
+        // runSim();
+        // sa.optimizeLBFGSB();
         // runSimIPOPT();
         // generateNucleiGT();
         // generateWeights();
@@ -575,8 +581,8 @@ int main(int argc, char** argv)
         // sa.saveConfig();
         // sa.optimizeIPOPT();
         
-        // sa.optimizeLBFGSB();
-        sa.optimizeKnitro();
+        sa.optimizeLBFGSB();
+        // sa.optimizeKnitro();
         // runSA();    
         // runSim();
         // sa.runTracking(28, 45, /*load weights = */false, /*weigts_file = */"");

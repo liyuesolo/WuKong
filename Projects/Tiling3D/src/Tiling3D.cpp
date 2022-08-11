@@ -1336,7 +1336,7 @@ void Tiling3D::initializeSimulationData(bool tetgen)
         // solver.ThreePointBendingTest();
         // solver.addForceMiddleTop();
         // solver.fixNodes(dirichlet_vertices);
-        solver.penaltyInPlaneCompression(1, 0.3);
+        // solver.penaltyInPlaneCompression(0, 0.1);
 
     }
     else

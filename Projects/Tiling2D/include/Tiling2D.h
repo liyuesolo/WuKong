@@ -61,6 +61,7 @@ public:
     ~Tiling2D() {}
 
     // ########################## Tiling2D.cpp ########################## 
+    void generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file);
     void initializeSimulationDataFromVTKFile(const std::string& filename);
     bool initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
@@ -78,9 +79,15 @@ public:
     void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
     void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
+    
+    void generateSandwichMeshNonPeridoic(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
 
     void generateSandwichStructureBatch();
+    void generateSandwichBatchChangingTilingParams();
     void generateOneStructure();
+    void generateOneNonperiodicStructure();
+    void generateOnePerodicUnit();
 
     void extrudeToMesh(const std::string& tiling_param,
         const std::string& mesh3d);
@@ -91,6 +98,17 @@ public:
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, const Vector<T, 4>& eij,
         bool save_to_file, std::string filename);
+
+    void sampleSandwichFromOneFamilyFromDiffParamsDilation(int IH, 
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, const std::vector<T>& params,
+        const Vector<T, 4>& eij, const std::string& filename);
+    
+    void sampleRegion(int IH, 
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, 
+        const std::vector<T>& params,
+        const Vector<T, 4>& eij, const std::string& filename);
 
     void fetchSandwichFromOneFamilyFromParamsDilation(int IH, 
         std::vector<T> params,

@@ -217,8 +217,8 @@ void VertexModel::dxdpFromdxdpEdgeWeights(MatrixXT& dxdp)
     //     full_hessian = d2edx2.selfadjointView<Eigen::Lower>();
     MatrixXT UV;
     buildSystemMatrixWoodbury(u, d2edx2, UV);
-    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
-    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2);
     solver.factorize(d2edx2);
     if (solver.info() == Eigen::NumericalIssue)

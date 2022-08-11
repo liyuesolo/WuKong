@@ -45,8 +45,8 @@ bool Simulation::fetchNegativeEigenVectorIfAny(T& negative_eigen_value, VectorXT
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
     buildSystemMatrix(u, d2edx2);
     
-    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
-    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.analyzePattern(d2edx2); 
     solver.factorize(d2edx2);
     
@@ -1102,7 +1102,7 @@ bool Simulation::WoodburySolve(StiffnessMatrix& K, const MatrixXT& UV,
     // out.close();
     // std::exit(0);
     
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>, Eigen::Lower> solver;
+    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, int>> solver;
     solver.pardisoParameterArray()[6] = 0;
     // solver.pardisoParameterArray()[59] = 1;
@@ -1482,8 +1482,8 @@ T Simulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max, bo
         // std::cout << "build system takes: " << ti.elapsed_sec() << "s" << std::endl;
         // ti.restart();
         // ti.restart();
-        success = WoodburySolve(K, UV, residual, du);   
-        // success = solveWoodburyCholmod(K, UV, residual, du); 
+        // success = WoodburySolve(K, UV, residual, du);   
+        success = solveWoodburyCholmod(K, UV, residual, du); 
         // std::cout << "solve takes: " << ti.elapsed_sec() << "s" << std::endl;
         // ti.restart();
     }

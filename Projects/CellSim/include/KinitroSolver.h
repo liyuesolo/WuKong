@@ -21,7 +21,7 @@
 // #include "Objectives.h"
 // class ObjNucleiTracking;
 
-#include "knitro.h"
+// #include "knitro.h"
 // using namespace knitro;
 
 // class InverseProblem : public knitro::KNProblem 

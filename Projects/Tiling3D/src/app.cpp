@@ -112,8 +112,12 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             if (finished)
             {
                 viewer.core().is_animating = false;
-                T bending_stiffness = tiling.solver.computeBendingStiffness();
-                std::cout << "bending stiffness " << bending_stiffness << std::endl;
+                // T bending_stiffness = tiling.solver.computeBendingStiffness();
+                // std::cout << "bending stiffness " << bending_stiffness << std::endl;
+                VectorXT interal_force(tiling.solver.deformed.rows());
+                interal_force.setZero();
+                tiling.solver.addBCPenaltyForceEntries(interal_force);
+                std::cout << interal_force.norm() << std::endl;
             }
             else 
                 static_solve_step++;
@@ -189,7 +193,8 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 
     tiling.initializeSimulationData(tetgen);
     // tiling.solver.runForceCurvatureExperiment();
-    // tiling.solver.runForceDisplacementExperiment();
+    tiling.solver.runForceDisplacementExperiment();
+    // tiling.solver.loadForceDisplacementResults();
     // tiling.solver.checkTotalGradientScale(true);
     // tiling.solver.checkTotalHessianScale(true);
     // tiling.solver.runBendingHomogenization();

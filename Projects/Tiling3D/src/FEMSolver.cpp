@@ -1,3 +1,4 @@
+#include <igl/readOBJ.h>
 #include "../include/FEMSolver.h"
 #include "../include/autodiff/FEMEnergy.h"
 #include "../include/Timer.h"
@@ -254,12 +255,16 @@ void FEMSolver::runForceCurvatureExperiment()
     std::cout << std::endl;
 }
 
-void FEMSolver::runForceDisplacementExperiment()
+void FEMSolver::loadForceDisplacementResults()
 {
-    T dp = 0.005;
+    
+    T dp = 0.01;
     std::vector<T> displacements;
     std::vector<T> force_norms;
-    for (T percent = 0.01; percent < 0.2; percent += dp)
+    VectorXT u_prev = u;
+    std::string data_folder = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling3D/";
+    for (T percent = 0.01; percent < 0.38; percent += dp)
+    // T percent = 0.25;
     {
         T displacement_sum = 0.0;
         penaltyInPlaneCompression(0, percent);
@@ -268,12 +273,26 @@ void FEMSolver::runForceDisplacementExperiment()
             displacement_sum += std::abs(undeformed[pair.first] - pair.second);
         }
         displacement_sum /= T(penalty_pairs.size());
-        staticSolve();
+        // u = u_prev;
+        // staticSolve();
+        // u_prev = u;
+        Eigen::MatrixXd Vi; Eigen::MatrixXi Fi;
+        igl::readOBJ(data_folder + std::to_string(percent) + ".obj", Vi, Fi);
+        for (int i = 0; i < Vi.rows(); i++)
+        {
+            deformed.segment<3>(i * 3) = Vi.row(i);
+        }
+        u = deformed - undeformed;
+        updateIPCVertices(u);
         VectorXT elastic_force(num_nodes * dim);
         elastic_force.setZero();
-        addElasticForceEntries(elastic_force);
+        // addElasticForceEntries(elastic_force);
+        addBCPenaltyForceEntries(elastic_force);
         displacements.push_back(displacement_sum);
         force_norms.push_back(elastic_force.norm() * 0.1);
+
+        // saveToOBJ(data_folder + std::to_string(percent) + ".obj");
+        // break;
     }
     for (T v : displacements)
         std::cout << v << " ";
@@ -281,7 +300,42 @@ void FEMSolver::runForceDisplacementExperiment()
     for (T v : force_norms)
         std::cout << v << " ";
     std::cout << std::endl;
+}
 
+void FEMSolver::runForceDisplacementExperiment()
+{
+    T dp = 0.01;
+    std::vector<T> displacements;
+    std::vector<T> force_norms;
+    VectorXT u_prev = u;
+    std::string data_folder = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling3D/exp2/";
+    for (T percent = 0.01; percent < 0.4; percent += dp)
+    {
+        T displacement_sum = 0.0;
+        penaltyInPlaneCompression(0, percent);
+        for (auto pair : penalty_pairs)
+        {
+            displacement_sum += std::abs(undeformed[pair.first] - pair.second);
+        }
+        displacement_sum /= T(penalty_pairs.size());
+        u = u_prev;
+        staticSolve();
+        u_prev = u;
+        VectorXT elastic_force(num_nodes * dim);
+        elastic_force.setZero();
+        addElasticForceEntries(elastic_force);
+        displacements.push_back(displacement_sum);
+        force_norms.push_back(elastic_force.norm() * 0.1);
+
+        saveToOBJ(data_folder + std::to_string(percent) + ".obj");
+        // break;
+    }
+    for (T v : displacements)
+        std::cout << v << " ";
+    std::cout << std::endl;
+    for (T v : force_norms)
+        std::cout << v << " ";
+    std::cout << std::endl;
 }
 
 void FEMSolver::runBendingHomogenization()

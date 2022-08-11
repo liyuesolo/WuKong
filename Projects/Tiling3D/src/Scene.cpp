@@ -71,7 +71,7 @@ void FEMSolver::initializeElementData(Eigen::MatrixXd& TV,
     }
 
     // E = 1e4;
-    E = 2.6 * 1e5;
+    E = 2.6 * 1e7;
     E_steel = 2 * 10e11;
     nu = 0.48;
     

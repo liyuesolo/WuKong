@@ -50,6 +50,8 @@ def imgToVideo(tiling_idx):
 
 def concatImage(tiling_idx):
     os.chdir("/home/yueli/Documents/ETH/SandwichStructure/ForceDisplacementCurve/" + str(tiling_idx))
+    if not os.path.exists("0.000000.png"):
+        return
     for i in range(41):
         percent = i * 2
         name = ""
@@ -63,7 +65,10 @@ def concatImage(tiling_idx):
 
 def plotForceDisplacementCurve(idx):
     base_folder = "/home/yueli/Documents/ETH/SandwichStructure/ForceDisplacementCurve/"
+
     filename = base_folder + str(idx) + "/log.txt"
+    if not os.path.exists(filename):
+        return
     image = base_folder + str(idx) + "/" + "force_displacement_curve"
     line_cnt = 0
     displacement = []
@@ -87,14 +92,55 @@ def plotForceDisplacementCurve(idx):
         plt.savefig(image + "_" + str(i) + ".png", dpi = 300)
         plt.close()
 
+def loadForcedDisplacement(filename):
+    line_cnt = 0
+    displacement = []
+    force = []
+    for line in open(filename).readlines():
+        line_cnt += 1
+        if line_cnt % 2 == 1:
+            continue
+        elif line_cnt == 2:
+            displacement = [float(i) for i in line.strip().split(' ')]
+        elif line_cnt == 4:
+            force = [float(i) for i in line.strip().split(' ')]
+    return force, displacement
+
+def plotSeveralCurvesTogether():
+    for IH in range(10):
+        tiling_indices = [IH * 16 + i for i in range(16)]
+        base_folder = "/home/yueli/Documents/ETH/SandwichStructure/ForceDisplacementCurve/"
+        image = base_folder + "tiling_IH"+str(IH)+".png"
+        forces = []
+        displacements = []
+        for idx in tiling_indices:
+            if not os.path.exists(base_folder + str(idx) + "/log.txt"):
+                continue
+            force, displacement = loadForcedDisplacement(base_folder + str(idx) + "/log.txt")
+            displacements.append(displacement)
+            forces.append(force)
+        for i in range(len(displacements)):
+            plt.plot(displacements[i][:-5], forces[i][:-5], linewidth=1.5, label="param_"+str(i))
+        # plt.legend(loc="upper left")
+        plt.title("IH" + str(IH))
+        plt.xlabel("displacement in cm")
+        plt.ylabel("force in N")
+        plt.savefig(image, dpi = 300)
+        plt.close()
+
+def gatherAllVideos(tiling_idx):
+    os.chdir("/home/yueli/Documents/ETH/SandwichStructure/ForceDisplacementCurve/" + str(tiling_idx))
+    os.system("cp tiling_" + str(tiling_idx) + ".mp4 ../../videos/tiling_" + str(tiling_idx) + ".mp4")
+
 def pipeLine():
-    idx_range = [i for i in range(100)]
-    Parallel(n_jobs=8)(delayed(resumeSim)(i, False) for i in idx_range)
-    Parallel(n_jobs=8)(delayed(renderOBJ)(i) for i in idx_range)
+    idx_range = [i for i in range(133)]
+    # Parallel(n_jobs=8)(delayed(resumeSim)(i, False) for i in idx_range)
+    # Parallel(n_jobs=8)(delayed(renderOBJ)(i) for i in idx_range)
     Parallel(n_jobs=8)(delayed(plotForceDisplacementCurve)(i) for i in idx_range)
     Parallel(n_jobs=8)(delayed(concatImage)(i) for i in idx_range)
     
-pipeLine()
-# Parallel(n_jobs=8)(delayed(process)(i, False) for i in [1111])
+# pipeLine()
+# Parallel(n_jobs=8)(delayed(process)(i, True) for i in range(200))
 # Parallel(n_jobs=8)(delayed(concatImage)(i) for i in range(2, 3))
-# Parallel(n_jobs=8)(delayed(imgToVideo)(i) for i in [1111])
+# Parallel(n_jobs=8)(delayed(gatherAllVideos)(i) for i in range(133))
+plotSeveralCurvesTogether()

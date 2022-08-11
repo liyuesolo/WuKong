@@ -132,10 +132,24 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         {
             tiling.generateOneStructure();
             updateScreen(viewer);
+            viewer.core().align_camera_center(V);
+        }
+        if (ImGui::Button("GeneratePeriodicUnit", ImVec2(-1,0)))
+        {
+            tiling.generateOnePerodicUnit();
+            updateScreen(viewer);
+            viewer.core().align_camera_center(V);
+        }
+        if (ImGui::Button("GenerateNonPeriodic", ImVec2(-1,0)))
+        {
+            tiling.generateOneNonperiodicStructure();
+            updateScreen(viewer);
+            viewer.core().align_camera_center(V);
         }
         if (ImGui::Button("GenerateBatch", ImVec2(-1,0)))
         {
-            tiling.generateSandwichStructureBatch();
+            // tiling.generateSandwichStructureBatch();
+            tiling.generateSandwichBatchChangingTilingParams();
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {

@@ -376,10 +376,6 @@ void Tiling3D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
     gmsh::option::setNumber("Geometry.Tolerance", eps);
     gmsh::option::setNumber("Mesh.ElementOrder", 1);
 
-    // gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
-    // gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
-    // gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
-
     //Points
     int acc = 1;
 
@@ -427,11 +423,11 @@ void Tiling3D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
     //     std::cout << ori << " ";
     // std::cout << std::endl;
     // std::getchar();
-
+    std::cout << "#polygons " << polygons.size() << std::endl;
     for (int i = 0; i < polygons.size(); i++)
     {
         std::vector<int> polygon_loop;
-        for(int j=1; j<polygons[i].size()+1; ++j)
+        for(int j=1; j < polygons[i].size()+1; j++)
             polygon_loop.push_back(acc_loop++);
         gmsh::model::occ::addCurveLoop(polygon_loop, acc++);
     }
@@ -440,18 +436,19 @@ void Tiling3D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std
     //Surface
     for (int i = 0; i < polygons.size(); i++)
     {
-        if (i == 2)
-            continue;
-        if (i == 1)
-            gmsh::model::occ::addPlaneSurface({i+1, i+2}, i + 1);
-        else
-            gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
+        // if (i == 2)
+        //     continue;
+        // if (i == 1)
+        //     gmsh::model::occ::addPlaneSurface({i+1, i+2}, i + 1);
+        // else
+        //     gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
+        gmsh::model::occ::addPlaneSurface({i+1}, i + 1);
     }
 
     std::cout << "add surface" << std::endl;
 
     int zero_idx;
-    for(int i=0; i < pbc_corners.size(); ++i)
+    for(int i=0; i < pbc_corners.size(); i++)
     {
         if(pbc_corners[i].norm()<1e-6)
         {
@@ -532,7 +529,7 @@ void Tiling3D::getPBCUnit(VectorXT& vertices, EdgeList& edge_list)
     //10 is good
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners;
-    fetchUnitCellFromOneFamily(0, polygons, pbc_corners, 2, false);
+    fetchUnitCellFromOneFamily(0, polygons, pbc_corners, 3, false);
     generatePeriodicMesh(polygons, pbc_corners);
 
     // std::cout << std::acos(T1.dot(TV2(1, 0)))/M_PI * 180 << " " << std::acos(T2.dot(TV2(1, 0)))/M_PI * 180 << std::endl;

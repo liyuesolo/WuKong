@@ -408,6 +408,7 @@ public:
     void addDirichletBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
     void addDirichletBoxY(const TV& min_corner, const TV& max_corner, const TV& displacement);
     void addPenaltyPairsBox(const TV& min_corner, const TV& max_corner, const TV& displacement);
+    void addPenaltyPairsBoxXY(const TV& min_corner, const TV& max_corner, const TV& displacement);
 
     // Penalty.cpp
     void addBCPenaltyEnergy(T w, T& energy);

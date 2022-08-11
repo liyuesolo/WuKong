@@ -65,6 +65,7 @@ public:
     using VectorXli = Matrix<long int, Eigen::Dynamic, 1>;
 
     using TV = Vector<T, 3>;
+    using TV2 = Vector<T, 2>;
     using IV = Vector<int, 3>;
 
     VectorXi time_stamp, positions;
@@ -79,7 +80,8 @@ public:
     void loadDataFromBinary(const std::string& int_data_file, 
         const std::string& long_int_data_file,
         const std::string& float_data_file);
-    
+    void getValidPointsSingleFrame(int frame_idx, VectorXT& frame_data);
+    void checkLoadingFromBinaryData();
     void trackCells();
     void processData();
     void filterWithVelocity();

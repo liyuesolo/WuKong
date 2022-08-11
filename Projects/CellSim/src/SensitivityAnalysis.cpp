@@ -1792,215 +1792,215 @@ void SensitivityAnalysis::sampleEnergyWithSearchAndGradientDirection(const Vecto
     }
     std::cout << std::endl;
 }
-static int callbackEvalFCGA(KN_context_ptr kc,
-                          CB_context_ptr cb,
-                          KN_eval_request_ptr const evalRequest,
-                          KN_eval_result_ptr const evalResult,
-                          void *const userParams){
-    const double *x;
-    double *obj;
-    double *objGrad;
+// static int callbackEvalFCGA(KN_context_ptr kc,
+//                           CB_context_ptr cb,
+//                           KN_eval_request_ptr const evalRequest,
+//                           KN_eval_result_ptr const evalResult,
+//                           void *const userParams){
+//     const double *x;
+//     double *obj;
+//     double *objGrad;
     
-    if (evalRequest->type != KN_RC_EVALFCGA) {
-        printf("*** callbackEvalFC incorrectly called with eval type %d\n", evalRequest->type);
-        return (-1);
-    }
+//     if (evalRequest->type != KN_RC_EVALFCGA) {
+//         printf("*** callbackEvalFC incorrectly called with eval type %d\n", evalRequest->type);
+//         return (-1);
+//     }
     
-    x = evalRequest->x;
+//     x = evalRequest->x;
 
-    obj = evalResult->obj;
-    objGrad = evalResult->objGrad;
+//     obj = evalResult->obj;
+//     objGrad = evalResult->objGrad;
 
-    Objectives* objective = (Objectives*) userParams;
-    int n_dof_design = objective->n_dof_design;
+//     Objectives* objective = (Objectives*) userParams;
+//     int n_dof_design = objective->n_dof_design;
 
-    Eigen::VectorXd p_curr(n_dof_design);
-    for (int i = 0; i < n_dof_design; i++)
-        p_curr[i] = x[i];
+//     Eigen::VectorXd p_curr(n_dof_design);
+//     for (int i = 0; i < n_dof_design; i++)
+//         p_curr[i] = x[i];
 
-    double O;
-    Eigen::VectorXd dOdp;
-    objective->gradient(p_curr, dOdp, O, true, true);
-    objective->equilibrium_prev = objective->simulation.u;
-    tbb::parallel_for(0, n_dof_design, [&](int i) 
-    {
-        objGrad[i] = dOdp[i];
-    });
-    *obj = O;
+//     double O;
+//     Eigen::VectorXd dOdp;
+//     objective->gradient(p_curr, dOdp, O, true, true);
+//     objective->equilibrium_prev = objective->simulation.u;
+//     tbb::parallel_for(0, n_dof_design, [&](int i) 
+//     {
+//         objGrad[i] = dOdp[i];
+//     });
+//     *obj = O;
     
-    return( 0 );
-}
+//     return( 0 );
+// }
 
-static int callbackEvalH(KN_context_ptr             kc,
-                         CB_context_ptr             cb,
-                         KN_eval_request_ptr const  evalRequest,
-                         KN_eval_result_ptr  const  evalResult,
-                         void              * const  userParams){
-    const double *x;
-    const double *lambda;
-    double sigma;
-    double *hess;
-    if (   evalRequest->type != KN_RC_EVALH
-        && evalRequest->type != KN_RC_EVALH_NO_F )
-    {
-        printf ("*** callbackEvalHess incorrectly called with eval type %d\n",
-               evalRequest->type);
-        return( -1 );
-    }
+// static int callbackEvalH(KN_context_ptr             kc,
+//                          CB_context_ptr             cb,
+//                          KN_eval_request_ptr const  evalRequest,
+//                          KN_eval_result_ptr  const  evalResult,
+//                          void              * const  userParams){
+//     const double *x;
+//     const double *lambda;
+//     double sigma;
+//     double *hess;
+//     if (   evalRequest->type != KN_RC_EVALH
+//         && evalRequest->type != KN_RC_EVALH_NO_F )
+//     {
+//         printf ("*** callbackEvalHess incorrectly called with eval type %d\n",
+//                evalRequest->type);
+//         return( -1 );
+//     }
 
-    x = evalRequest->x;
-    lambda = evalRequest->lambda;
-    /** Scale objective component of the Hessian by sigma */
-    sigma = *(evalRequest->sigma);
-    hess = evalResult->hess;
+//     x = evalRequest->x;
+//     lambda = evalRequest->lambda;
+//     /** Scale objective component of the Hessian by sigma */
+//     sigma = *(evalRequest->sigma);
+//     hess = evalResult->hess;
 
-    Objectives* objective = (Objectives*) userParams;
-    int n_dof_design = objective->n_dof_design;
+//     Objectives* objective = (Objectives*) userParams;
+//     int n_dof_design = objective->n_dof_design;
 
-    Eigen::VectorXd p_curr(n_dof_design);
-    for (int i = 0; i < n_dof_design; i++)
-        p_curr[i] = x[i];
-    Eigen::MatrixXd HGN(n_dof_design, n_dof_design);
-    objective->hessianGN(p_curr, HGN, true, true);
-    objective->equilibrium_prev = objective->simulation.u;
-    int cnt = 0;
-    for( int row = 0; row < n_dof_design; row++ )
-    {
-        for( int col = row; col < n_dof_design; col++ )
-        {
-            hess[cnt] = HGN(row, col);
-            cnt++;
-        }
-    }
-    return( 0 );
-}
+//     Eigen::VectorXd p_curr(n_dof_design);
+//     for (int i = 0; i < n_dof_design; i++)
+//         p_curr[i] = x[i];
+//     Eigen::MatrixXd HGN(n_dof_design, n_dof_design);
+//     objective->hessianGN(p_curr, HGN, true, true);
+//     objective->equilibrium_prev = objective->simulation.u;
+//     int cnt = 0;
+//     for( int row = 0; row < n_dof_design; row++ )
+//     {
+//         for( int col = row; col < n_dof_design; col++ )
+//         {
+//             hess[cnt] = HGN(row, col);
+//             cnt++;
+//         }
+//     }
+//     return( 0 );
+// }
 
-static int newPointCBFct (KN_context_ptr  kc,
-                         const double * const  x,
-                         const double * const  lambda,
-                         void   * const  userParams)
-                         {
+// static int newPointCBFct (KN_context_ptr  kc,
+//                          const double * const  x,
+//                          const double * const  lambda,
+//                          void   * const  userParams)
+//                          {
 
-    // KN_context_ptr kc = (KN_context_ptr) userParams;
-    // std::vector<double> xdata;
-    std::cout << "newPointCBFct" << std::endl;
-    double obj_value;
-    int nV = 0;
-    KN_get_number_vars(kc, &nV);
-    KN_get_obj_value(kc, &obj_value);
-    // std::cout << nV << " " << obj_value << std::endl;
-    Objectives* objective = (Objectives*) userParams;
+//     // KN_context_ptr kc = (KN_context_ptr) userParams;
+//     // std::vector<double> xdata;
+//     std::cout << "newPointCBFct" << std::endl;
+//     double obj_value;
+//     int nV = 0;
+//     KN_get_number_vars(kc, &nV);
+//     KN_get_obj_value(kc, &obj_value);
+//     // std::cout << nV << " " << obj_value << std::endl;
+//     Objectives* objective = (Objectives*) userParams;
     
-    Eigen::VectorXd p_curr(nV);
-    for (int i = 0; i < nV; i++)
-        p_curr[i] = x[i];
-    std::cout << objective->obj_data_folder << std::endl;
-    objective->saveDesignParameters(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".txt", p_curr);
-    std::cout << "save p" << std::endl;
-    objective->saveState(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".obj");
-    std::cout << "save x" << std::endl;
-    objective->iter_cnt++;
-    std::cout << "[knitro]: iter " << objective->iter_cnt << " obj " << obj_value << std::endl;
-    return 0;
-}
+//     Eigen::VectorXd p_curr(nV);
+//     for (int i = 0; i < nV; i++)
+//         p_curr[i] = x[i];
+//     std::cout << objective->obj_data_folder << std::endl;
+//     objective->saveDesignParameters(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".txt", p_curr);
+//     std::cout << "save p" << std::endl;
+//     objective->saveState(objective->obj_data_folder + "/" + std::to_string(objective->iter_cnt) + ".obj");
+//     std::cout << "save x" << std::endl;
+//     objective->iter_cnt++;
+//     std::cout << "[knitro]: iter " << objective->iter_cnt << " obj " << obj_value << std::endl;
+//     return 0;
+// }
 
 int SensitivityAnalysis::optimizeKnitro()
 {
     
-    bool use_GN_hessian = true;
-    objective.obj_data_folder = data_folder;
-    objective.iter_cnt = 0;
-    int  i, nStatus, error;
+    // bool use_GN_hessian = true;
+    // objective.obj_data_folder = data_folder;
+    // objective.iter_cnt = 0;
+    // int  i, nStatus, error;
 
-    KN_context   *kc;
+    // KN_context   *kc;
 
-    error = KN_new(&kc);
-    if (error) exit(-1);
-    if (kc == NULL)
-    {
-        printf ("Failed to find a valid license.\n");
-        return( -1 );
-    }
+    // error = KN_new(&kc);
+    // if (error) exit(-1);
+    // if (kc == NULL)
+    // {
+    //     printf ("Failed to find a valid license.\n");
+    //     return( -1 );
+    // }
 
-    KN_set_int_param_by_name(kc, "numthreads", 6);
-    if (error) exit(-1);
+    // KN_set_int_param_by_name(kc, "numthreads", 6);
+    // if (error) exit(-1);
 
-    KN_set_int_param_by_name(kc, "algorithm", 2);
-    if (error) exit(-1);
+    // KN_set_int_param_by_name(kc, "algorithm", 2);
+    // if (error) exit(-1);
 
-    KN_set_int_param_by_name(kc, "honorbnds", 0);
-    if (error) exit(-1);
+    // KN_set_int_param_by_name(kc, "honorbnds", 0);
+    // if (error) exit(-1);
     
 
-    int n = objective.n_dof_design;
-    error = KN_add_vars(kc, n, NULL);
-    if (error) exit(-1);
+    // int n = objective.n_dof_design;
+    // error = KN_add_vars(kc, n, NULL);
+    // if (error) exit(-1);
     
-    for (int i=0; i<n; i++) 
-    {
-        error = KN_set_var_primal_init_value(kc, i, design_parameters[i]);
-        if (error) exit(-1);
-    }
-    VectorXT lb = VectorXT::Constant(n_dof_design, 0.0);
-    VectorXT ub = VectorXT::Constant(n_dof_design, 30.0);
+    // for (int i=0; i<n; i++) 
+    // {
+    //     error = KN_set_var_primal_init_value(kc, i, design_parameters[i]);
+    //     if (error) exit(-1);
+    // }
+    // VectorXT lb = VectorXT::Constant(n_dof_design, 0.0);
+    // VectorXT ub = VectorXT::Constant(n_dof_design, 30.0);
 
-    error = KN_set_var_lobnds_all(kc, lb.data());  if (error) exit(-1);
-    error = KN_set_var_upbnds_all(kc, ub.data());  if (error) exit(-1);
+    // error = KN_set_var_lobnds_all(kc, lb.data());  if (error) exit(-1);
+    // error = KN_set_var_upbnds_all(kc, ub.data());  if (error) exit(-1);
 
-    error = KN_add_cons(kc, 0, NULL);
-    if (error) exit(-1);
+    // error = KN_add_cons(kc, 0, NULL);
+    // if (error) exit(-1);
 
 
-    CB_context   *cb;
+    // CB_context   *cb;
 
-    // error = KN_set_int_param(kc, KN_PARAM_BLASOPTION, 0);
+    // // error = KN_set_int_param(kc, KN_PARAM_BLASOPTION, 0);
 
-    error = KN_add_eval_callback (kc, KNTRUE, 0, NULL, callbackEvalFCGA, &cb);
-    error = KN_set_cb_grad(kc, cb, KN_DENSE, NULL, 0, NULL, NULL, callbackEvalFCGA);
+    // error = KN_add_eval_callback (kc, KNTRUE, 0, NULL, callbackEvalFCGA, &cb);
+    // error = KN_set_cb_grad(kc, cb, KN_DENSE, NULL, 0, NULL, NULL, callbackEvalFCGA);
 
-    if (use_GN_hessian)
-    {
-        error = KN_set_cb_hess (kc, cb, KN_DENSE_ROWMAJOR, NULL, NULL, callbackEvalH);
-        // error = KN_set_cb_hess(kc, cb, hessianIndex.size(), hessRow.data(), hessCol.data(), callbackEvalH);
-        if (error) exit(-1);
-    }
+    // if (use_GN_hessian)
+    // {
+    //     error = KN_set_cb_hess (kc, cb, KN_DENSE_ROWMAJOR, NULL, NULL, callbackEvalH);
+    //     // error = KN_set_cb_hess(kc, cb, hessianIndex.size(), hessRow.data(), hessCol.data(), callbackEvalH);
+    //     if (error) exit(-1);
+    // }
 
-    error = KN_set_obj_goal(kc, KN_OBJGOAL_MINIMIZE);
-    if (error) exit(-1);
+    // error = KN_set_obj_goal(kc, KN_OBJGOAL_MINIMIZE);
+    // if (error) exit(-1);
     
-    if (!use_GN_hessian)
-        error = KN_set_int_param (kc, KN_PARAM_HESSOPT, KN_HESSOPT_BFGS);
+    // if (!use_GN_hessian)
+    //     error = KN_set_int_param (kc, KN_PARAM_HESSOPT, KN_HESSOPT_BFGS);
 
-    error = KN_set_cb_user_params(kc, cb, &objective);
+    // error = KN_set_cb_user_params(kc, cb, &objective);
 
-    if(error) exit(-1);
+    // if(error) exit(-1);
 
-    KN_set_int_param(kc, KN_PARAM_EVAL_FCGA, KN_EVAL_FCGA_YES);
-    error = KN_set_int_param (kc, KN_PARAM_OUTLEV, 5);
-    // error = KN_set_newpt_callback(kc, &newPointCBFct, kc);
-    if(error) exit(-1); 
-    nStatus = KN_solve (kc);
-    std::vector<double> x(objective.n_dof_design);
-    double objSol;
-    double feasError, optError;
-    /** An example of obtaining solution information. */
-    error = KN_get_solution(kc, &nStatus, &objSol, x.data(), NULL);
-    error = KN_get_abs_feas_error (kc, &feasError);
-    error = KN_get_abs_opt_error (kc, &optError);
+    // KN_set_int_param(kc, KN_PARAM_EVAL_FCGA, KN_EVAL_FCGA_YES);
+    // error = KN_set_int_param (kc, KN_PARAM_OUTLEV, 5);
+    // // error = KN_set_newpt_callback(kc, &newPointCBFct, kc);
+    // if(error) exit(-1); 
+    // nStatus = KN_solve (kc);
+    // std::vector<double> x(objective.n_dof_design);
+    // double objSol;
+    // double feasError, optError;
+    // /** An example of obtaining solution information. */
+    // error = KN_get_solution(kc, &nStatus, &objSol, x.data(), NULL);
+    // error = KN_get_abs_feas_error (kc, &feasError);
+    // error = KN_get_abs_opt_error (kc, &optError);
 
-    /** Delete the Knitro solver instance. */
-    KN_free (&kc);
+    // /** Delete the Knitro solver instance. */
+    // KN_free (&kc);
 
-    VectorXT p_final = Eigen::VectorXd(x.size());
-    p_final.setZero();
-    for(int id = 0; id < x.size(); id++){
-        p_final[id] = x[id];
-    }
+    // VectorXT p_final = Eigen::VectorXd(x.size());
+    // p_final.setZero();
+    // for(int id = 0; id < x.size(); id++){
+    //     p_final[id] = x[id];
+    // }
 
-    objective.saveDesignParameters(data_folder + "/" + "knitro_lbfgs.txt", p_final);
-    objective.saveState(data_folder + "/" + "knitro_lbfgs.obj");
+    // objective.saveDesignParameters(data_folder + "/" + "knitro_lbfgs.txt", p_final);
+    // objective.saveState(data_folder + "/" + "knitro_lbfgs.obj");
 
-    return 0;
+    // return 0;
 }
 
 int SensitivityAnalysis::optimizeIPOPT()

@@ -98,7 +98,10 @@ void VertexModel::addMembraneSDFBoundHessianEntries(std::vector<Entry>& entries,
         sub_hessian[i] = hessian;
     });
     for (int i = 0; i < n_vtx; i++)
+    {
+        // if (lower_triangular)
         addHessianEntry<3>(entries, {i}, sub_hessian[i]);    
+    }
 
     // for (int i = 0; i < n_vtx; i++)
     // {

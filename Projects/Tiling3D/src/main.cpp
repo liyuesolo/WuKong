@@ -16,8 +16,8 @@ int main()
 
     FEMSolver fem_solver;
     Tiling3D tiling(fem_solver);
-    // SimulationApp app(tiling);
-    TilingViewerApp app(tiling);
+    SimulationApp app(tiling);
+    // TilingViewerApp app(tiling);
     
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;

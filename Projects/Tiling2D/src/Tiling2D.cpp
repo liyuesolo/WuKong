@@ -2,6 +2,12 @@
 #include <igl/readMSH.h>
 #include <igl/jet.h>
 #include "../include/Tiling2D.h"
+
+void Tiling2D::generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file)
+{
+    Eigen::MatrixXd V; Eigen::MatrixXi F;
+}
+
 /*
 Triangle:               Triangle6:          Triangle9/10:          Triangle12/15:
 
@@ -114,10 +120,16 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
     // solver.addForceBox(min1, max1, TV(0, -1));
     T dy = max_corner[1] - min_corner[1];
-    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.02 * dy));
+    solver.penalty_pairs.clear();
+    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.2 * dy));
+
+    solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
+        TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
+        TV(0, -0.2 * dy));
 
     // solver.unilateral_qubic = true;
     solver.penalty_weight = 1e4;
+    
     // solver.y_bar = max_corner[1] - 0.2 * dy;
 
     // Eigen::MatrixXd _V; Eigen::MatrixXi _F;
@@ -149,7 +161,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     solver.max_newton_iter = 1000;
     return true;
 }
-// barrier below a line / pusinig not pulll
+
 void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
 {
     Eigen::MatrixXd V; Eigen::MatrixXi F;
@@ -306,6 +318,9 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
         T displacement_sum = 0.0;
         solver.penalty_pairs.clear();
         solver.addPenaltyPairsBox(min1, max1, TV(0, -dis * dy));
+        solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
+            TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
+            TV(0, -dis * dy));
         // solver.y_bar = max_corner[1] - dis * dy;
         solver.u = u_prev;
         solver.staticSolve();

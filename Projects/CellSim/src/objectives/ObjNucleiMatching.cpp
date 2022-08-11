@@ -1710,8 +1710,8 @@ T ObjNucleiTracking::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy,
     });
     
     VectorXT lambda;
-    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
-    Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     solver.compute(d2edx2);
     lambda = solver.solve(dOdx);
 

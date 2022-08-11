@@ -347,6 +347,7 @@ public:
     
     void runForceCurvatureExperiment();
     void runForceDisplacementExperiment();
+    void loadForceDisplacementResults();
 
     void runBendingHomogenization();
     T computeBendingStiffness();

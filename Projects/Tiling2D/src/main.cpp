@@ -5,6 +5,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 #include <igl/png/writePNG.h>
+#include <igl/writeOBJ.h>
 #include <igl/jet.h>
 
 #include "../include/app.h"
@@ -119,13 +120,13 @@ int main(int argc, char** argv)
 
         if (script_flag == 0) // run sim in parallel
         {
-            std::ifstream in(input_dir + "SandwichStructure/TilingVTKNew/"+std::to_string(candidate)+".vtk");
+            std::ifstream in(input_dir + "SandwichStructure/TilingVTKDiffParams/"+std::to_string(candidate)+".vtk");
             if (!in.good())
                 return 0;
             else
                 in.close();
             
-            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + std::to_string(candidate)+ ".vtk", true);
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKDiffParams/" + std::to_string(candidate)+ ".vtk", true);
             if (!valid_structure)
                 return 0;
             std::string result_folder = base_folder + "ForceDisplacementCurve/" + std::to_string(candidate);
@@ -425,6 +426,20 @@ int main(int argc, char** argv)
     }
     else
     {
+
+        for (int i = 0; i < 0; i++)
+        {
+            tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".txt", 
+                "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk");
+            Eigen::MatrixXi tets, faces; Eigen::MatrixXd vertices;
+            loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk", vertices, faces, tets);
+
+            TV min_corner = vertices.colwise().minCoeff(), max_corner = vertices.colwise().maxCoeff();
+            
+            // igl::writeOBJ("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d_surface.obj", vertices, faces);
+        }
+        
+
         igl::opengl::glfw::Viewer viewer;
         igl::opengl::glfw::imgui::ImGuiMenu menu;
 
@@ -432,11 +447,46 @@ int main(int argc, char** argv)
         // tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0.txt", 
         //     "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d.msh");
         SimulationApp app(tiling);
-        tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0.vtk", true);
+        // // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0.vtk", true);
+        // Eigen::MatrixXi Tets;
+        // loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d.vtk", app.V, app.F, Tets);
+        // igl::writeOBJ("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d_surface.obj", app.V, app.F);
+        // app.C.resize(app.F.rows(), 3);
+        // app.C.col(0).setZero(); app.C.col(1).setConstant(0.3); app.C.col(2).setConstant(1.0);
+        // viewer.data().clear();
+        // viewer.data().set_mesh(app.V, app.F);
+        // viewer.data().set_colors(app.C);
         app.setViewer(viewer, menu);
+        
+        // std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingRenderingDiffParams/";
+        // int width = 2000, height = 2000;
+        // CMat R(width,height), G(width,height), B(width,height), A(width,height);
+        // viewer.core().background_color.setOnes();
+        // viewer.data().set_face_based(true);
+        // viewer.data().shininess = 1.0;
+        // viewer.data().point_size = 10.0;
+        // viewer.core().camera_zoom *= 1.4;
+        // viewer.launch_init();
+        // for (int i = 0; i < 994; i++)
+        // {
+        //     std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKDiffParams/"+std::to_string(i)+".vtk");
+        //     if (!in.good())
+        //         continue;
+        //     else
+        //         in.close();
+
+                
+        //     tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKDiffParams/"+std::to_string(i)+".vtk", true);
+        //     app.updateScreen(viewer);
+        //     viewer.core().align_camera_center(app.V);
+        //     app.updateScreen(viewer);
+        //     viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+        //     A.setConstant(255);
+        //     igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
+        // }
         viewer.launch();
         // simApp();
-        // renderScene();
+        
         // generateFDCurveSingleStructure();
     }
     return 0;

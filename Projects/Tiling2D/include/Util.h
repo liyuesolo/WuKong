@@ -12,7 +12,11 @@
 
 #include "VecMatDef.h"
 
+
+
 void loadMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, Eigen::MatrixXi& F);
+
+void loadMeshFromVTKFile3D(const std::string& filename, Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXi& T);
 
 void loadQuadraticTriangleMeshFromVTKFile(const std::string& filename, 
     Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXi& V_quad);

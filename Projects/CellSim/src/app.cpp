@@ -1339,9 +1339,13 @@ void SimulationApp::appendSphereToPositionVector(const VectorXT& position, T rad
 void DataViewerApp::loadRawData()
 {
     
-    data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
-            "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
-            "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
+    // data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
+    //         "/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat",
+    //         "/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat");
+    data_io.loadDataFromBinary("/home/yueli/Downloads/drosophila_data/drosophila_side1_time_xyz.dat", 
+            "/home/yueli/Downloads/drosophila_data/drosophila_side1_ids.dat",
+            "/home/yueli/Downloads/drosophila_data/drosophila_side1_scores.dat");
+    // data_io.checkLoadingFromBinaryData();
     
 }
 
@@ -1409,43 +1413,55 @@ void DataViewerApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         else
         {
             MatrixXT color;
-            std::string base_folder = "/home/yueli/Documents/ETH/WuKong/output/DrosophilaData/step2/";
-            std::ifstream in(base_folder + std::to_string(frame_cnt) + "_denoised.txt");
-            std::ifstream in2;
-            std::vector<int> parent_ids;
-            if(frame_cnt != 0)
-            {
-                in2.open(base_folder + "frame_" + std::to_string(frame_cnt) + "_parent_id.txt");
-                int parent_id;
-                while (in2 >> parent_id)
-                {
-                    parent_ids.push_back(parent_id);
-                    parent_ids.push_back(parent_id);
-                    parent_ids.push_back(parent_id);
-                }
-                in2.close();
-            }
+            // std::string base_folder = "/home/yueli/Documents/ETH/WuKong/output/DrosophilaData/step2/";
+            // std::ifstream in(base_folder + std::to_string(frame_cnt) + "_denoised.txt");
+            // std::ifstream in2;
+            // std::vector<int> parent_ids;
+            // if(frame_cnt != 0)
+            // {
+            //     in2.open(base_folder + "frame_" + std::to_string(frame_cnt) + "_parent_id.txt");
+            //     int parent_id;
+            //     while (in2 >> parent_id)
+            //     {
+            //         parent_ids.push_back(parent_id);
+            //         parent_ids.push_back(parent_id);
+            //         parent_ids.push_back(parent_id);
+            //     }
+            //     in2.close();
+            // }
                 
-            T value; std::vector<T> data_vec;
-            int cnt = 0;
-            while (in >> value)
-            {
-                if(frame_cnt != 0)
-                {
-                    if (parent_ids[cnt] != -1)
-                        data_vec.push_back(value);
-                }
-                else
-                {
-                    if (value != -1)
-                        data_vec.push_back(value);
-                }
+            // T value; std::vector<T> data_vec;
+            // int cnt = 0;
+            // while (in >> value)
+            // {
+            //     if(frame_cnt != 0)
+            //     {
+            //         if (parent_ids[cnt] != -1)
+            //             data_vec.push_back(value);
+            //     }
+            //     else
+            //     {
+            //         if (value != -1)
+            //             data_vec.push_back(value);
+            //     }
                     
-                cnt++;
-            }
-            in.close();
+            //     cnt++;
+            // }
+            // in.close();
             
-            VectorXT frame_data = Eigen::Map<VectorXT>(data_vec.data(), data_vec.size());
+            // VectorXT frame_data = Eigen::Map<VectorXT>(data_vec.data(), data_vec.size());
+            // Matrix<T, 3, 3> R;
+            // R << 0.960277, -0.201389, 0.229468, 0.2908, 0.871897, -0.519003, -0.112462, 0.558021, 0.887263;
+            // Matrix<T, 3, 3> R2 = Eigen::AngleAxis<T>(0.20 * M_PI + 0.5 * M_PI, TV(-1.0, 0.0, 0.0)).toRotationMatrix();
+            // for (int i = 0; i < frame_data.rows()/3; i++)
+            // {
+            //     TV pos = frame_data.segment<3>(i * 3);
+            //     TV updated = (pos - TV(605.877,328.32,319.752)) / 1096.61;
+            //     updated = R2 * R * updated;
+            //     frame_data.segment<3>(i * 3) = updated;
+            // }
+            VectorXT frame_data;
+            data_io.getValidPointsSingleFrame(frame_cnt, frame_data);
             Matrix<T, 3, 3> R;
             R << 0.960277, -0.201389, 0.229468, 0.2908, 0.871897, -0.519003, -0.112462, 0.558021, 0.887263;
             Matrix<T, 3, 3> R2 = Eigen::AngleAxis<T>(0.20 * M_PI + 0.5 * M_PI, TV(-1.0, 0.0, 0.0)).toRotationMatrix();
@@ -1456,7 +1472,6 @@ void DataViewerApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
                 updated = R2 * R * updated;
                 frame_data.segment<3>(i * 3) = updated;
             }
-            
             Eigen::MatrixXd pos3d(frame_data.rows()/3, 3);
             for (int i = 0; i < frame_data.rows() / 3; i++)
             {
@@ -2142,13 +2157,13 @@ void DataViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 
     show_edges = false;
     show_current = false;
-    raw_data = false;
+    raw_data = true;
 
     show_voronoi_diagram = false;
-    fake_voronoi = true;
+    fake_voronoi = false;
     if (raw_data)
     {
-
+        loadRawData();
     }
     else
     {

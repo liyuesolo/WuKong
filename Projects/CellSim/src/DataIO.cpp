@@ -30,11 +30,18 @@ void DataIO::loadDataFromTxt(const std::string& filename)
     }
     in.close();
     
-    write_binary<VectorXi>("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
+    // write_binary<VectorXi>("/home/yueli/Downloads/drosophila_data/drosophila_side2_time_xyz.dat", 
+    //     Eigen::Map<VectorXi>(int_data.data(), int_data.size()));
+    // write_binary<VectorXli>("/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat", 
+    //     Eigen::Map<VectorXli>(long_int_data.data(), long_int_data.size()));
+    // write_binary<VectorXT>("/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat", 
+    //     Eigen::Map<VectorXT>(float_data.data(), float_data.size()));
+
+    write_binary<VectorXi>("/home/yueli/Downloads/drosophila_data/drosophila_side1_time_xyz.dat", 
         Eigen::Map<VectorXi>(int_data.data(), int_data.size()));
-    write_binary<VectorXli>("/home/yueli/Downloads/drosophila_data/drosophila_side2_ids.dat", 
+    write_binary<VectorXli>("/home/yueli/Downloads/drosophila_data/drosophila_side1_ids.dat", 
         Eigen::Map<VectorXli>(long_int_data.data(), long_int_data.size()));
-    write_binary<VectorXT>("/home/yueli/Downloads/drosophila_data/drosophila_side2_scores.dat", 
+    write_binary<VectorXT>("/home/yueli/Downloads/drosophila_data/drosophila_side1_scores.dat", 
         Eigen::Map<VectorXT>(float_data.data(), float_data.size()));
 }
 
@@ -64,6 +71,103 @@ void DataIO::loadDataFromBinary(const std::string& int_data_file,
         node_scores[i] = score_data[i * 2 + 0];
         edge_scores[i] = score_data[i * 2 + 1];
     });
+}
+
+void DataIO::getValidPointsSingleFrame(int frame_idx, VectorXT& frame_data)
+{
+    int n_data_entries = time_stamp.rows();
+    struct FrameData
+    {
+        IV xyz;
+        long int cell_id, parent_id;
+        T edge_score, node_score;
+        FrameData(const IV& _xyz, long int _cell_id, long int _parent_id, T _edge_score, T _node_score) : 
+            xyz(_xyz), cell_id(_cell_id), parent_id(_parent_id), 
+            edge_score(_edge_score), node_score(_node_score) {}
+    };
+    
+    // sort all data by time stamp
+    std::unordered_map<int, std::vector<FrameData>> frame_map;
+    for (int i = 0; i < n_data_entries; i++)
+    {
+        int frame = time_stamp[i];
+        if (frame_map.find(frame) == frame_map.end())
+            frame_map[frame] = { FrameData(
+                positions.segment<3>(i * 3),
+                cell_ids[i], parent_ids[i],
+                edge_scores[i], node_scores[i]
+            ) };
+        else
+            frame_map[frame].push_back(FrameData(
+                    positions.segment<3>(i * 3),
+                    cell_ids[i], parent_ids[i],
+                    edge_scores[i], node_scores[i]
+                ));    
+    }
+    std::vector<T> positions;
+    for (auto data : frame_map[frame_idx])
+    {
+        if (data.node_score > 0.7)
+        {
+            positions.push_back(data.xyz[0]);
+            positions.push_back(data.xyz[1]);
+            positions.push_back(data.xyz[2]);
+        }
+    }
+    frame_data = Eigen::Map<VectorXT>(positions.data(), positions.size());
+}
+
+void DataIO::checkLoadingFromBinaryData()
+{
+    int n_data_entries = time_stamp.rows();
+    struct FrameData
+    {
+        IV xyz;
+        long int cell_id, parent_id;
+        T edge_score, node_score;
+        FrameData(const IV& _xyz, long int _cell_id, long int _parent_id, T _edge_score, T _node_score) : 
+            xyz(_xyz), cell_id(_cell_id), parent_id(_parent_id), 
+            edge_score(_edge_score), node_score(_node_score) {}
+    };
+    
+    // sort all data by time stamp
+    std::unordered_map<int, std::vector<FrameData>> frame_map;
+    for (int i = 0; i < n_data_entries; i++)
+    {
+        int frame = time_stamp[i];
+        if (frame_map.find(frame) == frame_map.end())
+            frame_map[frame] = { FrameData(
+                positions.segment<3>(i * 3),
+                cell_ids[i], parent_ids[i],
+                edge_scores[i], node_scores[i]
+            ) };
+        else
+            frame_map[frame].push_back(FrameData(
+                    positions.segment<3>(i * 3),
+                    cell_ids[i], parent_ids[i],
+                    edge_scores[i], node_scores[i]
+                ));    
+    }
+
+    // std::unordered_map<long int, int> map;
+    // std::unordered_map<long int, TV2> score_map;
+    // int cnt = 0;
+    // for (auto data : frame_map[30])
+    // {
+    //     std::cout << "here here" << std::endl;
+    //     std::cout << data.edge_score << " " << data.node_score << std::endl;
+    //     if (map.find(data.cell_id) == map.end())
+    //     {
+    //         map[data.cell_id] = cnt;
+    //         score_map[data.cell_id] = TV2(data.edge_score, data.node_score);
+    //         cnt++;
+    //     }
+    //     else
+    //     {
+    //         std::cout << score_map[data.cell_id].transpose() << " " << data.edge_score << " " << data.node_score << std::endl;
+    //         std::getchar();
+    //     }
+    // }
 }
 
 void DataIO::loadData(const std::string& filename, VectorXT& data)
