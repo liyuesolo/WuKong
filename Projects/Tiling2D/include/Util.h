@@ -24,4 +24,8 @@ void loadQuadraticTriangleMeshFromVTKFile(const std::string& filename,
 void loadPBCDataFromMSHFile(const std::string& filename, 
     std::vector<std::vector<Vector<int ,2>>>& pbc_pairs);
     // std::vector<Vector<int, 3>>& pbc_pairs);
+
+Matrix<T, 2, 2> rotMat(T angle);
+
+T angleToXaxis(Vector<T, 2>& vec);
 #endif

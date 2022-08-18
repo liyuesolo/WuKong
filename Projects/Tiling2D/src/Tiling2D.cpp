@@ -23,7 +23,7 @@ v
 0----------1 --> u      0-----3----1         0---3---4---1          0---3---4---5---1
 
 */
-bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bool periodic)
+bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PBCType pbc_type)
 {
     Eigen::MatrixXd V; Eigen::MatrixXi F, V_quad;
     // loadMeshFromVTKFile(data_folder + filename + ".vtk", V, F);
@@ -99,13 +99,17 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
             solver.indices.segment<3>(i * 3) = F.row(i);
     });
     
-    solver.add_pbc = periodic;
-    solver.add_pbc_strain = false;
-    if (solver.add_pbc)
+    if (pbc_type == PBC_None)
+        solver.add_pbc = false;
+    else
     {
-        // solver.reorderPBCPairs();
-        solver.addPBCPairInX();
+        solver.add_pbc = true;
+        solver.add_pbc_strain = false;
         solver.pbc_w = 1e4;
+        if (pbc_type == PBC_X)
+            solver.addPBCPairInX();
+        else if (pbc_type == PBC_XY)
+            solver.addPBCPairsXY();
         solver.strain_theta = M_PI / 2.0;
         solver.uniaxial_strain = 1.0;
     }
@@ -121,15 +125,15 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     // solver.addForceBox(min1, max1, TV(0, -1));
     T dy = max_corner[1] - min_corner[1];
     solver.penalty_pairs.clear();
-    solver.addPenaltyPairsBox(min1, max1, TV(0, -0.2 * dy));
+    T percent = 0.02;
+    solver.addPenaltyPairsBox(min1, max1, TV(0, -percent * dy));
 
     solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
         TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
-        TV(0, -0.2 * dy));
+        TV(0, -percent * dy));
 
     // solver.unilateral_qubic = true;
-    solver.penalty_weight = 1e4;
-    
+    solver.penalty_weight = 1e6;
     // solver.y_bar = max_corner[1] - 0.2 * dy;
 
     // Eigen::MatrixXd _V; Eigen::MatrixXi _F;
@@ -139,11 +143,16 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
     //     solver.deformed.segment<2>(i*2) = _V.row(i).segment<2>(0);
     //     solver.u = solver.deformed - solver.undeformed;
     // }
-    
+
+    T total_area = solver.computeTotalArea();
+    T bbox_area = (max_corner[0] - min_corner[0]) * (max_corner[1] - min_corner[1]);
+    std::cout << "Material Percentage: " << total_area / bbox_area << std::endl;
     solver.use_ipc = true;
     solver.add_friction = false;
     solver.barrier_distance = 1e-3;
     
+    // if (solver.use_quadratic_triangle)
+        solver.use_ipc = false;
     if (solver.use_ipc)
     {
         solver.computeIPCRestData();
@@ -156,7 +165,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, bo
         }
     }
 
-    solver.project_block_PD = true;
+    solver.project_block_PD = false;
     solver.verbose = true;
     solver.max_newton_iter = 1000;
     return true;
@@ -251,7 +260,7 @@ void Tiling2D::generateMeshForRendering(Eigen::MatrixXd& V,
 void Tiling2D::generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, 
     const std::string& result_folder)
 {
-    initializeSimulationDataFromFiles(vtk_file, true);
+    initializeSimulationDataFromFiles(vtk_file, PBC_X);
     
     T dp = 0.02;
     solver.penalty_weight = 1e5;
@@ -297,10 +306,12 @@ void Tiling2D::generateForceDisplacementCurveSingleStructure(const std::string& 
     out.close();
 }
 
+
 void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
 {
     T dp = 0.02;
     solver.penalty_weight = 1e4;
+    // solver.pbc_w = 1e8;
     std::vector<T> displacements;
     std::vector<T> force_norms;
     VectorXT u_prev = solver.u;
@@ -345,6 +356,12 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
     out << std::endl;
     out.close();
 }
+
+void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit)
+{
+
+}
+
 
 void Tiling2D::tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C)
 {

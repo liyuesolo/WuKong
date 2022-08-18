@@ -35,14 +35,21 @@ struct VectorHash
     }
 };
 
+enum PBCType
+{
+    PBC_XY, PBC_X, PBC_None
+};
+
 class Tiling2D
 {
 public: 
-    using T = double;
-    using TV = Vector<double, 2>;
-    using TV2 = Vector<double, 2>;
-    using TV3 = Vector<double, 3>;
-    using TM2 = Matrix<double, 2, 2>;
+    using dvec2 = glm::dvec2;
+    using dmat3 = glm::dmat3;
+    using TV = Vector<T, 2>;
+    using TV2 = Vector<T, 2>;
+    using TV3 = Vector<T, 3>;
+    using TM2 = Matrix<T, 2, 2>;
+    using TM = Matrix<T, 2, 2>;
     using IV3 = Vector<int, 3>;
     using IV = Vector<int, 2>;
 
@@ -51,11 +58,12 @@ public:
     using Face = Vector<int, 3>;
     using Edge = Vector<int, 2>;
     using EdgeList = std::vector<Edge>;
-    using VectorXT = Matrix<double, Eigen::Dynamic, 1>;
+    using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
     
     FEMSolver& solver;
 
     std::string data_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/data/";
+    
 public:
     Tiling2D(FEMSolver& _solver) : solver(_solver) {}
     ~Tiling2D() {}
@@ -63,42 +71,65 @@ public:
     // ########################## Tiling2D.cpp ########################## 
     void generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file);
     void initializeSimulationDataFromVTKFile(const std::string& filename);
-    bool initializeSimulationDataFromFiles(const std::string& filename, bool periodic = false);
+    bool initializeSimulationDataFromFiles(const std::string& filename, PBCType pbc_type = PBC_None);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool show_train = false);
+
+
     void tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit = 2);
     
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
-    void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
-    void fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base, int n_unit = 1, bool random = false);
-    void getPBCUnit(VectorXT& vertices, EdgeList& edge_list);
-    void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
-        std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
+    void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file = false, 
+        std::string prefix = "");
     
+    
+    void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, 
+        bool save_to_file = false, std::string filename = "",
+        int resolution = 0, int element_order = 1);
     void generateSandwichMeshNonPeridoic(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
 
     void generateSandwichStructureBatch();
     void generateSandwichBatchChangingTilingParams();
     void generateOneStructure();
+    void generateOneStructureWithRotation();
     void generateOneNonperiodicStructure();
     void generateOnePerodicUnit();
 
     void extrudeToMesh(const std::string& tiling_param,
         const std::string& mesh3d);
+
+    void loadTilingStructureFromTxt(const std::string& filename,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base);
+
+private:
     void generate3DSandwichMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
     
+    void sampleOneFamilyWithOrientation(int IH, T angle, int n_unit, T height,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, const std::vector<T>& params,
+        const Vector<T, 4>& eij, const std::string& filename);
+
     void sampleSandwichFromOneFamilyFromParamsDilation(int IH, 
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, const Vector<T, 4>& eij,
         bool save_to_file, std::string filename);
 
+    void fetchUnitCellFromOneFamily(int IH, int n_unit,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, 
+        const std::vector<T>& params,
+        const Vector<T, 4>& eij, const std::string& filename);
+    
     void sampleSandwichFromOneFamilyFromDiffParamsDilation(int IH, 
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, const std::vector<T>& params,
@@ -116,9 +147,25 @@ public:
         std::vector<TV2>& eigen_base, bool random = false,
         bool save_to_file = false, std::string filename = "");
 
-    void loadTilingStructureFromTxt(const std::string& filename,
-        std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base);
+    void saveClip(const ClipperLib::Paths& final_shape, 
+        const Vector<T, 8>& periodic, T mult,
+        const std::string& filename, bool add_box = true);
+
+    glm::dmat3 centrePSRect(T xmin, T ymin, T xmax, T ymax);
+    std::vector<glm::dvec2> outShapeVec(const std::vector<glm::dvec2>& vec, const glm::dmat3& M);
+    void getTilingShape(std::vector<dvec2>& shape, const csk::IsohedralTiling& tiling,
+        const std::vector<std::vector<dvec2>>& edges);
+    void getTilingEdges(const csk::IsohedralTiling& tiling,
+        const Vector<T, 4>& eij,
+        std::vector<std::vector<dvec2>>& edges);
+    void getTranslationUnitPolygon(std::vector<std::vector<dvec2>>& polygons_v,
+        const std::vector<dvec2>& shape,
+        const csk::IsohedralTiling& tiling, Vector<T, 4>& transf,
+        int width, int depth, TV2& xy_shift);
+    void shapeToPolygon(ClipperLib::Paths& final_shape, 
+        std::vector<std::vector<TV2>>& polygons, T mult);
+    void periodicToBase(const Vector<T, 8>& periodic, std::vector<TV2>& eigen_base);
+        
 };
 
 

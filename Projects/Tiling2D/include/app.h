@@ -64,6 +64,7 @@ class SimulationApp : public App
 public:
     bool connect_pbc_pairs = false;
     bool tile_in_x_only = false;
+    bool tile_XY = false;
     
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
     void setViewer(igl::opengl::glfw::Viewer& viewer,

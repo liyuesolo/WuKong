@@ -11,9 +11,11 @@
 #include <tbb/tbb.h>
 #include <unordered_map>
 #include <complex>
+#include <iomanip>
 
 #include "VecMatDef.h"
 
+#include "../include/Util.h"
 class FEMSolver
 {
 public:
@@ -54,7 +56,8 @@ public:
 
     bool use_quadratic_triangle = false;
 
-
+    // PBC
+    std::string pbc_translation_file = "";
     bool add_pbc = false;
     T pbc_w = 1e6;
     T pbc_strain_w = 1e6;
@@ -370,23 +373,40 @@ private:
         }
         return ele_x;
     }
+
+    void getPBCPairsAxisDirection(std::vector<int>& side0, std::vector<int>& side1, int direction);
+    void rotate(T angle)
+    {
+        TM R = rotMat(angle);
+        tbb::parallel_for(0, num_nodes, [&](int i)
+        {
+            TV xi = undeformed.segment<2>(i * 2);
+            undeformed.segment<2>(i * 2) = R * xi;
+        });
+        deformed = undeformed;
+    }
 public:
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb);
     void checkTotalGradientScale(bool perturb);
     void checkTotalHessianScale(bool perturb);
+    void checkdfdXScale(bool perturb);
+    void checkdfdX(bool perturb);
 
     // Elasticity.cpp
+    T computeTotalArea();
     T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void addElastsicPotential(T& energy);
     void addElasticForceEntries(VectorXT& residual);
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
+    void addElasticdfdXEntries(std::vector<Entry>& entries);
     void computeFirstPiola(VectorXT& PKStress);
     void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
     void addPBCPairInX();
+    void addPBCPairsXY();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);
     void reorderPBCPairs();
     void addPBCEnergy(T& energy);
@@ -411,6 +431,7 @@ public:
     void addPenaltyPairsBoxXY(const TV& min_corner, const TV& max_corner, const TV& displacement);
 
     // Penalty.cpp
+    void savePenaltyForces(const std::string& filename);
     void addBCPenaltyEnergy(T w, T& energy);
     void addBCPenaltyForceEntries(T w, VectorXT& residual);
     void addBCPenaltyHessianEntries(T w, std::vector<Entry>& entries);
@@ -421,6 +442,7 @@ public:
     // FEMSolver.cpp
     T computeTotalEnergy(const VectorXT& _u);
     void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
+    void builddfdX(const VectorXT& _u, StiffnessMatrix& dfdX);
     T computeResidual(const VectorXT& _u, VectorXT& residual);
     T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
     bool staticSolve();
@@ -431,7 +453,9 @@ public:
     void checkHessianPD(bool save_txt = false);
     
     // Scene.cpp
-    void saveToOBJ(const std::string& filename);
+    void loadOBJ(const std::string& filename, bool rest_shape = false);
+    void saveIPCMesh(const std::string& filename);
+    void saveToOBJ(const std::string& filename, bool rest_shape = false);
     void computeBoundingBox(TV& min_corner, TV& max_corner);
 
     FEMSolver() {}

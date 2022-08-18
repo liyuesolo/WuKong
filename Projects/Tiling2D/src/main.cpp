@@ -9,6 +9,8 @@
 #include <igl/jet.h>
 
 #include "../include/app.h"
+#include "../include/SensitivityAnalysis.h"
+#include "../include/Objective.h"
 #include <boost/filesystem.hpp>
 
 inline bool fileExist (const std::string& name) {
@@ -24,92 +26,7 @@ int main(int argc, char** argv)
 {
     FEMSolver fem_solver;
     Tiling2D tiling(fem_solver);
-    // igl::opengl::glfw::Viewer viewer;
-    // igl::opengl::glfw::imgui::ImGuiMenu menu;
-
-    // viewer.plugins.push_back(&menu);
     
-    // auto renderScene = [&]()
-    // {
-    //     SimulationApp app(tiling);
-
-    //     app.setViewer(viewer, menu);
-    //     std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingRenderingNew/";
-    //     int width = 2000, height = 2000;
-    //     CMat R(width,height), G(width,height), B(width,height), A(width,height);
-    //     viewer.core().background_color.setOnes();
-    //     viewer.data().set_face_based(true);
-    //     viewer.data().shininess = 1.0;
-    //     viewer.data().point_size = 10.0;
-    //     viewer.core().camera_zoom *= 1.4;
-    //     viewer.launch_init();
-    //     for (int i = 0; i < 994; i++)
-    //     {
-    //         std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".vtk");
-    //         if (!in.good())
-    //             continue;
-    //         else
-    //             in.close();
-
-                
-    //         tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".vtk", true);
-    //         app.updateScreen(viewer);
-    //         viewer.core().align_camera_center(app.V);
-    //         app.updateScreen(viewer);
-    //         viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
-    //         A.setConstant(255);
-    //         igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
-    //     }
-    //     viewer.launch_shut();
-    // };
-
-    // auto simApp = [&]()
-    // {
-    //     SimulationApp app(tiling);
-    //     tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/a_structure.vtk", true);
-    //     app.setViewer(viewer, menu);
-    //     viewer.launch();
-    // };
-
-    // auto generateForceDisplacementCurve = [&]()
-    // {
-    //     tiling.solver.penalty_pairs.clear();
-    //     std::string base_folder = "/home/yueli/Documents/ETH/SandwichStructure/";
-    //     // std::vector<int> candidates = {7, 8, 20, 
-    //     //     44, 45, 51, 66, 70,
-    //     //     71, 78, 79, 80,100, 101, 
-    //     //     102, 108, 130, 131, 140, 141, 142,
-    //     //     144, 150, 161, 166, 167, 
-    //     //     196, 224, 231, 234, 235, 
-    //     //     400, 401, 417, 428, 4249, 444, 
-    //     //     466, 473, 479, 516, 523, 545, 550,
-    //     //     554, 587, 588, 613, 653};
-
-    //     std::vector<int> candidates = {7, 8};
-
-        
-    //     for (int candidate : candidates)
-    //     {
-    //         std::cout << std::endl;
-    //         std::cout << "################## STRUCTURE " << candidate << " ########################" << std::endl;
-    //         tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTK/" + std::to_string(candidate)+ ".vtk", true);
-    //         std::string sub_dir = base_folder + "ForceDisplacementCurve/" + std::to_string(candidate);
-    //         boost::filesystem::create_directories(sub_dir);
-    //         std::string result_folder = sub_dir;
-    //         tiling.generateForceDisplacementCurve(result_folder + "/");
-    //     }
-    // };
-
-    // auto generateFDCurveSingleStructure = [&]()
-    // {
-    //     std::string base_folder = "/home/yueli/Documents/ETH/SandwichStructure/";
-    //     std::string vtk_file = base_folder + "TilingVTKNew/res1.vtk";
-    //     tiling.generateForceDisplacementCurveSingleStructure(vtk_file, base_folder + "convergence_test/res1/");
-    // };
-    // generateForceDisplacementCurve();
-    // simApp();
-    // renderScene();    
-
     if (argc > 1)
     {
         
@@ -120,13 +37,13 @@ int main(int argc, char** argv)
 
         if (script_flag == 0) // run sim in parallel
         {
-            std::ifstream in(input_dir + "SandwichStructure/TilingVTKDiffParams/"+std::to_string(candidate)+".vtk");
+            std::ifstream in(input_dir + "SandwichStructure/TilingVTKTri6/"+std::to_string(candidate)+".vtk");
             if (!in.good())
                 return 0;
             else
                 in.close();
             
-            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKDiffParams/" + std::to_string(candidate)+ ".vtk", true);
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKTri6/" + std::to_string(candidate)+ ".vtk", PBC_X);
             if (!valid_structure)
                 return 0;
             std::string result_folder = base_folder + "ForceDisplacementCurve/" + std::to_string(candidate);
@@ -178,7 +95,7 @@ int main(int argc, char** argv)
         else if (script_flag == 2) //batch resume
         {
             T dp = 0.02;
-            tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", true);
+            tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", PBC_X);
             TV min_corner, max_corner;
             tiling.solver.computeBoundingBox(min_corner, max_corner);
             TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
@@ -247,7 +164,7 @@ int main(int argc, char** argv)
         else if (script_flag == 3) // batch generate force displacement statistcs
         {
             T dp = 0.02;
-            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", true);
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", PBC_X);
             if (!valid_structure)
                 return 0;
             std::cout << "valid structure " << argv[1] << std::endl;
@@ -306,7 +223,7 @@ int main(int argc, char** argv)
         else if (script_flag == 4) //batch resume
         {
             T dp = 0.02;
-            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", true);
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", PBC_X);
             // if (!valid_structure)
             //     return 0;
             // std::cout << "valid structure " << argv[1] << std::endl;
@@ -389,7 +306,7 @@ int main(int argc, char** argv)
             viewer.core().camera_zoom *= 1.4;
             viewer.launch_init();
             T dp = 0.02;
-            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKNew/" + argv[1] + ".vtk", true);
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKTri6/" + argv[1] + ".vtk", PBC_X);
             
             for (T percent = 0.0; percent < 0.8 + dp; percent += dp)
             {
@@ -423,6 +340,19 @@ int main(int argc, char** argv)
             }
             viewer.launch_shut();
         }
+        else if (script_flag == 6)
+        {
+            T dp = 0.02;
+            bool valid_structure = tiling.initializeSimulationDataFromFiles(base_folder + "TilingVTKTri6/" + argv[1] + ".vtk", PBC_X);
+            
+            for (T percent = 0.0; percent < 0.8 + dp; percent += dp)
+            {
+                std::string obj_file = base_folder + "ForceDisplacementCurve/" + argv[1] + "/" +  std::to_string(percent) + ".obj";
+                if (!fileExist(obj_file))
+                    break;
+                tiling.solver.saveToOBJ(obj_file);
+            }
+        }
     }
     else
     {
@@ -439,53 +369,80 @@ int main(int argc, char** argv)
             // igl::writeOBJ("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d_surface.obj", vertices, faces);
         }
         
+        auto renderScene = [&]()
+        {
+            igl::opengl::glfw::Viewer viewer;
+            igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-        igl::opengl::glfw::Viewer viewer;
-        igl::opengl::glfw::imgui::ImGuiMenu menu;
+            viewer.plugins.push_back(&menu);
+            SimulationApp app(tiling);
+            
+            app.setViewer(viewer, menu);
+            std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKTri6/";
+            int width = 2000, height = 2000;
+            CMat R(width,height), G(width,height), B(width,height), A(width,height);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 10.0;
+            viewer.core().camera_zoom *= 1.4;
+            viewer.launch_init();
+            for (int i = 0; i < 994; i++)
+            {
+                std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKTri6/"+std::to_string(i)+".vtk");
+                if (!in.good())
+                    continue;
+                else
+                    in.close();
 
-        viewer.plugins.push_back(&menu);
-        // tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0.txt", 
-        //     "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d.msh");
-        SimulationApp app(tiling);
-        // // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0.vtk", true);
-        // Eigen::MatrixXi Tets;
-        // loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d.vtk", app.V, app.F, Tets);
-        // igl::writeOBJ("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/0_3d_surface.obj", app.V, app.F);
-        // app.C.resize(app.F.rows(), 3);
-        // app.C.col(0).setZero(); app.C.col(1).setConstant(0.3); app.C.col(2).setConstant(1.0);
-        // viewer.data().clear();
-        // viewer.data().set_mesh(app.V, app.F);
-        // viewer.data().set_colors(app.C);
-        app.setViewer(viewer, menu);
+                    
+                tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKTri6/"+std::to_string(i)+".vtk", PBC_X);
+                app.updateScreen(viewer);
+                viewer.core().align_camera_center(app.V);
+                app.updateScreen(viewer);
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
+            }
+        };
+
+        auto runSimApp = [&]()
+        {
+            igl::opengl::glfw::Viewer viewer;
+            igl::opengl::glfw::imgui::ImGuiMenu menu;
+
+            viewer.plugins.push_back(&menu);
+            SimulationApp app(tiling);
+            
+            app.setViewer(viewer, menu);
+            viewer.launch();
+        };
         
-        // std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingRenderingDiffParams/";
-        // int width = 2000, height = 2000;
-        // CMat R(width,height), G(width,height), B(width,height), A(width,height);
-        // viewer.core().background_color.setOnes();
-        // viewer.data().set_face_based(true);
-        // viewer.data().shininess = 1.0;
-        // viewer.data().point_size = 10.0;
-        // viewer.core().camera_zoom *= 1.4;
-        // viewer.launch_init();
-        // for (int i = 0; i < 994; i++)
-        // {
-        //     std::ifstream in("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKDiffParams/"+std::to_string(i)+".vtk");
-        //     if (!in.good())
-        //         continue;
-        //     else
-        //         in.close();
+        auto runSA = [&]()
+        {
+            ObjFTF obj(fem_solver);
+            SensitivityAnalysis sa(fem_solver, obj);
+            std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
+            tiling.initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_X);
+            obj.loadTargetFromFile("force.txt");
+            obj.use_ipc = true; obj.barrier_distance = 1e-1;
+            obj.setX0(tiling.solver.undeformed);
+            obj.add_reg_rest = false; obj.w_reg_rest = 1e-5;
+            obj.add_reg_laplacian = true; obj.w_reg_laplacian = 1e-4;
+            obj.add_pbc = true; obj.pbc_w = 1e3;
+            obj.initialize();
+            sa.max_iter = 300;
+            // sa.optimizeMMA();
+            sa.optimizeGaussNewton();
+            // sa.optimizeLBFGSB();
+            // sa.optimizeGradientDescent();
+            // obj.diffTestGradientScale();
+            // obj.diffTestGradient();
+            // obj.diffTestdOdx();
+        };
 
-                
-        //     tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKDiffParams/"+std::to_string(i)+".vtk", true);
-        //     app.updateScreen(viewer);
-        //     viewer.core().align_camera_center(app.V);
-        //     app.updateScreen(viewer);
-        //     viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
-        //     A.setConstant(255);
-        //     igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
-        // }
-        viewer.launch();
-        // simApp();
+        // runSimApp();
+        runSA();
         
         // generateFDCurveSingleStructure();
     }

@@ -16,6 +16,10 @@ def renderOBJ(i):
     os.system("taskset --cpu-list " + str(i%8) + " /home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D " + str(i)
      + " /home/yueli/Documents/ETH/ 1")
 
+def resaveOBJ(i):
+    os.system("taskset --cpu-list " + str(i%8) + " /home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D " + str(i)
+     + " /home/yueli/Documents/ETH/ 6")
+
 def renderStress(i):
     os.system("taskset --cpu-list " + str(i%8) + " /home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D " + str(i)
      + " /home/yueli/Documents/ETH/ 5")
@@ -128,19 +132,39 @@ def plotSeveralCurvesTogether():
         plt.savefig(image, dpi = 300)
         plt.close()
 
+def plotTogether():
+    
+    # tiling_indices = [IH * 16 + i for i in range(16)]
+    base_folder = "/home/yueli/Documents/ETH/SandwichStructure/comparison/"
+    image = base_folder + "comparison.png"
+    forces = []
+    displacements = []
+    for exp in ["tri3_high", "tri3_low", "tri6_high", "tri6_low", "tri6_ref"]:
+        force, displacement = loadForcedDisplacement(base_folder + exp + ".txt")
+        # displacements.append(displacement)
+        # forces.append(force)
+        plt.plot(displacement, force, linewidth=1.5, label=exp)
+    plt.legend(loc="upper left")
+    # plt.title("IH" + str(IH))
+    plt.xlabel("displacement in cm")
+    plt.ylabel("force in N")
+    plt.savefig(image, dpi = 300)
+    plt.close()
+
 def gatherAllVideos(tiling_idx):
     os.chdir("/home/yueli/Documents/ETH/SandwichStructure/ForceDisplacementCurve/" + str(tiling_idx))
     os.system("cp tiling_" + str(tiling_idx) + ".mp4 ../../videos/tiling_" + str(tiling_idx) + ".mp4")
 
 def pipeLine():
-    idx_range = [i for i in range(133)]
+    idx_range = [i for i in range(1)]
     # Parallel(n_jobs=8)(delayed(resumeSim)(i, False) for i in idx_range)
-    # Parallel(n_jobs=8)(delayed(renderOBJ)(i) for i in idx_range)
+    Parallel(n_jobs=8)(delayed(renderOBJ)(i) for i in idx_range)
     Parallel(n_jobs=8)(delayed(plotForceDisplacementCurve)(i) for i in idx_range)
     Parallel(n_jobs=8)(delayed(concatImage)(i) for i in idx_range)
-    
+
+plotTogether()
+# Parallel(n_jobs=8)(delayed(process)(i, False) for i in range(1))
 # pipeLine()
-# Parallel(n_jobs=8)(delayed(process)(i, True) for i in range(200))
-# Parallel(n_jobs=8)(delayed(concatImage)(i) for i in range(2, 3))
-# Parallel(n_jobs=8)(delayed(gatherAllVideos)(i) for i in range(133))
-plotSeveralCurvesTogether()
+# Parallel(n_jobs=8)(delayed(renderOBJ)(i) for i in range(15))
+# Parallel(n_jobs=8)(delayed(gatherAllVideos)(i) for i in range(15))
+# plotSeveralCurvesTogether()

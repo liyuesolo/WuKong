@@ -81,6 +81,10 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     if (tile_in_x_only)
         tiling.tilingMeshInX(V, F, C);
 
+    if (tile_XY)
+        tiling.tileUnitCell(V, F, C, 2);
+
+
     if (connect_pbc_pairs)
     {
         std::vector<std::pair<TV3, TV3>> end_points;
@@ -126,6 +130,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 {
                     updateScreen(viewer);
                 }
+                if (ImGui::Checkbox("TilingUnitCell", &tile_XY))
+                {
+                    updateScreen(viewer);
+                }
+                
             }
         }
         if (ImGui::Button("GenerateOne", ImVec2(-1,0)))
@@ -137,6 +146,12 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if (ImGui::Button("GeneratePeriodicUnit", ImVec2(-1,0)))
         {
             tiling.generateOnePerodicUnit();
+            updateScreen(viewer);
+            viewer.core().align_camera_center(V);
+        }
+        if (ImGui::Button("GenerateWithRotation", ImVec2(-1,0)))
+        {
+            tiling.generateOneStructureWithRotation();
             updateScreen(viewer);
             viewer.core().align_camera_center(V);
         }
@@ -162,9 +177,48 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             static_solve_step = 0;
             updateScreen(viewer);
         }
+        if (ImGui::Button("LoadVTK", ImVec2(-1,0)))
+        {
+            std::string fname = igl::file_dialog_open();
+            if (fname.length() != 0)
+            {
+                tiling.initializeSimulationDataFromFiles(fname, PBC_X);
+                updateScreen(viewer);
+            }
+        }
+        if (ImGui::Button("LoadMesh", ImVec2(-1,0)))
+        {
+            std::string fname = igl::file_dialog_open();
+            if (fname.length() != 0)
+            {
+                tiling.solver.loadOBJ(fname);
+                updateScreen(viewer);
+            }
+        }
+        if (ImGui::Button("LoadUndeformedMesh", ImVec2(-1,0)))
+        {
+            std::string fname = igl::file_dialog_open();
+            if (fname.length() != 0)
+            {
+                tiling.solver.loadOBJ(fname, true);
+                updateScreen(viewer);
+            }
+        }
+        if (ImGui::Button("SaveForces", ImVec2(-1,0)))
+        {
+            tiling.solver.savePenaltyForces("force.txt");
+        }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
             igl::writeOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/current_mesh.obj", V, F);
+        }
+        if (ImGui::Button("SaveIPCMesh", ImVec2(-1,0)))
+        {
+            if (tiling.solver.use_ipc)
+            {
+                tiling.solver.saveIPCMesh("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/ipc_mesh.obj");
+            }
+                
         }
     };    
 

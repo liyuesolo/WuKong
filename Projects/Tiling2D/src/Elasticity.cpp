@@ -60,7 +60,12 @@ void FEMSolver::computeFirstPiola(VectorXT& PKstress)
                 TV xi = gauss2DP2Position(idx);
                 TM F = computeDeformationGradient(x_deformed.transpose(), x_undeformed.transpose(), xi);
                 TM FinvT = F.inverse().transpose();
-                PKstress[ele_idx] += (mu * (F - FinvT) + lambda * std::log(F.determinant()) * FinvT).norm();
+                TM piola = (mu * (F - FinvT) + lambda * std::log(F.determinant()) * FinvT);
+                // PKstress[ele_idx] += std::sqrt(piola(0, 0) * piola(0, 0) 
+                //     + piola(1, 1) * piola(1, 1)
+                //     - piola(0, 0) * piola(1, 1)
+                //     + 3.0 * piola(0, 1) * piola(0, 1));
+                PKstress[ele_idx] += 1.0 / 3.0 * (mu * (F - FinvT) + lambda * std::log(F.determinant()) * FinvT).norm();
             }
             
             
@@ -80,6 +85,11 @@ void FEMSolver::computeFirstPiola(VectorXT& PKstress)
 
             TM F = dxdb * dXdb.inverse();
             TM FinvT = F.inverse().transpose();
+            TM piola = (mu * (F - FinvT) + lambda * std::log(F.determinant()) * FinvT);
+            // PKstress[ele_idx] = std::sqrt(piola(0, 0) * piola(0, 0) 
+            //     + piola(1, 1) * piola(1, 1)
+            //     - piola(0, 0) * piola(1, 1)
+            //     + 3.0 * piola(0, 1) * piola(0, 1));
             PKstress[ele_idx] = (mu * (F - FinvT) + lambda * std::log(F.determinant()) * FinvT).norm();
         });
     }
@@ -111,6 +121,20 @@ void FEMSolver::computePrincipleStress(VectorXT& principle_stress)
     });
 }
 
+T FEMSolver::computeTotalArea()
+{
+    VectorXT areas(num_ele);
+    iterateElementsParallel([&](const EleNodes& x_deformed, 
+        const EleNodes& x_undeformed, const EleIdx& indices, int ele_idx)
+    {
+        TV3 x1Undef3D(x_undeformed(0, 0), x_undeformed(0, 1), 0.0);
+        TV3 x2Undef3D(x_undeformed(1, 0), x_undeformed(1, 1), 0.0);
+        TV3 x3Undef3D(x_undeformed(2, 0), x_undeformed(2, 1), 0.0);
+        areas[ele_idx] = 0.5 * (x2Undef3D - x1Undef3D).cross(x3Undef3D - x1Undef3D)[2];
+    });
+    return areas.sum();
+}
+
 void FEMSolver::addElastsicPotential(T& energy)
 {
     VectorXT energies_neoHookean(num_ele);
@@ -134,11 +158,11 @@ void FEMSolver::addElastsicPotential(T& energy)
     energy += energies_neoHookean.sum();
 }
 
+
+
 void FEMSolver::addElasticForceEntries(VectorXT& residual)
 {
     
-
-
     if (use_quadratic_triangle)
         iterateQuadElementsSerial([&](const QuadEleNodes& x_deformed, 
             const QuadEleNodes& x_undeformed, const QuadEleIdx& indices, int tet_idx)
@@ -183,6 +207,26 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
                 projectBlockPD<6>(hessian);
             
             addHessianEntry<6>(entries, indices, hessian);
+        });
+}
+
+void FEMSolver::addElasticdfdXEntries(std::vector<Entry>& entries)
+{
+    if (use_quadratic_triangle)
+        iterateQuadElementsSerial([&](const QuadEleNodes& x_deformed, 
+            const QuadEleNodes& x_undeformed, const QuadEleIdx& indices, int tet_idx)
+        {
+            Matrix<T, 12, 12> dfdX;
+            computeQuadratic2DNeoHookeandfdX(E, nu, x_deformed, x_undeformed, dfdX);
+            addHessianEntry<12>(entries, indices, dfdX);
+        });
+    else
+        iterateElementsSerial([&](const EleNodes& x_deformed, 
+            const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
+        {
+            Matrix<T, 6, 6> dfdX;
+            computeLinear2DNeoHookeandfdX(E, nu, x_deformed, x_undeformed, dfdX);
+            addHessianEntry<6>(entries, indices, dfdX);
         });
 }
 

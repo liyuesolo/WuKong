@@ -1,6 +1,73 @@
 #include "../include/FEMSolver.h"
 
 
+void FEMSolver::addPBCPairsXY()
+{
+    std::cout << pbc_translation_file << std::endl;
+    std::ifstream in(pbc_translation_file);
+    TV t1, t2;
+    in >> t1[0] >> t1[1] >> t2[0] >> t2[1];
+    in.close();
+
+
+    // rotate the structure to have one translation vector align with X
+    // then gether the pairs in Y
+
+    T alpha = angleToXaxis(t1);
+    rotate(alpha);
+    std::vector<int> dir0_side0, dir0_side1, dir1_side0, dir1_side1;
+    getPBCPairsAxisDirection(dir0_side0, dir0_side1, 1);
+    rotate(-alpha);
+    alpha = angleToXaxis(t2);
+    rotate(alpha);
+    getPBCPairsAxisDirection(dir1_side0, dir1_side1, 1);
+    rotate(-alpha);
+
+    pbc_pairs = {std::vector<IV>(), std::vector<IV>()};
+    // std::cout <<  dir0_side0.size() << " " << dir0_side1.size()
+    //     << " " << dir1_side0.size() << " " << dir1_side1.size() << std::endl;
+    
+    for (int i = 0; i < dir0_side0.size(); i++)
+    {
+        pbc_pairs[0].push_back(IV(dir0_side0[i], dir0_side1[i]));
+    }
+    for (int i = 0; i < dir1_side0.size(); i++)
+    {
+        pbc_pairs[1].push_back(IV(dir1_side0[i], dir1_side1[i]));
+    }
+
+}
+
+void FEMSolver::getPBCPairsAxisDirection(std::vector<int>& side0, 
+    std::vector<int>& side1, int direction)
+{
+    bool ortho = !direction;
+    // std::cout << "dir " << direction << " " << ortho << std::endl;
+    side0.clear(); side1.clear();
+    TV min_corner, max_corner;
+    computeBoundingBox(min_corner, max_corner);
+    
+    for (int i = 0; i < num_nodes; i++)
+    {
+        TV xi = undeformed.segment<2>(i * 2);
+        if (std::abs(xi[direction] - min_corner[direction]) < 1e-4)
+            side0.push_back(i);
+        if (std::abs(xi[direction] - max_corner[direction]) < 1e-4)
+            side1.push_back(i);
+    }
+    
+    std::sort(side0.begin(), side0.end(), [&](const int a, const int b){
+        TV xa = undeformed.segment<2>(a * 2);
+        TV xb = undeformed.segment<2>(b * 2);
+        return xa[ortho] < xb[ortho];
+    });
+    std::sort(side1.begin(), side1.end(), [&](const int a, const int b){
+        TV xa = undeformed.segment<2>(a * 2);
+        TV xb = undeformed.segment<2>(b * 2);
+        return xa[ortho] < xb[ortho];
+    });
+}
+
 void FEMSolver::addPBCPairInX()
 {
     TV min_corner, max_corner;

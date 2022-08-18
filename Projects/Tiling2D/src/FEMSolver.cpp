@@ -150,10 +150,13 @@ void FEMSolver::reset()
 {
     deformed = undeformed;
     u.setZero();
-    
-    ipc_vertices.resize(num_nodes, 2);
-    for (int i = 0; i < num_nodes; i++)
-        ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+    if (use_ipc)
+    {
+        computeIPCRestData();
+        ipc_vertices.resize(num_nodes, 2);
+        for (int i = 0; i < num_nodes; i++)
+            ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+    }
     
 }
 
@@ -229,6 +232,31 @@ void FEMSolver::checkHessianPD(bool save_txt)
             std::cout << "Eigen decomposition failed" << std::endl;
         }
     }
+}
+
+void FEMSolver::builddfdX(const VectorXT& _u, StiffnessMatrix& dfdX)
+{
+    dfdX.resize(num_nodes * 2, num_nodes * 2);
+    VectorXT projected = _u;
+    if (!run_diff_test)
+    {
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            projected[offset] = target;
+        });
+    }
+    deformed = undeformed + projected;
+    
+    std::vector<Entry> entries;
+
+    addElasticdfdXEntries(entries);
+
+    dfdX.setFromTriplets(entries.begin(), entries.end());
+
+    if (!run_diff_test)
+        projectDirichletDoFMatrix(dfdX, dirichlet_data);
+    
+    dfdX.makeCompressed();
 }
 
 void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
@@ -476,7 +504,7 @@ bool FEMSolver::staticSolve()
         }
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
-        // if (verbose)
+        if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter 
             << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
         
@@ -495,7 +523,13 @@ bool FEMSolver::staticSolve()
         u[offset] = target;
     });
     deformed = undeformed + u;
-
+    if (verbose)
+    {
+        T E_bc = 0.0, E_pbc = 0.0;
+        addBCPenaltyEnergy(penalty_weight, E_bc);
+        addPBCEnergy(E_pbc);
+        std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
+    }
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
         << residual_norm << "|ddu|: " << du_norm  << std::endl;
     // std::cout << u.norm() << std::endl;

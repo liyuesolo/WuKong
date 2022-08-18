@@ -1,3 +1,5 @@
+#include <igl/edges.h>
+#include <igl/boundary_loop.h>
 #include <ipc/ipc.hpp>
 #include <ipc/barrier/adaptive_stiffness.hpp>
 #include "../include/FEMSolver.h"
@@ -36,37 +38,52 @@ void FEMSolver::computeIPCRestData()
     num_ipc_vtx = ipc_vertices.rows();
     
     std::vector<Edge> edges;
-    ipc_faces.resize(num_ele, 3);
+    if (use_quadratic_triangle)
+        ipc_faces.resize(num_ele * 4, 3);
+    else
+        ipc_faces.resize(num_ele, 3);
+
     for (int i = 0; i < num_ele; i++)
     {
-        ipc_faces.row(i) = indices.segment<3>(i * 3);
-        for (int j = 0; j < 3; j++)
+        if (use_quadratic_triangle)
         {
-            int k = (j + 1) % 3;
-            Edge ei(ipc_faces(i, j), ipc_faces(i, k));
-            auto find_iter = std::find_if(edges.begin(), edges.end(), 
-                [&ei](const Edge e)->bool {return (ei[0] == e[0] && ei[1] == e[1] ) 
-                    || (ei[0] == e[1] && ei[1] == e[0]); });
-            if (find_iter == edges.end())
-            {
-                edges.push_back(ei);
-            }
+            ipc_faces.row(i* 4 + 0) = IV3(indices[i * 6 + 0], indices[i * 6 + 3], indices[i * 6 + 5]);
+            ipc_faces.row(i* 4 + 1) = IV3(indices[i * 6 + 3], indices[i * 6 + 1], indices[i * 6 + 4]);
+            ipc_faces.row(i* 4 + 2) = IV3(indices[i * 6 + 5], indices[i * 6 + 3], indices[i * 6 + 4]);
+            ipc_faces.row(i* 4 + 3) = IV3(indices[i * 6 + 5], indices[i * 6 + 4], indices[i * 6 + 2]);
         }
+        else
+            ipc_faces.row(i) = indices.segment<3>(i * 3);
     }
-    ipc_edges.resize(edges.size(), 2);
-    for (int i = 0; i < edges.size(); i++)
-        ipc_edges.row(i) = edges[i];    
-    
-    for (int i = 0; i < ipc_edges.rows(); i++)
+    std::vector<std::vector<int>> boundary_vertices;
+    igl::boundary_loop(ipc_faces, boundary_vertices);
+
+    int n_bd_edge = 0;
+    for (auto loop : boundary_vertices)
     {
-        Edge edge = ipc_edges.row(i);
-        TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
-        if (verbose)
-        {
-            if ((vi - vj).norm() < barrier_distance)
-                std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
-        }
+        n_bd_edge += loop.size();
     }
+    
+    ipc_edges.resize(n_bd_edge, 2);
+    int edge_cnt = 0;
+    for (auto loop : boundary_vertices)
+    {
+        for (int i = 0; i < loop.size(); i++)
+            ipc_edges.row(edge_cnt++) = Edge(loop[i], loop[(i+1)%loop.size()]);
+    }
+    ipc_faces.resize(0, 0);
+    
+    
+    // for (int i = 0; i < ipc_edges.rows(); i++)
+    // {
+    //     Edge edge = ipc_edges.row(i);
+    //     TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
+    //     if (verbose)
+    //     {
+    //         if ((vi - vj).norm() < barrier_distance)
+    //             std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
+    //     }
+    // }
     std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
     
     TV min_corner, max_corner;
@@ -74,8 +91,9 @@ void FEMSolver::computeIPCRestData()
     T bb_diag = (max_corner - min_corner).norm();
     VectorXT dedx(num_nodes * 2), dbdx(num_nodes * 2);
     dedx.setZero(); dbdx.setZero();
+    barrier_weight = 1.0;
     addIPCForceEntries(dbdx); dbdx *= -1.0;
-    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
+    computeResidual(u, dedx); dedx *= 6665-1.0; dedx -= dbdx;
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
     if (verbose)
         std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;

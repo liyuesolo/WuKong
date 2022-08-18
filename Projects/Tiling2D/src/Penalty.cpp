@@ -1,5 +1,14 @@
 #include "../include/FEMSolver.h"
 
+void FEMSolver::savePenaltyForces(const std::string& filename)
+{
+    VectorXT penalty_forces(num_nodes * 2); penalty_forces.setZero();
+    addBCPenaltyForceEntries(penalty_weight, penalty_forces);
+    std::ofstream out(filename);
+    out << std::setprecision(20) << penalty_forces;
+    out.close();
+}
+
 void FEMSolver::addBCPenaltyEnergy(T w, T& energy)
 {
     T penalty_energy = 0.0;

@@ -92,6 +92,108 @@ void FEMSolver::checkTotalGradientScale(bool perturb)
     run_diff_test = false;
 }
 
+void FEMSolver::checkdfdX(bool perturb)
+{
+    std::cout << "======================== CHECK HESSIAN ========================" << std::endl;
+    run_diff_test = true;
+    T epsilon = 1e-5;
+    int n_dof = num_nodes * 3;
+    
+    VectorXT du(num_nodes * 3);
+    du.setRandom();
+    du *= 1.0 / du.norm();
+    du *= 0.001;
+    if (perturb)
+        u += du;
+    VectorXT rest = undeformed;
+    
+    deformed = undeformed + u;
+    StiffnessMatrix A(n_dof, n_dof);
+    builddfdX(u, A);
+    
+    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        undeformed(dof_i) += epsilon;
+        VectorXT g0(n_dof), g1(n_dof);
+        g0.setZero(); g1.setZero();
+        
+        addElasticForceEntries(g0);
+
+        undeformed(dof_i) -= 2.0 * epsilon;
+        
+        addElasticForceEntries(g1);
+        undeformed(dof_i) += epsilon;
+        VectorXT row_FD = (g1 - g0) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof; i++)
+        {
+            
+            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Hessian Diff Test Passed" << std::endl;
+    run_diff_test = false;
+}
+
+void FEMSolver::checkdfdXScale(bool perturb)
+{
+    std::cout << "===================== check dfdX Scale =====================" << std::endl;
+    run_diff_test = true;
+    project_block_PD = false;
+    int n_dof = num_nodes * 2;
+
+    VectorXT du(num_nodes * 2);
+    du.setRandom();
+    du *= 1.0 / du.norm();
+    du *= 0.001;
+    if (perturb)
+        u += du;
+    
+    deformed = undeformed + u;
+    StiffnessMatrix A(n_dof, n_dof);
+    
+    builddfdX(u, A);
+
+    VectorXT f0(n_dof);
+    f0.setZero();
+    addElasticForceEntries(f0);
+    
+    
+    VectorXT dx(n_dof);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    for(int i = 0; i < n_dof; i++) dx[i] += 0.5;
+    dx *= 0.001;
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        
+        VectorXT f1(n_dof);
+        f1.setZero();
+        undeformed += dx;
+        addElasticForceEntries(f1);
+        undeformed -= dx;
+        T df_norm = (f0 + (A * dx) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+    }
+    run_diff_test = false;
+}
+
 void FEMSolver::checkTotalHessianScale(bool perturb)
 {
     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
