@@ -111,7 +111,7 @@ void SensitivityAnalysis::optimizeGaussNewton()
         VectorXT dOdp(n_dof_design); dOdp.setZero();
         T E0;
         T g_norm = objective.gradient(design_parameters, dOdp, E0);   
-        std::cout << "[GD] iter " << iter << " |g|: " << g_norm << " obj: " << E0 << std::endl;
+        std::cout << "[GN] iter " << iter << " |g|: " << g_norm << " obj: " << E0 << std::endl;
         g_norm = dOdp.norm();
         if (g_norm < tol_g)
             break;
@@ -168,7 +168,7 @@ void SensitivityAnalysis::optimizeGaussNewton()
         }
         objective.updateIPCVertices(design_parameters);
         objective.updateDesignParameters(design_parameters);
-        std::string filename = "/home/yueli/Documents/ETH/SandwichStructure/opt/GD_iter_" + std::to_string(iter) + ".obj";
+        std::string filename = "/home/yueli/Documents/ETH/SandwichStructure/opt/GN_iter_" + std::to_string(iter) + ".obj";
         solver.saveToOBJ(filename, true);
     }
 }

@@ -106,16 +106,20 @@ public:
     virtual void getDesignParameters(VectorXT& design_parameters) {}
 
     virtual void loadTargetFromFile(const std::string& filename) {}
+    virtual void loadTarget(const std::string& data_folder) {}
+    
     virtual void initialize() {}
     virtual T maximumStepSize(const VectorXT& p_curr, const VectorXT& search_dir) {}
 
     virtual void getDirichletIndices(std::vector<int>& indices) {}
     virtual void getDirichletMask(VectorXT& mask) {}
 
+    virtual void generateTarget(const std::string& target_folder) {}
+
     void setX0(const VectorXT& _X0) { X0 = _X0; }
     void projectDesignParameters(VectorXT& design_parameters);
 
-    void diffTestGradientScale();
+    virtual void diffTestGradientScale();
     void diffTestGradient();
     void diffTestdOdx();
     void diffTestdOdxScale();
@@ -136,6 +140,9 @@ class ObjFTF : public Objective
 {
 public:
     VectorXT f_target;
+    VectorXT f_current;
+    bool sequence = false;
+    int num_data_point = 2;
 
 public:
     void computeOx(const VectorXT& x, T& Ox);
@@ -147,16 +154,23 @@ public:
     void computed2Odp2(const VectorXT& p_curr, std::vector<Entry>& d2Odp2_entries);
 
     T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false);
-    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false);
-    void hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate = false, bool use_prev_equil = false);
+    T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, 
+        bool simulate = true, bool use_prev_equil = false);
+    void hessianGN(const VectorXT& p_curr, MatrixXT& H, 
+        bool simulate = false, bool use_prev_equil = false);
     
     void updateDesignParameters(const VectorXT& design_parameters);
     void getDesignParameters(VectorXT& design_parameters);
     void loadTargetFromFile(const std::string& filename);
+    void loadTarget(const std::string& data_folder);
     void initialize();
     void getDirichletIndices(std::vector<int>& indices);
     void getDirichletMask(VectorXT& mask);
     T maximumStepSize(const VectorXT& p_curr, const VectorXT& search_dir);
+    void generateTarget(const std::string& target_folder);
+    void generateSequenceData(VectorXT& x, bool simulate = true, bool use_prev_equil = false);
+
+    void diffTestGradientScale();
     
 public:
     ObjFTF(FEMSolver& _solver) : Objective(_solver) {}

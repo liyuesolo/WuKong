@@ -3,7 +3,10 @@
 void FEMSolver::checkTotalGradient(bool perturb)
 {
     run_diff_test = true;
-    
+    E = 0;
+    use_ipc = false;
+    pbc_w = 0.0;
+    penalty_weight = 0.0;
 
     VectorXT du(num_nodes * 3);
     du.setRandom();
@@ -89,6 +92,65 @@ void FEMSolver::checkTotalGradientScale(bool perturb)
         previous = dE;
         dx *= 0.5;
     }
+    run_diff_test = false;
+}
+
+void FEMSolver::checkTotalHessian(bool perturb)
+{
+    project_block_PD = false;
+    run_diff_test = true;
+    T epsilon = 1e-5;
+    unilateral_qubic = false;
+    int n_dof = num_nodes * 3;
+    // pbc_w = 0;
+    // use_ipc=false;
+    // E=0;
+    // penalty_weight =0;
+    // pbc_strain_w = 0;
+
+    VectorXT du(num_nodes * 3);
+    du.setRandom();
+    du *= 1.0 / du.norm();
+    du *= 0.001;
+    if (perturb)
+        u += du;
+    VectorXT rest = undeformed;
+    
+    deformed = undeformed + u;
+    StiffnessMatrix A(n_dof, n_dof);
+    buildSystemMatrix(u, A);
+    
+    for(int dof_i = 0; dof_i < n_dof; dof_i++)
+    {
+        // std::cout << dof_i << std::endl;
+        u(dof_i) += epsilon;
+        VectorXT g0(n_dof), g1(n_dof);
+        g0.setZero(); g1.setZero();
+        
+        computeResidual(u, g0); 
+        
+        u(dof_i) -= 2.0 * epsilon;
+        
+        computeResidual(u, g1); 
+        
+        u(dof_i) += epsilon;
+        VectorXT row_FD = (g1 - g0) / (2.0 * epsilon);
+
+        for(int i = 0; i < n_dof; i++)
+        {
+            
+            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
+            // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
+            //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
+            //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::cout << "H(" << i << ", " << dof_i << ") " << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
+            std::getchar();
+        }
+    }
+    std::cout << "Hessian Diff Test Passed" << std::endl;
     run_diff_test = false;
 }
 

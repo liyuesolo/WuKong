@@ -66,6 +66,9 @@ public:
     std::vector<std::vector<IV>> pbc_pairs;
     T uniaxial_strain = 1.1;
     T strain_theta = 0.0;
+    bool prescribe_strain_tensor = false;
+    TV3 target_strain = TV3(1, 1, 0); // epsilon_xx epsilon_yy epsilon_xy
+    Vector<int, 4> pbc_corners = Vector<int, 4>::Constant(-1);
 
     std::unordered_map<int, T> dirichlet_data;
     std::unordered_map<int, T> penalty_pairs;
@@ -391,6 +394,7 @@ public:
     void checkTotalGradient(bool perturb);
     void checkTotalGradientScale(bool perturb);
     void checkTotalHessianScale(bool perturb);
+    void checkTotalHessian(bool perturb);
     void checkdfdXScale(bool perturb);
     void checkdfdX(bool perturb);
 
@@ -405,6 +409,9 @@ public:
     void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
+    void computeHomogenizedStress(TM& sigma);
+    void computeMarcoBoundaryIndices();
+    void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X);
     void addPBCPairInX();
     void addPBCPairsXY();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);

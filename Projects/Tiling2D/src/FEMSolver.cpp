@@ -311,6 +311,9 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
     Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     T alpha = 1e-6;
+    StiffnessMatrix H(K.rows(), K.cols());
+    H.setIdentity(); H.diagonal().array() = 1e-12;
+    K += H;
     solver.analyzePattern(K);
     // T time_analyze = t.elapsed_sec();
     // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
@@ -459,7 +462,14 @@ bool FEMSolver::staticSolveStep(int step)
     std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol)
+    {
+        if (prescribe_strain_tensor)
+        {
+            TM sigma_macro;
+            computeHomogenizedStress(sigma_macro);
+        }
         return true;
+    }
     
 
     T dq_norm = lineSearchNewton(u, residual);
@@ -471,7 +481,10 @@ bool FEMSolver::staticSolveStep(int step)
     // deformed = undeformed + u;
 
     if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
+    {
+        
         return true;
+    }
     
     return false;
 
@@ -533,6 +546,7 @@ bool FEMSolver::staticSolve()
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
         << residual_norm << "|ddu|: " << du_norm  << std::endl;
     // std::cout << u.norm() << std::endl;
+    
     if (cnt == max_newton_iter || du_norm > 1e10 || residual_norm > 1)
         return false;
     return true;

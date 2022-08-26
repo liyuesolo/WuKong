@@ -217,8 +217,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             if (tiling.solver.use_ipc)
             {
                 tiling.solver.saveIPCMesh("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/ipc_mesh.obj");
-            }
-                
+            }    
         }
     };    
 

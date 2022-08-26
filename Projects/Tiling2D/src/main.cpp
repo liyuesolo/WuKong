@@ -424,26 +424,36 @@ int main(int argc, char** argv)
             SensitivityAnalysis sa(fem_solver, obj);
             std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
             tiling.initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_X);
-            obj.loadTargetFromFile("force.txt");
             obj.use_ipc = true; obj.barrier_distance = 1e-1;
-            obj.setX0(tiling.solver.undeformed);
             obj.add_reg_rest = false; obj.w_reg_rest = 1e-5;
             obj.add_reg_laplacian = true; obj.w_reg_laplacian = 1e-4;
             obj.add_pbc = true; obj.pbc_w = 1e3;
+            obj.sequence = true;
+            obj.num_data_point = 5;
+            if (obj.sequence)
+                obj.loadTarget("/home/yueli/Documents/ETH/SandwichStructure/sequence/");
+            else
+                obj.loadTargetFromFile("force.txt");
             obj.initialize();
+            // obj.generateTarget("/home/yueli/Documents/ETH/SandwichStructure/sequence/");
             sa.max_iter = 300;
             // sa.optimizeMMA();
-            sa.optimizeGaussNewton();
+            // sa.optimizeGaussNewton();
             // sa.optimizeLBFGSB();
             // sa.optimizeGradientDescent();
-            // obj.diffTestGradientScale();
+            obj.diffTestGradientScale();
             // obj.diffTestGradient();
             // obj.diffTestdOdx();
         };
 
-        // runSimApp();
-        runSA();
-        
+        std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
+        fem_solver.pbc_translation_file = data_folder + "a_structure_translation.txt";
+        tiling.initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_XY);
+        // tiling.solver.checkTotalHessian(true);
+        // tiling.solver.checkTotalHessianScale(true);
+        runSimApp();
+        // runSA();
+        // tiling.generateForceDisplacementPolarCurve("/home/yueli/Documents/ETH/SandwichStructure/PolarCurve/0/");
         // generateFDCurveSingleStructure();
     }
     return 0;

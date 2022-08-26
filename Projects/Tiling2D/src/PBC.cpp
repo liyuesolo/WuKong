@@ -1,6 +1,5 @@
 #include "../include/FEMSolver.h"
 
-
 void FEMSolver::addPBCPairsXY()
 {
     std::cout << pbc_translation_file << std::endl;
@@ -96,7 +95,6 @@ void FEMSolver::addPBCPairInX()
     if (left_nodes.size() != right_nodes.size())
     {
         std::cout << left_nodes.size() << " " << right_nodes.size() << std::endl;
-        // std::exit(0);
     }
 
     pbc_pairs = {std::vector<IV>(), std::vector<IV>()};
@@ -203,7 +201,7 @@ void FEMSolver::addPBCEnergy(T& energy)
             T Dij = (Xj - Xi).dot(strain_dir);
             T dij_target = Dij * uniaxial_strain;
             T dij = (xj - xi).dot(strain_dir);
-            if (add_pbc_strain)
+            if (add_pbc_strain && !prescribe_strain_tensor)
                 energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
             cnt++;
             if (cnt == 1)
@@ -225,6 +223,31 @@ void FEMSolver::addPBCEnergy(T& energy)
 
     addPBCEnergyDirection(0);
     addPBCEnergyDirection(1);
+
+    if (add_pbc_strain && prescribe_strain_tensor)
+    {
+        Matrix<T, 4, 2> x, X;
+        getMarcoBoundaryData(x, X);
+        
+        // computeStrainMatchingEnergy(pbc_strain_w, target_strain, x, X, 
+        //     strain_matching_term);
+        TV xa = x.row(0), xb = x.row(1), xc = x.row(2), xd = x.row(3);
+		TV Xa = X.row(0), Xb = X.row(1), Xc = X.row(2), Xd = X.row(3);
+        TV3 epsilon = target_strain;
+		TV xb_target = xa + TV((Xb-Xa).dot(TV(1, 0))*(epsilon[0] + T(1.0)), 
+											(Xb-Xa).dot(TV(0, 1))*(epsilon[2] + T(1.0)));
+
+		TV xd_target = xa + TV((Xd-Xa).dot(TV(1, 0))*(epsilon[2] + T(1.0)), 
+											(Xd-Xa).dot(TV(0, 1))*(epsilon[1] + T(1.0)));
+
+		TV xc_target = xa + TV((Xc-Xa).dot(TV(1, 0))*(epsilon[0] + epsilon[2] + T(1.0)), 
+											(Xc-Xa).dot(TV(0, 1))*(epsilon[2] + epsilon[1] + T(1.0)));
+
+		T strain_matching_term = 0.5 * pbc_strain_w * ((xb_target - xb).dot(xb_target - xb) + 
+										(xc_target - xc).dot(xc_target - xc) + 
+										(xd_target - xd).dot(xd_target - xd));
+        energy += strain_matching_term;
+    }
 
     energy += energy_pbc;
 }
@@ -249,7 +272,7 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
             T Dij = (Xj - Xi).dot(strain_dir);
             T dij_target = Dij * uniaxial_strain;
             T dij = (xj - xi).dot(strain_dir);
-            if (add_pbc_strain)
+            if (add_pbc_strain && !prescribe_strain_tensor)
             {
                 residual.segment<2>(idx0 * 2) += pbc_strain_w * strain_dir * (dij - dij_target);
                 residual.segment<2>(idx1 * 2) -= pbc_strain_w * strain_dir * (dij - dij_target);
@@ -263,7 +286,7 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
             // if (pair_dis_vec.norm() < 1e-6)
-            //     continue;
+            //     continue;`
             // std::cout << (xj_ref - xi_ref).norm() << " " << (xj - xi).norm() << std::endl;
             // std::cout << pair_dis_vec.norm() << std::endl;
             // std::getchar();
@@ -284,6 +307,44 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
 
     addPBCForceDirection(0);
     addPBCForceDirection(1);
+
+    if (add_pbc_strain && prescribe_strain_tensor)
+    {
+        Matrix<T, 4, 2> x, X;
+        getMarcoBoundaryData(x, X);
+
+        TV xa = x.row(0), xb = x.row(1), xc = x.row(2), xd = x.row(3);
+		TV Xa = X.row(0), Xb = X.row(1), Xc = X.row(2), Xd = X.row(3);
+        TV3 epsilon = target_strain;
+		TV xb_target = xa + TV((Xb-Xa).dot(TV(1, 0))*(epsilon[0] + T(1.0)), 
+											(Xb-Xa).dot(TV(0, 1))*(epsilon[2] + T(1.0)));
+
+		TV xd_target = xa + TV((Xd-Xa).dot(TV(1, 0))*(epsilon[2] + T(1.0)), 
+											(Xd-Xa).dot(TV(0, 1))*(epsilon[1] + T(1.0)));
+
+		TV xc_target = xa + TV((Xc-Xa).dot(TV(1, 0))*(epsilon[0] + epsilon[2] + T(1.0)), 
+											(Xc-Xa).dot(TV(0, 1))*(epsilon[2] + epsilon[1] + T(1.0)));
+
+		// T energy = 0.5 * pbc_strain_w * ((xb_target - xb).dot(xb_target - xb) + 
+		// 								(xc_target - xc).dot(xc_target - xc) + 
+		// 								(xd_target - xd).dot(xd_target - xd));
+        
+
+        TV dedxa = pbc_strain_w * ((xb_target - xb) + (xc_target - xc) + (xd_target - xd));
+        TV dedxb = -pbc_strain_w * (xb_target - xb);
+        TV dedxc = -pbc_strain_w * (xc_target - xc);
+        TV dedxd = -pbc_strain_w * (xd_target - xd);
+
+        // std::cout << dedxa.transpose() << " " << dedxb.transpose() << " "<< dedxc.transpose() << " "<< dedxd.transpose() << std::endl;
+        // Vector<T, 8> dedx;
+        // computeStrainMatchingEnergyGradient(pbc_strain_w, target_strain, x, X, dedx);
+        // std::cout << dedx.transpose() << std::endl;
+        residual.segment<2>(pbc_corners[0] * 2) -= dedxa;
+        residual.segment<2>(pbc_corners[1] * 2) -= dedxb;
+        residual.segment<2>(pbc_corners[2] * 2) -= dedxc;
+        residual.segment<2>(pbc_corners[3] * 2) -= dedxd;
+        // std::getchar();
+    }
 }
 
 void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_PD)
@@ -306,7 +367,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             T dij = (xj - xi).dot(strain_dir);
 
             TM Hessian = strain_dir * strain_dir.transpose();
-            if (add_pbc_strain)
+            if (add_pbc_strain && !prescribe_strain_tensor)
             {
                 for(int i = 0; i < dim; i++)
                 {
@@ -352,4 +413,132 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
 
     addPBCHessianDirection(0);
     addPBCHessianDirection(1);
+
+    if (add_pbc_strain && prescribe_strain_tensor)
+    {
+        
+
+        Matrix<T, 8, 8> d2edx2;
+        d2edx2.setZero();
+        d2edx2.block(0, 0, 2, 2) = 3.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(2, 2, 2, 2) = 1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(4, 4, 2, 2) = 1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(6, 6, 2, 2) = 1.0 * pbc_strain_w * TM::Identity();
+
+        d2edx2.block(2, 0, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(4, 0, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(6, 0, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+
+        d2edx2.block(0, 2, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(0, 4, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+        d2edx2.block(0, 6, 2, 2) = -1.0 * pbc_strain_w * TM::Identity();
+
+        for (int i = 0; i < 4; i++)
+        {
+            for (int j = 0; j < 4; j++)
+            {
+                for (int k = 0; k < 2; k++)
+                {
+                    for (int l = 0; l < 2; l++)
+                    {
+                        entries.push_back(Entry(
+                            pbc_corners[i]*2 + k, 
+                            pbc_corners[j] * 2 + l, 
+                            d2edx2(i * 2 + k, j * 2 + l)));
+                    }
+                       
+                }   
+            }
+            
+        }
+        
+    }
+}
+
+void FEMSolver::computeMarcoBoundaryIndices()
+{
+    pbc_corners << pbc_pairs[0][0][0], 
+        pbc_pairs[0][pbc_pairs[0].size() - 1][0],
+        pbc_pairs[0][pbc_pairs[0].size() - 1][1],
+        pbc_pairs[0][0][1];
+    
+    // std::cout << pbc_corners << std::endl;
+}
+
+void FEMSolver::getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X)
+{
+    x.row(0) = deformed.segment<2>(pbc_corners[0] * 2);
+    x.row(1) = deformed.segment<2>(pbc_corners[1] * 2);
+    x.row(2) = deformed.segment<2>(pbc_corners[2] * 2);
+    x.row(3) = deformed.segment<2>(pbc_corners[3] * 2);
+
+    X.row(0) = undeformed.segment<2>(pbc_corners[0] * 2);
+    X.row(1) = undeformed.segment<2>(pbc_corners[1] * 2);
+    X.row(2) = undeformed.segment<2>(pbc_corners[2] * 2);
+    X.row(3) = undeformed.segment<2>(pbc_corners[3] * 2);
+}
+
+void FEMSolver::computeHomogenizedStress(TM& sigma)
+{
+    VectorXT inner_force(num_nodes * 2);
+    inner_force.setZero(); 
+    addPBCForceEntries(inner_force);
+    std::vector<TV> f_bc(2, TV::Zero());
+    for (int dir = 0; dir < 2; dir++)
+    {
+        for (auto pbc_pair : pbc_pairs[dir])
+        {
+            int idx0 = pbc_pair[0], idx1 = pbc_pair[1];
+            
+            TV Xi = undeformed.segment<2>(idx0 * 2);
+            TV Xj = undeformed.segment<2>(idx1 * 2);
+            T length = (Xj - Xi).norm();
+            f_bc[dir] += inner_force.segment<2>(idx1 * 2) / length;
+        }
+    }
+
+    TM R90 = TM::Zero();
+    R90.row(0) = TV(0, -1);
+    R90.row(1) = TV(1, 0);
+
+    TV xi_ref = deformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV xj_ref = deformed.segment<2>(pbc_pairs[0][0][1] * 2);
+
+    TV xk_ref = deformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV xl_ref = deformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+
+    TV Xi = undeformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV Xj = undeformed.segment<2>(pbc_pairs[0][0][1] * 2);
+    TV Xk = undeformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV Xl = undeformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+    TM X = TM::Zero(), x = TM::Zero();
+    X.col(0) = (Xi - Xj).template segment<2>(0);
+    X.col(1) = (Xk - Xl).template segment<2>(0);
+
+    x.col(0) = (xi_ref - xj_ref).template segment<2>(0);
+    x.col(1) = (xk_ref - xl_ref).template segment<2>(0);
+
+
+    TM F_macro = x * X.inverse();
+    std::cout << "strain macro" << std::endl;
+    TM strain_macro = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+    std::cout << strain_macro << std::endl;
+    
+    TV n0 = (R90 * (xj_ref - xi_ref).template segment<2>(0)).normalized(), 
+        n1 = (R90 * (xl_ref - xk_ref).template segment<2>(0)).normalized();
+
+    
+    TM F_bc = TM::Zero(), n_bc = TM::Zero();
+    F_bc.col(0) = f_bc[0].template segment<2>(0); 
+    F_bc.col(1) = f_bc[1].template segment<2>(0);
+
+    // std::cout << F_bc << std::endl;
+
+    n_bc.col(0) = n1; n_bc.col(1) = n0;
+
+    sigma = F_bc * n_bc.inverse();
+
+    std::cout << sigma << std::endl;
 }

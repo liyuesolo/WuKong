@@ -28,7 +28,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     Eigen::MatrixXd V; Eigen::MatrixXi F, V_quad;
     // loadMeshFromVTKFile(data_folder + filename + ".vtk", V, F);
     // loadMeshFromVTKFile(filename, V, F);
-    solver.use_quadratic_triangle = false;
+    solver.use_quadratic_triangle = true;
     if (filename.substr(filename.find_last_of(".") + 1) == "vtk")
     {
         if (solver.use_quadratic_triangle)
@@ -74,8 +74,8 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     });
 
     solver.dirichlet_data.clear();
-    // for (int i = 0; i < 2; i++)
-    //     solver.dirichlet_data[i] = 0.0;
+
+    
 
     TV min_corner, max_corner;
     solver.computeBoundingBox(min_corner, max_corner);
@@ -104,33 +104,47 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     else
     {
         solver.add_pbc = true;
-        solver.add_pbc_strain = false;
         solver.pbc_w = 1e4;
         if (pbc_type == PBC_X)
             solver.addPBCPairInX();
         else if (pbc_type == PBC_XY)
+        {
             solver.addPBCPairsXY();
-        solver.strain_theta = M_PI / 2.0;
-        solver.uniaxial_strain = 1.0;
+            solver.add_pbc_strain = true;
+            // solver.strain_theta = M_PI / 2.0;
+            // solver.uniaxial_strain = 0.5;
+            solver.pbc_strain_w = 1e6;
+            solver.prescribe_strain_tensor = true;
+            solver.target_strain = TV3(0.1, 0.0, 0.);
+            solver.computeMarcoBoundaryIndices();
+        }
+    }
+    if (pbc_type == PBC_XY)
+    {
+        for (int i = 0; i < 2; i++)
+            solver.dirichlet_data[solver.pbc_pairs[0][0][0]* 2 + i] = 0.0;
+    }
+    else if (pbc_type == PBC_X)
+    {
+        TV min0(min_corner[0] - 1e-6, min_corner[1] - 1e-6);
+        TV max0(max_corner[0] + 1e-6, min_corner[1] + 1e-6);
+        // solver.addForceBox(min0, max0, TV(0, 1));
+        solver.addDirichletBoxY(min0, max0, TV::Zero());
+        solver.addDirichletBox(min0, min0 + TV(2e-6, 2e-6), TV::Zero());
+
+        TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
+        TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
+        // solver.addForceBox(min1, max1, TV(0, -1));
+        T dy = max_corner[1] - min_corner[1];
+        solver.penalty_pairs.clear();
+        T percent = 0.02;
+        solver.addPenaltyPairsBox(min1, max1, TV(0, -percent * dy));
+
+        solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
+            TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
+            TV(0, -percent * dy));
     }
     
-    TV min0(min_corner[0] - 1e-6, min_corner[1] - 1e-6);
-    TV max0(max_corner[0] + 1e-6, min_corner[1] + 1e-6);
-    // solver.addForceBox(min0, max0, TV(0, 1));
-    solver.addDirichletBoxY(min0, max0, TV::Zero());
-    solver.addDirichletBox(min0, min0 + TV(2e-6, 2e-6), TV::Zero());
-
-    TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
-    TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
-    // solver.addForceBox(min1, max1, TV(0, -1));
-    T dy = max_corner[1] - min_corner[1];
-    solver.penalty_pairs.clear();
-    T percent = 0.02;
-    solver.addPenaltyPairsBox(min1, max1, TV(0, -percent * dy));
-
-    solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
-        TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
-        TV(0, -percent * dy));
 
     // solver.unilateral_qubic = true;
     solver.penalty_weight = 1e6;
@@ -152,7 +166,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     solver.barrier_distance = 1e-3;
     
     // if (solver.use_quadratic_triangle)
-        solver.use_ipc = false;
+        solver.use_ipc = true;
     if (solver.use_ipc)
     {
         solver.computeIPCRestData();
@@ -165,7 +179,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         }
     }
 
-    solver.project_block_PD = false;
+    solver.project_block_PD = true;
     solver.verbose = true;
     solver.max_newton_iter = 1000;
     return true;
@@ -306,6 +320,24 @@ void Tiling2D::generateForceDisplacementCurveSingleStructure(const std::string& 
     out.close();
 }
 
+void Tiling2D::generateForceDisplacementPolarCurve(const std::string& result_folder)
+{
+    std::vector<T> displacements;
+    std::vector<T> force_norms;
+    TV min_corner, max_corner;
+    solver.computeBoundingBox(min_corner, max_corner);
+    TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
+    TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
+
+    T dy = max_corner[1] - min_corner[1];
+    int n_sample = 5;
+    T dangle = (M_PI) / T(n_sample);
+    for (T angle = 0.0; angle < M_PI; angle += dangle)
+    {
+        solver.strain_theta = angle;
+        solver.staticSolve();
+    }
+}
 
 void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
 {
@@ -359,6 +391,47 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
 
 void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit)
 {
+    Eigen::MatrixXd V_tile(V.rows() * 4, 3);
+    Eigen::MatrixXi F_tile(F.rows() * 4, 3);
+    Eigen::MatrixXd C_tile(F.rows() * 4, 3);
+
+    TV left0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][0] * 2);
+    TV right0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][1] * 2);
+    TV top0 = solver.deformed.segment<2>(solver.pbc_pairs[1][0][1] * 2);
+    TV bottom0 = solver.deformed.segment<2>(solver.pbc_pairs[1][0][0] * 2);
+    TV dx = (right0 - left0);
+    TV dy = (top0 - bottom0);
+
+    int n_face = F.rows(), n_vtx = V.rows();
+    V_tile.block(0, 0, n_vtx, 3) = V;
+    V_tile.block(n_vtx, 0, n_vtx, 3) = V;
+    V_tile.block(2 * n_vtx, 0, n_vtx, 3) = V;
+    V_tile.block(3 * n_vtx, 0, n_vtx, 3) = V;
+    
+    tbb::parallel_for(0, n_vtx, [&](int i){
+        V_tile.row(n_vtx + i).head<2>() += dx;
+        V_tile.row(3 * n_vtx + i).head<2>() += dx;
+        V_tile.row(2 * n_vtx + i).head<2>() += dy;
+        V_tile.row(3 * n_vtx + i).head<2>() += dy;
+    });
+    
+
+    V = V_tile;
+    Eigen::MatrixXi offset(n_face, 3);
+    offset.setConstant(n_vtx);
+    F_tile.block(0, 0, n_face, 3) = F;
+    F_tile.block(n_face, 0, n_face, 3) = F + offset;
+    F_tile.block(2 * n_face, 0, n_face, 3) = F + 2 * offset;
+    F_tile.block(3 * n_face, 0, n_face, 3) = F + 3 * offset;
+    F = F_tile;
+
+    Eigen::MatrixXd C_unit = C;
+    C_unit.col(2).setConstant(0.3); C_unit.col(1).setConstant(1.0);
+    C_tile.block(0, 0, n_face, 3) = C_unit;
+    C_tile.block(n_face, 0, n_face, 3) = C;
+    C_tile.block(2 * n_face, 0, n_face, 3) = C;
+    C_tile.block(3 * n_face, 0, n_face, 3) = C;
+    C = C_tile;
 
 }
 

@@ -84,6 +84,8 @@ void Objective::diffTestGradient()
     }
 }
 
+
+
 void Objective::diffTestGradientScale()
 {
     solver.verbose = false;
@@ -92,10 +94,12 @@ void Objective::diffTestGradientScale()
     VectorXT p;
     getDesignParameters(p);
     T E0 = 0.0;
-    // gradient(p, dOdp, E0, false);
+    VectorXT init;
+    
     solver.staticSolve();
-    VectorXT init = solver.u;
+    init = solver.u;
     equilibrium_prev = init;
+    
     gradient(p, dOdp, E0, true, true);
     // std::cout << dOdp.minCoeff() << " " << dOdp.maxCoeff() << std::endl;
     VectorXT dp(n_dof_design);
@@ -260,7 +264,7 @@ void Objective::buildIPCRestData()
     VectorXT dbdx = ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
-    
+    // barrier_weight = 1e3;
     std::cout << "barrier weight " << barrier_weight << std::endl;
     // std::getchar();
 }
@@ -292,6 +296,58 @@ void ObjFTF::getDirichletMask(VectorXT& mask)
             mask.segment<2>(i * 2).setZero();
         }
     });
+}
+
+void ObjFTF::diffTestGradientScale()
+{
+    solver.verbose = false;
+    std::cout << "###################### CHECK GRADIENT SCALE ######################" << std::endl;   
+    VectorXT dOdp(n_dof_design);
+    VectorXT p;
+    getDesignParameters(p);
+    T E0 = 0.0;
+    VectorXT init;
+    if (sequence)
+    {
+        generateSequenceData(init, true, false);
+    }
+    else
+    {
+        solver.staticSolve();
+        init = solver.u;
+        equilibrium_prev = init;
+    }
+    gradient(p, dOdp, E0, true, true);
+    // std::cout << dOdp.minCoeff() << " " << dOdp.maxCoeff() << std::endl;
+    VectorXT dp(n_dof_design);
+    dp.setRandom();
+    dp *= 1.0 / dp.norm();
+    VectorXT dirichlet_mask;
+    getDirichletMask(dirichlet_mask);
+    dp.array() *= dirichlet_mask.array();
+    // dp *= 0.001;
+    T previous = 0.0;
+    
+    for (int i = 0; i < 10; i++)
+    {
+        // T E1 = value(p + dp, true, true);
+        // VectorXT p1 = (p + dp).cwiseMax(bound[0]).cwiseMin(bound[1]);
+        // dp = p1 - p;
+        equilibrium_prev = init;
+        T E1 = value(p + dp, true, true);
+        T dE = E1 - E0;
+        
+        dE -= dOdp.dot(dp);
+        // std::cout << "dE " << dE << std::endl;
+        if (i > 0)
+        {
+            // std::cout << "scale" << std::endl;
+            std::cout << (previous/dE) << std::endl;
+            // std::getchar();
+        }
+        previous = dE;
+        dp *= 0.5;
+    }
 }
 
 void ObjFTF::getDirichletIndices(std::vector<int>& indices)
@@ -336,59 +392,102 @@ void ObjFTF::updateDesignParameters(const VectorXT& design_parameters)
 T ObjFTF::value(const VectorXT& p_curr, bool simulate, bool use_prev_equil)
 {
     updateDesignParameters(p_curr);
-    if (simulate)
-    {
-        solver.reset();
-        if (use_prev_equil)
-            solver.u = equilibrium_prev;
-        solver.staticSolve();
-    }
     T Ox = 0.0, Op = 0.0;
-    computeOx(solver.deformed, Ox);
+    if (sequence)
+    {
+        VectorXT x_sequence;
+        generateSequenceData(x_sequence, simulate, use_prev_equil);
+        computeOx(x_sequence, Ox);
+    }
+    else
+    {
+        if (simulate)
+        {
+            solver.reset();
+            if (use_prev_equil)
+                solver.u = equilibrium_prev;
+            solver.staticSolve();
+        }
+        computeOx(solver.deformed, Ox);
+    }
     computeOp(p_curr, Op);
     return Ox + Op;
 }
 
-T ObjFTF::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate, bool use_prev_equil)
+T ObjFTF::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, 
+    bool simulate, bool use_prev_equil)
 {
-    
+    dOdp = VectorXT::Zero(n_dof_design);
     updateDesignParameters(p_curr);
     
-    if (simulate)
-    {
-        solver.reset();
-        if (use_prev_equil)
-            solver.u = equilibrium_prev;
-        solver.staticSolve();
-    }
-    
     VectorXT dOdx; T Ox = 0.0;
-    computeOx(solver.deformed, Ox);
-    computedOdx(solver.deformed, dOdx);
-    
-    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-    bool flag = solver.project_block_PD;
-    solver.project_block_PD = false;
-    solver.buildSystemMatrix(solver.u, d2edx2);
-    solver.project_block_PD = flag;
-    
-    solver.iterateDirichletDoF([&](int offset, T target)
+    if (sequence)
     {
-        dOdx[offset] = 0;
-    });
-    
-    VectorXT lambda;
-    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
-    // solver.checkHessianPD(false);
-    cholmod_solver.compute(d2edx2);
-    lambda = -1.0 * cholmod_solver.solve(dOdx);
-    
-    StiffnessMatrix dfdX(n_dof_sim, n_dof_sim);
-    solver.builddfdX(solver.u, dfdX);
-    dOdp = lambda.transpose() * -dfdX;
+        VectorXT x_sequence;
+        generateSequenceData(x_sequence, simulate, use_prev_equil);
+        computeOx(x_sequence, Ox);
+        computedOdx(x_sequence, dOdx);
+        for (int i = 0; i < num_data_point; i++)
+        {
+            StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+            bool flag = solver.project_block_PD;
+            solver.project_block_PD = false;
+            VectorXT ui = x_sequence.segment(i * n_dof_sim, n_dof_sim) - solver.undeformed;
+            solver.buildSystemMatrix(ui, d2edx2);
+            solver.project_block_PD = flag;
+            
+            solver.iterateDirichletDoF([&](int offset, T target)
+            {
+                dOdx[offset] = 0;
+            });
 
-    if (!use_prev_equil)
-        equilibrium_prev = solver.u;
+            Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
+            cholmod_solver.compute(d2edx2);
+
+            VectorXT lambda;
+            lambda = -1.0 * cholmod_solver.solve(dOdx.segment(i * n_dof_sim, n_dof_sim));
+            
+            StiffnessMatrix dfdX(n_dof_sim, n_dof_sim);
+            solver.builddfdX(ui, dfdX);
+            dOdp += lambda.transpose() * -dfdX;
+            if (!use_prev_equil)
+                equilibrium_prev.segment(i * n_dof_sim, n_dof_sim) = solver.u;
+        }
+    }
+    else
+    {
+        if (simulate)
+        {
+            solver.reset();
+            if (use_prev_equil)
+                solver.u = equilibrium_prev;
+            solver.staticSolve();
+        }
+        computeOx(solver.deformed, Ox);
+        computedOdx(solver.deformed, dOdx);
+        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+        bool flag = solver.project_block_PD;
+        solver.project_block_PD = false;
+        solver.buildSystemMatrix(solver.u, d2edx2);
+        solver.project_block_PD = flag;
+        
+        solver.iterateDirichletDoF([&](int offset, T target)
+        {
+            dOdx[offset] = 0;
+        });
+
+        Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
+        cholmod_solver.compute(d2edx2);
+
+        VectorXT lambda;
+        lambda = -1.0 * cholmod_solver.solve(dOdx);
+        
+        StiffnessMatrix dfdX(n_dof_sim, n_dof_sim);
+        solver.builddfdX(solver.u, dfdX);
+        dOdp = lambda.transpose() * -dfdX;
+        if (!use_prev_equil)
+            equilibrium_prev = solver.u;
+    }
 
     VectorXT partialO_partialp;
     computedOdp(p_curr, partialO_partialp);
@@ -408,36 +507,71 @@ T ObjFTF::gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simul
 void ObjFTF::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate, bool use_prev_equil)
 {   
     updateDesignParameters(p_curr);
-    if (simulate)
+    if (sequence)
     {
-        solver.reset();
-        if (use_prev_equil)
-            solver.u = equilibrium_prev;
-        solver.staticSolve();
+        VectorXT x_sequence;
+        generateSequenceData(x_sequence, simulate, use_prev_equil);
+        
+        MatrixXT dxdp(num_data_point * n_dof_sim, n_dof_design);
+        for (int i = 0; i < num_data_point; i++)
+        {
+            StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+            bool flag = solver.project_block_PD;
+            solver.project_block_PD = false;
+            VectorXT ui = x_sequence.segment(i * n_dof_sim, n_dof_sim) - solver.undeformed;
+            solver.buildSystemMatrix(ui, d2edx2);
+            solver.project_block_PD = flag;
+            Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
+            cholmod_solver.analyzePattern(d2edx2);
+            cholmod_solver.factorize(d2edx2);
+            if (cholmod_solver.info() == Eigen::NumericalIssue)
+            {
+                std::cout << "forward hessian indefinite when computing dxdp" << std::endl;
+            }
+            StiffnessMatrix dfdX(n_dof_sim, n_dof_sim);
+            solver.builddfdX(ui, dfdX);
+            MatrixXT dfdp = dfdX;
+            dxdp.block(i * n_dof_sim, 0, n_dof_sim, n_dof_design) = cholmod_solver.solve(dfdp);
+        }
+        std::vector<Entry> d2Odx2_entries;
+        computed2Odx2(x_sequence, d2Odx2_entries);
+        StiffnessMatrix d2Odx2_matrix(n_dof_sim * num_data_point, n_dof_sim * num_data_point);
+        d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+        // solver.projectDirichletDoFMatrix(d2Odx2_matrix, solver.dirichlet_data);
+        H = dxdp.transpose() * d2Odx2_matrix * dxdp;
     }
-    MatrixXT dxdp(n_dof_sim, n_dof_design);
-    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
-    solver.buildSystemMatrix(solver.u, d2edx2);
-    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
-    cholmod_solver.analyzePattern(d2edx2);
-    cholmod_solver.factorize(d2edx2);
-    if (cholmod_solver.info() == Eigen::NumericalIssue)
+    else
     {
-        std::cout << "forward hessian indefinite when computing dxdp" << std::endl;
+        if (simulate)
+        {
+            solver.reset();
+            if (use_prev_equil)
+                solver.u = equilibrium_prev;
+            solver.staticSolve();
+        }
+        MatrixXT dxdp(n_dof_sim, n_dof_design);
+        StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+        solver.buildSystemMatrix(solver.u, d2edx2);
+        Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> cholmod_solver;
+        cholmod_solver.analyzePattern(d2edx2);
+        cholmod_solver.factorize(d2edx2);
+        if (cholmod_solver.info() == Eigen::NumericalIssue)
+        {
+            std::cout << "forward hessian indefinite when computing dxdp" << std::endl;
+        }
+        StiffnessMatrix dfdX;
+        solver.builddfdX(solver.u, dfdX);
+        MatrixXT dfdp = dfdX;
+        dxdp.noalias() = cholmod_solver.solve(dfdp);
+        
+        std::vector<Entry> d2Odx2_entries;
+        computed2Odx2(solver.deformed, d2Odx2_entries);
+        StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
+        d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
+        solver.projectDirichletDoFMatrix(d2Odx2_matrix, solver.dirichlet_data);
+        H = dxdp.transpose() * d2Odx2_matrix * dxdp;
     }
-    StiffnessMatrix dfdX;
-    solver.builddfdX(solver.u, dfdX);
-    MatrixXT dfdp = dfdX;
-    dxdp.noalias() = cholmod_solver.solve(dfdp);
     
-    std::vector<Entry> d2Odx2_entries;
-    computed2Odx2(solver.deformed, d2Odx2_entries);
-    StiffnessMatrix d2Odx2_matrix(n_dof_sim, n_dof_sim);
-    d2Odx2_matrix.setFromTriplets(d2Odx2_entries.begin(), d2Odx2_entries.end());
-    solver.projectDirichletDoFMatrix(d2Odx2_matrix, solver.dirichlet_data);
-    H = dxdp.transpose() * d2Odx2_matrix * dxdp;
-    
-
     std::vector<Entry> d2Odp2_entries;
     computed2Odp2(p_curr, d2Odp2_entries);
 
@@ -451,35 +585,113 @@ void ObjFTF::hessianGN(const VectorXT& p_curr, MatrixXT& H, bool simulate, bool 
     });
 
 }
+
+void ObjFTF::generateSequenceData(VectorXT& x, 
+    bool simulate, bool use_prev_equil)
+{
+    solver.reset();
+    x = VectorXT::Zero(f_target.rows());
+    f_current = VectorXT::Zero(f_target.rows());
+    T dp = 0.05;
+    solver.penalty_weight = 1e4;
+    
+    VectorXT u_prev = solver.u;
+    if (use_prev_equil)
+        u_prev = equilibrium_prev.segment(0, n_dof_sim);
+
+    TV min_corner, max_corner;
+    solver.computeBoundingBox(min_corner, max_corner);
+    TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
+    TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
+
+    T dy = max_corner[1] - min_corner[1];
+    int cnt = 0;
+    for (T dis = 0.0; dis < 0.4 + dp; dis += dp)
+    {
+        solver.penalty_pairs.clear();
+        solver.addPenaltyPairsBox(min1, max1, TV(0, -dis * dy));
+        solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
+            TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
+            TV(0, -dis * dy));
+        if (simulate)
+        {
+            solver.u = equilibrium_prev.segment(cnt * n_dof_sim, n_dof_sim);
+            solver.staticSolve();
+            // u_prev = solver.u;
+        }
+        else
+        {
+            solver.u = equilibrium_prev.segment(cnt * n_dof_sim, n_dof_sim);
+        }
+        VectorXT interal_force(solver.num_nodes * 2);
+        interal_force.setZero();
+        solver.addBCPenaltyForceEntries(solver.penalty_weight, interal_force);
+        x.segment(cnt * n_dof_sim, n_dof_sim) = solver.undeformed + solver.u;
+        f_current.segment(cnt * n_dof_sim, n_dof_sim) = interal_force;
+        cnt++;
+        if (cnt >= num_data_point)
+            break;
+    }
+}
+
 void ObjFTF::computeOx(const VectorXT& x, T& Ox)
 {
-    solver.deformed = x;
-    VectorXT f(n_dof_sim); f.setZero();
-    solver.addBCPenaltyForceEntries(solver.penalty_weight, f);
-    solver.iterateBCPenaltyPairs([&](int offset, T target)
+    VectorXT f;
+    f = VectorXT::Zero(f_target.rows());
+    if (sequence)
     {
-        Ox += 0.5 * (f[offset] - f_target[offset]) * (f[offset] - f_target[offset]);
-    });
+        f = f_current;
+    }
+    else
+    {
+        solver.deformed = x;
+        solver.addBCPenaltyForceEntries(solver.penalty_weight, f);
+    }
+    // std::cout << "=========================== f ===========================" << std::endl;
+    // std::cout << f.transpose() << std::endl;
+    // std::cout << "=========================== f target ===========================" << std::endl;
+    // std::cout << f_target.transpose() << std::endl;
+    // std::cout << "-----------------------------------------" << std::endl;
+    // std::exit(0);
+    Ox += 0.5 * (f - f_target).dot(f - f_target);
 }
 
 void ObjFTF::computedOdx(const VectorXT& x, VectorXT& dOdx)
 {
-    solver.deformed = x;
-    VectorXT f(n_dof_sim); f.setZero();
-    solver.addBCPenaltyForceEntries(solver.penalty_weight, f);
-    dOdx = VectorXT::Zero(n_dof_sim);
-    solver.iterateBCPenaltyPairs([&](int offset, T target)
+    VectorXT f;
+    f = VectorXT::Zero(f_target.rows());
+    if (sequence)
     {
-        dOdx[offset] = -solver.penalty_weight * ((f[offset] - f_target[offset]));
-    });
+        f = f_current;
+    }
+    else
+    {
+        solver.deformed = x;
+        solver.addBCPenaltyForceEntries(solver.penalty_weight, f);
+    }
+    dOdx = -solver.penalty_weight * (f - f_target);
 }
 
 void ObjFTF::computed2Odx2(const VectorXT& x, std::vector<Entry>& d2Odx2_entries)
 {
-    solver.iterateBCPenaltyPairs([&](int offset, T target)
+    if (sequence)
     {
-        d2Odx2_entries.push_back(Entry(offset, offset, std::pow(solver.penalty_weight, 2)));
-    });
+        for (int i = 0; i < num_data_point; i++)
+        {
+            solver.iterateBCPenaltyPairs([&](int offset, T target)
+            {
+                d2Odx2_entries.push_back(Entry(i * n_dof_sim + offset, i * n_dof_sim + offset, 
+                    std::pow(solver.penalty_weight, 2)));
+            });    
+        }
+    }
+    else
+    {
+        solver.iterateBCPenaltyPairs([&](int offset, T target)
+        {
+            d2Odx2_entries.push_back(Entry(offset, offset, std::pow(solver.penalty_weight, 2)));
+        });
+    }
 }
 
 void ObjFTF::loadTargetFromFile(const std::string& filename)
@@ -507,6 +719,7 @@ void ObjFTF::initialize()
 {
     n_dof_design = solver.num_nodes * 2;
     n_dof_sim = solver.num_nodes * 2;
+    
     if (add_reg_laplacian)
     {
         int n_faces = solver.surface_indices.rows() / 3;
@@ -525,6 +738,11 @@ void ObjFTF::initialize()
         igl::cotmatrix(surface_vertices, surface_faces, cot_mat);
         cot_mat *= -1.0;
     }
+    setX0(solver.undeformed);
+    if (sequence)
+        equilibrium_prev = VectorXT::Zero(solver.undeformed.rows() * num_data_point);
+    else
+        equilibrium_prev = VectorXT::Zero(solver.undeformed.rows());
     if (use_ipc)
         buildIPCRestData();
 
@@ -538,6 +756,7 @@ void ObjFTF::initialize()
         dirichlet_data[idx * 2 + 0] = solver.undeformed[idx * 2 + 0];
         dirichlet_data[idx * 2 + 1] = solver.undeformed[idx * 2 + 1];
     }
+    std::cout << "objective initialized" << std::endl;
 }
 
 
@@ -734,5 +953,86 @@ void ObjFTF::computed2Odp2(const VectorXT& p_curr, std::vector<Entry>& d2Odp2_en
                     for(int i = 0; i < 2; i++)
                         d2Odp2_entries.push_back(Entry(nodes[k]*2 + i, nodes[l] * 2 + i, -pbc_w *sign_F[k]*sign_J[l]));
         }
+    }
+}
+
+void ObjFTF::loadTarget(const std::string& data_folder)
+{
+    if (sequence)
+    {
+        std::vector<VectorXT> forces;
+        for (int i = 0; i < num_data_point; i++)
+        {
+            std::ifstream in(data_folder + std::to_string(i) + ".txt");
+            std::vector<T> data_vec;
+            T fi;
+            while (in >> fi)
+            {
+                data_vec.push_back(fi);
+            }
+            in.close();
+            forces.push_back(Eigen::Map<VectorXT>(data_vec.data(), data_vec.size()));
+        }
+        int n_entry_per_force = forces[0].rows();
+        f_target.resize(forces.size() * n_entry_per_force);
+        for (int i = 0; i < num_data_point; i++)
+            f_target.segment(i * n_entry_per_force, n_entry_per_force) = forces[i];
+    }
+    else
+    {
+        
+    }
+}
+
+void ObjFTF::generateTarget(const std::string& target_folder)
+{
+    if (sequence)
+    {
+        T dp = 0.05;
+        solver.penalty_weight = 1e4;
+        std::vector<T> displacements;
+        std::vector<T> force_norms;
+        VectorXT u_prev = solver.u;
+
+        TV min_corner, max_corner;
+        solver.computeBoundingBox(min_corner, max_corner);
+        TV min1(min_corner[0] - 1e-6, max_corner[1] - 1e-6);
+        TV max1(max_corner[0] + 1e-6, max_corner[1] + 1e-6);
+
+        T dy = max_corner[1] - min_corner[1];
+        int cnt = 0;
+        for (T dis = 0.0; dis < 0.4 + dp; dis += dp)
+        {
+            std::cout << "\t---------pencent " << dp << std::endl;
+            std::cout << dis << std::endl;
+            T displacement_sum = 0.0;
+            solver.penalty_pairs.clear();
+            solver.addPenaltyPairsBox(min1, max1, TV(0, -dis * dy));
+            solver.addPenaltyPairsBoxXY(TV(min_corner[0] - 1e-6, max_corner[1] - 1e-6), 
+                TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
+                TV(0, -dis * dy));
+            // solver.y_bar = max_corner[1] - dis * dy;
+            solver.u = u_prev;
+            solver.staticSolve();
+            u_prev = solver.u;
+            VectorXT interal_force(solver.num_nodes * 2);
+            interal_force.setZero();
+            solver.addBCPenaltyForceEntries(solver.penalty_weight, interal_force);
+            displacements.push_back(dis * dy);
+            force_norms.push_back(interal_force.norm());
+            solver.savePenaltyForces(target_folder + std::to_string(cnt) + ".txt");
+            solver.saveToOBJ(target_folder + std::to_string(cnt) + ".obj");
+            cnt++;
+        }
+        std::ofstream out(target_folder + "log.txt");
+        out << "displacement in cm" << std::endl;
+        for (T v : displacements)
+            out << v << " ";
+        out << std::endl;
+        out << "force in N" << std::endl;
+        for (T v : force_norms)
+            out << v << " ";
+        out << std::endl;
+        out.close();
     }
 }

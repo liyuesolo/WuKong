@@ -873,7 +873,7 @@ void Tiling2D::generateOnePerodicUnit()
 
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
-    fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, diff_params, 
+    fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, params, 
         cubic_weights, data_folder + "a_structure.txt");
     
     generatePeriodicMesh(polygons, pbc_corners, true, data_folder + "a_structure");
@@ -1196,7 +1196,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
         // std::cout << std::endl;
     }
     
-    T distance = -2.0;
+    T distance = -1.5;
     ClipperLib::Paths final_shape;
 
     ClipperLib::ClipperOffset c;
@@ -1583,7 +1583,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
 
     gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
     gmsh::option::setNumber("Geometry.Tolerance", eps);
-    gmsh::option::setNumber("Mesh.ElementOrder", 1);
+    gmsh::option::setNumber("Mesh.ElementOrder", 2);
 
     gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
@@ -1594,13 +1594,13 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
 
     // clamping box 1 2 3 4
     for (int i = 0; i < pbc_corners.size(); ++i)
-		gmsh::model::occ::addPoint(pbc_corners[i][0], pbc_corners[i][1], 0, 2, acc++);
+		gmsh::model::occ::addPoint(pbc_corners[i][0], pbc_corners[i][1], 0, 1, acc++);
 
     for(int i=0; i<polygons.size(); ++i)
     {
         for(int j=0; j<polygons[i].size(); ++j)
         {
-            gmsh::model::occ::addPoint(polygons[i][j][0], polygons[i][j][1], 0, 2, acc++);
+            gmsh::model::occ::addPoint(polygons[i][j][0], polygons[i][j][1], 0, 1, acc++);
         }
     }
     
@@ -1724,8 +1724,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
 
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);
-    gmsh::model::mesh::field::setNumber(2, "SizeMin", 1.0);
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 2.0);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.0);
     gmsh::model::mesh::field::setAsBackgroundMesh(2);
     gmsh::model::occ::synchronize();
 

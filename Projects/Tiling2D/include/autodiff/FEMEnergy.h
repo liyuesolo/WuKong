@@ -12,5 +12,4 @@ void computeQuadratic2DNeoHookeanEnergy(double E, double nu, const Eigen::Matrix
 void computeQuadratic2DNeoHookeanEnergyGradient(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, Eigen::Matrix<double, 12, 1>& energygradient);
 void computeQuadratic2DNeoHookeanEnergyHessian(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, Eigen::Matrix<double, 12, 12>& energyhessian);
 void computeQuadratic2DNeoHookeandfdX(double E, double nu, const Eigen::Matrix<double,6,2> & x, const Eigen::Matrix<double,6,2> & X, Eigen::Matrix<double, 12, 12>& dfdX);
-
 #endif
