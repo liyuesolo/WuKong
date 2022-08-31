@@ -295,8 +295,9 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 tiling.solver.computeIPCRestData();
             }
 
-            tiling.solver.checkTotalGradientScale(true);
-            tiling.solver.checkTotalHessianScale(true);
+            tiling.solver.checkTotalGradient(false);
+            // tiling.solver.checkTotalHessianScale(true);
+            tiling.solver.checkTotalHessian(false);
             return true;
 
         }

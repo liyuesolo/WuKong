@@ -131,7 +131,7 @@ void Tiling2D::getTranslationUnitPolygon(std::vector<std::vector<dvec2>>& polygo
     int min_y=10000, max_y=-10000, min_x=10000, max_x=-10000;
     
     int ii=0;
-    int extension = 4;
+    int extension = 2;
     dmat3 M = centrePSRect( -width, -depth, width, depth );
     for( auto i : tiling.fillRegion( -extension * width, -extension * depth, extension * width, extension * depth ) ) 
     {

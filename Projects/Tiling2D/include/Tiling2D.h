@@ -83,6 +83,16 @@ public:
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
+    // ################ Generate Training Data ###############pragma endregion
+    void sampleUniaxialStrainSingleStructure(const std::string& result_folder);
+    void sampleUniaxialStrainSingleFamily(const std::string& result_folder, int IH = 0);
+    void computeMarcoStressFromNetworkInputs(const TV3& macro_strain, int IH, 
+        const VectorXT& tiling_params);
+    void sampleStrainAlongDirection(const std::string& result_folder,
+        int n_sample, const TV& strain_range, T theta);
+    void sampleDirectionWithStrain(const std::string& result_folder,
+        int n_sample, const TV& theta_range, T strain);
+
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 

@@ -111,11 +111,13 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         {
             solver.addPBCPairsXY();
             solver.add_pbc_strain = true;
-            // solver.strain_theta = M_PI / 2.0;
-            // solver.uniaxial_strain = 0.5;
-            solver.pbc_strain_w = 1e6;
-            solver.prescribe_strain_tensor = true;
-            solver.target_strain = TV3(0.1, 0.0, 0.);
+            solver.strain_theta = M_PI / 1.0;
+            solver.uniaxial_strain = 1.1;
+            solver.pbc_strain_w = 1e7;
+            solver.pbc_w = 1e6;
+            solver.prescribe_strain_tensor = false;
+            solver.target_strain = TV3(0.1, 0.3, 0.1);
+            // solver.target_strain = TV3(0.44765, -0.0656891, 0.0956651);
             solver.computeMarcoBoundaryIndices();
         }
     }
@@ -467,4 +469,255 @@ void Tiling2D::tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Matr
     C_tile.block(n_face, 0, n_face, 3) = C;
     C_tile.block(2 * n_face, 0, n_face, 3) = C;
     C = C_tile;
+}
+
+void Tiling2D::computeMarcoStressFromNetworkInputs(const TV3& macro_strain, int IH, 
+        const VectorXT& tiling_params)
+{
+    std::string result_folder = "./";
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    int num_params = a_tiling.numParameters();
+    T new_params[ num_params ];
+    a_tiling.getParameters( new_params );
+    std::vector<T> params(num_params);
+    for (int j = 0; j < num_params;j ++)
+    {
+        params[j] = tiling_params[j];
+    }
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    solver.verbose = true;
+    solver.prescribe_strain_tensor = false;
+    solver.target_strain = macro_strain;
+    solver.strain_theta = 0.0;
+        solver.uniaxial_strain = 1.1;
+    solver.staticSolve();
+    solver.saveToOBJ(result_folder + "temp.obj");
+    TM sigma, epsilon;
+    solver.computeHomogenizedStressStrain(sigma, epsilon);
+    
+    std::cout << "strain" << std::endl;
+    std::cout << epsilon << std::endl;
+    std::cout << "stress" << std::endl;
+    std::cout << sigma << std::endl;
+}
+
+void Tiling2D::sampleDirectionWithStrain(const std::string& result_folder,
+        int n_sample, const TV& theta_range, T strain)
+{
+    int IH = 0;
+    std::ofstream out(result_folder + "strain_stress.txt");
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    int num_params = a_tiling.numParameters();
+    T new_params[ num_params ];
+    a_tiling.getParameters( new_params );
+    std::vector<T> params(num_params);
+    std::vector<TV> params_range(num_params);
+    for (int j = 0; j < num_params;j ++)
+    {
+        params[j] = new_params[j];
+    }
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    solver.verbose = true;
+    solver.prescribe_strain_tensor = false;
+    for (int i = 0; i < n_sample; i++)
+    {
+        solver.reset();
+        T theta= theta_range[0] + ((double)i/(double)n_sample)*(theta_range[1] - theta_range[0]);
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain;
+        solver.staticSolve();
+        // solver.saveToOBJ(result_folder + "temp.obj");
+        TM sigma, epsilon;
+        solver.computeHomogenizedStressStrain(sigma, epsilon);
+        // out << strain << " " << epsilon(0, 0) << " " << epsilon(0, 1) << " " << epsilon(1, 1)
+        // << " " << sigma(0, 0) << " " << sigma(0, 1) << " " << sigma(1, 1) << std::endl;
+        for (int m = 0; m < num_params; m++)
+        {
+            out << params[m] << " ";
+        }
+        out << epsilon(0, 0) << " "<< epsilon(0, 1) << " " << epsilon(1, 0) << " " << epsilon(1, 1) << " " 
+                << sigma(0, 0) << " "<< sigma(0, 1) << " "<< sigma(1, 0) << " "<< sigma(1, 1) << " " << strain << " " << theta << std::endl;
+    }
+    
+    out.close();
+}
+
+void Tiling2D::sampleStrainAlongDirection(const std::string& result_folder,
+        int n_sample, const TV& strain_range, T theta)
+{
+    int IH = 0;
+    std::ofstream out(result_folder + "strain_stress.txt");
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    int num_params = a_tiling.numParameters();
+    T new_params[ num_params ];
+    a_tiling.getParameters( new_params );
+    std::vector<T> params(num_params);
+    std::vector<TV> params_range(num_params);
+    for (int j = 0; j < num_params;j ++)
+    {
+        params[j] = new_params[j];
+    }
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    solver.verbose = true;
+    solver.prescribe_strain_tensor = false;
+    for (int i = 0; i < n_sample; i++)
+    {
+        solver.reset();
+        T strain = strain_range[0] + ((double)i/(double)n_sample)*(strain_range[1] - strain_range[0]);
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain;
+        solver.staticSolve();
+        // solver.saveToOBJ(result_folder + "temp.obj");
+        TM sigma, epsilon;
+        solver.computeHomogenizedStressStrain(sigma, epsilon);
+        // out << strain << " " << epsilon(0, 0) << " " << epsilon(0, 1) << " " << epsilon(1, 1)
+        // << " " << sigma(0, 0) << " " << sigma(0, 1) << " " << sigma(1, 1) << std::endl;
+        for (int m = 0; m < num_params; m++)
+        {
+            out << params[m] << " ";
+        }
+        out << epsilon(0, 0) << " "<< epsilon(0, 1) << " " << epsilon(1, 0) << " " << epsilon(1, 1) << " " 
+                << sigma(0, 0) << " "<< sigma(0, 1) << " "<< sigma(1, 0) << " "<< sigma(1, 1) << " " << strain << std::endl;
+    }
+    
+    out.close();
+    
+    
+}
+
+void Tiling2D::sampleUniaxialStrainSingleFamily(const std::string& result_folder, int IH)
+{
+    std::ofstream out(result_folder + "training_data.txt");
+    
+    
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    int num_params = a_tiling.numParameters();
+    T new_params[ num_params ];
+    a_tiling.getParameters( new_params );
+    std::vector<T> params(num_params);
+    std::vector<TV> params_range(num_params);
+    for (int j = 0; j < num_params;j ++)
+    {
+        params[j] = new_params[j];
+        params_range[j] = TV(std::max(0.05, params[j] - 0.2), std::min(0.92, params[j] + 0.2));
+    }
+    int tiling_cnt = 0;
+    int num_data_points = 100;
+    TV range_strain(0.5, 2.0);
+	TV range_theta(0.0, M_PI);
+    
+    int n_sp_per_para = 10;
+    // for (int i = 0; i < num_params; i++)
+    {
+        // for (int j = 0; j < n_sp_per_para; j++)
+        {
+            // T pi = params_range[i][0] + ((double)j/(double)n_sp_per_para)*(params_range[i][1] - params_range[i][0]);
+            std::vector<T> params_sp = params;
+            // params_sp[i] = pi;
+            std::vector<std::vector<TV2>> polygons;
+            std::vector<TV2> pbc_corners; 
+            Vector<T, 4> cubic_weights;
+            cubic_weights << 0.25, 0, 0.75, 0;
+            fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params_sp, 
+                cubic_weights, result_folder + "structure"+std::to_string(tiling_cnt)+".txt");
+            
+            generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure"+std::to_string(tiling_cnt));
+            
+            solver.pbc_translation_file = result_folder + "structure"+std::to_string(tiling_cnt) +"_translation.txt";
+            initializeSimulationDataFromFiles(result_folder + "structure"+std::to_string(tiling_cnt)+".vtk", PBC_XY);
+            solver.verbose = true;
+            tiling_cnt++;
+            // if (tiling_cnt != 7)
+            //     continue;
+            for(int k =0; k < num_data_points; k++)
+            {
+                T strain = range_strain[0] + ((double)k/(double)num_data_points)*(range_strain[1] - range_strain[0]);
+
+                for(int l =0; l < num_data_points; l++)
+                {
+                    solver.reset();
+                    T theta = range_theta[0] + ((double)l/(double)num_data_points)*(range_theta[1] - range_theta[0]);
+                    solver.strain_theta = theta;
+                    solver.uniaxial_strain = strain;
+                    solver.staticSolve();
+                    VectorXT residual(solver.num_nodes * 2); residual.setZero();
+                    solver.computeResidual(solver.u, residual);
+                    TM sigma, epsilon;
+                    solver.computeHomogenizedStressStrain(sigma, epsilon);
+                    for (int m = 0; m < num_params; m++)
+                    {
+                        out << params_sp[m] << " ";
+                    }
+                    
+                    out << epsilon(0, 0) << " "<< epsilon(0, 1) << " " << epsilon(1, 0) << " " << epsilon(1, 1) << " " 
+                        << sigma(0, 0) << " "<< sigma(0, 1) << " "<< sigma(1, 0) << " "<< sigma(1, 1) << " " << residual.norm() << std::endl;
+                    solver.saveToOBJ(result_folder + std::to_string(tiling_cnt-1) + "_strain_" + std::to_string(strain) + "theta_" + std::to_string(theta) + ".obj");
+                }
+            }
+
+           
+        }
+    }
+    
+    //
+}
+
+void Tiling2D::sampleUniaxialStrainSingleStructure(const std::string& result_folder)
+{
+    std::ofstream out(result_folder + "training_data.txt");
+    TV range_strain(0.5, 2.0);
+	TV range_theta(-M_PI, M_PI);
+    solver.verbose = false;
+    int num_data_points = 30;
+    for(int i=0; i<num_data_points; ++i)
+    {
+        T strain = range_strain[0] + ((double)i/(double)num_data_points)*(range_strain[1] - range_strain[0]);
+
+        for(int j=0; j<num_data_points; ++j)
+        {
+            solver.reset();
+            T theta = range_theta[0] + ((double)j/(double)num_data_points)*(range_theta[1] - range_theta[0]);
+            solver.strain_theta = theta;
+            solver.uniaxial_strain = strain;
+            solver.staticSolve();
+            VectorXT residual(solver.num_nodes * 2); residual.setZero();
+            solver.computeResidual(solver.u, residual);
+            TM sigma, epsilon;
+            solver.computeHomogenizedStressStrain(sigma, epsilon);
+            out << epsilon(0, 0) << " "<< epsilon(0, 1) << " " << epsilon(1, 0) << " " << epsilon(1, 1) << " " 
+                << sigma(0, 0) << " "<< sigma(0, 1) << " "<< sigma(1, 0) << " "<< sigma(1, 1) << " " << residual.norm() << std::endl;
+            solver.saveToOBJ(result_folder + "strain_" + std::to_string(strain) + "theta_" + std::to_string(theta) + ".obj");
+        }
+    }
+    out.close();
 }

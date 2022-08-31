@@ -93,7 +93,7 @@ void FEMSolver::computeIPCRestData()
     dedx.setZero(); dbdx.setZero();
     barrier_weight = 1.0;
     addIPCForceEntries(dbdx); dbdx *= -1.0;
-    computeResidual(u, dedx); dedx *= 6665-1.0; dedx -= dbdx;
+    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
     if (verbose)
         std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;

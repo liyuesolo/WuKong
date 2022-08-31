@@ -3,10 +3,8 @@
 void FEMSolver::checkTotalGradient(bool perturb)
 {
     run_diff_test = true;
-    E = 0;
-    use_ipc = false;
-    pbc_w = 0.0;
-    penalty_weight = 0.0;
+    // pbc_strain_w = 0;
+    // pbc_w = 0;
 
     VectorXT du(num_nodes * 3);
     du.setRandom();

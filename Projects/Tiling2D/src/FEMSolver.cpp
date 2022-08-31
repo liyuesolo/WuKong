@@ -153,9 +153,9 @@ void FEMSolver::reset()
     if (use_ipc)
     {
         computeIPCRestData();
-        ipc_vertices.resize(num_nodes, 2);
-        for (int i = 0; i < num_nodes; i++)
-            ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+        // ipc_vertices.resize(num_nodes, 2);
+        // for (int i = 0; i < num_nodes; i++)
+        //     ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
     }
     
 }
@@ -346,7 +346,8 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
         }
         
         // bool solve_success = true;
-        bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        // bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        bool solve_success = du.norm() < 1e3;
         
         if (!solve_success)
             invalid_residual_cnt++;
@@ -463,10 +464,12 @@ bool FEMSolver::staticSolveStep(int step)
 
     if (residual_norm < newton_tol)
     {
-        if (prescribe_strain_tensor)
+        if (add_pbc_strain)
         {
-            TM sigma_macro;
-            computeHomogenizedStress(sigma_macro);
+            TM stress_macro, strain_macro;
+            computeHomogenizedStressStrain(stress_macro, strain_macro);
+            std::cout << "strain " << strain_macro << std::endl << std::endl;
+            std::cout << "stress " << stress_macro << std::endl;
         }
         return true;
     }

@@ -409,7 +409,7 @@ public:
     void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
-    void computeHomogenizedStress(TM& sigma);
+    void computeHomogenizedStressStrain(TM& sigma, TM& epsilon);
     void computeMarcoBoundaryIndices();
     void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X);
     void addPBCPairInX();
