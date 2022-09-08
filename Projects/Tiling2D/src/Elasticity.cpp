@@ -155,7 +155,7 @@ void FEMSolver::addElastsicPotential(T& energy)
             computeLinear2DNeoHookeanEnergy(E, nu, x_deformed, x_undeformed, ei);
             energies_neoHookean[tet_idx] += ei;
         });
-    energy += energies_neoHookean.sum();
+    energy += thickness * energies_neoHookean.sum();
 }
 
 
@@ -171,7 +171,7 @@ void FEMSolver::addElasticForceEntries(VectorXT& residual)
             Vector<T, 12> dedx;
             computeQuadratic2DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
             
-            addForceEntry<12>(residual, indices, -dedx);
+            addForceEntry<12>(residual, indices, -thickness * dedx);
         });
     else
         iterateElementsSerial([&](const EleNodes& x_deformed, 
@@ -180,7 +180,7 @@ void FEMSolver::addElasticForceEntries(VectorXT& residual)
             Vector<T, 6> dedx;
             computeLinear2DNeoHookeanEnergyGradient(E, nu, x_deformed, x_undeformed, dedx);
             
-            addForceEntry<6>(residual, indices, -dedx);
+            addForceEntry<6>(residual, indices, -thickness * dedx);
         });
 }
 
@@ -195,7 +195,7 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
             if (project_PD)
                 projectBlockPD<12>(hessian);
             
-            addHessianEntry<12>(entries, indices, hessian);
+            addHessianEntry<12>(entries, indices, thickness * hessian);
         });
     else
         iterateElementsSerial([&](const EleNodes& x_deformed, 
@@ -206,7 +206,7 @@ void FEMSolver::addElasticHessianEntries(std::vector<Entry>& entries, bool proje
             if (project_PD)
                 projectBlockPD<6>(hessian);
             
-            addHessianEntry<6>(entries, indices, hessian);
+            addHessianEntry<6>(entries, indices, thickness * hessian);
         });
 }
 

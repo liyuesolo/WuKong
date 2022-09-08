@@ -448,20 +448,27 @@ int main(int argc, char** argv)
 
         std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
         fem_solver.pbc_translation_file = data_folder + "a_structure_translation.txt";
-        tiling.initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_XY);
-        // std::string training_data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SingleStructureUniaxialStrain/";
-        std::string training_data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SingleFamilyUniaxialStrain/";
+        // tiling.initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_XY);
+        std::string training_data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SingleFamilyUniaxialDense/";
+        // std::string training_data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SingleFamilyUniaxialStrain/";
+        // std::string training_data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SingleFamilyBiaxialStrainTest/";
         // tiling.sampleUniaxialStrainSingleStructure(training_data_folder);
         // tiling.sampleUniaxialStrainSingleFamily(training_data_folder, 0);
+        std::string test_dir = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/SimTest/";
+        // tiling.sampleUniaxialStrain(test_dir, 1.001);
+        tiling.generateGreenStrainSecondPKPairs("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
+        // tiling.sampleStrain("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
+        // tiling.sampleBiaxialStrainSingleFamily(training_data_folder, 0);
         VectorXT params(4);
         // params << 0.17280802, 0.26377602, 0.12171941, 0.16898692;
         params << 0.32896349, 0.24773578, 0.20972134, 0.12847836;
         // tiling.computeMarcoStressFromNetworkInputs(Vector<T, 3>(1.2, 1.1, 0.0), 0, params);
         // tiling.solver.checkTotalHessian(true);
         // tiling.solver.checkTotalHessianScale(true);
+
         // runSimApp();
         // tiling.sampleStrainAlongDirection("./", 200, TV(0.6, 3.0), 0.2);
-        tiling.sampleDirectionWithStrain("./", 200, TV(0.0, M_PI), 1.5);
+        // tiling.sampleDirectionWithStrain("./", 200, TV(0.0, M_PI), 1.5);
         // runSA();
         // tiling.generateForceDisplacementPolarCurve("/home/yueli/Documents/ETH/SandwichStructure/PolarCurve/0/");
         // generateFDCurveSingleStructure();

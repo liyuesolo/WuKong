@@ -84,14 +84,23 @@ public:
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
     // ################ Generate Training Data ###############pragma endregion
+    void sampleUniaxialStrain(const std::string& result_folder, T strain);
+    void sampleSingleFamily(const std::string& result_folder, 
+        const TV& uniaxial_strain_range, const TV& biaxial_strain_range, 
+        const TV& theta_range, int n_sp_params, int n_sp_uni, 
+        int n_sp_bi, int n_sp_theta, int IH = 0);
     void sampleUniaxialStrainSingleStructure(const std::string& result_folder);
     void sampleUniaxialStrainSingleFamily(const std::string& result_folder, int IH = 0);
+    void sampleBiaxialStrainSingleFamily(const std::string& result_folder, int IH = 0);
     void computeMarcoStressFromNetworkInputs(const TV3& macro_strain, int IH, 
         const VectorXT& tiling_params);
     void sampleStrainAlongDirection(const std::string& result_folder,
         int n_sample, const TV& strain_range, T theta);
     void sampleDirectionWithStrain(const std::string& result_folder,
         int n_sample, const TV& theta_range, T strain);
+    void computeEnergyForSimData(const std::string& result_folder);
+    void generateGreenStrainSecondPKPairs(const std::string& result_folder);
+    void sampleStrain(const std::string& result_folder);
 
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh

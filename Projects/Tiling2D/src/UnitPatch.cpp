@@ -1184,7 +1184,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     periodic.segment<2>(6) = periodic.head<2>() + T(n_unit) * TV2(transf[1],transf[3]);
 
     ClipperLib::Paths polygons(polygons_v.size());
-    T mult = 10000000.0;
+    T mult = 1e14;
     for(int i=0; i<polygons_v.size(); ++i)
     {
         for(int j=0; j<polygons_v[i].size(); ++j)
@@ -1203,7 +1203,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     c.AddPaths(polygons, ClipperLib::jtSquare, ClipperLib::etClosedPolygon);
     
     c.Execute(final_shape, distance*mult);
-    saveClip(final_shape, periodic, mult, "tiling_unit_clip_in_x.obj", true);
+    // saveClip(final_shape, periodic, mult, "tiling_unit_clip_in_x.obj", true);
     shapeToPolygon(final_shape, eigen_polygons, mult);
     periodicToBase(periodic, eigen_base);
 }
@@ -1573,10 +1573,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix)
 {
       // Before using any functions in the C++ API, Gmsh must be initialized:
-    T eps = 1e-5;
+    T eps = 1e-6;
     gmsh::initialize();
-
-    T mult = 10000000.0;
 
     gmsh::model::add("tiling");
     gmsh::logger::start();
@@ -1725,7 +1723,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);
     gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.0);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
     gmsh::model::mesh::field::setAsBackgroundMesh(2);
     gmsh::model::occ::synchronize();
 

@@ -64,7 +64,9 @@ public:
     bool add_pbc_strain = false;
     TV t1, t2;
     std::vector<std::vector<IV>> pbc_pairs;
-    T uniaxial_strain = 1.1;
+    T uniaxial_strain = 1.0;
+    T uniaxial_strain_ortho = 1.0;
+    bool biaxial = false;
     T strain_theta = 0.0;
     bool prescribe_strain_tensor = false;
     TV3 target_strain = TV3(1, 1, 0); // epsilon_xx epsilon_yy epsilon_xy
@@ -88,7 +90,7 @@ public:
     bool unilateral_qubic = false;
     T penalty_weight = 1e6;
     T y_bar = 0.0;
-
+    T thickness = 1.0;
 
     // IPC
     T max_barrier_weight = 1e8;
@@ -409,7 +411,9 @@ public:
     void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
+    void computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density);
     void computeHomogenizedStressStrain(TM& sigma, TM& epsilon);
+    void computeHomogenizedStressStrain(TM& sigma, TM& Cauchy_strain, TM& Green_strain);
     void computeMarcoBoundaryIndices();
     void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X);
     void addPBCPairInX();

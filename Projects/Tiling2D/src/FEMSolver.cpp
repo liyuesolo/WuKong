@@ -466,10 +466,12 @@ bool FEMSolver::staticSolveStep(int step)
     {
         if (add_pbc_strain)
         {
-            TM stress_macro, strain_macro;
-            computeHomogenizedStressStrain(stress_macro, strain_macro);
-            std::cout << "strain " << strain_macro << std::endl << std::endl;
-            std::cout << "stress " << stress_macro << std::endl;
+            TM secondPK_stress, Green_strain;
+            T psi;
+            computeHomogenizationData(secondPK_stress, Green_strain, psi);
+            std::cout << "strain " << Green_strain << std::endl << std::endl;
+            std::cout << "stress " << secondPK_stress << std::endl << std::endl;
+            std::cout << "energy density " << psi << std::endl;
         }
         return true;
     }

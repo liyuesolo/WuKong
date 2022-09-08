@@ -27,10 +27,8 @@ class FourierFeatures(tf.keras.Model):
                 "B": self.B}
 
     def call(self, x):
-        x01 = 0.5 * (x + 1.0)
+        x01 = 0.5 * (0.5 * x + 1.0)
         out = tf.concat((tf.math.sin(tf.matmul(x01, np.float32(self.B))), tf.math.cos(tf.matmul(x01, np.float32(self.B)))), axis=-1)
-        # print('fourier')
-        # print(out)
         return out
 
 
@@ -42,6 +40,7 @@ class IdentityFeatures(tf.keras.Model):
         self.num_output = num_input
     def call(self, x):
         return x
+    
 
 class ConcatSquareFeatures(tf.keras.Model):
     def __init__(self, num_input):
@@ -68,9 +67,9 @@ class DenseSIRENModel(tf.keras.Model):
         super(DenseSIRENModel, self).__init__()
         
         def sin_activation(x):
-            return K.sin(x);
+            return K.sin(x)
         def sin_activation_first_layer(x):
-            return K.sin(omega0*x);
+            return K.sin(omega0*x)
         
         regularizer = keras.regularizers.l1(0.0)
         
@@ -88,48 +87,52 @@ class DenseSIRENModel(tf.keras.Model):
         self.dense2 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
         self.dense3 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
         self.dense4 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
-        self.dense5 = Dense(num_output, activation='linear', use_bias=False, kernel_initializer=last_initializer)
+        self.dense5 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
+        self.dense6 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
+        self.dense_last = Dense(num_output, activation=tf.keras.activations.softplus, kernel_initializer=last_initializer, kernel_regularizer=regularizer)
+        # self.dense_last = Dense(num_output, activation=tf.keras.activations.swish, kernel_initializer=last_initializer, kernel_regularizer=regularizer)
 
     def call(self, inputs):
         l0 = self.dense0(inputs)
         l1 = self.dense1(l0)
         l2 = self.dense2(l1)
-        l2_concate = Concatenate()([inputs, l2])
-        l3 = self.dense3(l2_concate)
+        # l2_concate = Concatenate()([inputs, l2])
+        l3 = self.dense3(l2)
         l4 = self.dense4(l3)
-        l4_concate = Concatenate()([l2_concate, l4])
-        l5 = self.dense5(l4_concate)
+        # l4_concate = Concatenate()([l2_concate, l4])
+        output = self.dense_last(l4)
         # l5 = self.dense5(l1)
-        return l5
+        return output
 
 class DenseSwishModel(tf.keras.Model):
     def __init__(self, num_input, num_output, num_hidden, use_BN = True, use_dropout = True):
         super(DenseSwishModel, self).__init__()
         
         regularizer = keras.regularizers.l1(0.0)
-        
+        self.dropout = Dropout(0.2)
+
         self.dense0 = Dense(num_hidden, activation=tf.keras.activations.swish)
         self.dense1 = Dense(num_hidden, activation=tf.keras.activations.swish)
         self.dense2 = Dense(num_hidden, activation=tf.keras.activations.swish)
         self.dense3 = Dense(num_hidden, activation=tf.keras.activations.swish)
         self.dense4 = Dense(num_hidden, activation=tf.keras.activations.swish)
-        self.dense5 = Dense(num_output, activation='linear', use_bias=False)
+        self.dense5 = Dense(num_output, activation=tf.keras.activations.softplus)
 
 
     def call(self, inputs):
         l0 = self.dense0(inputs)
-        l0_concate = Concatenate()([inputs, l0])
-        # l1 = self.dense1(l0)
-        l1 = self.dense1(l0_concate)
-        l1_concate = Concatenate()([inputs, l1])
-        # l2 = self.dense2(l1)
-        l2 = self.dense2(l1_concate)
-        # l3 = self.dense3(l2_concate)
-        # l4 = self.dense4(l3)
-        # l4_concate = Concatenate()([l2_concate, l4])
-        # l5 = self.dense5(l4_concate)
-        l5 = self.dense5(l2)
+        # l0 = self.dropout(l0)
+        l1 = self.dense1(l0)
+        # l1 = self.dropout(l1)
+        l2 = self.dense2(l1)
+        # l2 = self.dropout(l2)
+        l3 = self.dense3(l2)
+        # l3 = self.dropout(l3)
+        l4 = self.dense4(l3)
+        # l4 = self.dropout(l4)
+        l5 = self.dense5(l4)
         return l5
+
 
 class ConstitutiveModel(tf.keras.Model):
 
@@ -139,30 +142,67 @@ class ConstitutiveModel(tf.keras.Model):
         num_hidden = 30
         self.num_hidden = num_hidden
 
-        self.features = FourierFeatures(num_input=num_input, num_samples=30, sigma=2.0, B = B, dtype_np=np.float32)
+        # self.features = FourierFeatures(num_input=num_input, num_samples=30, sigma=2.0, B = B, dtype_np=np.float32)
+        self.features = IdentityFeatures(num_input=num_input)
         
-        self.model = DenseSwishModel(num_input=self.features.num_output, num_output=1, 
-            num_hidden = num_hidden)
+        # self.model = DenseSwishModel(num_input=self.features.num_output, num_output=1, 
+        #     num_hidden = num_hidden)
+        
+        self.model = DenseSIRENModel(num_input=self.features.num_output, num_output=1, 
+            num_hidden = num_hidden, last_layer_init_scale=1.0, 
+            omega0 = 30.0)
+        
         
     def call(self, inputs):
         n = self.features(inputs)
         elastic_potential = self.model(n)
         return elastic_potential
     
+    # def get_config(self):
+    #     return {"B" : self.features.B}
     def get_config(self):
-        return {"B" : self.features.B}
+        return {"B" : None}
 
 def loadSingleFamilyModel(num_params, B):
-    inputS = Input(shape=(3 + num_params,),dtype=tf.float32, name="inputS")
-    output = ConstitutiveModel(3 + num_params, B)(inputS)
+    inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
+    output = ConstitutiveModel(4 + num_params, B)(inputS)
     model = Model(inputS, output)
     return model
 
-def buildSingleFamilyModel(num_params):
-    inputS = Input(shape=(3 + num_params,),dtype=tf.float32, name="inputS")
-    output = ConstitutiveModel(3 + num_params)(inputS)
+def buildSingleFamilyModel(num_params, B = None):
+    inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
+    output = ConstitutiveModel(4 + num_params, B)(inputS)
     model = Model(inputS, output)
     return model
+
+def get_sub_tensor(dim, start, end):
+	def f(x):
+		if dim == 0:
+			return x[start:end]
+		if dim == 1:
+			return x[:, start:end]
+		if dim == 2:
+			return x[:, :, start:end]
+		if dim == 3:
+			return x[:, :, :, start:end]
+	return Lambda(f)
+
+# def buildSingleFamilyModelSeparateTilingParams(num_params):
+#     inputS = Input(shape=(3 + num_params,),dtype=tf.float32, name="inputS")
+#     tiling_params = get_sub_tensor(1, 0, 4)(inputS)
+#     strain = get_sub_tensor(1, 4, 7)(inputS)
+#     num_hidden = 30
+#     x = Dense(num_hidden, activation=tf.keras.activations.swish)(tiling_params)
+#     y = Dense(num_hidden, activation=tf.keras.activations.swish)(strain)
+#     z = Concatenate()([x, y]) 
+#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+#     output = Dense(1, activation=tf.keras.activations.swish)(z)
+
+#     model = Model(inputS, output)
+#     return model
 
 def buildSrainStressModel():
     inputS = Input(shape=(3,),dtype=tf.float32, name="inputS")

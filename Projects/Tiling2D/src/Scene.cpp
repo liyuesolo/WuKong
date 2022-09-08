@@ -22,6 +22,10 @@ void FEMSolver::loadOBJ(const std::string& filename, bool rest_shape)
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
+    // undeformed.resize(V.rows()*2);
+    // deformed.resize(V.rows()*2);
+    // surface_indices.resize(F.rows() * 3);
+    // num_nodes = V.rows();
     for (int i = 0; i < num_nodes; i++)
     {
         if (rest_shape)
@@ -31,7 +35,12 @@ void FEMSolver::loadOBJ(const std::string& filename, bool rest_shape)
     }
     if (rest_shape)
         deformed = undeformed;
-        
+    
+    // for (int i = 0; i < F.rows(); i++)
+    // {
+    //     surface_indices.segment<3>(i * 3) = F.row(i);
+    // }
+    
     u = deformed - undeformed;
     if (use_ipc)
     {

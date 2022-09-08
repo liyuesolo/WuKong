@@ -50,9 +50,9 @@ void FEMSolver::getPBCPairsAxisDirection(std::vector<int>& side0,
     for (int i = 0; i < num_nodes; i++)
     {
         TV xi = undeformed.segment<2>(i * 2);
-        if (std::abs(xi[direction] - min_corner[direction]) < 1e-4)
+        if (std::abs(xi[direction] - min_corner[direction]) < 1e-6)
             side0.push_back(i);
-        if (std::abs(xi[direction] - max_corner[direction]) < 1e-4)
+        if (std::abs(xi[direction] - max_corner[direction]) < 1e-6)
             side1.push_back(i);
     }
     
@@ -186,7 +186,7 @@ void FEMSolver::addPBCEnergy(T& energy)
 {
     T energy_pbc = 0.0;
     TV strain_dir = TV(std::cos(strain_theta), std::sin(strain_theta));
-
+    TV ortho_dir = TV(-std::sin(strain_theta), std::cos(strain_theta));
     auto addPBCEnergyDirection = [&](int dir)
     {
         int cnt = 0;
@@ -202,8 +202,16 @@ void FEMSolver::addPBCEnergy(T& energy)
             T Dij = (Xj - Xi).dot(strain_dir);
             T dij_target = Dij * uniaxial_strain;
             T dij = (xj - xi).dot(strain_dir);
+            
             if (add_pbc_strain && !prescribe_strain_tensor)
                 energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
+            if (add_pbc_strain && !prescribe_strain_tensor && biaxial)
+            {
+                Dij = (Xj - Xi).dot(ortho_dir);
+                dij_target = Dij * uniaxial_strain_ortho;
+                dij = (xj - xi).dot(ortho_dir);
+                energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
+            }
             if (add_pbc_strain && prescribe_strain_tensor)
             {
                 TV xj_target;
@@ -278,6 +286,7 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
 {
     
     TV strain_dir = TV(std::cos(strain_theta), std::sin(strain_theta));
+    TV ortho_dir = TV(-std::sin(strain_theta), std::cos(strain_theta));
 
     auto addPBCForceDirection = [&](int dir)
     {
@@ -299,6 +308,14 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
                 residual.segment<2>(idx0 * 2) += pbc_strain_w * strain_dir * (dij - dij_target);
                 residual.segment<2>(idx1 * 2) -= pbc_strain_w * strain_dir * (dij - dij_target);
             }
+            if (add_pbc_strain && !prescribe_strain_tensor && biaxial)
+            {
+                Dij = (Xj - Xi).dot(ortho_dir);
+                dij_target = Dij * uniaxial_strain_ortho;
+                dij = (xj - xi).dot(ortho_dir);
+                residual.segment<2>(idx0 * 2) += pbc_strain_w * ortho_dir * (dij - dij_target);
+                residual.segment<2>(idx1 * 2) -= pbc_strain_w * ortho_dir * (dij - dij_target);
+            }
             if (add_pbc_strain && prescribe_strain_tensor)
             {
                 TV xj_target;
@@ -313,7 +330,6 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
                 TV dedxj = -pbc_strain_w * (xj_target - xj);
                 residual.segment<2>(idx0 * 2) -= dedxi;
                 residual.segment<2>(idx1 * 2) -= dedxj;
-
             }
             cnt++;
             if (cnt == 1)
@@ -395,7 +411,7 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
 void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_PD)
 {
     TV strain_dir = TV(std::cos(strain_theta), std::sin(strain_theta));
-
+    TV ortho_dir = TV(-std::sin(strain_theta), std::cos(strain_theta));
     auto addPBCHessianDirection = [&](int dir)
     {
         int cnt = 0;
@@ -414,6 +430,20 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             TM Hessian = strain_dir * strain_dir.transpose();
             if (add_pbc_strain && !prescribe_strain_tensor)
             {
+                for(int i = 0; i < dim; i++)
+                {
+                    for(int j = 0; j < dim; j++)
+                    {
+                        entries.push_back(Entry(idx0 * 2 + i, idx0 * 2 + j, pbc_strain_w * Hessian(i, j)));
+                        entries.push_back(Entry(idx0 * 2 + i, idx1 * 2 + j, -pbc_strain_w * Hessian(i, j)));
+                        entries.push_back(Entry(idx1 * 2 + i, idx0 * 2 + j, -pbc_strain_w * Hessian(i, j)));
+                        entries.push_back(Entry(idx1 * 2 + i, idx1 * 2 + j, pbc_strain_w * Hessian(i, j)));
+                    }
+                }
+            }
+            if (add_pbc_strain && !prescribe_strain_tensor && biaxial)
+            {
+                Hessian = ortho_dir * ortho_dir.transpose();
                 for(int i = 0; i < dim; i++)
                 {
                     for(int j = 0; j < dim; j++)
@@ -555,6 +585,172 @@ void FEMSolver::getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X)
     X.row(3) = undeformed.segment<2>(pbc_corners[3] * 2);
 }
 
+void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density)
+{
+    TV xi = deformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV xj = deformed.segment<2>(pbc_pairs[0][0][1] * 2);
+
+    TV xk = deformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV xl = deformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+
+    TV Xi = undeformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV Xj = undeformed.segment<2>(pbc_pairs[0][0][1] * 2);
+    TV Xk = undeformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV Xl = undeformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+    VectorXT inner_force(num_nodes * 2);
+    inner_force.setZero(); 
+    addPBCForceEntries(inner_force);
+    
+    // computeResidual(u, inner_force);
+    TV f0 = TV::Zero(), f1 = TV::Zero();
+    T l0 = (xj - xi).norm(), l1 = (xl - xk).norm();
+    for (auto pbc_pair : pbc_pairs[0])
+    {
+        f0 += inner_force.segment<2>(pbc_pair[0] * 2) / l1 / thickness;
+    }
+    for (auto pbc_pair : pbc_pairs[1])
+    {
+        f1 += inner_force.segment<2>(pbc_pair[1] * 2) / l0 / thickness;
+    }
+
+    // f0 /= 0.01; f1 /= 0.01;
+    // std::cout << f0.norm() << std::endl;
+    TM R90 = TM::Zero();
+    R90.row(0) = TV(0, -1);
+    R90.row(1) = TV(1, 0);
+
+    TM _X = TM::Zero(), _x = TM::Zero();
+    _X.col(0) = (Xj - Xi);
+    _X.col(1) = (Xk - Xl);
+
+    _x.col(0) = (xj - xi);
+    _x.col(1) = (xk - xl);
+
+    TM F_macro = _x * _X.inverse();
+    Green_strain = 0.5 * (F_macro.transpose() * F_macro - TM::Identity());
+    
+    // std::cout << F_macro << std::endl;
+
+    TV n1 = (R90 * (xj - xi)).normalized(), 
+        n0 = (R90 * (xl - xk)).normalized();
+
+    TM f_bc = TM::Zero(), n_bc = TM::Zero();
+    
+    f_bc.col(0) = f0; f_bc.col(1) = f1;
+    
+    n_bc.col(0) = n0; n_bc.col(1) = n1;
+
+    TM cauchy_stress = f_bc * n_bc.inverse();
+
+    //https://engcourses-uofa.ca/books/introduction-to-solid-mechanics/stress/first-and-second-piola-kirchhoff-stress-tensors/
+    TM F_inv = F_macro.inverse();
+    secondPK_stress = F_macro.determinant() * F_inv * cauchy_stress.transpose() * F_inv.transpose();
+
+    TV dx = Xj - Xi, dy = Xk - Xl;
+    if ((Xi - Xl).norm() > 1e-6)
+    {
+        std::cout << "ALERT" << std::endl;
+        std::getchar();
+    }
+    T volume = TV3(dx[0], dx[1], 0).cross(TV3(dy[0], dy[1], 0)).norm() * thickness;
+    // volume *= 0.001;
+    // std::cout << "volume " << volume << std::endl;
+    T total_energy = computeTotalEnergy(u);
+    // std::cout << "potential " << total_energy;
+    energy_density = total_energy / volume;
+
+    // auto computedPsidE = [&](const Eigen::Matrix<double,2,2> & Green_strain, 
+    //         double& energy, TM& dPsidE)
+    // {
+    //     T trace = Green_strain(0, 0) + Green_strain(1, 1);
+    //     TM E2 = Green_strain * Green_strain;
+    //     energy = 0.5 * trace * trace + E2(0, 0) + E2(1, 1);
+    //     dPsidE = trace * TM::Identity() + 2.0 * Green_strain; 
+    // };
+
+    // auto difftest = [&]()
+    // {
+    //     T eps = 1e-6;
+    //     TM rest;
+    //     T E0, E1;
+    //     computedPsidE(Green_strain, energy_density, rest);
+    //     Green_strain(1, 0) += eps;
+    //     computedPsidE(Green_strain, E0, secondPK_stress);
+    //     Green_strain(1, 0) -= 2.0 * eps;
+    //     computedPsidE(Green_strain, E1, secondPK_stress);
+    //     Green_strain(1, 0) += eps;
+    //     std::cout << "fd " << (E0 - E1) / 2.0/ eps << " analytic " << rest(1, 0) << std::endl;
+    // };
+    // computedPsidE(Green_strain, energy_density, secondPK_stress);
+    // std::cout << "Green Strain" << std::endl;
+    // std::cout << Green_strain << std::endl;
+    // std::cout << "second PK Stress" << std::endl;
+    // std::cout << secondPK_stress << std::endl;
+    // difftest();
+    // std::exit(0);
+   
+}
+
+void FEMSolver::computeHomogenizedStressStrain(TM& sigma, TM& Cauchy_strain, TM& Green_strain)
+{
+    TV xi = deformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV xj = deformed.segment<2>(pbc_pairs[0][0][1] * 2);
+
+    TV xk = deformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV xl = deformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+
+    TV Xi = undeformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV Xj = undeformed.segment<2>(pbc_pairs[0][0][1] * 2);
+    TV Xk = undeformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV Xl = undeformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+    VectorXT inner_force(num_nodes * 2);
+    inner_force.setZero(); 
+    addPBCForceEntries(inner_force);
+    
+    // computeResidual(u, inner_force);
+    TV f0 = TV::Zero(), f1 = TV::Zero();
+    T l0 = (xj - xi).norm(), l1 = (xl - xk).norm();
+    for (auto pbc_pair : pbc_pairs[0])
+    {
+        f0 += inner_force.segment<2>(pbc_pair[0] * 2) / l1;
+    }
+    for (auto pbc_pair : pbc_pairs[1])
+    {
+        f1 += inner_force.segment<2>(pbc_pair[1] * 2) / l0;
+    }
+    
+    TM R90 = TM::Zero();
+    R90.row(0) = TV(0, -1);
+    R90.row(1) = TV(1, 0);
+
+    TM _X = TM::Zero(), _x = TM::Zero();
+    _X.col(0) = (Xi - Xj).template segment<2>(0);
+    _X.col(1) = (Xk - Xl).template segment<2>(0);
+
+    _x.col(0) = (xi - xj).template segment<2>(0);
+    _x.col(1) = (xk - xl).template segment<2>(0);
+
+    TM F_macro = _x * _X.inverse();
+    Cauchy_strain = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+    Green_strain = 0.5 * (F_macro.transpose() * F_macro - TM::Identity());
+    
+
+    TV n1 = (R90 * (xj - xi)).normalized(), 
+        n0 = (R90 * (xl - xk)).normalized();
+
+    TM f_bc = TM::Zero(), n_bc = TM::Zero();
+    
+    f_bc.col(0) = f0; f_bc.col(1) = f1;
+    
+    n_bc.col(0) = n0; n_bc.col(1) = n1;
+
+    sigma = f_bc * n_bc.inverse();
+}
+
 void FEMSolver::computeHomogenizedStressStrain(TM& sigma, TM& epsilon)
 {
     
@@ -598,12 +794,12 @@ void FEMSolver::computeHomogenizedStressStrain(TM& sigma, TM& epsilon)
     _x.col(1) = (xk - xl).template segment<2>(0);
 
     TM F_macro = _x * _X.inverse();
-    std::cout << "deformation graident" << std::endl;
-    std::cout << F_macro << std::endl;
+    // std::cout << "deformation graident" << std::endl;
+    // std::cout << F_macro << std::endl;
     
     TM cauchy_strain = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
-    std::cout << "cauchy_strain" << std::endl;
-    std::cout << cauchy_strain << std::endl;
+    // std::cout << "cauchy_strain" << std::endl;
+    // std::cout << cauchy_strain << std::endl;
     epsilon =  0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
 
     // Matrix<T, 4, 2> x, X;
