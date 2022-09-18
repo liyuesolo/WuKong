@@ -8,26 +8,19 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 
-#include "Foam2D.h"
+#include "Cell.h"
 
-class Foam2D;
-
-class Foam2DApp
+class Cell2DApp 
 {
 public:
-    Foam2D& foam;
-
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    Eigen::MatrixXd C;
+	CellSim cellSim;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
 
-    Foam2DApp(Foam2D& _foam) : foam(_foam) {}
-    ~Foam2DApp() {}
+    Cell2DApp(CellSim& cellSim) : cellSim(cellSim) {}
 };
 
 #endif
