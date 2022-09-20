@@ -1,3 +1,6 @@
+#ifndef CELL_S
+#define CELL_S
+
 #include <cmath>
 #include <cassert>
 #include <vector>
@@ -10,8 +13,8 @@
 #include <igl/triangle/triangulate.h>
 #include <igl/doublearea.h>
 
-#ifndef CELL_S
-#define CELL_S
+#include "constants.hpp"
+
 
 using Eigen::MatrixXd;
 using Eigen::MatrixXi;
@@ -20,10 +23,9 @@ using Eigen::VectorXd;
 
 using std::tuple;
 
-constexpr int n_segments = 7;
-using CellDerivativeVector = Eigen::Vector<double, n_segments * 2>;
-using CellVertexMatrix3 = Eigen::Matrix<double, n_segments, 3>;
-using CellVertexMatrix2 = Eigen::Matrix<double, n_segments, 2>;
+using CellDerivativeVector = Eigen::Vector<double, N_SEGMENTS * 2>;
+using CellVertexMatrix3 = Eigen::Matrix<double, N_SEGMENTS, 3>;
+using CellVertexMatrix2 = Eigen::Matrix<double, N_SEGMENTS, 2>;
 
 template <typename T>
 void print_dimensions(const std::string& name, const Eigen::MatrixBase<T>& matrix) {
@@ -43,23 +45,23 @@ class CellSim {
 		std::vector<Cell> cells;
 
 		int t = 0;
-		CellSim(): vertices_state(0, n_segments){ }
+		CellSim(): vertices_state(0, N_SEGMENTS){ }
 
-		void addCell(const Eigen::Matrix<double,n_segments,3>& cell_vertices);
+		void addCell(const Eigen::Matrix<double,N_SEGMENTS,3>& cell_vertices);
 		std::pair<MatrixXd, MatrixXi> triangulate_all_cells() const;
 
-		Eigen::Block<const Eigen::MatrixXd, n_segments> cellVerticesC(const MatrixXd vertices, int cell_idx) const;
+		Eigen::Block<const Eigen::MatrixXd, N_SEGMENTS> cellVerticesC(const MatrixXd vertices, int cell_idx) const;
 
-		Eigen::Block<Eigen::MatrixXd, n_segments> cellVertices(MatrixXd vertices, int cell_idx) const;
+		Eigen::Block<Eigen::MatrixXd, N_SEGMENTS> cellVertices(MatrixXd vertices, int cell_idx) const;
 
-		Eigen::Matrix<int, n_segments, 2> cellEdgeList() const;
+		Eigen::Matrix<int, N_SEGMENTS, 2> cellEdgeList() const;
 
 		std::pair<double, CellDerivativeVector> areaDerivatives(
-				const Eigen::Matrix<double, n_segments, 2>& vertices
+				const Eigen::Matrix<double, N_SEGMENTS, 2>& vertices
 				) const;
 
 		std::pair<double, CellDerivativeVector> perimeterDerivatives(
-				const Eigen::Matrix<double, n_segments, 2>& vertices
+				const Eigen::Matrix<double, N_SEGMENTS, 2>& vertices
 				) const;
 
 		std::pair<Eigen::VectorXd, Eigen::MatrixXd> volumeDerivativesAll(const MatrixXd& vertices) const;
@@ -86,4 +88,24 @@ class CellSim {
 		void step();
 
 };
+
+template <typename T>
+// vertices are stored as x0, y0, x1, ..., yN_SEGMENTS
+T perimeter(const std::vector<T>& vertices);
+
+template <typename T>
+void perimeterJacobian(std::vector<T>& jacobian, const std::vector<T>& vertices);
+
+template <typename T>
+void perimeterHessian(std::vector<T>& hessian, const std::vector<T>& vertices);
+
+template <typename T>
+// vertices are stored as x0, y0, x1, ..., y2
+T triangleArea(const std::vector<T>& x);
+
+template <typename T>
+void triangleAreaJacobian(std::vector<T>& jacobian, const std::vector<T>& vertices);
+
+template <typename T>
+void triangleAreaHessian(std::vector<T>& hessian, const std::vector<T>& vertices);
 #endif

@@ -1,4 +1,5 @@
 #include "../include/App.h"
+#include "../include/constants.hpp"
 #include <cmath>
 #include <random>
 #define PI 3.14159265
@@ -18,18 +19,18 @@ Eigen::MatrixXd createEdgeLoop(const Eigen::MatrixXd& vertices, const std::vecto
 }
 
 void createCell(CellSim& cellSim, Eigen::Vector2d center, double roughness) {
-	Eigen::MatrixXd cellVertices(n_segments, 3);
+	Eigen::MatrixXd cellVertices(N_SEGMENTS, 3);
 	cellVertices.rightCols<1>().setZero();
-	std::normal_distribution<double> normal{1, 1./n_segments};
-	for (int i = 0; i < n_segments; i ++) {
+	std::normal_distribution<double> normal{1, 1./N_SEGMENTS};
+	for (int i = 0; i < N_SEGMENTS; i ++) {
 		cellVertices.leftCols(2).row(i) = center + normal(gen) * Eigen::Vector2d(
-				std::cos((PI*2*i)/n_segments),
-				std::sin((PI*2*i)/n_segments)
+				std::cos((PI*2*i)/N_SEGMENTS),
+				std::sin((PI*2*i)/N_SEGMENTS)
 		);
 	}
 
-	std::vector<int> edges(n_segments);
-	for (int i = 0; i < edges.size(); i++) {
+	std::vector<int> edges(N_SEGMENTS);
+	for (size_t i = 0; i < edges.size(); i++) {
 		edges[i] = i;
 	}
 	cellSim.addCell(createEdgeLoop(cellVertices, edges));
