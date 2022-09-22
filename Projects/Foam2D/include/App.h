@@ -12,21 +12,22 @@
 
 class Foam2D;
 
-class Foam2DApp
-{
+class Foam2DApp {
 public:
-    Foam2D& foam;
+    Foam2D &foam;
 
     int drag_idx;
     bool optimize;
     double area_target;
 
 public:
-    void setViewer(igl::opengl::glfw::Viewer& viewer,
-        igl::opengl::glfw::imgui::ImGuiMenu& menu);
-    void updateViewerData(igl::opengl::glfw::Viewer& viewer);
+    void setViewer(igl::opengl::glfw::Viewer &viewer,
+                   igl::opengl::glfw::imgui::ImGuiMenu &menu);
 
-    Foam2DApp(Foam2D& _foam) : foam(_foam) {}
+    void updateViewerData(igl::opengl::glfw::Viewer &viewer);
+
+    Foam2DApp(Foam2D &_foam) : foam(_foam) {}
+
     ~Foam2DApp() {}
 };
 

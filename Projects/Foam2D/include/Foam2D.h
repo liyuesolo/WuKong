@@ -24,7 +24,7 @@ public:
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
-    
+
     using Edge = Vector<int, 2>;
 
     typedef int StorageIndex;
