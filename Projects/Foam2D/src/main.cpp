@@ -1,7 +1,6 @@
 #include "../include/App.h"
 
-int main()
-{
+int main() {
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
 

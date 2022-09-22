@@ -1,47 +1,102 @@
 #include "../include/App.h"
 
-void Foam2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
-        igl::opengl::glfw::imgui::ImGuiMenu& menu)
-{
-    menu.callback_draw_viewer_menu = [&]()
-    {
-        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-
-        }
+void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
+                          igl::opengl::glfw::imgui::ImGuiMenu &menu) {
+    menu.callback_draw_viewer_menu = [&]() {
+        ImGui::Checkbox("Optimize", &optimize);
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Area Target", &area_target, 0.005f, 0.005f, "%.3f");
     };
 
-    viewer.callback_key_pressed = 
-        [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
-    {
-        switch(key)
-        {
-        default: 
-            return false;
-        }
-        
-    };
-    
-    foam.createRectangleScene();
+    viewer.callback_key_pressed =
+            [&](igl::opengl::glfw::Viewer &viewer, unsigned int key, int mods) -> bool {
+                switch (key) {
+                    case GLFW_KEY_SPACE:
+                        optimize = !optimize;
+                        return false;
+                    default:
+                        return false;
+                }
+            };
 
-    updateScreen(viewer);
+    viewer.callback_mouse_scroll =
+            [&](igl::opengl::glfw::Viewer &viewer, float t) -> bool {
+                return true;
+            };
 
+    viewer.callback_mouse_down =
+            [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
+                if (drag_idx == -1) {
+                    Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
+                    drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
+                }
+                return true;
+            };
+
+    viewer.callback_mouse_up =
+            [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
+                drag_idx = -1;
+                return true;
+            };
+
+    viewer.callback_mouse_move =
+            [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
+                if (drag_idx != -1) {
+                    Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
+                    foam.moveVertex(drag_idx, p);
+                    updateViewerData(viewer);
+                }
+                return true;
+            };
+
+    viewer.callback_pre_draw =
+            [&](igl::opengl::glfw::Viewer &viewer) -> bool {
+                if (optimize) {
+                    foam.optimize(area_target);
+                    updateViewerData(viewer);
+                }
+                return false;
+            };
+
+
+    foam.generateRandomVoronoi();
+    foam.testCasadiCode();
+
+    viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
+    viewer.core().camera_zoom = 2.07;
     viewer.core().background_color.setOnes();
-    viewer.data().set_face_based(true);
-    viewer.data().shininess = 1.0;
-    viewer.data().point_size = 10.0;
+    viewer.data().point_size = 10;
+    viewer.core().is_animating = true;
 
-    viewer.data().set_mesh(V, F);     
-    viewer.data().set_colors(C);
+    drag_idx = -1;
+    optimize = false;
+    area_target = 0.06;
 
-    viewer.core().align_camera_center(V);
-    // viewer.core().toggle(viewer.data().show_lines);
+    updateViewerData(viewer);
 }
 
-void Foam2DApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
-{
-    foam.generateMeshForRendering(V, F, C);
-    viewer.data().clear();
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_colors(C);
+void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
+    Eigen::Matrix<double, -1, -1> points;
+    Eigen::Matrix<double, -1, -1> nodes;
+    Eigen::Matrix<int, -1, -1> lines;
+    foam.generateVoronoiDiagramForVisualization(points, nodes, lines);
+
+    Eigen::Matrix<double, -1, -1> points_c;
+    points_c.resize(points.rows(), 3);
+    points_c.setZero();
+
+    Eigen::Matrix<double, -1, -1> lines_c;
+    lines_c.resize(lines.rows(), 3);
+    lines_c.setZero();
+
+    viewer.data().set_points(points, points_c);
+    viewer.data().set_edges(nodes, lines, lines_c);
+
+    Eigen::Matrix<double, 4, 3> bb_p1;
+    bb_p1 << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
+    Eigen::Matrix<double, 4, 3> bb_p2;
+    bb_p2 << 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 0;
+    Eigen::Matrix<double, 4, 3> bb_c;
+    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
+    viewer.data().add_edges(bb_p1, bb_p2, bb_c);
 }

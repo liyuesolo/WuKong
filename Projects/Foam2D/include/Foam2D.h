@@ -8,15 +8,11 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
-#include <tbb/tbb.h>
-
-
 
 #include "VecMatDef.h"
 
 
-class Foam2D
-{
+class Foam2D {
 public:
     using TV = Vector<double, 2>;
     using TV3 = Vector<double, 3>;
@@ -28,7 +24,7 @@ public:
     using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
-
+    
     using Edge = Vector<int, 2>;
 
     typedef int StorageIndex;
@@ -40,14 +36,24 @@ public:
     int dim = 2;
 public:
 
-    void createRectangleScene();
+    void generateRandomVoronoi();
 
-    void generateMeshForRendering(MatrixXT& V, Eigen::MatrixXi& F, MatrixXT& C);
-    void appendCylindersToEdges(const std::vector<std::pair<TV, TV>>& edge_pairs, 
-        const std::vector<TV3>& color, T radius,
-        MatrixXT& _V, Eigen::MatrixXi& _F, MatrixXT& _C);
+    void generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, MatrixXi &E);
+
+    void optimize(double area_target);
+
+    void retriangulate();
+
+    void moveVertex(int idx, const TV &pos);
+
+    int getClosestMovablePointThreshold(const TV &p, double threshold);
+
+    void testCasadiCode();
+
 public:
     Foam2D() {}
+
     ~Foam2D() {}
 };
+
 #endif

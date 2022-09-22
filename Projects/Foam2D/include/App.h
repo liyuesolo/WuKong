@@ -17,14 +17,14 @@ class Foam2DApp
 public:
     Foam2D& foam;
 
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    Eigen::MatrixXd C;
+    int drag_idx;
+    bool optimize;
+    double area_target;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
-    void updateScreen(igl::opengl::glfw::Viewer& viewer);
+    void updateViewerData(igl::opengl::glfw::Viewer& viewer);
 
     Foam2DApp(Foam2D& _foam) : foam(_foam) {}
     ~Foam2DApp() {}
