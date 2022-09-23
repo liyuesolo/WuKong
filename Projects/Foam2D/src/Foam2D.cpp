@@ -2,10 +2,7 @@
 // libigl libirary must be included first
 #include "../include/Foam2D.h"
 #include "../include/CodeGen.h"
-#include "../codegen/ca_x.h"
-#include "../codegen/ca_dxdc.h"
-#include "../codegen/ca_A.h"
-#include "../codegen/ca_dAdx.h"
+#include "../include/Voronoi.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 #include <random>
 
@@ -13,10 +10,49 @@
 #define NAREA 300
 #define OBJWEIGHT 2
 
-void Foam2D::testCasadiCode() {
-    Eigen::SparseMatrix<double> dxdc = evaluate_dxdc(vertices, tri_face_indices);
+Foam2D::Foam2D() : Foam2D(VORONOI) {}
 
-    VectorXT x0 = evaluate_x(vertices, tri_face_indices);
+Foam2D::Foam2D(TessellationType tessellationType) {
+    switch (tessellationType) {
+        case VORONOI:
+            tessellation = new Voronoi();
+            break;
+        default:
+            std::cout << "Invalid tessellation type in Foam2D constructor. Exiting." << std::endl;
+            exit(1);
+    }
+}
+
+static VectorXi getAreaTriangles(std::vector<std::vector<int>> cells) {
+    VectorXi area_triangles(NAREA * 3);
+
+    int edge = 0;
+    for (size_t i = 0; i < NCELLS; i++) {
+        std::vector<int> &cell = cells[i];
+        size_t degree = cell.size();
+
+        for (size_t j = 0; j < degree; j++) {
+            area_triangles[edge * 3 + 0] = i;
+            area_triangles[edge * 3 + 1] = cell[j];
+            area_triangles[edge * 3 + 2] = cell[(j + 1) % degree];
+            edge++;
+        }
+    }
+
+    for (int i = edge; i < NAREA; i++) {
+        area_triangles[i * 3 + 0] = 0; // TODO: this is a hack, degenerate triangle with area 0...
+        area_triangles[i * 3 + 1] = 0;
+        area_triangles[i * 3 + 2] = 0;
+    }
+
+    return area_triangles;
+}
+
+void Foam2D::checkGradients() {
+    VectorXi tri = tessellation->getDualGraph(vertices);
+    Eigen::SparseMatrix<double> dxdc = tessellation->getNodesGradient(vertices, tri);
+
+    VectorXT x0 = tessellation->getNodes(vertices, tri);
 
     {
         std::random_device rd;
@@ -29,7 +65,7 @@ void Foam2D::testCasadiCode() {
         double eps = 1e-4;
         double error = 1;
         for (int i = 0; i < 10; i++) {
-            xh = evaluate_x(vertices + vert_offsets * eps, tri_face_indices);
+            xh = tessellation->getNodes(vertices + vert_offsets * eps, tri);
 
             VectorXT xfd = x0 + dxdc * vert_offsets * eps;
 
@@ -40,81 +76,7 @@ void Foam2D::testCasadiCode() {
         }
     }
 
-    // Test A
-    int n_faces = tri_face_indices.rows() / 3;
-
-    MatrixXi F;
-    F.resize(n_faces, 3);
-    for (int i = 0; i < n_faces; i++) {
-        F.row(i) = tri_face_indices.segment<3>(i * 3);
-    }
-
-    VectorXi area_triangles(NAREA * 3);
-
-    int edge = 0;
-    for (int i = 0; i < n_faces; i++) {
-        for (int j = i + 1; j < n_faces; j++) {
-            int num_shared_vertices = 0;
-            bool shared[3] = {false, false, false};
-            for (int ii = 0; ii < 3; ii++) {
-                if (F(i, ii) == F(j, 0) || F(i, ii) == F(j, 1) || F(i, ii) == F(j, 2)) {
-                    num_shared_vertices++;
-                    shared[ii] = true;
-                }
-            }
-            if (num_shared_vertices == 2) {
-                if (shared[0] && shared[1]) {
-                    if (F(i, 0) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 0);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (F(i, 1) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 1);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else if (shared[1] && shared[2]) {
-                    if (F(i, 1) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 1);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (F(i, 2) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 2);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else if (shared[2] && shared[0]) {
-                    if (F(i, 2) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 2);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (F(i, 0) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = F(i, 0);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else {
-                    assert(false);
-                }
-            }
-        }
-    }
-    std::cout << "NUM AREA TRIS " << edge << std::endl;
-
-    for (int i = edge; i < NAREA; i++) {
-        area_triangles[i * 3 + 0] = 0; // TODO: this is a hack, degenerate triangle with area 0...
-        area_triangles[i * 3 + 1] = 0;
-        area_triangles[i * 3 + 2] = 0;
-    }
+    VectorXi area_triangles = getAreaTriangles(tessellation->getCells(vertices, tri, x0));
 
     VectorXT A = evaluate_A(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
     Eigen::SparseMatrix<double> dAdx = evaluate_dAdx(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
@@ -158,7 +120,7 @@ void Foam2D::testCasadiCode() {
         double eps = 1e-4;
         double error = 1;
         for (int i = 0; i < 10; i++) {
-            xh = evaluate_x(vertices + vert_offsets * eps, tri_face_indices);
+            xh = tessellation->getNodes(vertices + vert_offsets * eps, tri);
             Ah = evaluate_A((vertices + vert_offsets * eps).segment<NCELLS * 2>(0), xh, area_triangles);
 
             VectorXT Afd = A + dAdc * vert_offsets * eps;
@@ -170,32 +132,6 @@ void Foam2D::testCasadiCode() {
         }
     }
 }
-
-static void triangulateWrapper(Foam2D::VectorXT verticesIn, Foam2D::VectorXT &verticesOut, Foam2D::VectorXi &triOut) {
-    int n_vtx = verticesIn.rows() / 2;
-
-    Foam2D::MatrixXT P;
-    P.resize(n_vtx, 2);
-    for (int i = 0; i < n_vtx; i++) {
-        P.row(i) = verticesIn.segment<2>(i * 2);
-    }
-
-    Foam2D::MatrixXT V;
-    Foam2D::MatrixXi F;
-    igl::triangle::triangulate(P,
-                               Foam2D::MatrixXi(),
-                               Foam2D::MatrixXT(),
-                               "cQ", // Enclose convex hull with segments
-                               V, F);
-
-    verticesOut.resize(V.rows() * 2);
-    for (int i = 0; i < V.rows(); i++)
-        verticesOut.segment<2>(i * 2) = V.row(i);
-    triOut.resize(F.rows() * 3);
-    for (int i = 0; i < F.rows(); i++)
-        triOut.segment<3>(i * 3) = F.row(i);
-}
-
 
 void Foam2D::generateRandomVoronoi() {
 
@@ -209,107 +145,29 @@ void Foam2D::generateRandomVoronoi() {
         boundary_points.segment<2>(i * 2) = TV(cos(i * 2 * M_PI / 40), sin(i * 2 * M_PI / 40));
     }
 
-    VectorXT voronoi_points = VectorXT::Zero((40 + NCELLS) * 2).unaryExpr([&](float dummy) { return dis(gen); });
-    voronoi_points.segment<40 * 2>(NCELLS * 2) = boundary_points;
-
-    triangulateWrapper(voronoi_points, vertices, tri_face_indices);
-}
-
-void Foam2D::retriangulate() {
-    triangulateWrapper(vertices, vertices, tri_face_indices);
-}
-
-static Foam2D::VectorXi getAreaTriangles(Foam2D::VectorXi tri) {
-    Foam2D::VectorXi area_triangles(NAREA * 3);
-
-    int n_faces = tri.rows() / 3;
-    int edge = 0;
-    for (int i = 0; i < n_faces; i++) {
-        for (int j = i + 1; j < n_faces; j++) {
-            int num_shared_vertices = 0;
-            bool shared[3] = {false, false, false};
-            for (int ii = 0; ii < 3; ii++) {
-                if (tri(i * 3 + ii) == tri(j * 3 + 0) || tri(i * 3 + ii) == tri(j * 3 + 1) ||
-                    tri(i * 3 + ii) == tri(j * 3 + 2)) {
-                    num_shared_vertices++;
-                    shared[ii] = true;
-                }
-            }
-            if (num_shared_vertices == 2) {
-                if (shared[0] && shared[1]) {
-                    if (tri(i * 3 + 0) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 0);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (tri(i * 3 + 1) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 1);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else if (shared[1] && shared[2]) {
-                    if (tri(i * 3 + 1) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 1);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (tri(i * 3 + 2) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 2);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else if (shared[2] && shared[0]) {
-                    if (tri(i * 3 + 2) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 2);
-                        area_triangles[edge * 3 + 1] = j;
-                        area_triangles[edge * 3 + 2] = i;
-                        edge++;
-                    }
-                    if (tri(i * 3 + 0) < NCELLS) {
-                        area_triangles[edge * 3 + 0] = tri(i * 3 + 0);
-                        area_triangles[edge * 3 + 1] = i;
-                        area_triangles[edge * 3 + 2] = j;
-                        edge++;
-                    }
-                } else {
-                    assert(false);
-                }
-            }
-        }
-    }
-
-    for (int i = edge; i < NAREA; i++) {
-        area_triangles[i * 3 + 0] = 0; // TODO: this is a hack, degenerate triangle with area 0...
-        area_triangles[i * 3 + 1] = 0;
-        area_triangles[i * 3 + 2] = 0;
-    }
-
-    return area_triangles;
+    vertices = VectorXT::Zero((40 + NCELLS) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment<40 * 2>(NCELLS * 2) = boundary_points;
 }
 
 
 class AreaObjective : public ObjectiveFunction {
 
 public:
+    Tessellation *tessellation;
+
     double area_target = 0.1;
 
 public:
     virtual double evaluate(const VectorXd &c) const {
-        Foam2D::VectorXi tri;
-        Foam2D::VectorXT x;
-        Foam2D::VectorXi e;
-        Foam2D::VectorXT A;
+        VectorXi tri;
+        VectorXT x;
+        VectorXi e;
+        VectorXT A;
 
-        Foam2D::VectorXT c_temp;
-        triangulateWrapper(c, c_temp, tri);
+        tri = tessellation->getDualGraph(c);
+        x = tessellation->getNodes(c, tri);
 
-        x = evaluate_x(c, tri);
-
-        e = getAreaTriangles(tri);
+        e = getAreaTriangles(tessellation->getCells(c, tri, x));
 
         A = evaluate_A(c.segment<NCELLS * 2>(0), x, e);
 
@@ -326,32 +184,30 @@ public:
     }
 
     VectorXd get_DODc(const VectorXd &c) const {
-        Foam2D::VectorXi tri;
-        Foam2D::VectorXT x;
+        VectorXi tri;
+        VectorXT x;
         Eigen::SparseMatrix<double> dxdc;
-        Foam2D::VectorXi e;
-        Foam2D::VectorXT A;
+        VectorXi e;
+        VectorXT A;
         Eigen::SparseMatrix<double> dAdx;
-        Foam2D::MatrixXT dOdA;
+        MatrixXT dOdA;
 
-        Foam2D::VectorXT c_temp;
-        triangulateWrapper(c, c_temp, tri);
+        tri = tessellation->getDualGraph(c);
+        x = tessellation->getNodes(c, tri);
+        dxdc = tessellation->getNodesGradient(c, tri);
 
-        x = evaluate_x(c, tri);
-        dxdc = evaluate_dxdc(c, tri);
-
-        e = getAreaTriangles(tri);
+        e = getAreaTriangles(tessellation->getCells(c, tri, x));
 
         A = evaluate_A(c.segment<NCELLS * 2>(0), x, e);
         dAdx = evaluate_dAdx(c.segment<NCELLS * 2>(0), x, e);
 
-        Foam2D::VectorXT targets;
+        VectorXT targets;
         targets.resize(A.rows());
         targets.setOnes();
         targets = targets * area_target;
         dOdA = 2 * (A - targets).transpose();
 
-        Foam2D::VectorXT dOdc = (dOdA * dAdx * dxdc).transpose();
+        VectorXT dOdc = (dOdA * dAdx * dxdc).transpose();
         dOdc.segment<40 * 2>(NCELLS * 2) *= 0; // Fix boundary sites...
 
         return OBJWEIGHT * dOdc.transpose();
@@ -360,12 +216,12 @@ public:
 
 void Foam2D::optimize(double area_target) {
     AreaObjective objective;
+    Voronoi voronoi;
+    objective.tessellation = &voronoi;
     objective.area_target = area_target;
 
     GradientDescentLineSearch minimizer(1, 1e-6, 15);
     minimizer.minimize(&objective, vertices);
-
-    retriangulate();
 }
 
 int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
@@ -386,32 +242,13 @@ int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
     return closest;
 }
 
-void Foam2D::moveVertex(int idx, const Foam2D::TV &pos) {
+void Foam2D::moveVertex(int idx, const TV &pos) {
     vertices.segment<2>(idx * 2) = pos;
-    retriangulate();
-}
-
-static Foam2D::TV getCircumcentre(const Foam2D::TV &v1, const Foam2D::TV &v2, const Foam2D::TV &v3) {
-    double x1 = v1(0), x2 = v2(0), x3 = v3(0);
-    double y1 = v1(1), y2 = v2(1), y3 = v3(1);
-
-    double m = 0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1));
-
-    double xc = 0.5 * (x1 + x3) - m * (y3 - y1);
-    double yc = 0.5 * (y1 + y3) + m * (x3 - x1);
-
-    return {xc, yc};
-}
-
-static Foam2D::TV3 getRandomColorFromVertex(const Foam2D::TV &v) {
-    double r = (double) ((int) (0.5 * (v(0) + 1) * RAND_MAX) % 255) / 255;
-    double g = (double) ((int) (0.5 * (v(1) + 1) * RAND_MAX) % 255) / 255;
-    double b = (double) ((int) (0.25 * (v(0) + v(1) + 2) * RAND_MAX) % 255) / 255;
-    return {r, g, b};
 }
 
 void Foam2D::generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
-    long n_vtx = vertices.rows() / 2, n_faces = tri_face_indices.rows() / 3;
+    VectorXi tri = tessellation->getDualGraph(vertices);
+    long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
     C.resize(n_vtx, 3);
     C.setZero();
@@ -422,33 +259,33 @@ void Foam2D::generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, Ma
     MatrixXi F;
     F.resize(n_faces, 3);
     for (int i = 0; i < n_faces; i++) {
-        F.row(i) = tri_face_indices.segment<3>(i * 3);
+        F.row(i) = tri.segment<3>(i * 3);
     }
 
-    int num_voronoi_nodes = n_faces;
-    X.resize(num_voronoi_nodes, 3);
+    VectorXT x = tessellation->getNodes(vertices, tri);
+    X.resize(n_faces, 3);
     X.setZero();
     for (int i = 0; i < n_faces; i++) {
-        TV vc = getCircumcentre(C.block<1, 2>(F(i, 0), 0), C.block<1, 2>(F(i, 1), 0), C.block<1, 2>(F(i, 2), 0));
-        X.row(i).segment<2>(0) = vc;
+        X.row(i).segment<2>(0) = x.segment<2>(i * 2);
     }
 
     int num_voronoi_edges = 2 * n_faces - n_vtx + 1;
-    E.resize(num_voronoi_edges, 2);
+    E.resize(num_voronoi_edges * 2, 2);
+    E.setZero();
 
+    std::vector<std::vector<int>> cells = tessellation->getCells(vertices, tri, x);
     int edge = 0;
-    for (int i = 0; i < n_faces; i++) {
-        for (int j = i + 1; j < n_faces; j++) {
-            int num_shared_vertices = 0;
-            for (int ii = 0; ii < 3; ii++) {
-                if (F(i, ii) == F(j, 0) || F(i, ii) == F(j, 1) || F(i, ii) == F(j, 2)) {
-                    num_shared_vertices++;
-                }
-            }
-            if (num_shared_vertices == 2) {
-                E.row(edge) = IV(i, j);
-                edge++;
-            }
+    for (int i = 0; i < NCELLS; i++) {
+        std::vector<int> &cell = cells[i];
+        size_t degree = cell.size();
+
+        for (size_t j = 0; j < degree; j++) {
+            int v1 = cell[j];
+            int v2 = cell[(j + 1) % degree];
+
+            // TODO: This adds most edges twice (once per adjacent cell), fine for now.
+            E.row(edge) = IV(v1, v2);
+            edge++;
         }
     }
 }

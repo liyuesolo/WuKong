@@ -60,7 +60,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
 
     foam.generateRandomVoronoi();
-    foam.testCasadiCode();
+    foam.checkGradients();
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
     viewer.core().camera_zoom = 2.07;
