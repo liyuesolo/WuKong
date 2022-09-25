@@ -1,4 +1,4 @@
-set(DEPS Half tbb tbbmalloc tbbmalloc_proxy igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis)
+set(DEPS tbb tbbmalloc tbbmalloc_proxy igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png suitesparseconfig metis)
 
 file(GLOB HEADERS "include/*.h" "include/*.hpp" )
 file(GLOB SOURCES "src/*.cpp" )
