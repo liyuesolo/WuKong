@@ -21,6 +21,9 @@ public:
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
 
     Cell2DApp(CellSim& cellSim) : cellSim(cellSim) {}
+
+private:
+	bool print_step;
 };
 
 #endif

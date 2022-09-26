@@ -3,17 +3,23 @@
 
 #include "../include/App.h"
 #include "../include/Cell.h"
-#include "../include/Triangulate.h"
 
 void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu)
 {
     menu.callback_draw_viewer_menu = [&]()
     {
-        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
-        {
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Checkbox("Print Step", &print_step);
+			ImGui::Checkbox("Total Potential", &cellSim.config.print_total_potential);
+			ImGui::Checkbox("Individual Potentials", &cellSim.config.print_separate_potential);
+		}
+        if (ImGui::CollapsingHeader("Cell Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::InputDouble("Resting perimeter", &cellSim.perimeter_goal);
+			ImGui::InputDouble("Resting volume", &cellSim.volume_goal);
 
         }
+
     };
 
     viewer.callback_key_pressed = 
@@ -22,7 +28,8 @@ void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         switch(key)
         {
 		case ' ':
-			std::cout << "Simulation step =" << cellSim.t << std::endl;
+			if (print_step)
+				std::cout << "Simulation step =" << cellSim.t << std::endl;
 			cellSim.step();
 			//std::cout << cellSim.vertices << std::endl;
 			break;
@@ -33,8 +40,6 @@ void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         
     };
     
-    //foam.createRectangleScene();
-
     updateScreen(viewer);
 
     viewer.core().background_color.setOnes();
@@ -43,9 +48,6 @@ void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().point_size = 20.0;
     viewer.data().line_width = 4.0;
     //viewer.data().set_colors(C);
-
-	// draw two cells to test disconnected meshes
-
 }
 
 void Cell2DApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
