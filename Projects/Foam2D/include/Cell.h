@@ -63,9 +63,6 @@ class CellSim {
 
 		Matrix<int, N_SEGMENTS, 2> cellEdgeList() const;
 
-		std::pair<double, CellDerivativeVector> areaDerivatives(
-				const Matrix<double, N_SEGMENTS, 2>& vertices
-				) const;
 		double volumePotential(const MatrixXd& vertices) const;
 		double perimeterPotential(const MatrixXd& vertices) const;
 

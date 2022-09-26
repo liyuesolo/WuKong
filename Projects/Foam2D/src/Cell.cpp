@@ -1,10 +1,32 @@
+#include<functional>
 #include "../include/Cell.h"
 #include "../include/ad.h"
 #include "../include/area.h"
 #include "../include/perimeter.h"
 
+#include<Eigen/IterativeLinearSolvers>
+//#include<Eigen/SparseCholesky>
+//#include<Eigen/SparseLU>
+//
+using SolverClass = Eigen::BiCGSTAB<SparseMatrix<double>>;
+//Eigen::SimplicialLDLT<SparseMatrix<double>>;
+//Eigen::SparseLU<SparseMatrix<double>>;
+
 using Eigen::VectorXi;
-//Matrix<double, N_SEGMENTS, 2> buildCellMatrix(){
+
+MatrixXd finiteDiffHess(const std::function<VectorXd (VectorXd)>& jac, const VectorXd& x0, double h) {
+	const int n_dof = x0.size();
+	MatrixXd hessian(n_dof, n_dof);
+	for (int i = 0; i < n_dof; ++i) {
+		VectorXd d = VectorXd::Zero(n_dof);
+		d[i] = h;
+		const VectorXd j_n = jac(x0-d);
+		const VectorXd j_p = jac(x0+d);
+		hessian.row(i) = (j_p - j_n)/h/2;
+	}
+	return hessian;
+}
+
 const Matrix<int, N_SEGMENTS, 2> CellSim::cell_edges = [](){
 	Matrix<int, N_SEGMENTS, 2> edges;
 	for (int i = 0; i < N_SEGMENTS; i++) {
@@ -46,134 +68,8 @@ std::pair<MatrixXd, MatrixXi> CellSim::triangulate_all_cells() const {
 
 }
 
-std::pair<double, CellDerivativeVector> CellSim::areaDerivatives(
-		const Matrix<double, N_SEGMENTS, 2>& vertices
-		) const {
-	// computes the 2d area of a polygon defined by `vertices`
-	std::vector<double> vertices_vec(3*2);
-
-	std::vector<double> jacobian(N_SEGMENTS*2);
-	Eigen::Map<Vector<double, N_SEGMENTS*2>> derivatives_vec(jacobian.data());
-
-	double area_scalar = 0;
-
-	Vector<double, N_SEGMENTS*2> derivatives_old;
-	derivatives_old.setZero();
-
-	MatrixXd V, areas;
-	MatrixXi F;
-
-	igl::triangle::triangulate(
-			vertices,
-			cell_edges,
-			MatrixXd(), 
-			"aqQ",  // any triangulation is fine for computing the volume
-			V, F);
-
-	for (int i = 0; i < vertices.rows(); i++) {
-		if (V.row(i) != vertices.row(i)) {
-			std::cout << "Vertex " << i << " changed! new: " << V.row(i) << ", original: " << vertices.row(i);
-		}
-	}
-	igl::doublearea(V, F, areas);
-	areas /= 2;
-	double area = 0;
-	Vector<double, N_SEGMENTS*2> derivatives;
-	derivatives.setZero();
-
-	/*
-	Vector<double, N_SEGMENTS*2> derivatives_new;
-	derivatives_new.setZero();
-	*/
-	const Vector3d unitX(1, 0, 0), unitY(0, 1, 0), unitZ(0, 0, 1);
-
-	for (const Eigen::RowVector3i& triangle: F.rowwise()) {
-		// compute the area of the face
-		Vector3d a, b, c;
-		a.setZero();
-		b.setZero();
-		c.setZero();
-		a.head<2>() = V.row(triangle[1]) - V.row(triangle[0]);
-		b.head<2>() = V.row(triangle[2]) - V.row(triangle[1]);
-		c.head<2>() = V.row(triangle[0]) - V.row(triangle[2]);
-		area += a.cross(b).dot(unitZ)/2;
-
-		if (triangle[0] < N_SEGMENTS) {
-			derivatives(triangle[0]*2 + 0) += b.cross(unitX).dot(unitZ);
-			derivatives(triangle[0]*2 + 1) += b.cross(unitY).dot(unitZ);
-		}
-		if (triangle[1] < N_SEGMENTS) {
-			derivatives(triangle[1]*2 + 0) += c.cross(unitX).dot(unitZ);
-			derivatives(triangle[1]*2 + 1) += c.cross(unitY).dot(unitZ);
-		}
-		if (triangle[2] < N_SEGMENTS) {
-			derivatives(triangle[2]*2 + 0) += a.cross(unitX).dot(unitZ);
-			derivatives(triangle[2]*2 + 1) += a.cross(unitY).dot(unitZ);
-		}
-
-		/*
-		const std::vector<double> vertices_vec{a[0], a[1], b[0], b[1], c[0], c[1]};
-		area_scalar += triangleArea(vertices_vec);
-		triangleAreaJacobian(jacobian, vertices_vec);
-		derivatives_new(triangle[0]*2 + 0) += jacobian[0];
-		derivatives_new(triangle[0]*2 + 1) += jacobian[1];
-		derivatives_new(triangle[1]*2 + 0) += jacobian[2];
-		derivatives_new(triangle[1]*2 + 1) += jacobian[3];
-		derivatives_new(triangle[2]*2 + 0) += jacobian[4];
-		derivatives_new(triangle[2]*2 + 1) += jacobian[5];
-		*/
-	}
-	derivatives /= 2;
-	std::cout << "Area (old): " << area
-		<< ", (new): " << area_scalar << std::endl
-		<< "Derivatives (old): " << derivatives.transpose() << std::endl
-		//<< "Derivatives (new): " << derivatives_new.transpose()
-		<< std::endl;
-	return std::make_pair(area, derivatives);
-}
-
 void CellSim::jiggle(double delta) {
 	vertices_state.leftCols<2>() += vertices_state.Random(vertices_state.rows(), 2)*delta;
-}
-
-void CellSim::lineSearch() {
-	jiggle(0.01);
-	/*
-	 * 1) get derivative
-	 * 2) check x axis intercept
-	 * 3) repeat if solution does not improve
-	 *
-	const double min_step = 1e-9, start_step = 1;
-
-	double potential;
-	MatrixXd potential_d, potential_d_like_vertices(vertices_state.rows(), vertices_state.cols());
-	std::tie(potential, potential_d) = potentialDerivatives(vertices_state);
-	const double start_potential = potential;
-
-	potential_d_like_vertices.setZero();
-	for (size_t cell_idx = 0; cell_idx < cells.size(); cell_idx++) {
-		potential_d_like_vertices.leftCols<2>().middleRows<N_SEGMENTS>(cell_idx*N_SEGMENTS) = potential_d.row(cell_idx).reshaped(2, N_SEGMENTS).transpose();
-	}
-
-	double step_size = start_step;
-	//const double step_factor = potential/potential_d.sum();
-	const double step_factor = 1;
-	std::cout << "The potential is " << potential << " and the step factor is " << step_factor << std::endl;
-
-	int i = 0;
-	for (; step_size > min_step; step_size = std::max(min_step, step_size/2)) {
-		// compute potential for given step size
-		std::tie(potential, potential_d) = potentialDerivatives(vertices_state - step_size * step_factor * potential_d_like_vertices);
-		if (potential < start_potential) {
-			vertices_state -= step_size * step_factor * potential_d_like_vertices;
-			std::cout << "Line search concluded at step " << i << std::endl;
-			return;
-		}
-		std::cout << "Step " << i << ": \t Potential = " << potential << std::endl;
-		i++;
-	}
-	std::cout << "Line search failed after " << i << " steps." << std::endl;
-	 * */
 }
 
 double CellSim::volumePotential(const MatrixXd& vertices) const {
@@ -243,7 +139,11 @@ VectorXd CellSim::perimeterPotentialD(const MatrixXd& vertices) const {
 SparseMatrix<double> CellSim::volumePotentialH(const MatrixXd& vertices) const {
 	using CellHessian = Matrix<double, 2*N_SEGMENTS, 2*N_SEGMENTS>;
 	const int n_cells = cells.size(), n_dof = 2*vertices.rows();
-	SparseMatrix<double> hessian;
+	// lower order derivatives
+	double potential = 0;
+	VectorXd jacobian = VectorXd::Zero(n_dof);
+
+	SparseMatrix<double> hessian(n_dof, n_dof);
 	hessian.reserve(VectorXi::Constant(n_dof, N_SEGMENTS*2));
 
 	MatrixXd V;
@@ -254,13 +154,24 @@ SparseMatrix<double> CellSim::volumePotentialH(const MatrixXd& vertices) const {
 			cellVertices(vertices, c).leftCols<2>(),
 			cell_edges, MatrixXd(), "aqQ", V, F);
 
+		double volume = cellSum<3>(triangleArea, V, F);
+		potential += pow(volume - volume_goal, 2);
+
+		const VectorXd area_jac = cellSumJacobian<3>(triangleAreaJacobian, V, F).head<2*N_SEGMENTS>(); 
+		const VectorXd potential_j = 2 * (volume - volume_goal) * area_jac;
+		jacobian.segment<N_SEGMENTS*2>(c*N_SEGMENTS*2) = potential_j;
+
 		const int c_off = c*N_SEGMENTS*2;
-		const CellHessian cell_hessian = cellSumHessian<3>(
+		const CellHessian vol_hessian = cellSumHessian<3>(
 				triangleAreaHessian,
-				V, F);
+				V, F).topLeftCorner<2*N_SEGMENTS, 2*N_SEGMENTS>();
+		const CellHessian pot_hessian = 2 * (
+				(volume - volume_goal) * vol_hessian
+				+ area_jac * area_jac.transpose()
+				);
 		for (int i = 0; i < 2*N_SEGMENTS; ++i) {
 			for (int j = 0; j < 2*N_SEGMENTS; ++j) {
-				hessian.insert(i+c_off,j+c_off) = cell_hessian(i,j);
+				hessian.insert(i+c_off,j+c_off) = pot_hessian(i,j);
 			}
 		}
 	}
@@ -271,40 +182,35 @@ SparseMatrix<double> CellSim::volumePotentialH(const MatrixXd& vertices) const {
 SparseMatrix<double> CellSim::perimeterPotentialH(const MatrixXd& vertices) const {
 	using CellHessian = Matrix<double, 2*N_SEGMENTS, 2*N_SEGMENTS>;
 	const int n_cells = cells.size(), n_dof = 2*vertices.rows();
-	SparseMatrix<double> hessian;
+	SparseMatrix<double> hessian(n_dof, n_dof);
 	hessian.reserve(VectorXi::Constant(n_dof, N_SEGMENTS*2));
+
+	// lower order derivatives
+	double potential = 0;
+	VectorXd jacobian = VectorXd::Zero(n_dof);
 
 	for (int c = 0; c < n_cells; ++c) {
 		const int c_off = c*N_SEGMENTS*2;
-		const CellHessian cell_hessian = cellSumHessian<2>(
+		const double perimeter = cellSum<2>(lineLength, cellVertices(vertices, c).leftCols<2>(), cell_edges);
+		potential += pow(perimeter - perimeter_goal, 2);
+		const VectorXd per_jac = cellSumJacobian<2>(lineLengthJacobian, cellVertices(vertices, c).leftCols<2>(), cell_edges); 
+		const VectorXd potential_j = 2 * (perimeter - perimeter_goal) * per_jac;
+		jacobian.segment<N_SEGMENTS*2>(c*N_SEGMENTS*2) = potential_j;
+		const CellHessian per_hessian = cellSumHessian<2>(
 				lineLengthHessian,
 				cellVertices(vertices, c).leftCols<2>(), cell_edges);
+		const CellHessian pot_hessian = 2 * (
+				(perimeter - perimeter_goal) * per_hessian
+				+ per_jac * per_jac.transpose()
+				);
 		for (int i = 0; i < 2*N_SEGMENTS; ++i) {
 			for (int j = 0; j < 2*N_SEGMENTS; ++j) {
-				hessian.insert(i+c_off,j+c_off) = cell_hessian(i,j);
+				hessian.insert(i+c_off,j+c_off) = pot_hessian(i,j);
 			}
 		}
 	}
 	hessian.makeCompressed();
 	return hessian;
-}
-
-double CellSim::computePotential(const MatrixXd& vertices) const {
-	const int n_dof = 2*vertices.rows();
-	double potential;
-	return potential;
-}
-
-VectorXd CellSim::computeResidual(const MatrixXd& vertices) const {
-	const int n_dof = 2*vertices.rows();
-	VectorXd r(n_dof);
-	return r;
-}
-
-SparseMatrix<double> CellSim::computeSystemMatrix(const MatrixXd& vertices) const {
-	const int n_dof = 2*vertices.rows();
-	SparseMatrix<double> K(n_dof, n_dof);
-	return K;
 }
 
 void CellSim::step() {
@@ -332,12 +238,61 @@ void CellSim::step() {
 		std::cout << "Total residual norm: " << jacobian.norm() << std::endl;
 	}
 
-	auto gd_matrix = jacobian.reshaped(2, n_dof/2).transpose();
-	vertices_state.leftCols<2>() -= gd_matrix * 1e-2;
 	// compute whole-system hessian (system matrix, K)
+
+	const SparseMatrix<double> k_perimeter = perimeterPotentialH(vertices_state);
+	const SparseMatrix<double> k_volume = volumePotentialH(vertices_state);
+	const SparseMatrix<double> hessian = k_perimeter + k_volume;
+
+	if (config.print_hessian) {
+		std::cout << "Hessian: " << std::endl << hessian << std::endl;
+		std::cout << "Perimeter Hessian: " << std::endl << k_perimeter << std::endl;
+		std::cout << "Volume Hessian: " << std::endl << k_volume << std::endl;
+	}
+
+	if (config.check_system_matrix) {
+		const MatrixXd k_p_fd = finiteDiffHess(
+				[&n_dof, this](VectorXd v){
+				return perimeterPotentialD(v.reshaped(2, n_dof/2).transpose());},
+				vertices_state.leftCols<2>().transpose().reshaped(n_dof, 1), 1e-5);
+
+		const MatrixXd k_v_fd = finiteDiffHess(
+				[&n_dof, this](VectorXd v){
+				return volumePotentialD(v.reshaped(2, n_dof/2).transpose());},
+				vertices_state.leftCols<2>().transpose().reshaped(n_dof, 1), 1e-5);
+		std::cout << "Difference (norm, perimeter): " << std::endl << (k_perimeter - k_p_fd).norm() << std::endl;
+		std::cout << "Difference (norm, volume): " << std::endl << (k_volume - k_v_fd).norm() << std::endl;
+		if (config.print_hessian) {
+			std::cout << "Perimeter Hessian (FD): " << std::endl << k_p_fd << std::endl;
+			std::cout << "Volume Hessian (FD): " << std::endl << k_v_fd << std::endl;
+		}
+	}
+
 	// solve K x = -r
 	// take a step in direction of x
-	const SparseMatrix hessian = computeSystemMatrix(vertices_state);
+
+	Eigen::VectorXd dof_update;
+	if (config.use_hessian) {
+		std::cout << "Using Hessian" << std::endl;
+		SolverClass solver;
+		solver.compute(hessian);
+		if(solver.info()!=Eigen::Success) {
+			// decomposition failed
+			std::cout << "ERROR: Decomposition failed!" << std::endl;
+		return;
+		}
+		const VectorXd u = solver.solve(jacobian);
+		if(solver.info()!=Eigen::Success) {
+			// solving failed
+			std::cout << "ERROR: Solving failed!" << std::endl;
+			return;
+		}
+		dof_update = u;
+	} else {
+		std::cout << "Using Jacobian" << std::endl;
+		dof_update = jacobian;
+	}
+	vertices_state.leftCols<2>() -= dof_update.reshaped(2, n_dof/2).transpose() * 1e-2;
 	++t;
 }
 
@@ -366,17 +321,6 @@ std::pair<double, MatrixXd> CellSim::collisionPotential(const MatrixXd& vertices
 		}
 	}
 	return std::make_pair(potential, potential_d);
-	/*
-	   const auto perimeter_der = perimeterDerivativesAll(vertices);
-	   const VectorXd perimeterResiduals = perimeter_der.first.array() - idealPerimeter;
-	   const double perimeter_potential = perimeterResiduals.array().pow(2).sum();
-	   MatrixXd derivatives = perimeter_der.second;
-
-	   for (int i = 0; i < derivatives.rows(); i++) {
-	   derivatives.row(i) *= 2 * perimeterResiduals(i);
-	   }
-	   return std::make_pair(perimeter_potential, derivatives);
-	   */
 }
 
 bool CellSim::intervalsOverlap(const Vector2d& a_min_max, const Vector2d& b_min_max, double epsilon) const {

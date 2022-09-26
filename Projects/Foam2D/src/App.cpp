@@ -11,8 +11,13 @@ void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     {
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Checkbox("Print Step", &print_step);
+			ImGui::Checkbox("Print Hessian", &cellSim.config.print_hessian);
 			ImGui::Checkbox("Total Potential", &cellSim.config.print_total_potential);
 			ImGui::Checkbox("Individual Potentials", &cellSim.config.print_separate_potential);
+		}
+        if (ImGui::CollapsingHeader("Solver", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Checkbox("Use Hessian", &cellSim.config.use_hessian);
+			ImGui::Checkbox("Check System Matrix", &cellSim.config.check_system_matrix);
 		}
         if (ImGui::CollapsingHeader("Cell Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::InputDouble("Resting perimeter", &cellSim.perimeter_goal);
@@ -29,7 +34,7 @@ void Cell2DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         {
 		case ' ':
 			if (print_step)
-				std::cout << "Simulation step =" << cellSim.t << std::endl;
+				std::cout << std::endl<< std::endl<< "Simulation step =" << cellSim.t << std::endl;
 			cellSim.step();
 			//std::cout << cellSim.vertices << std::endl;
 			break;
