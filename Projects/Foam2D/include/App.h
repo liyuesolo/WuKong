@@ -16,9 +16,10 @@ class Foam2DApp {
 public:
     Foam2D &foam;
 
-    int drag_idx;
-    bool optimize;
-    double area_target;
+    int drag_idx = -1;
+    bool optimize = false;
+    double area_target = 0.06;
+    bool show_dual = false;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,

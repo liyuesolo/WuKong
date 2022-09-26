@@ -31,7 +31,8 @@ public:
     using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
     using Entry = Eigen::Triplet<T>;
 
-    Tessellation *tessellation;
+    std::vector<Tessellation *> tessellations;
+    int tesselation = 0;
 
     VectorXT vertices;
     int dim = 2;
@@ -39,7 +40,9 @@ public:
 
     void generateRandomVoronoi();
 
-    void generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, MatrixXi &E);
+    void getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E);
+
+    void getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E);
 
     void optimize(double area_target);
 
@@ -50,8 +53,6 @@ public:
     void checkGradients();
 
 public:
-
-    explicit Foam2D(TessellationType tessellationType);
 
     Foam2D();
 

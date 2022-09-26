@@ -1,8 +1,7 @@
-#include <igl/triangle/triangulate.h>
-// libigl libirary must be included first
 #include "../include/Foam2D.h"
 #include "../include/CodeGen.h"
 #include "../include/Voronoi.h"
+#include "../include/Sectional.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 #include <random>
 
@@ -10,17 +9,9 @@
 #define NAREA 300
 #define OBJWEIGHT 2
 
-Foam2D::Foam2D() : Foam2D(VORONOI) {}
-
-Foam2D::Foam2D(TessellationType tessellationType) {
-    switch (tessellationType) {
-        case VORONOI:
-            tessellation = new Voronoi();
-            break;
-        default:
-            std::cout << "Invalid tessellation type in Foam2D constructor. Exiting." << std::endl;
-            exit(1);
-    }
+Foam2D::Foam2D() {
+    tessellations.push_back(new Voronoi());
+    tessellations.push_back(new Sectional());
 }
 
 static VectorXi getAreaTriangles(std::vector<std::vector<int>> cells) {
@@ -49,10 +40,10 @@ static VectorXi getAreaTriangles(std::vector<std::vector<int>> cells) {
 }
 
 void Foam2D::checkGradients() {
-    VectorXi tri = tessellation->getDualGraph(vertices);
-    Eigen::SparseMatrix<double> dxdc = tessellation->getNodesGradient(vertices, tri);
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
+    Eigen::SparseMatrix<double> dxdc = tessellations[tesselation]->getNodesGradient(vertices, tri);
 
-    VectorXT x0 = tessellation->getNodes(vertices, tri);
+    VectorXT x0 = tessellations[tesselation]->getNodes(vertices, tri);
 
     {
         std::random_device rd;
@@ -65,7 +56,7 @@ void Foam2D::checkGradients() {
         double eps = 1e-4;
         double error = 1;
         for (int i = 0; i < 10; i++) {
-            xh = tessellation->getNodes(vertices + vert_offsets * eps, tri);
+            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, tri);
 
             VectorXT xfd = x0 + dxdc * vert_offsets * eps;
 
@@ -76,7 +67,7 @@ void Foam2D::checkGradients() {
         }
     }
 
-    VectorXi area_triangles = getAreaTriangles(tessellation->getCells(vertices, tri, x0));
+    VectorXi area_triangles = getAreaTriangles(tessellations[tesselation]->getCells(vertices, tri, x0));
 
     VectorXT A = evaluate_A(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
     Eigen::SparseMatrix<double> dAdx = evaluate_dAdx(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
@@ -120,7 +111,7 @@ void Foam2D::checkGradients() {
         double eps = 1e-4;
         double error = 1;
         for (int i = 0; i < 10; i++) {
-            xh = tessellation->getNodes(vertices + vert_offsets * eps, tri);
+            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, tri);
             Ah = evaluate_A((vertices + vert_offsets * eps).segment<NCELLS * 2>(0), xh, area_triangles);
 
             VectorXT Afd = A + dAdc * vert_offsets * eps;
@@ -246,8 +237,8 @@ void Foam2D::moveVertex(int idx, const TV &pos) {
     vertices.segment<2>(idx * 2) = pos;
 }
 
-void Foam2D::generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
-    VectorXi tri = tessellation->getDualGraph(vertices);
+void Foam2D::getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
     C.resize(n_vtx, 3);
@@ -256,13 +247,34 @@ void Foam2D::generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, Ma
         C.row(i).segment<2>(0) = vertices.segment<2>(i * 2);
     }
 
-    MatrixXi F;
-    F.resize(n_faces, 3);
+    X = C;
+
+    int num_edges = n_faces * 3;
+    E.resize(num_edges, 2);
+    E.setZero();
+
     for (int i = 0; i < n_faces; i++) {
-        F.row(i) = tri.segment<3>(i * 3);
+        int v0 = tri(i * 3 + 0);
+        int v1 = tri(i * 3 + 1);
+        int v2 = tri(i * 3 + 2);
+
+        E.row(i * 3 + 0) = IV(v0, v1);
+        E.row(i * 3 + 1) = IV(v1, v2);
+        E.row(i * 3 + 2) = IV(v2, v0);
+    }
+}
+
+void Foam2D::getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
+    long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
+
+    C.resize(n_vtx, 3);
+    C.setZero();
+    for (int i = 0; i < n_vtx; i++) {
+        C.row(i).segment<2>(0) = vertices.segment<2>(i * 2);
     }
 
-    VectorXT x = tessellation->getNodes(vertices, tri);
+    VectorXT x = tessellations[tesselation]->getNodes(vertices, tri);
     X.resize(n_faces, 3);
     X.setZero();
     for (int i = 0; i < n_faces; i++) {
@@ -273,7 +285,7 @@ void Foam2D::generateVoronoiDiagramForVisualization(MatrixXT &C, MatrixXT &X, Ma
     E.resize(num_voronoi_edges * 2, 2);
     E.setZero();
 
-    std::vector<std::vector<int>> cells = tessellation->getCells(vertices, tri, x);
+    std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
     int edge = 0;
     for (int i = 0; i < NCELLS; i++) {
         std::vector<int> &cell = cells[i];

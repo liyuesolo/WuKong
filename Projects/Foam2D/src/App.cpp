@@ -6,6 +6,17 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Checkbox("Optimize", &optimize);
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Target", &area_target, 0.005f, 0.005f, "%.3f");
+
+        std::vector<std::string> tesselationTypes;
+        tesselationTypes.push_back("Voronoi");
+        tesselationTypes.push_back("Sectional");
+        if (ImGui::Combo("Tessellation Type", &foam.tesselation, tesselationTypes)) {
+            updateViewerData(viewer);
+        };
+
+        if (ImGui::Checkbox("Show Dual", &show_dual)) {
+            updateViewerData(viewer);
+        };
     };
 
     viewer.callback_key_pressed =
@@ -60,17 +71,13 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
 
     foam.generateRandomVoronoi();
-    foam.checkGradients();
+//    foam.checkGradients();
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
     viewer.core().camera_zoom = 2.07;
     viewer.core().background_color.setOnes();
     viewer.data().point_size = 10;
     viewer.core().is_animating = true;
-
-    drag_idx = -1;
-    optimize = false;
-    area_target = 0.06;
 
     updateViewerData(viewer);
 }
@@ -79,11 +86,17 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<double, -1, -1> points;
     Eigen::Matrix<double, -1, -1> nodes;
     Eigen::Matrix<int, -1, -1> lines;
-    foam.generateVoronoiDiagramForVisualization(points, nodes, lines);
+
+    if (show_dual) {
+        foam.getTriangulationViewerData(points, nodes, lines);
+    } else {
+        foam.getTessellationViewerData(points, nodes, lines);
+    }
 
     Eigen::Matrix<double, -1, -1> points_c;
     points_c.resize(points.rows(), 3);
     points_c.setZero();
+    points_c(0, 0) = 1;
 
     Eigen::Matrix<double, -1, -1> lines_c;
     lines_c.resize(lines.rows(), 3);
