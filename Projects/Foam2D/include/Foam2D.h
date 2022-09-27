@@ -10,7 +10,7 @@
 #include <Eigen/Dense>
 
 #include "VecMatDef.h"
-#include "Tessellation.h"
+#include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 
 using TV = Vector<double, 2>;
 using TV3 = Vector<double, 3>;
@@ -35,6 +35,7 @@ public:
     int tesselation = 0;
 
     VectorXT vertices;
+    VectorXT params;
     int dim = 2;
 public:
 
@@ -51,6 +52,8 @@ public:
     int getClosestMovablePointThreshold(const TV &p, double threshold);
 
     void checkGradients();
+
+    void resetVertexParams();
 
 public:
 

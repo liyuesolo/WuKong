@@ -1,128 +1,106 @@
 #include "../include/Foam2D.h"
 #include "../include/CodeGen.h"
-#include "../include/Voronoi.h"
-#include "../include/Sectional.h"
+#include "Projects/Foam2D/include/Tessellation/Voronoi.h"
+#include "Projects/Foam2D/include/Tessellation/Sectional.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
+#include "../include/Objective/AreaLengthObjective.h"
 #include <random>
 
 #define NCELLS 40
-#define NAREA 300
-#define OBJWEIGHT 2
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
     tessellations.push_back(new Sectional());
 }
 
-static VectorXi getAreaTriangles(std::vector<std::vector<int>> cells) {
-    VectorXi area_triangles(NAREA * 3);
-
-    int edge = 0;
-    for (size_t i = 0; i < NCELLS; i++) {
-        std::vector<int> &cell = cells[i];
-        size_t degree = cell.size();
-
-        for (size_t j = 0; j < degree; j++) {
-            area_triangles[edge * 3 + 0] = i;
-            area_triangles[edge * 3 + 1] = cell[j];
-            area_triangles[edge * 3 + 2] = cell[(j + 1) % degree];
-            edge++;
-        }
-    }
-
-    for (int i = edge; i < NAREA; i++) {
-        area_triangles[i * 3 + 0] = 0; // TODO: this is a hack, degenerate triangle with area 0...
-        area_triangles[i * 3 + 1] = 0;
-        area_triangles[i * 3 + 2] = 0;
-    }
-
-    return area_triangles;
+void Foam2D::resetVertexParams() {
+    params = tessellations[tesselation]->getDefaultVertexParams(vertices);
 }
 
-void Foam2D::checkGradients() {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
-    Eigen::SparseMatrix<double> dxdc = tessellations[tesselation]->getNodesGradient(vertices, tri);
-
-    VectorXT x0 = tessellations[tesselation]->getNodes(vertices, tri);
-
-    {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<double> dis(-1, 1);
-        VectorXT vert_offsets = VectorXT::Zero(vertices.rows()).unaryExpr([&](float dummy) { return dis(gen); });
-
-        VectorXT xh;
-
-        double eps = 1e-4;
-        double error = 1;
-        for (int i = 0; i < 10; i++) {
-            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, tri);
-
-            VectorXT xfd = x0 + dxdc * vert_offsets * eps;
-
-            std::cout << "dxdc error " << (xfd - xh).norm() << " " << error / (xfd - xh).norm() << std::endl;
-
-            error = (xfd - xh).norm();
-            eps *= 0.5;
-        }
-    }
-
-    VectorXi area_triangles = getAreaTriangles(tessellations[tesselation]->getCells(vertices, tri, x0));
-
-    VectorXT A = evaluate_A(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
-    Eigen::SparseMatrix<double> dAdx = evaluate_dAdx(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
-
-    for (int i = 0; i < A.rows(); i++) {
-        std::cout << "area " << A[i] << std::endl;
-    }
-
-    {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<double> dis(-1, 1);
-        VectorXT node_offsets = VectorXT::Zero(x0.rows()).unaryExpr([&](float dummy) { return dis(gen); });
-
-        VectorXT Ah;
-
-        double eps = 1e-4;
-        double error = 1;
-        for (int i = 0; i < 10; i++) {
-            Ah = evaluate_A(vertices.segment<NCELLS * 2>(0), x0 + eps * node_offsets, area_triangles);
-
-            VectorXT Afd = A + dAdx * node_offsets * eps;
-
-            std::cout << "dAdx error " << (Afd - Ah).norm() << " " << error / (Afd - Ah).norm() << std::endl;
-
-            error = (Afd - Ah).norm();
-            eps *= 0.5;
-        }
-    }
-
-    Eigen::SparseMatrix<double> dAdc = dAdx * dxdc;
-    {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<double> dis(-1, 1);
-        VectorXT vert_offsets = VectorXT::Zero(vertices.rows()).unaryExpr([&](float dummy) { return dis(gen); });
-
-        VectorXT xh;
-        VectorXT Ah;
-
-        double eps = 1e-4;
-        double error = 1;
-        for (int i = 0; i < 10; i++) {
-            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, tri);
-            Ah = evaluate_A((vertices + vert_offsets * eps).segment<NCELLS * 2>(0), xh, area_triangles);
-
-            VectorXT Afd = A + dAdc * vert_offsets * eps;
-
-            std::cout << "dAdc error " << (Afd - Ah).norm() << " " << error / (Afd - Ah).norm() << std::endl;
-
-            error = (Afd - Ah).norm();
-            eps *= 0.5;
-        }
-    }
-}
+//void Foam2D::checkGradients() {
+//    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
+//    Eigen::SparseMatrix<double> dxdc = tessellations[tesselation]->getNodesGradient(vertices, params, tri);
+//
+//    VectorXT x0 = tessellations[tesselation]->getNodes(vertices, params, tri);
+//
+//    {
+//        std::random_device rd;
+//        std::mt19937 gen(rd());
+//        std::uniform_real_distribution<double> dis(-1, 1);
+//        VectorXT vert_offsets = VectorXT::Zero(vertices.rows()).unaryExpr([&](float dummy) { return dis(gen); });
+//
+//        VectorXT xh;
+//
+//        double eps = 1e-4;
+//        double error = 1;
+//        for (int i = 0; i < 10; i++) {
+//            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, params, tri);
+//
+//            VectorXT xfd = x0 + dxdc * vert_offsets * eps;
+//
+//            std::cout << "dxdc error " << (xfd - xh).norm() << " " << error / (xfd - xh).norm() << std::endl;
+//
+//            error = (xfd - xh).norm();
+//            eps *= 0.5;
+//        }
+//    }
+//
+//    VectorXi area_triangles = getAreaTriangles(tessellations[tesselation]->getCells(vertices, tri, x0));
+//
+//    VectorXT A = evaluate_A(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
+//    Eigen::SparseMatrix<double> dAdx = evaluate_dAdx(vertices.segment<NCELLS * 2>(0), x0, area_triangles);
+//
+//    for (int i = 0; i < A.rows(); i++) {
+//        std::cout << "area " << A[i] << std::endl;
+//    }
+//
+//    {
+//        std::random_device rd;
+//        std::mt19937 gen(rd());
+//        std::uniform_real_distribution<double> dis(-1, 1);
+//        VectorXT node_offsets = VectorXT::Zero(x0.rows()).unaryExpr([&](float dummy) { return dis(gen); });
+//
+//        VectorXT Ah;
+//
+//        double eps = 1e-4;
+//        double error = 1;
+//        for (int i = 0; i < 10; i++) {
+//            Ah = evaluate_A(vertices.segment<NCELLS * 2>(0), x0 + eps * node_offsets, area_triangles);
+//
+//            VectorXT Afd = A + dAdx * node_offsets * eps;
+//
+//            std::cout << "dAdx error " << (Afd - Ah).norm() << " " << error / (Afd - Ah).norm() << std::endl;
+//
+//            error = (Afd - Ah).norm();
+//            eps *= 0.5;
+//        }
+//    }
+//
+//    Eigen::SparseMatrix<double> dAdc = dAdx * dxdc;
+//    {
+//        std::random_device rd;
+//        std::mt19937 gen(rd());
+//        std::uniform_real_distribution<double> dis(-1, 1);
+//        VectorXT vert_offsets = VectorXT::Zero(vertices.rows()).unaryExpr([&](float dummy) { return dis(gen); });
+//
+//        VectorXT xh;
+//        VectorXT Ah;
+//
+//        double eps = 1e-4;
+//        double error = 1;
+//        for (int i = 0; i < 10; i++) {
+//            xh = tessellations[tesselation]->getNodes(vertices + vert_offsets * eps, params, tri);
+//            Ah = evaluate_A((vertices + vert_offsets * eps).segment<NCELLS * 2>(0), xh, area_triangles);
+//
+//            VectorXT Afd = A + dAdc * vert_offsets * eps;
+//
+//            std::cout << "dAdc error " << (Afd - Ah).norm() << " " << error / (Afd - Ah).norm() << std::endl;
+//
+//            error = (Afd - Ah).norm();
+//            eps *= 0.5;
+//        }
+//    }
+//}
 
 void Foam2D::generateRandomVoronoi() {
 
@@ -138,81 +116,20 @@ void Foam2D::generateRandomVoronoi() {
 
     vertices = VectorXT::Zero((40 + NCELLS) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment<40 * 2>(NCELLS * 2) = boundary_points;
+
+    resetVertexParams();
 }
 
-
-class AreaObjective : public ObjectiveFunction {
-
-public:
-    Tessellation *tessellation;
-
-    double area_target = 0.1;
-
-public:
-    virtual double evaluate(const VectorXd &c) const {
-        VectorXi tri;
-        VectorXT x;
-        VectorXi e;
-        VectorXT A;
-
-        tri = tessellation->getDualGraph(c);
-        x = tessellation->getNodes(c, tri);
-
-        e = getAreaTriangles(tessellation->getCells(c, tri, x));
-
-        A = evaluate_A(c.segment<NCELLS * 2>(0), x, e);
-
-        double O = 0;
-        for (int i = 0; i < A.rows(); i++) {
-            O += (A(i) - area_target) * (A(i) - area_target);
-        }
-
-        return OBJWEIGHT * O;
-    }
-
-    virtual void addGradientTo(const VectorXd &c, VectorXd &grad) const {
-        grad += get_DODc(c);
-    }
-
-    VectorXd get_DODc(const VectorXd &c) const {
-        VectorXi tri;
-        VectorXT x;
-        Eigen::SparseMatrix<double> dxdc;
-        VectorXi e;
-        VectorXT A;
-        Eigen::SparseMatrix<double> dAdx;
-        MatrixXT dOdA;
-
-        tri = tessellation->getDualGraph(c);
-        x = tessellation->getNodes(c, tri);
-        dxdc = tessellation->getNodesGradient(c, tri);
-
-        e = getAreaTriangles(tessellation->getCells(c, tri, x));
-
-        A = evaluate_A(c.segment<NCELLS * 2>(0), x, e);
-        dAdx = evaluate_dAdx(c.segment<NCELLS * 2>(0), x, e);
-
-        VectorXT targets;
-        targets.resize(A.rows());
-        targets.setOnes();
-        targets = targets * area_target;
-        dOdA = 2 * (A - targets).transpose();
-
-        VectorXT dOdc = (dOdA * dAdx * dxdc).transpose();
-        dOdc.segment<40 * 2>(NCELLS * 2) *= 0; // Fix boundary sites...
-
-        return OBJWEIGHT * dOdc.transpose();
-    }
-};
-
 void Foam2D::optimize(double area_target) {
-    AreaObjective objective;
-    Voronoi voronoi;
-    objective.tessellation = &voronoi;
+    AreaLengthObjective objective;
+    objective.tessellation = tessellations[tesselation];
     objective.area_target = area_target;
 
     GradientDescentLineSearch minimizer(1, 1e-6, 15);
-    minimizer.minimize(&objective, vertices);
+
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    minimizer.minimize(&objective, c);
+    tessellations[tesselation]->separateVerticesParams(c, vertices, params);
 }
 
 int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
@@ -238,7 +155,7 @@ void Foam2D::moveVertex(int idx, const TV &pos) {
 }
 
 void Foam2D::getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
     C.resize(n_vtx, 3);
@@ -265,7 +182,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
 }
 
 void Foam2D::getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices);
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
     C.resize(n_vtx, 3);
@@ -274,7 +191,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
         C.row(i).segment<2>(0) = vertices.segment<2>(i * 2);
     }
 
-    VectorXT x = tessellations[tesselation]->getNodes(vertices, tri);
+    VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
     X.resize(n_faces, 3);
     X.setZero();
     for (int i = 0; i < n_faces; i++) {

@@ -30,26 +30,26 @@ x = ca.vec(ca.vertcat(xn, yn))
 # Generate and compile C code
 opts = dict(with_header=True)
 
-ca_x = ca.Function('ca_x', [c, tri], [x])
-ca_x.generate('ca_x', opts)
+ca_x_voronoi = ca.Function('ca_x_voronoi', [c, tri], [x])
+ca_x_voronoi.generate('ca_x_voronoi', opts)
 print('compiling generated code for voronoi nodes...')
-cmd = 'gcc -fPIC -shared -O0 ca_x.c -o libca_x.so'
+cmd = 'gcc -fPIC -shared -O0 ca_x_voronoi.c -o libca_x_voronoi.so'
 status = os.system(cmd)
 if status != 0:
     raise Exception('Command {} failed'.format(cmd))
-cmd = 'gcc -fPIC -shared -O0 ca_x.c -o ca_x.so'
+cmd = 'gcc -fPIC -shared -O0 ca_x_voronoi.c -o ca_x_voronoi.so'
 status = os.system(cmd)
 if status != 0:
     raise Exception('Command {} failed'.format(cmd))
 
-ca_dxdc = ca.Function('ca_dxdc', [c, tri], [ca.jacobian(x, c)])
-ca_dxdc.generate('ca_dxdc', opts)
+ca_dxdc_voronoi = ca.Function('ca_dxdc_voronoi', [c, tri], [ca.jacobian(x, c)])
+ca_dxdc_voronoi.generate('ca_dxdc_voronoi', opts)
 print('compiling generated code for gradient of voronoi nodes...')
-cmd = 'gcc -fPIC -shared -O0 ca_dxdc.c -o libca_dxdc.so'
+cmd = 'gcc -fPIC -shared -O0 ca_dxdc_voronoi.c -o libca_dxdc_voronoi.so'
 status = os.system(cmd)
 if status != 0:
     raise Exception('Command {} failed'.format(cmd))
-cmd = 'gcc -fPIC -shared -O0 ca_dxdc.c -o ca_dxdc.so'
+cmd = 'gcc -fPIC -shared -O0 ca_dxdc_voronoi.c -o ca_dxdc_voronoi.so'
 status = os.system(cmd)
 if status != 0:
     raise Exception('Command {} failed'.format(cmd))

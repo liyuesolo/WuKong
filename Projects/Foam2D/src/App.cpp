@@ -11,6 +11,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         tesselationTypes.push_back("Voronoi");
         tesselationTypes.push_back("Sectional");
         if (ImGui::Combo("Tessellation Type", &foam.tesselation, tesselationTypes)) {
+            foam.resetVertexParams();
             updateViewerData(viewer);
         };
 

@@ -1,4 +1,4 @@
-#include "../include/Tessellation.h"
+#include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 
 std::vector<std::vector<int>>
 Tessellation::getCells(const VectorXT &vertices, const VectorXi &dual, const VectorXT &nodes) {
@@ -13,8 +13,15 @@ Tessellation::getCells(const VectorXT &vertices, const VectorXi &dual, const Vec
     }
 
     for (int i = 0; i < n_vtx; i++) {
-        double xc = vertices(i * 2 + 0);
-        double yc = vertices(i * 2 + 1);
+        std::vector<int> cell = cells[i];
+
+        double xc = 0, yc = 0;
+        for (int j = 0; j < cell.size(); j++) {
+            xc += nodes(cell[j] * 2 + 0);
+            yc += nodes(cell[j] * 2 + 1);
+        }
+        xc /= cell.size();
+        yc /= cell.size();
 
         std::sort(cells[i].begin(), cells[i].end(), [nodes, xc, yc](int a, int b) {
             double xa = nodes(a * 2 + 0);
