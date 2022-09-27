@@ -94,12 +94,15 @@ public:
     void sampleBiaxialStrainSingleFamily(const std::string& result_folder, int IH = 0);
     void computeMarcoStressFromNetworkInputs(const TV3& macro_strain, int IH, 
         const VectorXT& tiling_params);
-    void sampleStrainAlongDirection(const std::string& result_folder,
+    void sampleUniAxialStrainAlongDirection(const std::string& result_folder,
         int n_sample, const TV& strain_range, T theta);
     void sampleDirectionWithStrain(const std::string& result_folder,
         int n_sample, const TV& theta_range, T strain);
     void computeEnergyForSimData(const std::string& result_folder);
     void generateGreenStrainSecondPKPairs(const std::string& result_folder);
+    void generateGreenStrainSecondPKPairsServer(const std::vector<T>& params, 
+        int IH, const std::string& prefix,
+        const std::string& result_folder, int resume_start = 0);
     void sampleStrain(const std::string& result_folder);
 
     // ########################## UnitPatch.cpp ########################## 
@@ -170,6 +173,15 @@ private:
     void saveClip(const ClipperLib::Paths& final_shape, 
         const Vector<T, 8>& periodic, T mult,
         const std::string& filename, bool add_box = true);
+
+    T evalDistance(const TV& p1, const TV& p2, const TV& q, T t)
+    {
+        return std::sqrt(std::pow((0.1e1 - t) * p1[0] + t * p2[0] - q[0], 0.2e1) + std::pow((0.1e1 - t) * p1[1] + t * p2[1] - q[1], 0.2e1));
+    };
+
+    T closestTToLine(const TV& p1, const TV& p2, const TV& q){
+        return (p1[0] * p1[0] + (-p2[0] - q[0]) * p1[0] + p1[1] * p1[1] + (-p2[1] - q[1]) * p1[1] + p2[0] * q[0] + p2[1] * q[1]) / (p1[0] * p1[0] - 2 * p1[0] * p2[0] + p1[1] * p1[1] - 2 * p1[1] * p2[1] + p2[0] * p2[0] + p2[1] * p2[1]);
+    };
 
     glm::dmat3 centrePSRect(T xmin, T ymin, T xmax, T ymax);
     std::vector<glm::dvec2> outShapeVec(const std::vector<glm::dvec2>& vec, const glm::dmat3& M);

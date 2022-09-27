@@ -307,12 +307,13 @@ void FEMSolver::projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unorder
 bool FEMSolver::linearSolve(StiffnessMatrix& K, 
     VectorXT& residual, VectorXT& du)
 {
+    // std::cout << "Linear Solver" << std::endl;
     Timer t(true);
     Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
     // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
     T alpha = 1e-6;
     StiffnessMatrix H(K.rows(), K.cols());
-    H.setIdentity(); H.diagonal().array() = 1e-12;
+    H.setIdentity(); H.diagonal().array() = 1e-10;
     K += H;
     solver.analyzePattern(K);
     // T time_analyze = t.elapsed_sec();
@@ -323,6 +324,7 @@ bool FEMSolver::linearSolve(StiffnessMatrix& K,
     for (int i = 0; i < 50; i++)
     {
         solver.factorize(K);
+        // std::cout << "factorize" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
             K.diagonal().array() += alpha;

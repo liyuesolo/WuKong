@@ -3,11 +3,11 @@ import tensorflow.keras as keras
 from tensorflow.keras.layers import Input, Dense, Lambda
 from tensorflow.keras import Sequential, Model
 from tensorflow.keras import activations
-from tensorflow.keras.layers import Input, Dense, Lambda, Concatenate, BatchNormalization, Dropout
+from tensorflow.keras.layers import Input, Dense, Lambda, Concatenate, BatchNormalization, Dropout, Add
 import math
 import numpy as np
 import tensorflow as tf
-
+from tf_siren import SIRENModel, SinusodialRepresentationDense
 class FourierFeatures(tf.keras.Model):
     def __init__(self, sigma, num_input, num_samples, B = None, dtype_np = np.float32):
         super(FourierFeatures, self).__init__()
@@ -89,19 +89,20 @@ class DenseSIRENModel(tf.keras.Model):
         self.dense4 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
         self.dense5 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
         self.dense6 = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
+        self.dense_middle = Dense(num_hidden, activation=sin_activation, kernel_initializer=weight_initializer_middle_layer, kernel_regularizer=regularizer,bias_initializer=bias_initializer)
         self.dense_last = Dense(num_output, activation=tf.keras.activations.softplus, kernel_initializer=last_initializer, kernel_regularizer=regularizer)
-        # self.dense_last = Dense(num_output, activation=tf.keras.activations.swish, kernel_initializer=last_initializer, kernel_regularizer=regularizer)
+        # self.dense_last = Dense(num_output, activation="linear", kernel_initializer=last_initializer, kernel_regularizer=regularizer)
+        
 
     def call(self, inputs):
-        l0 = self.dense0(inputs)
-        l1 = self.dense1(l0)
-        l2 = self.dense2(l1)
-        # l2_concate = Concatenate()([inputs, l2])
-        l3 = self.dense3(l2)
-        l4 = self.dense4(l3)
-        # l4_concate = Concatenate()([l2_concate, l4])
-        output = self.dense_last(l4)
-        # l5 = self.dense5(l1)
+        output = self.dense0(inputs)
+        for i in range(12):
+            output = self.dense_middle(output)
+        # l1 = self.dense1(l0)
+        # l2 = self.dense2(l1)
+        # l3 = self.dense3(l2)
+        # l4 = self.dense4(l3)
+        output = self.dense_last(output)
         return output
 
 class DenseSwishModel(tf.keras.Model):
@@ -136,13 +137,13 @@ class DenseSwishModel(tf.keras.Model):
 
 class ConstitutiveModel(tf.keras.Model):
 
-    def __init__(self, num_input, B = None):
+    def __init__(self, num_input = None):
         super(ConstitutiveModel, self).__init__()
         
-        num_hidden = 30
+        num_hidden = 128
         self.num_hidden = num_hidden
 
-        # self.features = FourierFeatures(num_input=num_input, num_samples=30, sigma=2.0, B = B, dtype_np=np.float32)
+        # self.features = FourierFeatures(num_input=num_input, num_samples=30, sigma=2.0 = B, dtype_np=np.float32)
         self.features = IdentityFeatures(num_input=num_input)
         
         # self.model = DenseSwishModel(num_input=self.features.num_output, num_output=1, 
@@ -150,7 +151,10 @@ class ConstitutiveModel(tf.keras.Model):
         
         self.model = DenseSIRENModel(num_input=self.features.num_output, num_output=1, 
             num_hidden = num_hidden, last_layer_init_scale=1.0, 
-            omega0 = 30.0)
+            omega0 = 100.0)
+        
+        # self.model = SIRENModel(units=num_hidden, final_units=1, final_activation='softplus',
+        #            num_layers=32, w0=1.0, w0_initial=30.0)
         
         
     def call(self, inputs):
@@ -158,20 +162,19 @@ class ConstitutiveModel(tf.keras.Model):
         elastic_potential = self.model(n)
         return elastic_potential
     
-    # def get_config(self):
-    #     return {"B" : self.features.B}
+    
     def get_config(self):
-        return {"B" : None}
+        return 
 
-def loadSingleFamilyModel(num_params, B):
+def loadSingleFamilyModel(num_params):
     inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
-    output = ConstitutiveModel(4 + num_params, B)(inputS)
+    output = ConstitutiveModel(4 + num_params)(inputS)
     model = Model(inputS, output)
     return model
 
-def buildSingleFamilyModel(num_params, B = None):
+def buildSingleFamilyModel(num_params):
     inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
-    output = ConstitutiveModel(4 + num_params, B)(inputS)
+    output = ConstitutiveModel(4 + num_params)(inputS)
     model = Model(inputS, output)
     return model
 
@@ -186,26 +189,28 @@ def get_sub_tensor(dim, start, end):
 		if dim == 3:
 			return x[:, :, :, start:end]
 	return Lambda(f)
-
-# def buildSingleFamilyModelSeparateTilingParams(num_params):
-#     inputS = Input(shape=(3 + num_params,),dtype=tf.float32, name="inputS")
-#     tiling_params = get_sub_tensor(1, 0, 4)(inputS)
-#     strain = get_sub_tensor(1, 4, 7)(inputS)
-#     num_hidden = 30
-#     x = Dense(num_hidden, activation=tf.keras.activations.swish)(tiling_params)
-#     y = Dense(num_hidden, activation=tf.keras.activations.swish)(strain)
-#     z = Concatenate()([x, y]) 
-#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
-#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
-#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
-#     z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
-#     output = Dense(1, activation=tf.keras.activations.swish)(z)
-
-#     model = Model(inputS, output)
-#     return model
-
+    
 def buildSrainStressModel():
     inputS = Input(shape=(3,),dtype=tf.float32, name="inputS")
     output = ConstitutiveModel(3)(inputS)
+    model = Model(inputS, output)
+    return model
+
+def buildSingleFamilyModelSeparateTilingParams(num_params):
+    
+    inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 4)(inputS)
+    num_hidden = 256
+    x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(tiling_params)
+    x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    y = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(strain)
+    y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
     model = Model(inputS, output)
     return model

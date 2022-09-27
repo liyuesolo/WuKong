@@ -387,7 +387,7 @@ void Tiling2D::sampleRegion(int IH,
             else
                 eigen_polygons[i].push_back(cur_point);	
 
-            //eigen_polygons[i].push_back(Vector2a(final[i][j].X/mult, final[i][j].Y/mult));
+            //eigen_polygons[i].push_back(TV(final[i][j].X/mult, final[i][j].Y/mult));
         }
     }
 
@@ -856,7 +856,7 @@ void Tiling2D::generateOnePerodicUnit()
     
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
-    int tiling_idx = 0;
+    int tiling_idx = 19;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -870,7 +870,8 @@ void Tiling2D::generateOnePerodicUnit()
         T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
         diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
     }
-
+    params[0] = 0.15; params[1] = 0.65;
+    // params[0] = 0.15; params[1] = 0.5;
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
     fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, params, 
@@ -1184,7 +1185,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     periodic.segment<2>(6) = periodic.head<2>() + T(n_unit) * TV2(transf[1],transf[3]);
 
     ClipperLib::Paths polygons(polygons_v.size());
-    T mult = 1e14;
+    T mult = 1e12;
     for(int i=0; i<polygons_v.size(); ++i)
     {
         for(int j=0; j<polygons_v[i].size(); ++j)
@@ -1573,6 +1574,12 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix)
 {
       // Before using any functions in the C++ API, Gmsh must be initialized:
+
+    TV p1 = pbc_corners[0];
+    TV p2 = pbc_corners[1];
+    TV p3 = pbc_corners[2];
+    TV p4 = pbc_corners[3];
+
     T eps = 1e-6;
     gmsh::initialize();
 
@@ -1586,7 +1593,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
-    
+
+    T th = eps;
     //Points
     int acc = 1;
 
@@ -1613,16 +1621,113 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::model::occ::addLine(4, 1, acc++);
 
     starting_vtx = 5;
-
+    std::vector<T> poly_lines;
     for (int i = 0; i < polygons.size(); i++)
     {
         for(int j=1; j<polygons[i].size(); ++j)
         {
             gmsh::model::occ::addLine(starting_vtx++, starting_vtx, acc++);
+            poly_lines.push_back(acc);
         }
         gmsh::model::occ::addLine(starting_vtx, starting_vtx-polygons[i].size()+1, acc++);
+        poly_lines.push_back(acc);
         ++starting_vtx;
     }
+
+    // std::vector<T> poly_lines;
+    // for(int i=0; i<polygons.size(); ++i)
+    // {
+    //     for(int j=1; j<polygons[i].size(); ++j)
+    //     {
+    //         TV q1 = polygons[i][j-1];
+    //         TV q2 = polygons[i][j];
+
+    //         T t_left1 = closestTToLine(p1, p4, q1);
+    //         T t_right1 = closestTToLine(p2, p3, q1);
+    //         T t_bottom1 = closestTToLine(p1, p2, q1);
+    //         T t_top1 = closestTToLine(p4, p3, q1);
+
+    //         T t_left2 = closestTToLine(p1, p4, q2);
+    //         T t_right2 = closestTToLine(p2, p3, q2);
+    //         T t_bottom2 = closestTToLine(p1, p2, q2);
+    //         T t_top2 = closestTToLine(p4, p3, q2);
+
+    //         bool pass1 = false;
+    //         bool pass2 = false;
+
+    //         if(evalDistance(p1, p4, q1, t_left1)<th)
+    //             pass1 = true;
+    //         if(evalDistance(p2, p3, q1, t_right1)<th)
+    //             pass1 = true;
+    //         if(evalDistance(p1, p2, q1, t_bottom1)<th)
+    //             pass1 = true;
+    //         if(evalDistance(p4, p3, q1, t_top1)<th)
+    //             pass1 = true;
+
+    //         if(evalDistance(p1, p4, q2, t_left2)<th)
+    //             pass2 = true;
+    //         if(evalDistance(p2, p3, q2, t_right2)<th)
+    //             pass2 = true;
+    //         if(evalDistance(p1, p2, q2, t_bottom2)<th)
+    //             pass2 = true;
+    //         if(evalDistance(p4, p3, q2, t_top2)<th)
+    //             pass2 = true;
+
+    //         if(!pass1 || !pass2)
+    //             poly_lines.push_back(acc);
+    //         gmsh::model::occ::addLine(starting_vtx++, starting_vtx, acc++);
+    //     }
+
+    //     TV q1 = polygons[i].back();
+    //     TV q2 = polygons[i][0];
+
+    //     T t_left1 = closestTToLine(p1, p4, q1);
+    //     T t_right1 = closestTToLine(p2, p3, q1);
+    //     T t_bottom1 = closestTToLine(p1, p2, q1);
+    //     T t_top1 = closestTToLine(p4, p3, q1);
+
+    //     T t_left2 = closestTToLine(p1, p4, q2);
+    //     T t_right2 = closestTToLine(p2, p3, q2);
+    //     T t_bottom2 = closestTToLine(p1, p2, q2);
+    //     T t_top2 = closestTToLine(p4, p3, q2);
+
+    //     bool pass1 = false;
+    //     bool pass2 = false;
+
+    //     if(evalDistance(p1, p4, q1, t_left1)<th)
+    //         pass1 = true;
+    //     if(evalDistance(p2, p3, q1, t_right1)<th)
+    //         pass1 = true;
+    //     if(evalDistance(p1, p2, q1, t_bottom1)<th)
+    //         pass1 = true;
+    //     if(evalDistance(p4, p3, q1, t_top1)<th)
+    //         pass1 = true;
+
+    //     if(evalDistance(p1, p4, q2, t_left2)<th)
+    //         pass2 = true;
+    //     if(evalDistance(p2, p3, q2, t_right2)<th)
+    //         pass2 = true;
+    //     if(evalDistance(p1, p2, q2, t_bottom2)<th)
+    //         pass2 = true;
+    //     if(evalDistance(p4, p3, q2, t_top2)<th)
+    //         pass2 = true;
+
+    //     if(!pass1 || !pass2)
+    //         poly_lines.push_back(acc);
+    //     gmsh::model::occ::addLine(starting_vtx, starting_vtx-polygons[i].size()+1, acc++);
+    //     ++starting_vtx;
+    // }
+
+    gmsh::model::mesh::field::add("Distance", 1);
+    // gmsh::model::mesh::field::setNumbers(1, "CurvesList", poly_lines);
+
+    gmsh::model::mesh::field::add("Threshold", 2);
+    gmsh::model::mesh::field::setNumber(2, "InField", 1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.0);
+    gmsh::model::mesh::field::setNumber(2, "DistMin", 0.005);
+	// gmsh::model::mesh::field::setNumber(2, "DistMax", 10.0);
+    gmsh::model::mesh::field::setAsBackgroundMesh(2);
     
     acc = 1;
     int acc_loop = 1;
@@ -1718,13 +1823,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
             }
         }
     }
-    gmsh::model::mesh::field::add("Distance", 1);
-
-    gmsh::model::mesh::field::add("Threshold", 2);
-    gmsh::model::mesh::field::setNumber(2, "InField", 1);
-    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
-    gmsh::model::mesh::field::setAsBackgroundMesh(2);
+    
     gmsh::model::occ::synchronize();
 
     gmsh::model::mesh::generate(2);

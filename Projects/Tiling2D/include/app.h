@@ -11,10 +11,10 @@
 #include "Tiling2D.h"
 class Tiling2D;
 
+#include "HexFEMSolver.h"
+
 class App
 {
-public:
-    Tiling2D& tiling;
     
 public:
     using TV = Vector<double, 2>;
@@ -55,13 +55,15 @@ public:
         const std::vector<TV3>& color, T radius,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
 
-    App(Tiling2D& _tiling) : tiling(_tiling) {}
+    App() {}
     ~App() {}
 };
 
 class SimulationApp : public App
 {
 public:
+    Tiling2D& tiling;
+
     bool connect_pbc_pairs = false;
     bool tile_in_x_only = false;
     bool tile_XY = false;
@@ -70,23 +72,21 @@ public:
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
 
-    SimulationApp(Tiling2D& _tiling) : App(_tiling) {}
+    SimulationApp(Tiling2D& _tiling) : tiling(_tiling) {}
     ~SimulationApp() {}
 };
 
-class TilingViewerApp : public App
+class Simulation3DApp : public App
 {
-
 public:
-    bool show_unit = false;
+    HexFEMSolver& solver;
 public:
-
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
     void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
-
-    TilingViewerApp(Tiling2D& _tiling) : App(_tiling) {}
-    ~TilingViewerApp() {}    
+    Simulation3DApp(HexFEMSolver& _solver) : solver(_solver) {}
+    ~Simulation3DApp() {}
 };
+
 
 #endif

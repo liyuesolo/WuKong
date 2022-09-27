@@ -41,6 +41,7 @@ void FEMSolver::addPBCPairsXY()
 void FEMSolver::getPBCPairsAxisDirection(std::vector<int>& side0, 
     std::vector<int>& side1, int direction)
 {
+    T thres_hold = 1e-3;
     bool ortho = !direction;
     // std::cout << "dir " << direction << " " << ortho << std::endl;
     side0.clear(); side1.clear();
@@ -50,9 +51,9 @@ void FEMSolver::getPBCPairsAxisDirection(std::vector<int>& side0,
     for (int i = 0; i < num_nodes; i++)
     {
         TV xi = undeformed.segment<2>(i * 2);
-        if (std::abs(xi[direction] - min_corner[direction]) < 1e-6)
+        if (std::abs(xi[direction] - min_corner[direction]) < thres_hold)
             side0.push_back(i);
-        if (std::abs(xi[direction] - max_corner[direction]) < 1e-6)
+        if (std::abs(xi[direction] - max_corner[direction]) < thres_hold)
             side1.push_back(i);
     }
     
@@ -615,7 +616,7 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
         f1 += inner_force.segment<2>(pbc_pair[1] * 2) / l0 / thickness;
     }
 
-    // f0 /= 0.01; f1 /= 0.01;
+    // f0 /= 1e-6; f1 /= 1e-6;
     // std::cout << f0.norm() << std::endl;
     TM R90 = TM::Zero();
     R90.row(0) = TV(0, -1);
@@ -651,14 +652,24 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
     TV dx = Xj - Xi, dy = Xk - Xl;
     if ((Xi - Xl).norm() > 1e-6)
     {
-        std::cout << "ALERT" << std::endl;
-        std::getchar();
+        if ((Xk - Xj).norm() > 1e-6)
+        {
+            std::cout << "ALERT" << std::endl;
+            std::cout << (Xi - Xl).norm() << " " << Xi.transpose() << " " << Xl.transpose() << " " << Xk.transpose() << " " << Xj.transpose() << std::endl;
+            std::getchar();
+        }
+        else
+        {
+            dx = Xi - Xj;
+            dy = Xl - Xk;
+        }
     }
     T volume = TV3(dx[0], dx[1], 0).cross(TV3(dy[0], dy[1], 0)).norm() * thickness;
-    // volume *= 0.001;
+    // volume /= 1e-9;
     // std::cout << "volume " << volume << std::endl;
+    
     T total_energy = computeTotalEnergy(u);
-    // std::cout << "potential " << total_energy;
+    // std::cout << "potential " << total_energy << std::endl;
     energy_density = total_energy / volume;
 
     // auto computedPsidE = [&](const Eigen::Matrix<double,2,2> & Green_strain, 

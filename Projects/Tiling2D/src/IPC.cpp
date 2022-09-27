@@ -3,14 +3,14 @@
 #include <ipc/ipc.hpp>
 #include <ipc/barrier/adaptive_stiffness.hpp>
 #include "../include/FEMSolver.h"
-
+#include <unordered_set>
 // #include <igl/writeOBJ.h>
 
 void FEMSolver::updateBarrierInfo(bool first_step)
 {
     Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
-    for (int i = 0; i < num_nodes; i++) 
-        ipc_vertices_deformed.row(i) = deformed.segment<2>(i * 2);
+    for (int i = 0; i < num_ipc_vtx; i++) 
+        ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
 
     ipc::Constraints ipc_constraints;
     ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
@@ -31,30 +31,59 @@ void FEMSolver::updateBarrierInfo(bool first_step)
 
 void FEMSolver::computeIPCRestData()
 {
-    
-    ipc_vertices.resize(num_nodes, 2);
-    for (int i = 0; i < num_nodes; i++)
-        ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
-    num_ipc_vtx = ipc_vertices.rows();
+    if (use_quadratic_triangle)
+    {
+        std::unordered_set<int> surface_index_map;
+        for (int i = 0; i < surface_indices.rows(); i++)
+        {
+            surface_index_map.insert(surface_indices[i]);
+        }
+        coarse_to_fine.resize(surface_index_map.size());
+        fine_to_coarse.clear();
+        int cnt = 0;
+        for (const auto& value: surface_index_map)
+        {
+            coarse_to_fine[cnt] = value;
+            fine_to_coarse[value] = cnt;
+            cnt++;
+        }
+
+        num_ipc_vtx = surface_index_map.size();
+        ipc_vertices.resize(num_ipc_vtx, 2);
+        for (int i = 0; i < num_ipc_vtx; i++)
+        {
+            ipc_vertices.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2);
+        }
+    }
+    else
+    {
+        ipc_vertices.resize(num_nodes, 2);
+        for (int i = 0; i < num_nodes; i++)
+            ipc_vertices.row(i) = undeformed.segment<2>(i * 2);
+        num_ipc_vtx = ipc_vertices.rows();
+        for (int i = 0; i < num_ipc_vtx; i++)
+        {
+            coarse_to_fine[i] = i;
+            fine_to_coarse[i] = i;
+        }
+        
+    }
     
     std::vector<Edge> edges;
-    if (use_quadratic_triangle)
-        ipc_faces.resize(num_ele * 4, 3);
-    else
-        ipc_faces.resize(num_ele, 3);
+    ipc_faces.resize(num_ele, 3);
 
     for (int i = 0; i < num_ele; i++)
     {
         if (use_quadratic_triangle)
         {
-            ipc_faces.row(i* 4 + 0) = IV3(indices[i * 6 + 0], indices[i * 6 + 3], indices[i * 6 + 5]);
-            ipc_faces.row(i* 4 + 1) = IV3(indices[i * 6 + 3], indices[i * 6 + 1], indices[i * 6 + 4]);
-            ipc_faces.row(i* 4 + 2) = IV3(indices[i * 6 + 5], indices[i * 6 + 3], indices[i * 6 + 4]);
-            ipc_faces.row(i* 4 + 3) = IV3(indices[i * 6 + 5], indices[i * 6 + 4], indices[i * 6 + 2]);
+            ipc_faces.row(i) = IV3(fine_to_coarse[surface_indices[i * 3 + 0]],
+                                    fine_to_coarse[surface_indices[i * 3 + 1]],
+                                    fine_to_coarse[surface_indices[i * 3 + 2]]);
         }
         else
             ipc_faces.row(i) = indices.segment<3>(i * 3);
     }
+    // igl::edges(ipc_faces, ipc_edges);
     std::vector<std::vector<int>> boundary_vertices;
     igl::boundary_loop(ipc_faces, boundary_vertices);
 
@@ -106,11 +135,10 @@ T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du
     Eigen::MatrixXd current_position = ipc_vertices, 
         next_step_position = ipc_vertices;
         
-    for (int i = 0; i < num_nodes; i++)
+    for (int i = 0; i < num_ipc_vtx; i++)
     {
-        current_position.row(i) = undeformed.segment<2>(i * 2) + _u.segment<2>(i * 2);
-        // current_position.row(i) = undeformed.segment<3>(i * 3);
-        next_step_position.row(i) = undeformed.segment<2>(i * 2) + _u.segment<2>(i * 2) + du.segment<2>(i * 2);
+        current_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + _u.segment<2>(coarse_to_fine[i] * 2);
+        next_step_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + _u.segment<2>(coarse_to_fine[i] * 2) + du.segment<2>(coarse_to_fine[i] * 2);
     }
     return ipc::compute_collision_free_stepsize(current_position, 
             next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
@@ -124,8 +152,8 @@ void FEMSolver::updateIPCVertices(const VectorXT& _u)
         projected[offset] = target;
     });
     deformed = undeformed + projected;
-    for (int i = 0; i < num_nodes; i++)
-        ipc_vertices.row(i) = deformed.segment<2>(i * dim);
+    for (int i = 0; i < num_ipc_vtx; i++)
+        ipc_vertices.row(i) = deformed.segment<2>(coarse_to_fine[i] * dim);
 }
 
 void FEMSolver::addIPCEnergy(T& energy)
@@ -133,9 +161,9 @@ void FEMSolver::addIPCEnergy(T& energy)
     T contact_energy = 0.0;
     
     Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
-    for (int i = 0; i < num_nodes; i++) 
+    for (int i = 0; i < num_ipc_vtx; i++) 
     {
-        ipc_vertices_deformed.row(i) = deformed.segment<2>(i * 2);
+        ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
     ipc::Constraints ipc_constraints;
@@ -152,9 +180,9 @@ void FEMSolver::addIPCEnergy(T& energy)
 void FEMSolver::addIPCForceEntries(VectorXT& residual)
 {
     Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
-    for (int i = 0; i < num_nodes; i++) 
+    for (int i = 0; i < num_ipc_vtx; i++) 
     {
-        ipc_vertices_deformed.row(i) = deformed.segment<2>(i * 2);
+        ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
     ipc::Constraints ipc_constraints;
@@ -181,16 +209,19 @@ void FEMSolver::addIPCForceEntries(VectorXT& residual)
 
     VectorXT contact_gradient = barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
-    // std::cout << "contact force norm: " << contact_gradient.norm() << std::endl;
-    residual += -contact_gradient;
+    for (int i = 0; i < num_ipc_vtx; i++)
+    {
+        residual.segment<2>(coarse_to_fine[i] * 2) -= contact_gradient.segment<2>(i * 2);
+    }
+    
 
 }
 void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD)
 {
     Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
-    for (int i = 0; i < num_nodes; i++) 
+    for (int i = 0; i < num_ipc_vtx; i++) 
     {
-        ipc_vertices_deformed.row(i) = deformed.segment<2>(i * 2);
+        ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
     ipc::Constraints ipc_constraints;
@@ -200,11 +231,15 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
     StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance, project_PD);
 
-    // std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian.block(0, 0, num_nodes * dim , num_nodes * dim));
     std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
-    
-    entries.insert(entries.end(), contact_entries.begin(), contact_entries.end());
-
+    for (Entry& entry : contact_entries)
+    {
+        int node_i = std::floor(entry.row() / 2);
+        int node_j = std::floor(entry.col() / 2);
+        entries.push_back(Entry(coarse_to_fine[node_i] * 2 + entry.row() % 2, 
+                            coarse_to_fine[node_j] * 2 + entry.col() % 2, 
+                            entry.value()));
+    }
     
 }
 

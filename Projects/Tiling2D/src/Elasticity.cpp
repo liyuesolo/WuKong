@@ -233,30 +233,87 @@ void FEMSolver::addElasticdfdXEntries(std::vector<Entry>& entries)
 T FEMSolver::computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du)
 {
     if (use_quadratic_triangle)
-        return 1.0;
-    Matrix<T, 3, 2> dNdb;
+    {
+        auto computedNdb = [&](const TV &xi)
+        {
+            Matrix<T, 6, 2> dNdb;
+            dNdb(0, 0) = -(1.0 - 2.0 * xi[0] - 2.0 * xi[1]) - 2.0 * (1.0 - xi[0] - xi[1]);
+            dNdb(1, 0) = 4.0 * xi[0] - 1.0;
+            dNdb(2, 0) = 0.0;
+            dNdb(3, 0) = 4.0 * xi[1];
+            dNdb(4, 0) = -4.0 * xi[1];
+            dNdb(5, 0) = 4.0 * (1.0 - xi[0] - xi[1]) - 4.0 * xi[0];
+
+            dNdb(0, 1) = -(1.0 - 2.0 * xi[0] - 2.0 * xi[1]) - 2.0 * (1.0 - xi[0] - xi[1]);
+            dNdb(1, 1) = 0.0;
+            dNdb(2, 1) = 4.0 * xi[1] - 1.0;
+            dNdb(3, 1) = 4.0 * xi[0];
+            dNdb(4, 1) = 4.0 * (1.0 - xi[0] - xi[1]) - 4.0 * xi[1];
+            dNdb(5, 1) = -4.0 * xi[0];
+            return dNdb;
+        };
+
+        auto gauss2DP2Position = [&](int idx)
+        {
+            switch (idx)
+            {
+            case 0: return TV(T(1.0 / 6.0), T(1.0 / 6.0));
+            case 1: return TV(T(2.0 / 3.0), T(1.0 / 6.0));
+            case 2: return TV(T(1.0 / 6.0), T(2.0 / 3.0));
+        
+            }
+        };
+        VectorXT step_sizes = VectorXT::Zero(num_ele * 3);
+        iterateQuadElementsParallel([&](const QuadEleNodes& x_deformed, 
+            const QuadEleNodes& x_undeformed, const QuadEleIdx& indices, int ele_idx)
+        {
+            for (int idx = 0; idx < 3; idx++)
+            {
+                TV xi = gauss2DP2Position(idx);
+                Matrix<T, 6, 2> dNdb = computedNdb(xi);
+                TM dXdb = x_undeformed.transpose() * dNdb;
+                TM dxdb = x_deformed.transpose() * dNdb;
+                TM A = dxdb * dXdb.inverse();
+                T a, b, c, d;
+                a = 0;
+                b = A.determinant();
+                c = A.diagonal().sum();
+                d = 0.8;
+
+                T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
+                if (t < 0 || t > 1) t = 1;
+                    step_sizes(ele_idx * 3 + idx) = t;
+            } 
+        });
+        return step_sizes.minCoeff();
+    }
+    else
+    {
+        Matrix<T, 3, 2> dNdb;
         dNdb << -1.0, -1.0, 
             1.0, 0.0,
             0.0, 1.0;
            
-    VectorXT step_sizes = VectorXT::Zero(num_ele);
+        VectorXT step_sizes = VectorXT::Zero(num_ele);
 
-    iterateElementsParallel([&](const EleNodes& x_deformed, 
-        const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
-    {
-        TM dXdb = x_undeformed.transpose() * dNdb;
-        TM dxdb = x_deformed.transpose() * dNdb;
-        TM A = dxdb * dXdb.inverse();
-        T a, b, c, d;
-        a = 0;
-        b = A.determinant();
-        c = A.diagonal().sum();
-        d = 0.8;
+        iterateElementsParallel([&](const EleNodes& x_deformed, 
+            const EleNodes& x_undeformed, const EleIdx& indices, int tet_idx)
+        {
+            TM dXdb = x_undeformed.transpose() * dNdb;
+            TM dxdb = x_deformed.transpose() * dNdb;
+            TM A = dxdb * dXdb.inverse();
+            T a, b, c, d;
+            a = 0;
+            b = A.determinant();
+            c = A.diagonal().sum();
+            d = 0.8;
 
-        T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
-        if (t < 0 || t > 1) t = 1;
-            step_sizes(tet_idx) = t;
-    });
-    return step_sizes.minCoeff();
+            T t = getSmallestPositiveRealCubicRoot(a, b, c, d);
+            if (t < 0 || t > 1) t = 1;
+                step_sizes(tet_idx) = t;
+        });
+        return step_sizes.minCoeff();
+    }
+    
 }
 

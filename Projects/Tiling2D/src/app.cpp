@@ -295,9 +295,10 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 tiling.solver.computeIPCRestData();
             }
 
-            tiling.solver.checkTotalGradient(false);
-            // tiling.solver.checkTotalHessianScale(true);
-            tiling.solver.checkTotalHessian(false);
+            // tiling.solver.checkTotalGradient(false);
+            tiling.solver.checkTotalGradientScale(true);
+            tiling.solver.checkTotalHessianScale(true);
+            // tiling.solver.checkTotalHessian(false);
             return true;
 
         }
@@ -320,30 +321,116 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.core().is_animating = false;
 }
 
-void TilingViewerApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
+void Simulation3DApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
-    if (show_unit)
-    {
-
-    }
+    solver.generateMeshForRendering(V, F, C);
+    viewer.data().clear();
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);
 }
 
-void TilingViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
+void Simulation3DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     igl::opengl::glfw::imgui::ImGuiMenu& menu)
 {
     menu.callback_draw_viewer_menu = [&]()
     {
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (ImGui::Checkbox("ShowUnit", &show_unit))
-            {
-                updateScreen(viewer);
-            }
+            
         }
-    };   
-    
-    
-    tiling.generateSandwichStructureBatch();
+        if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("Kirchhoff-Love", &solver.plain_strain))
+            {
+                std::cout << solver.plain_strain << std::endl;
+            }
+            if (ImGui::Checkbox("StVK", &solver.stvk))
+            {
+
+            } 
+        }
+        if (ImGui::Button("Reset", ImVec2(-1,0)))
+        {
+            solver.reset();
+            static_solve_step = 0;
+            updateScreen(viewer);
+        }
+    };
+
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && check_modes)
+        {
+            solver.deformed = solver.undeformed + solver.u + evectors.col(modes) * std::sin(t);
+            updateScreen(viewer);
+            t += 0.1;
+        }
+        return false;
+    };
+
+    viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
+    {
+        if(viewer.core().is_animating && !check_modes)
+        {
+            
+            bool finished = solver.staticSolveStep(static_solve_step);
+            if (finished)
+            {
+                viewer.core().is_animating = false;
+            }
+            else 
+                static_solve_step++;
+            updateScreen(viewer);
+        }
+        return false;
+    };
+
+    viewer.callback_key_pressed = 
+        [&](igl::opengl::glfw::Viewer & viewer,unsigned int key,int mods)->bool
+    {
+        
+        switch(key)
+        {
+        default: 
+            return false;
+        case 's':
+            solver.staticSolveStep(static_solve_step);
+            updateScreen(viewer);
+            return true;
+        case ' ':
+            viewer.core().is_animating = true;
+            
+            return true;
+        case '1':
+            check_modes = true;
+            solver.checkHessianPD(true);
+            loadDisplacementVectors("eigen_vectors.txt");
+            
+            for (int i = 0; i < evalues.rows(); i++)
+            {
+                if (evalues[i] > 1e-6)
+                {
+                    modes = i;
+                    return true;
+                }
+            }
+            return true;
+        case '2':
+            modes++;
+            modes = (modes + evectors.cols()) % evectors.cols();
+            std::cout << "modes " << modes << std::endl;
+            return true;
+        case 'a':
+            viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case 'd':
+            // solver.checkTotalGradient(true);
+            // solver.checkTotalHessian(true);
+            return true;
+
+        }
+    };
+
     updateScreen(viewer);
     viewer.core().background_color.setOnes();
     viewer.data().set_face_based(true);
@@ -351,6 +438,7 @@ void TilingViewerApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().point_size = 25.0;
 
     viewer.core().align_camera_center(V);
+    // viewer.core().toggle(viewer.data().show_lines);
     viewer.core().animation_max_fps = 24.;
     // key_down(viewer,'0',0);
     viewer.core().is_animating = false;

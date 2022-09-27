@@ -103,7 +103,8 @@ public:
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
-
+    VectorXT coarse_to_fine;
+    std::unordered_map<int, int> fine_to_coarse;
 
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
