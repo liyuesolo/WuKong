@@ -3,14 +3,15 @@
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Sectional.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
-#include "../include/Objective/AreaLengthObjective.h"
+#include "../src/optLib/NewtonFunctionMinimizer.h"
+#include "../include/Constants.h"
 #include <random>
-
-#define NCELLS 40
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
     tessellations.push_back(new Sectional());
+    minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
+    minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
 }
 
 void Foam2D::resetVertexParams() {
@@ -114,21 +115,24 @@ void Foam2D::generateRandomVoronoi() {
         boundary_points.segment<2>(i * 2) = TV(cos(i * 2 * M_PI / 40), sin(i * 2 * M_PI / 40));
     }
 
-    vertices = VectorXT::Zero((40 + NCELLS) * 2).unaryExpr([&](float dummy) { return dis(gen); });
-    vertices.segment<40 * 2>(NCELLS * 2) = boundary_points;
+    vertices = VectorXT::Zero((NFREE + NFIXED) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment<NFIXED * 2>(NFREE * 2) = boundary_points;
 
     resetVertexParams();
 }
 
-void Foam2D::optimize(double area_target) {
-    AreaLengthObjective objective;
+void Foam2D::optimize() {
     objective.tessellation = tessellations[tesselation];
-    objective.area_target = area_target;
-
-    GradientDescentLineSearch minimizer(1, 1e-6, 15);
 
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    minimizer.minimize(&objective, c);
+    objective.c_fixed = c.segment(NFREE * (2 + tessellations[tesselation]->getNumVertexParams()),
+                                  NFIXED * (2 + tessellations[tesselation]->getNumVertexParams()));
+    VectorXT c_free = c.segment(0,
+                                NFREE * (2 + tessellations[tesselation]->getNumVertexParams()));
+    minimizers[opttype]->minimize(&objective, c_free);
+
+    c.segment(0, NFREE * (2 + tessellations[tesselation]->getNumVertexParams())) = c_free;
+
     tessellations[tesselation]->separateVerticesParams(c, vertices, params);
 }
 
@@ -141,7 +145,7 @@ int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
     for (int i = 0; i < n_vtx; i++) {
         TV p2 = vertices.segment<2>(i * 2);
         double d = (p2 - p).norm();
-        if (d < threshold && d < dmin && i < NCELLS) {
+        if (d < threshold && d < dmin && i < NFREE) {
             closest = i;
             dmin = d;
         }
@@ -204,7 +208,8 @@ void Foam2D::getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E) {
 
     std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
     int edge = 0;
-    for (int i = 0; i < NCELLS; i++) {
+    int n_cells = NFREE;
+    for (int i = 0; i < n_cells; i++) {
         std::vector<int> &cell = cells[i];
         size_t degree = cell.size();
 

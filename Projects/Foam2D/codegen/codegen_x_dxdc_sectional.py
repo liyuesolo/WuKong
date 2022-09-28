@@ -1,12 +1,15 @@
 import casadi as ca
 import os
 
-# problem dimensions
-Nc = 80  # number of Voronoi sites
+# Problem dimensions
+Nc_fixed = 40  # number of fixed sites
+Nc_free = 40  # number of free sites
 Nt = 118  # number of Delaunay triangles
 
 # Input: Voronoi sites with z offset from plane
-c = ca.MX.sym('c', 3, Nc)
+c_fixed = ca.MX.sym('c_fixed', 3, Nc_fixed)
+c_free = ca.MX.sym('c_free', 3, Nc_free)
+c = ca.horzcat(c_free, c_fixed)
 xc, yc, zc = ca.vertsplit(c)
 
 # Input: Triangle vertex indices
@@ -37,7 +40,7 @@ x = ca.vec(ca.vertcat(xn, yn))
 # Generate and compile C code
 opts = dict(with_header=True)
 
-ca_x_sectional = ca.Function('ca_x_sectional', [c, tri], [x])
+ca_x_sectional = ca.Function('ca_x_sectional', [c_free, c_fixed, tri], [x])
 ca_x_sectional.generate('ca_x_sectional', opts)
 print('compiling generated code for voronoi nodes...')
 cmd = 'gcc -fPIC -shared -O0 ca_x_sectional.c -o libca_x_sectional.so'
@@ -49,7 +52,7 @@ status = os.system(cmd)
 if status != 0:
     raise Exception('Command {} failed'.format(cmd))
 
-ca_dxdc_sectional = ca.Function('ca_dxdc_sectional', [c, tri], [ca.jacobian(x, c)])
+ca_dxdc_sectional = ca.Function('ca_dxdc_sectional', [c_free, c_fixed, tri], [ca.jacobian(x, c_free)])
 ca_dxdc_sectional.generate('ca_dxdc_sectional', opts)
 print('compiling generated code for gradient of voronoi nodes...')
 cmd = 'gcc -fPIC -shared -O0 ca_dxdc_sectional.c -o libca_dxdc_sectional.so'

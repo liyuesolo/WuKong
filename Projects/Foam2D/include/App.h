@@ -18,7 +18,6 @@ public:
 
     int drag_idx = -1;
     bool optimize = false;
-    double area_target = 0.06;
     bool show_dual = false;
 
 public:

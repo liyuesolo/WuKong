@@ -3,15 +3,13 @@
 #include "../../src/optLib/ObjectiveFunction.h"
 #include "../../include/Tessellation/Tessellation.h"
 #include "../../include/CodeGen.h"
-
-#define NAREA 300
-#define NCELLS 40
+#include "../../include/Constants.h"
 
 static VectorXi getAreaTriangles(std::vector<std::vector<int>> cells) {
     VectorXi area_triangles(NAREA * 3);
 
     int edge = 0;
-    for (size_t i = 0; i < NCELLS; i++) {
+    for (size_t i = 0; i < NFREE; i++) {
         std::vector<int> &cell = cells[i];
         size_t degree = cell.size();
 
@@ -37,17 +35,22 @@ class AreaLengthObjective : public ObjectiveFunction {
 public:
     Tessellation *tessellation;
 
-    double area_target = 0.1;
+    VectorXd c_fixed;
+
+    double area_target = 0.05;
     double area_weight = 2;
     double length_weight = 0.01;
 
 public:
-    virtual double evaluate(const VectorXd &c) const {
+    virtual double evaluate(const VectorXd &c_free) const {
         VectorXi tri;
         VectorXT x;
         VectorXi e;
         VectorXT A;
         double L;
+
+        VectorXd c(c_free.size() + c_fixed.size());
+        c << c_free, c_fixed;
 
         VectorXT vertices;
         VectorXT params;
@@ -60,7 +63,7 @@ public:
 
         double O = 0;
         if (area_weight > 0) {
-            A = evaluate_A(vertices.segment<NCELLS * 2>(0), x, e);
+            A = evaluate_A(c_free, x, e);
             for (int i = 0; i < A.rows(); i++) {
                 O += area_weight * (A(i) - area_target) * (A(i) - area_target);
             }
@@ -73,11 +76,11 @@ public:
         return O;
     }
 
-    virtual void addGradientTo(const VectorXd &c, VectorXd &grad) const {
-        grad += get_DODc(c);
+    virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
+        grad += get_DODc(c_free);
     }
 
-    VectorXd get_DODc(const VectorXd &c) const {
+    VectorXd get_DODc(const VectorXd &c_free) const {
         VectorXi tri;
         VectorXT x;
         Eigen::SparseMatrix<double> dxdc;
@@ -86,6 +89,9 @@ public:
         Eigen::SparseMatrix<double> dAdx;
         Eigen::SparseMatrix<double> dLdx;
         MatrixXT dOdA;
+
+        VectorXd c(c_free.size() + c_fixed.size());
+        c << c_free, c_fixed;
 
         VectorXT vertices;
         VectorXT params;
@@ -97,11 +103,11 @@ public:
 
         e = getAreaTriangles(tessellation->getCells(vertices, tri, x));
 
-        VectorXT dOdc = VectorXT::Zero(c.rows());
+        VectorXT dOdc = VectorXT::Zero(c_free.rows());
 
         if (area_weight > 0) {
-            A = evaluate_A(vertices.segment<NCELLS * 2>(0), x, e);
-            dAdx = evaluate_dAdx(vertices.segment<NCELLS * 2>(0), x, e);
+            A = evaluate_A(c_free, x, e);
+            dAdx = evaluate_dAdx(c_free, x, e);
 
             VectorXT targets;
             targets.resize(A.rows());
@@ -116,11 +122,6 @@ public:
 
             double dOdL = length_weight;
             dOdc += (dOdL * dLdx * dxdc).transpose();
-        }
-
-        // Fix boundary sites...
-        for (int i = NCELLS * (2 + tessellation->getNumVertexParams()); i < dOdc.rows(); i++) {
-            dOdc(i) = 0;
         }
 
         return dOdc.transpose();

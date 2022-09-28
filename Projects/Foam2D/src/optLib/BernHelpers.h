@@ -45,43 +45,8 @@ const auto max_element_wrapper = [](const auto &v) { return *std::max_element(v.
 
 static void toggle(bool &b) { b = !b; };
 
-static bool setFalseButReturnOriginalValue(bool &b) {
-    bool ret = b;
-    b = false;
-    return ret;
-}
-
-static bool setTrueButReturnOriginalValue(bool &b) {
-    bool ret = b;
-    b = true;
-    return ret;
-}
-
-double PI = 3.14159265358979323846264338327;
-
-bool isNaN(const double &x) { return (x != x); }
-
-double clamp(const double &a, const double left, const double right) {
-    if (a < left) { return left; }
-    else if (a > right) { return right; } else { return a; }
-};
-
-double clamp01(const double &a) { return clamp(a, 0., 1.); };
-
-Vector2d e_theta(const double &theta) { return Vector2d(cos(theta), sin(theta)); };
-
-double atan2_wrapper(const Vector2d &xy) { return atan2(xy.y(), xy.x()); };
-
-Vector2d from_(const Vector2d &a, const Vector2d &b) { return b - a; }
-
-Vector2d rotate_(const Vector2d &p, const double &theta) {
-    return Vector2d(p[0] * cos(theta) - p[1] * sin(theta), p[1] * cos(theta) + p[0] * sin(theta));
-};
-
 template<typename T>
 T lerp(const double &f, const T &p, const T &q) { return p + (q - p) * f; };
-
-double inverseLerp(const double x, const double left, const double right) { return (x - left) / (right - left); };
 
 template<typename ... Args>
 string string_format(const std::string &format, Args ... args) {
@@ -102,37 +67,6 @@ vector<T> linspace(const int N, const T &left, const T &right) {
         X.push_back(x);
     }
     return X;
-}
-
-vector<double> VectorXd2vecDub(const VectorXd &in) {
-    vector<double> out;
-    for (int i = 0; i < in.size(); ++i) {
-        out.push_back(in[i]);
-    }
-    return out;
-}
-
-VectorXd vecDub2VectorXd(const vector<double> &in) {
-    VectorXd out;
-    out.setZero(in.size());
-    for (size_t i = 0; i < in.size(); ++i) {
-        out[i] = in[i];
-    }
-    return out;
-}
-
-
-VectorXd stack_(const vector<VectorXd> &in) {
-    int N = 0;
-    for (auto &dvec: in) { N += int(dvec.size()); }
-    VectorXd out;
-    out.setZero(N);
-    int o = 0;
-    for (const auto &v: in) {
-        out.segment(o, int(v.size())) = v;
-        o += int(v.size());
-    }
-    return out;
 }
 
 const auto vecFD = [](VectorXd s0, auto O_of_s, double d = 1e-5) -> VectorXd {
@@ -173,20 +107,6 @@ const auto matFD = [](VectorXd s0, auto G_of_s, double d = 1e-5) -> MatrixXd {
     }
     return dGds;
 };
-
-SparseMatrixd dense2sparse(const MatrixXd &in) {
-    SparseMatrixd out;
-    out.resize(int(in.rows()), int(in.cols()));
-    for (int r = 0; r < int(in.rows()); ++r) {
-        for (int c = 0; c < int(in.cols()); ++c) {
-            const double &val = in(r, c);
-            if (fabs(val) > 1e-10) {
-                out.insert(r, c) = val;
-            }
-        }
-    }
-    return out;
-}
 
 template<class MATType>
 void

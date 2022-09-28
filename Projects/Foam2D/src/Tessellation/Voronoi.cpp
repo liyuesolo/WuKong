@@ -132,7 +132,7 @@ VectorXi Voronoi::delaunayJRS(const VectorXT &vertices) {
 }
 
 VectorXi Voronoi::getDualGraph(const VectorXT &vertices, const VectorXT &params) {
-    return delaunayNaive(vertices);
+    return delaunayJRS(vertices);
 }
 
 VectorXT Voronoi::getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {

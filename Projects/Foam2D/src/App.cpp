@@ -4,8 +4,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
         ImGui::Checkbox("Optimize", &optimize);
-        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Target", &area_target, 0.005f, 0.005f, "%.3f");
+
+        std::vector<std::string> optTypes;
+        optTypes.push_back("Gradient Descent");
+        optTypes.push_back("Newton's Method");
+        ImGui::Combo("Optimizer", &foam.opttype, optTypes);
 
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
@@ -13,7 +16,16 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         if (ImGui::Combo("Tessellation Type", &foam.tesselation, tesselationTypes)) {
             foam.resetVertexParams();
             updateViewerData(viewer);
-        };
+        }
+
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Area Target", &foam.objective.area_target, 0.005f, 0.005f, "%.3f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.5f, 0.5f, "%.1f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.005f, 0.005f, "%.3f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.005f, 0.005f, "%.3f");
 
         if (ImGui::Checkbox("Show Dual", &show_dual)) {
             updateViewerData(viewer);
@@ -64,7 +76,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
     viewer.callback_pre_draw =
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
                 if (optimize) {
-                    foam.optimize(area_target);
+                    foam.optimize();
                     updateViewerData(viewer);
                 }
                 return false;

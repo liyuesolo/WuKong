@@ -8,10 +8,20 @@
 #include "../codegen/ca_dAdx.h"
 #include "../codegen/ca_L.h"
 #include "../codegen/ca_dLdx.h"
+#include "../codegen/ca_O_voronoi.h"
+#include "../codegen/ca_dOdc_voronoi.h"
+#include "../codegen/ca_d2Odc2_voronoi.h"
+#include "../codegen/ca_O_sectional.h"
+#include "../codegen/ca_dOdc_sectional.h"
+#include "../codegen/ca_d2Odc2_sectional.h"
+
+#include "../include/Constants.h"
 
 #include <iostream>
 
 VectorXT evaluate_x_voronoi(const VectorXT &c, const VectorXi &tri) {
+    if (tri.rows() != 118 * 3) std::cout << "ERROR: wrong number of triangles" << std::endl;
+
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
     ca_x_voronoi_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
 
@@ -20,9 +30,12 @@ VectorXT evaluate_x_voronoi(const VectorXT &c, const VectorXi &tri) {
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
+    VectorXT c_free = c.segment<NFREE * 2>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 2>(NFREE * 2);
+    arg[1] = c_fixed.data();
     VectorXT tri_d = tri.cast<double>();
-    arg[1] = tri_d.data();
+    arg[2] = tri_d.data();
 
     int n_faces = tri.rows() / 3;
     casadi_real x[n_faces * 2];
@@ -34,6 +47,8 @@ VectorXT evaluate_x_voronoi(const VectorXT &c, const VectorXi &tri) {
 }
 
 Eigen::SparseMatrix<double> evaluate_dxdc_voronoi(const VectorXT &c, const VectorXi &tri) {
+    if (tri.rows() != 118 * 3) std::cout << "ERROR: wrong number of triangles" << std::endl;
+
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
     ca_dxdc_voronoi_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
 
@@ -42,9 +57,12 @@ Eigen::SparseMatrix<double> evaluate_dxdc_voronoi(const VectorXT &c, const Vecto
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
+    VectorXT c_free = c.segment<NFREE * 2>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 2>(NFREE * 2);
+    arg[1] = c_fixed.data();
     VectorXT tri_d = tri.cast<double>();
-    arg[1] = tri_d.data();
+    arg[2] = tri_d.data();
 
     const casadi_int *sp_i = ca_dxdc_voronoi_sparsity_out(0);
     casadi_int nrow = *sp_i++; /* Number of rows */
@@ -75,6 +93,8 @@ Eigen::SparseMatrix<double> evaluate_dxdc_voronoi(const VectorXT &c, const Vecto
 }
 
 VectorXT evaluate_x_sectional(const VectorXT &c, const VectorXi &tri) {
+    if (tri.rows() != 118 * 3) std::cout << "ERROR: wrong number of triangles" << std::endl;
+
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
     ca_x_sectional_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
 
@@ -83,9 +103,12 @@ VectorXT evaluate_x_sectional(const VectorXT &c, const VectorXi &tri) {
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
+    VectorXT c_free = c.segment<NFREE * 3>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 3>(NFREE * 3);
+    arg[1] = c_fixed.data();
     VectorXT tri_d = tri.cast<double>();
-    arg[1] = tri_d.data();
+    arg[2] = tri_d.data();
 
     int n_faces = tri.rows() / 3;
     casadi_real x[n_faces * 2];
@@ -97,6 +120,8 @@ VectorXT evaluate_x_sectional(const VectorXT &c, const VectorXi &tri) {
 }
 
 Eigen::SparseMatrix<double> evaluate_dxdc_sectional(const VectorXT &c, const VectorXi &tri) {
+    if (tri.rows() != 118 * 3) std::cout << "ERROR: wrong number of triangles" << std::endl;
+
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
     ca_dxdc_sectional_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
 
@@ -105,9 +130,12 @@ Eigen::SparseMatrix<double> evaluate_dxdc_sectional(const VectorXT &c, const Vec
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
+    VectorXT c_free = c.segment<NFREE * 3>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 3>(NFREE * 3);
+    arg[1] = c_fixed.data();
     VectorXT tri_d = tri.cast<double>();
-    arg[1] = tri_d.data();
+    arg[2] = tri_d.data();
 
     const casadi_int *sp_i = ca_dxdc_sectional_sparsity_out(0);
     casadi_int nrow = *sp_i++; /* Number of rows */
@@ -252,6 +280,7 @@ Eigen::SparseMatrix<double> evaluate_dLdx(const VectorXT &x, const VectorXi &e) 
     int nzidx = 0;
     for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
         for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
+            if (std::isnan(dLdx[nzidx])) dLdx[nzidx] = 0;
             rr = row[el];
             triplets[nzidx] = Eigen::Triplet<double>(rr, cc, dLdx[nzidx]);
             nzidx++;
@@ -262,4 +291,250 @@ Eigen::SparseMatrix<double> evaluate_dLdx(const VectorXT &x, const VectorXi &e) 
     DLDX.setFromTriplets(triplets.begin(), triplets.end());
 
     return DLDX;
+}
+
+double evaluate_O_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_O_voronoi_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 2>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 2>(NFREE * 2);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    casadi_real Obj[1];
+    res[0] = Obj;
+
+    ca_O_voronoi(arg, res, iw, w, 0);
+
+    return Obj[0];
+}
+
+Eigen::SparseMatrix<double>
+evaluate_dOdc_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_dOdc_voronoi_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 2>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 2>(NFREE * 2);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    const casadi_int *sp_i = ca_dOdc_voronoi_sparsity_out(0);
+    casadi_int nrow = *sp_i++; /* Number of rows */
+    casadi_int ncol = *sp_i++; /* Number of columns */
+    const casadi_int *colind = sp_i; /* Column offsets */
+    const casadi_int *row = sp_i + ncol + 1; /* Row nonzero */
+    casadi_int nnz = sp_i[ncol]; /* Number of nonzeros */
+
+    casadi_real dOdc[nnz];
+    res[0] = dOdc;
+    ca_dOdc_voronoi(arg, res, iw, w, 0); /* Actual function evaluation */
+
+    std::vector<Eigen::Triplet<double>> triplets(nnz);
+    casadi_int rr, cc, el;
+    int nzidx = 0;
+    for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
+        for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
+            rr = row[el];
+            triplets[nzidx] = Eigen::Triplet<double>(rr, cc, dOdc[nzidx]);
+            nzidx++;
+        }
+    }
+
+    Eigen::SparseMatrix<double> DODC(nrow, ncol);
+    DODC.setFromTriplets(triplets.begin(), triplets.end());
+
+    return DODC;
+}
+
+Eigen::SparseMatrix<double>
+evaluate_d2Odc2_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_d2Odc2_voronoi_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 2>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 2>(NFREE * 2);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    const casadi_int *sp_i = ca_d2Odc2_voronoi_sparsity_out(0);
+    casadi_int nrow = *sp_i++; /* Number of rows */
+    casadi_int ncol = *sp_i++; /* Number of columns */
+    const casadi_int *colind = sp_i; /* Column offsets */
+    const casadi_int *row = sp_i + ncol + 1; /* Row nonzero */
+    casadi_int nnz = sp_i[ncol]; /* Number of nonzeros */
+
+    casadi_real d2Odc2[nnz];
+    res[0] = d2Odc2;
+    ca_d2Odc2_voronoi(arg, res, iw, w, 0); /* Actual function evaluation */
+
+    std::vector<Eigen::Triplet<double>> triplets(nnz);
+    casadi_int rr, cc, el;
+    int nzidx = 0;
+    for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
+        for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
+            rr = row[el];
+            triplets[nzidx] = Eigen::Triplet<double>(rr, cc, d2Odc2[nzidx]);
+            nzidx++;
+        }
+    }
+
+    Eigen::SparseMatrix<double> D2ODC2(nrow, ncol);
+    D2ODC2.setFromTriplets(triplets.begin(), triplets.end());
+
+    return D2ODC2;
+}
+
+double evaluate_O_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_O_sectional_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 3>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 3>(NFREE * 3);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    casadi_real Obj[1];
+    res[0] = Obj;
+
+    ca_O_sectional(arg, res, iw, w, 0);
+
+    return Obj[0];
+}
+
+Eigen::SparseMatrix<double>
+evaluate_dOdc_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_dOdc_sectional_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 3>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 3>(NFREE * 3);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    const casadi_int *sp_i = ca_dOdc_sectional_sparsity_out(0);
+    casadi_int nrow = *sp_i++; /* Number of rows */
+    casadi_int ncol = *sp_i++; /* Number of columns */
+    const casadi_int *colind = sp_i; /* Column offsets */
+    const casadi_int *row = sp_i + ncol + 1; /* Row nonzero */
+    casadi_int nnz = sp_i[ncol]; /* Number of nonzeros */
+
+    casadi_real dOdc[nnz];
+    res[0] = dOdc;
+    ca_dOdc_sectional(arg, res, iw, w, 0); /* Actual function evaluation */
+
+    std::vector<Eigen::Triplet<double>> triplets(nnz);
+    casadi_int rr, cc, el;
+    int nzidx = 0;
+    for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
+        for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
+            rr = row[el];
+            triplets[nzidx] = Eigen::Triplet<double>(rr, cc, dOdc[nzidx]);
+            nzidx++;
+        }
+    }
+
+    Eigen::SparseMatrix<double> DODC(nrow, ncol);
+    DODC.setFromTriplets(triplets.begin(), triplets.end());
+
+    return DODC;
+}
+
+Eigen::SparseMatrix<double>
+evaluate_d2Odc2_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p) {
+    casadi_int sz_arg, sz_res, sz_iw, sz_w;
+    ca_d2Odc2_sectional_work(&sz_arg, &sz_res, &sz_iw, &sz_w);
+
+    const casadi_real *arg[sz_arg];
+    casadi_real *res[sz_res];
+    casadi_int iw[sz_iw];
+    casadi_real w[sz_w];
+
+    VectorXT c_free = c.segment<NFREE * 3>(0);
+    arg[0] = c_free.data();
+    VectorXT c_fixed = c.segment<NFIXED * 3>(NFREE * 3);
+    arg[1] = c_fixed.data();
+    VectorXT tri_d = tri.cast<double>();
+    arg[2] = tri_d.data();
+    VectorXT e_d = e.cast<double>();
+    arg[3] = e_d.data();
+    arg[4] = p.data();
+
+    const casadi_int *sp_i = ca_d2Odc2_sectional_sparsity_out(0);
+    casadi_int nrow = *sp_i++; /* Number of rows */
+    casadi_int ncol = *sp_i++; /* Number of columns */
+    const casadi_int *colind = sp_i; /* Column offsets */
+    const casadi_int *row = sp_i + ncol + 1; /* Row nonzero */
+    casadi_int nnz = sp_i[ncol]; /* Number of nonzeros */
+
+    casadi_real d2Odc2[nnz];
+    res[0] = d2Odc2;
+    ca_d2Odc2_sectional(arg, res, iw, w, 0); /* Actual function evaluation */
+
+    std::vector<Eigen::Triplet<double>> triplets(nnz);
+    casadi_int rr, cc, el;
+    int nzidx = 0;
+    for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
+        for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
+            rr = row[el];
+            triplets[nzidx] = Eigen::Triplet<double>(rr, cc, d2Odc2[nzidx]);
+            nzidx++;
+        }
+    }
+
+    Eigen::SparseMatrix<double> D2ODC2(nrow, ncol);
+    D2ODC2.setFromTriplets(triplets.begin(), triplets.end());
+
+    return D2ODC2;
 }

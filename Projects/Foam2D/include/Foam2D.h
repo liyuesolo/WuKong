@@ -11,6 +11,8 @@
 
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
+#include "../include/Objective/AreaLengthObjective2.h"
+#include "../src/optLib/GradientDescentMinimizer.h"
 
 using TV = Vector<double, 2>;
 using TV3 = Vector<double, 3>;
@@ -33,6 +35,10 @@ public:
 
     std::vector<Tessellation *> tessellations;
     int tesselation = 0;
+    std::vector<GradientDescentLineSearch *> minimizers;
+    int opttype = 0;
+
+    AreaLengthObjective2 objective;
 
     VectorXT vertices;
     VectorXT params;
@@ -45,7 +51,7 @@ public:
 
     void getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E);
 
-    void optimize(double area_target);
+    void optimize();
 
     void moveVertex(int idx, const TV &pos);
 

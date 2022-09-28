@@ -1,7 +1,7 @@
 import casadi as ca
 import os
 
-# problem dimensions
+# Problem dimensions
 Nc = 40  # number of Voronoi sites (excludes convex hull sites)
 Nx = 118  # number of Voronoi nodes
 Na = 300  # max number of edges
