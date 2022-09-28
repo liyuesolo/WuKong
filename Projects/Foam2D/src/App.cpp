@@ -78,19 +78,24 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 if (optimize) {
                     foam.optimize();
                     updateViewerData(viewer);
+                } else {
+                    Eigen::Matrix<double, 4, 3> bb;
+                    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
+                    viewer.core().align_camera_center(bb);
                 }
                 return false;
             };
 
 
     foam.generateRandomVoronoi();
-//    foam.checkGradients();
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
     viewer.core().camera_zoom = 2.07;
+    viewer.data().show_lines = 0;
     viewer.core().background_color.setOnes();
     viewer.data().point_size = 10;
     viewer.core().is_animating = true;
+    viewer.data().shininess = 0;
 
     updateViewerData(viewer);
 }
@@ -99,12 +104,18 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<double, -1, -1> points;
     Eigen::Matrix<double, -1, -1> nodes;
     Eigen::Matrix<int, -1, -1> lines;
+    Eigen::Matrix<double, -1, -1> V;
+    Eigen::Matrix<int, -1, -1> F;
+    Eigen::Matrix<double, -1, -1> C;
 
     if (show_dual) {
-        foam.getTriangulationViewerData(points, nodes, lines);
+        foam.getTriangulationViewerData(points, nodes, lines, V, F, C);
     } else {
-        foam.getTessellationViewerData(points, nodes, lines);
+        foam.getTessellationViewerData(points, nodes, lines, V, F, C);
     }
+    viewer.data().clear();
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);
 
     Eigen::Matrix<double, -1, -1> points_c;
     points_c.resize(points.rows(), 3);
@@ -118,11 +129,13 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     viewer.data().set_points(points, points_c);
     viewer.data().set_edges(nodes, lines, lines_c);
 
-    Eigen::Matrix<double, 4, 3> bb_p1;
-    bb_p1 << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
+    Eigen::Matrix<double, 4, 3> bb;
+    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
     Eigen::Matrix<double, 4, 3> bb_p2;
     bb_p2 << 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 0;
     Eigen::Matrix<double, 4, 3> bb_c;
     bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
-    viewer.data().add_edges(bb_p1, bb_p2, bb_c);
+    viewer.data().add_edges(bb, bb_p2, bb_c);
+
+    viewer.core().align_camera_center(bb);
 }

@@ -47,9 +47,9 @@ public:
 
     void generateRandomVoronoi();
 
-    void getTessellationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E);
+    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
 
-    void getTriangulationViewerData(MatrixXT &C, MatrixXT &X, MatrixXi &E);
+    void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
 
     void optimize();
 
