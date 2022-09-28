@@ -1,4 +1,4 @@
-#include "../../include/Objective/AreaLengthObjective2.h"
+#include "../../include/Objective/AreaLengthObjective.h"
 #include "../../include/CodeGen.h"
 #include "../../include/Constants.h"
 
@@ -28,7 +28,7 @@ static VectorXi getAreaTriangles2(std::vector<std::vector<int>> cells) {
 }
 
 
-double AreaLengthObjective2::evaluate(const VectorXd &c_free) const {
+double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXT x;
     VectorXi e;
@@ -52,11 +52,11 @@ double AreaLengthObjective2::evaluate(const VectorXd &c_free) const {
                                                                                                              e, p);
 }
 
-void AreaLengthObjective2::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
+void AreaLengthObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
     grad += get_dOdc(c_free);
 }
 
-VectorXd AreaLengthObjective2::get_dOdc(const VectorXd &c_free) const {
+VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXT x;
     VectorXi e;
@@ -80,11 +80,11 @@ VectorXd AreaLengthObjective2::get_dOdc(const VectorXd &c_free) const {
                                                    : evaluate_dOdc_sectional(c, tri, e, p).transpose();
 }
 
-void AreaLengthObjective2::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
+void AreaLengthObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
     hessian = get_d2Odc2(c_free);
 }
 
-Eigen::SparseMatrix<double> AreaLengthObjective2::get_d2Odc2(const VectorXd &c_free) const {
+Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXT x;
     VectorXi e;

@@ -11,7 +11,7 @@
 
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
-#include "../include/Objective/AreaLengthObjective2.h"
+#include "../include/Objective/AreaLengthObjective.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 
 using TV = Vector<double, 2>;
@@ -38,7 +38,7 @@ public:
     std::vector<GradientDescentLineSearch *> minimizers;
     int opttype = 0;
 
-    AreaLengthObjective2 objective;
+    AreaLengthObjective objective;
 
     VectorXT vertices;
     VectorXT params;
