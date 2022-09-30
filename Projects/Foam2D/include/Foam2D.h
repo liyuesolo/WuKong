@@ -12,6 +12,7 @@
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 #include "../include/Objective/AreaLengthObjective.h"
+#include "../include/Objective/AreaLengthObjective.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 
 using TV = Vector<double, 2>;

@@ -13,9 +13,13 @@ public:
     double area_target = 0.05;
     double area_weight = 2;
     double length_weight = 0.01;
-    double centroid_weight = 0.01;
+    double centroid_weight = 0.05;
 
 public:
+    void
+    getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &c_cell, VectorXT &p_cell,
+              VectorXi &i_cell) const;
+
     virtual double evaluate(const VectorXd &c_free) const;
 
     virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const;

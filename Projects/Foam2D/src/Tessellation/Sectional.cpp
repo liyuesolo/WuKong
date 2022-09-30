@@ -123,14 +123,36 @@ VectorXi Sectional::getDualGraph(const VectorXT &vertices, const VectorXT &param
 }
 
 VectorXT Sectional::getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {
-    VectorXT vertices3d = combineVerticesParams(vertices, params);
-    return evaluate_x_sectional(vertices3d, dual);
-}
+    int n_faces = dual.rows() / 3;
+    VectorXT nodes(2 * n_faces);
 
-Eigen::SparseMatrix<double>
-Sectional::getNodesGradient(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {
-    VectorXT vertices3d = combineVerticesParams(vertices, params);
-    return evaluate_dxdc_sectional(vertices3d, dual);
+    for (int i = 0; i < n_faces; i++) {
+        int v1 = dual(i * 3 + 0);
+        int v2 = dual(i * 3 + 1);
+        int v3 = dual(i * 3 + 2);
+
+        double x1 = vertices(v1 * 2 + 0);
+        double y1 = vertices(v1 * 2 + 1);
+        double z1 = params(v1);
+        double x2 = vertices(v2 * 2 + 0);
+        double y2 = vertices(v2 * 2 + 1);
+        double z2 = params(v2);
+        double x3 = vertices(v3 * 2 + 0);
+        double y3 = vertices(v3 * 2 + 1);
+        double z3 = params(v3);
+
+        double m2 = -(y2 - y1) / (x2 - x1);
+        double c2 = (x2 * x2 - x1 * x1 + y2 * y2 - y1 * y1 + z2 * z2 - z1 * z1) / (2 * (x2 - x1));
+        double m3 = -(y3 - y1) / (x3 - x1);
+        double c3 = (x3 * x3 - x1 * x1 + y3 * y3 - y1 * y1 + z3 * z3 - z1 * z1) / (2 * (x3 - x1));
+
+        double yn = (c3 - c2) / (m2 - m3);
+        double xn = m2 * yn + c2;
+
+        nodes.segment<2>(i * 2) = TV(xn, yn);
+    }
+
+    return nodes;
 }
 
 VectorXT Sectional::getDefaultVertexParams(const VectorXT &vertices) {

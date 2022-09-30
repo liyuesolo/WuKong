@@ -5,8 +5,8 @@
 
 class GradientDescentFixedStep : public Minimizer {
 public:
-    GradientDescentFixedStep(int maxIterations=100, double solveResidual=1e-5)
-        : maxIterations(maxIterations), solveResidual(solveResidual) {
+    GradientDescentFixedStep(int maxIterations = 100, double solveResidual = 1e-5)
+            : maxIterations(maxIterations), solveResidual(solveResidual) {
     }
 
     int getLastIterations() { return lastIterations; }
@@ -17,12 +17,14 @@ public:
 
         VectorXd dx(x.size());
 
-        int i=0;
-        for(; i < maxIterations; i++) {
+        int i = 0;
+        for (; i < maxIterations; i++) {
             dx.setZero();
             computeSearchDirection(function, x, dx);
 
-            if (dx.norm() < solveResidual){
+            std::cout << "gradient norm" << dx.norm() << std::endl;
+
+            if (dx.norm() < solveResidual) {
                 optimizationConverged = true;
                 break;
             }
@@ -36,13 +38,13 @@ public:
     }
 
 public:
-    virtual void computeSearchDirection(const ObjectiveFunction *function, const VectorXd &x, VectorXd& dx) {
+    virtual void computeSearchDirection(const ObjectiveFunction *function, const VectorXd &x, VectorXd &dx) {
         function->addGradientTo(x, dx);
     }
 
     // Given the objective `function` and the search direction `x`, update the candidate `x`
-    virtual void step(const ObjectiveFunction *function, const VectorXd& dx, VectorXd& x) {
-		x = x - stepSize * dx;
+    virtual void step(const ObjectiveFunction *function, const VectorXd &dx, VectorXd &x) {
+        x = x - stepSize * dx;
     }
 
 public:
@@ -57,24 +59,23 @@ public:
 
 class GradientDescentLineSearch : public GradientDescentFixedStep {
 public:
-    GradientDescentLineSearch(int maxIterations=100, double solveResidual=1e-5, int maxLineSearchIterations=15)
-        : GradientDescentFixedStep (maxIterations, solveResidual), maxLineSearchIterations(maxLineSearchIterations){
+    GradientDescentLineSearch(int maxIterations = 100, double solveResidual = 1e-5, int maxLineSearchIterations = 15)
+            : GradientDescentFixedStep(maxIterations, solveResidual), maxLineSearchIterations(maxLineSearchIterations) {
     }
 
 public:
-    virtual void step(const ObjectiveFunction *function, const VectorXd& dx, VectorXd& x)
-    {
-		double alpha_nominal = 1.;
-		double O0 = function->evaluate(x);
-		VectorXd x_cand = x;
-		for (int i = 0; i < maxLineSearchIterations; ++i) {
-			double alpha = alpha_nominal * pow(.5, i);
-			x_cand = x - alpha * dx;
-			if (function->evaluate(x_cand) < O0) {
-				x = x_cand;
-				return;
-			}
-		}
+    virtual void step(const ObjectiveFunction *function, const VectorXd &dx, VectorXd &x) {
+        double alpha_nominal = 1.;
+        double O0 = function->evaluate(x);
+        VectorXd x_cand = x;
+        for (int i = 0; i < maxLineSearchIterations; ++i) {
+            double alpha = alpha_nominal * pow(.5, i);
+            x_cand = x - alpha * dx;
+            if (function->evaluate(x_cand) < O0) {
+                x = x_cand;
+                return;
+            }
+        }
     }
 
 public:

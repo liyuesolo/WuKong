@@ -38,17 +38,11 @@ public:
 //        return getNodes(vertices, params, getDualGraph(vertices, params));
 //    }
 
-    // Gradient of nodes with respect to vertices.
-    virtual Eigen::SparseMatrix<double>
-    getNodesGradient(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) = 0;
-
-//    // Wrapper for getNodesGradient which computes the dual graph internally.
-//    Eigen::SparseMatrix<double> getNodesGradient(const VectorXT &vertices, const VectorXT &params) {
-//        return getNodesGradient(vertices, params, getDualGraph(vertices, params));
-//    }
-
     // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
     std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXi &dual, const VectorXT &nodes);
+
+    // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
+    std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual);
 
 //    // Wrapper for getCells which computes the dual graph internally.
 //    std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXT &params) {

@@ -136,12 +136,30 @@ VectorXi Voronoi::getDualGraph(const VectorXT &vertices, const VectorXT &params)
 }
 
 VectorXT Voronoi::getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {
-    return evaluate_x_voronoi(vertices, dual);
-}
+    int n_faces = dual.rows() / 3;
+    VectorXT nodes(2 * n_faces);
 
-Eigen::SparseMatrix<double>
-Voronoi::getNodesGradient(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {
-    return evaluate_dxdc_voronoi(vertices, dual);
+    for (int i = 0; i < n_faces; i++) {
+        int v1 = dual(i * 3 + 0);
+        int v2 = dual(i * 3 + 1);
+        int v3 = dual(i * 3 + 2);
+
+        double x1 = vertices(v1 * 2 + 0);
+        double y1 = vertices(v1 * 2 + 1);
+        double x2 = vertices(v2 * 2 + 0);
+        double y2 = vertices(v2 * 2 + 1);
+        double x3 = vertices(v3 * 2 + 0);
+        double y3 = vertices(v3 * 2 + 1);
+
+        double m =
+                0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1));
+        double xn = 0.5 * (x1 + x3) - m * (y3 - y1);
+        double yn = 0.5 * (y1 + y3) + m * (x3 - x1);
+
+        nodes.segment<2>(i * 2) = TV(xn, yn);
+    }
+
+    return nodes;
 }
 
 VectorXT Voronoi::getDefaultVertexParams(const VectorXT &vertices) {

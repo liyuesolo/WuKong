@@ -7,36 +7,18 @@
 using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 using VectorXi = Vector<int, Eigen::Dynamic>;
 
-VectorXT evaluate_x_voronoi(const VectorXT &c, const VectorXi &tri);
+void add_O_voronoi_cell(const VectorXT &c, const VectorXT &p, double &out);
 
-Eigen::SparseMatrix<double> evaluate_dxdc_voronoi(const VectorXT &c, const VectorXi &tri);
+void add_dOdc_voronoi_cell(const VectorXT &c, const VectorXT &p, const VectorXi &map, VectorXT &out);
 
-VectorXT evaluate_x_sectional(const VectorXT &c, const VectorXi &tri);
+void
+add_d2Odc2_voronoi_cell(const VectorXT &c, const VectorXT &p, const VectorXi &map, Eigen::SparseMatrix<double> &out);
 
-Eigen::SparseMatrix<double> evaluate_dxdc_sectional(const VectorXT &c, const VectorXi &tri);
+void add_O_sectional_cell(const VectorXT &c, const VectorXT &p, double &out);
 
-VectorXT evaluate_A(const VectorXT &c, const VectorXT &x, const VectorXi &e);
+void add_dOdc_sectional_cell(const VectorXT &c, const VectorXT &p, const VectorXi &map, VectorXT &out);
 
-Eigen::SparseMatrix<double> evaluate_dAdx(const VectorXT &c, const VectorXT &x, const VectorXi &e);
-
-double evaluate_L(const VectorXT &x, const VectorXi &e);
-
-Eigen::SparseMatrix<double> evaluate_dLdx(const VectorXT &x, const VectorXi &e);
-
-double evaluate_O_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
-
-Eigen::SparseMatrix<double>
-evaluate_dOdc_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
-
-Eigen::SparseMatrix<double>
-evaluate_d2Odc2_voronoi(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
-
-double evaluate_O_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
-
-Eigen::SparseMatrix<double>
-evaluate_dOdc_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
-
-Eigen::SparseMatrix<double>
-evaluate_d2Odc2_sectional(const VectorXT &c, const VectorXi &tri, const VectorXi &e, const VectorXT &p);
+void
+add_d2Odc2_sectional_cell(const VectorXT &c, const VectorXT &p, const VectorXi &map, Eigen::SparseMatrix<double> &out);
 
 #endif

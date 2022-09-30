@@ -120,7 +120,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<double, -1, -1> points_c;
     points_c.resize(points.rows(), 3);
     points_c.setZero();
-    points_c(0, 0) = 1;
+//    points_c(0, 0) = 1; // Make the first point red.
 
     Eigen::Matrix<double, -1, -1> lines_c;
     lines_c.resize(lines.rows(), 3);

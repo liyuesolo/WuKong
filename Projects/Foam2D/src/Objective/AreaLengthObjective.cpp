@@ -2,37 +2,28 @@
 #include "../../include/CodeGen.h"
 #include "../../include/Constants.h"
 
-static VectorXi getAreaTriangles2(std::vector<std::vector<int>> cells) {
-    VectorXi area_triangles(NAREA * 3);
+void
+AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &c_cell,
+                               VectorXT &p_cell,
+                               VectorXi &i_cell) const {
+    int n_neighbors = cell.size();
 
-    int edge = 0;
-    for (size_t i = 0; i < NFREE; i++) {
-        std::vector<int> &cell = cells[i];
-        size_t degree = cell.size();
+    cell.insert(cell.begin(), cellIndex);
+    i_cell = VectorXi::Map(cell.data(), cell.size());
 
-        for (size_t j = 0; j < degree; j++) {
-            area_triangles[edge * 3 + 0] = i;
-            area_triangles[edge * 3 + 1] = cell[j];
-            area_triangles[edge * 3 + 2] = cell[(j + 1) % degree];
-            edge++;
-        }
+    int dims = 2 + tessellation->getNumVertexParams();
+    c_cell.resize(20 * dims);
+    for (int j = 0; j < i_cell.rows(); j++) {
+        c_cell.segment(j * dims, dims) = c.segment(i_cell(j) * dims, dims);
     }
 
-    for (int i = edge; i < NAREA; i++) {
-        area_triangles[i * 3 + 0] = NFREE; // TODO: this is a hack, degenerate triangle with area 0...
-        area_triangles[i * 3 + 1] = 0;
-        area_triangles[i * 3 + 2] = 0;
-    }
-
-    return area_triangles;
+    p_cell.resize(5);
+    p_cell << area_weight, length_weight, centroid_weight, area_target, n_neighbors;
 }
-
 
 double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
     VectorXi tri;
-    VectorXT x;
     VectorXi e;
-    VectorXT p;
 
     VectorXd c(c_free.size() + c_fixed.size());
     c << c_free, c_fixed;
@@ -42,14 +33,22 @@ double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    x = tessellation->getNodes(vertices, params, tri);
-    e = getAreaTriangles2(tessellation->getCells(vertices, tri, x));
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
 
-    p.resize(3 + NFREE);
-    p << area_weight, length_weight, centroid_weight, area_target * VectorXT::Ones(NFREE);
+    double O = 0;
+    for (int i = 0; i < cells.size(); i++) {
+        VectorXT c_cell, p_cell;
+        VectorXi i_cell;
+        getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-    return tessellation->getNumVertexParams() == 0 ? evaluate_O_voronoi(c, tri, e, p) : evaluate_O_sectional(c, tri,
-                                                                                                             e, p);
+        if (tessellation->getNumVertexParams() == 0) {
+            add_O_voronoi_cell(c_cell, p_cell, O);
+        } else {
+            add_O_sectional_cell(c_cell, p_cell, O);
+        }
+    }
+
+    return O;
 }
 
 void AreaLengthObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
@@ -58,9 +57,7 @@ void AreaLengthObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) 
 
 VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXi tri;
-    VectorXT x;
     VectorXi e;
-    VectorXT p;
 
     VectorXd c(c_free.size() + c_fixed.size());
     c << c_free, c_fixed;
@@ -70,14 +67,22 @@ VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    x = tessellation->getNodes(vertices, params, tri);
-    e = getAreaTriangles2(tessellation->getCells(vertices, tri, x));
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
 
-    p.resize(3 + NFREE);
-    p << area_weight, length_weight, centroid_weight, area_target * VectorXT::Ones(NFREE);
+    int dims = 2 + tessellation->getNumVertexParams();
+    VectorXT dOdc = VectorXT::Zero(NFREE * dims);
+    for (int i = 0; i < cells.size(); i++) {
+        VectorXT c_cell, p_cell;
+        VectorXi i_cell;
+        getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
+        if (tessellation->getNumVertexParams() == 0) {
+            add_dOdc_voronoi_cell(c_cell, p_cell, i_cell, dOdc);
+        } else {
+            add_dOdc_sectional_cell(c_cell, p_cell, i_cell, dOdc);
+        }
+    }
 
-    return tessellation->getNumVertexParams() == 0 ? evaluate_dOdc_voronoi(c, tri, e, p).transpose()
-                                                   : evaluate_dOdc_sectional(c, tri, e, p).transpose();
+    return dOdc;
 }
 
 void AreaLengthObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
@@ -86,9 +91,7 @@ void AreaLengthObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hess
 
 Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_free) const {
     VectorXi tri;
-    VectorXT x;
     VectorXi e;
-    VectorXT p;
 
     VectorXd c(c_free.size() + c_fixed.size());
     c << c_free, c_fixed;
@@ -98,13 +101,22 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    x = tessellation->getNodes(vertices, params, tri);
-    e = getAreaTriangles2(tessellation->getCells(vertices, tri, x));
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
 
-    p.resize(3 + NFREE);
-    p << area_weight, length_weight, centroid_weight, area_target * VectorXT::Ones(NFREE);
+    int dims = 2 + tessellation->getNumVertexParams();
+    Eigen::SparseMatrix<double> d2Odc2(NFREE * dims, NFREE * dims);
+    for (int i = 0; i < cells.size(); i++) {
+        VectorXT c_cell, p_cell;
+        VectorXi i_cell;
+        getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-    return tessellation->getNumVertexParams() == 0 ? evaluate_d2Odc2_voronoi(c, tri, e, p)
-                                                   : evaluate_d2Odc2_sectional(c, tri, e, p);
+        if (tessellation->getNumVertexParams() == 0) {
+            add_d2Odc2_voronoi_cell(c_cell, p_cell, i_cell, d2Odc2);
+        } else {
+            add_d2Odc2_sectional_cell(c_cell, p_cell, i_cell, d2Odc2);
+        }
+    }
+
+    return d2Odc2;
 }
 

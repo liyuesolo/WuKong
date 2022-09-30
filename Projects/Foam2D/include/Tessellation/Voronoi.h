@@ -14,9 +14,6 @@ public:
 
     virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual);
 
-    virtual Eigen::SparseMatrix<double>
-    getNodesGradient(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual);
-
     virtual int getNumVertexParams() { return 0; }
 
     virtual VectorXT getDefaultVertexParams(const VectorXT &vertices);

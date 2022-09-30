@@ -210,7 +210,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             int v2 = cell[(j + 1) % degree];
 
             F.row(edge) = IV3(i, v1 + n_vtx, v2 + n_vtx);
-            C.row(edge) = getColor(areas(i), objective.area_target);
+            C.row(edge) = getColor(areas(i), objective.area_target * (1 + 3 * (i % 2)));
             edge++;
         }
     }
