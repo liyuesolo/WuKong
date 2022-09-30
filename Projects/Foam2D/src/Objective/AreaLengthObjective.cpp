@@ -33,7 +33,7 @@ double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri, n_free);
 
     double O = 0;
     for (int i = 0; i < cells.size(); i++) {
@@ -67,10 +67,10 @@ VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri, n_free);
 
     int dims = 2 + tessellation->getNumVertexParams();
-    VectorXT dOdc = VectorXT::Zero(NFREE * dims);
+    VectorXT dOdc = VectorXT::Zero(n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
         VectorXT c_cell, p_cell;
         VectorXi i_cell;
@@ -101,10 +101,10 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
     tessellation->separateVerticesParams(c, vertices, params);
 
     tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri);
+    std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri, n_free);
 
     int dims = 2 + tessellation->getNumVertexParams();
-    Eigen::SparseMatrix<double> d2Odc2(NFREE * dims, NFREE * dims);
+    Eigen::SparseMatrix<double> d2Odc2(n_free * dims, n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
         VectorXT c_cell, p_cell;
         VectorXi i_cell;

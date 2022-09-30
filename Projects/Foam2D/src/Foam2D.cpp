@@ -2,7 +2,6 @@
 #include "../include/CodeGen.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Sectional.h"
-#include "../src/optLib/GradientDescentMinimizer.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../include/Constants.h"
 #include <random>
@@ -18,35 +17,50 @@ void Foam2D::resetVertexParams() {
     params = tessellations[tesselation]->getDefaultVertexParams(vertices);
 }
 
-void Foam2D::generateRandomVoronoi() {
+void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
+    n_free = n_free_in;
+    n_fixed = n_fixed_in;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<double> dis(-0.5, 0.5);
 
     VectorXT boundary_points;
-    boundary_points.resize(40 * 2);
-    for (int i = 0; i < 40; i++) {
-        boundary_points.segment<2>(i * 2) = TV(cos(i * 2 * M_PI / 40), sin(i * 2 * M_PI / 40));
+    boundary_points.resize(n_fixed * 2);
+    for (int i = 0; i < n_fixed; i++) {
+        boundary_points.segment<2>(i * 2) = TV(cos(i * 2 * M_PI / n_fixed), sin(i * 2 * M_PI / n_fixed));
     }
 
-    vertices = VectorXT::Zero((NFREE + NFIXED) * 2).unaryExpr([&](float dummy) { return dis(gen); });
-    vertices.segment<NFIXED * 2>(NFREE * 2) = boundary_points;
+    vertices = VectorXT::Zero((n_free + n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment(n_free * 2, n_fixed * 2) = boundary_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initBasicTestCase() {
+    n_free = 2;
+    n_fixed = 4;
+
+    vertices.resize(6 * 2);
+
+    vertices << 0, 0.5, 0, -0.4, 0, 1, -0.4, 0, 0, -1, 0.4, 0;
 
     resetVertexParams();
 }
 
 void Foam2D::optimize() {
     objective.tessellation = tessellations[tesselation];
+    objective.n_free = n_free;
+    objective.n_fixed = n_fixed;
 
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    objective.c_fixed = c.segment(NFREE * (2 + tessellations[tesselation]->getNumVertexParams()),
-                                  NFIXED * (2 + tessellations[tesselation]->getNumVertexParams()));
+    objective.c_fixed = c.segment(n_free * (2 + tessellations[tesselation]->getNumVertexParams()),
+                                  n_fixed * (2 + tessellations[tesselation]->getNumVertexParams()));
     VectorXT c_free = c.segment(0,
-                                NFREE * (2 + tessellations[tesselation]->getNumVertexParams()));
+                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
     minimizers[opttype]->minimize(&objective, c_free);
 
-    c.segment(0, NFREE * (2 + tessellations[tesselation]->getNumVertexParams())) = c_free;
+    c.segment(0, n_free * (2 + tessellations[tesselation]->getNumVertexParams())) = c_free;
 
     tessellations[tesselation]->separateVerticesParams(c, vertices, params);
 }
@@ -60,7 +74,7 @@ int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
     for (int i = 0; i < n_vtx; i++) {
         TV p2 = vertices.segment<2>(i * 2);
         double d = (p2 - p).norm();
-        if (d < threshold && d < dmin && i < NFREE) {
+        if (d < threshold && d < dmin && i < n_free) {
             closest = i;
             dmin = d;
         }
@@ -87,8 +101,7 @@ static TV3 getColor(double area, double target) {
     return {r, g, b};
 }
 
-static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells) {
-    int n_cells = NFREE;
+static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, int n_cells) {
     VectorXT A(n_cells);
     for (int i = 0; i < n_cells; i++) {
         if (cells[i].size() < 3) {
@@ -176,7 +189,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
     std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
     int edge = 0;
-    int n_cells = NFREE;
+    int n_cells = n_free;
     for (int i = 0; i < n_cells; i++) {
         std::vector<int> &cell = cells[i];
         size_t degree = cell.size();
@@ -199,18 +212,17 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     F.setZero();
     C.resize(num_voronoi_edges * 2, 3);
     C.setZero();
-    VectorXT areas = getCellAreas(x, cells);
+    VectorXT areas = getCellAreas(x, cells, n_free);
     edge = 0;
     for (int i = 0; i < n_cells; i++) {
         std::vector<int> &cell = cells[i];
-        size_t degree = cell.size();
+        for (size_t j = 1; j < cells[i].size() - 1; j++) {
+            int v1 = cell[0];
+            int v2 = cell[j];
+            int v3 = cell[j + 1];
 
-        for (size_t j = 0; j < degree; j++) {
-            int v1 = cell[j];
-            int v2 = cell[(j + 1) % degree];
-
-            F.row(edge) = IV3(i, v1 + n_vtx, v2 + n_vtx);
-            C.row(edge) = getColor(areas(i), objective.area_target * (1 + 3 * (i % 2)));
+            F.row(edge) = IV3(v1 + n_vtx, v2 + n_vtx, v3 + n_vtx);
+            C.row(edge) = getColor(areas(i), objective.area_target);
             edge++;
         }
     }

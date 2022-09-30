@@ -44,9 +44,14 @@ public:
     VectorXT vertices;
     VectorXT params;
     int dim = 2;
+
+    int n_free;
+    int n_fixed;
 public:
 
-    void generateRandomVoronoi();
+    void initRandomSitesInCircle(int n_free_in, int n_fixed_in);
+
+    void initBasicTestCase();
 
     void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
 

@@ -42,8 +42,8 @@ Tessellation::getCells(const VectorXT &vertices, const VectorXi &dual, const Vec
 }
 
 std::vector<std::vector<int>>
-Tessellation::getNeighbors(const VectorXT &vertices, const VectorXi &dual) {
-    int n_cells = NFREE, n_faces = dual.rows() / 3;
+Tessellation::getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells) {
+    int n_faces = dual.rows() / 3;
 
     std::vector<std::set<int>> cells(n_cells);
 

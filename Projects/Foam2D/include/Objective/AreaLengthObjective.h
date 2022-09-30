@@ -15,6 +15,9 @@ public:
     double length_weight = 0.01;
     double centroid_weight = 0.05;
 
+    int n_free;
+    int n_fixed;
+
 public:
     void
     getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &c_cell, VectorXT &p_cell,

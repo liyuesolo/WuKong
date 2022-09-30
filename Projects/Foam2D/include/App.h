@@ -20,9 +20,15 @@ public:
     bool optimize = false;
     bool show_dual = false;
 
+    int scenario = 0;
+    int free_sites = 40;
+    int fixed_sites = 40;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);
+
+    void generateScenario();
 
     void updateViewerData(igl::opengl::glfw::Viewer &viewer);
 

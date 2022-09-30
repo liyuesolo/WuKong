@@ -10,6 +10,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         optTypes.push_back("Newton's Method");
         ImGui::Combo("Optimizer", &foam.opttype, optTypes);
 
+        ImGui::Spacing();
+        ImGui::Spacing();
+
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
         tesselationTypes.push_back("Sectional");
@@ -18,6 +21,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             updateViewerData(viewer);
         }
 
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Target", &foam.objective.area_target, 0.005f, 0.005f, "%.3f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -27,9 +34,32 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.005f, 0.005f, "%.3f");
 
+        ImGui::Spacing();
+        ImGui::Spacing();
+
         if (ImGui::Checkbox("Show Dual", &show_dual)) {
             updateViewerData(viewer);
-        };
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        ImGui::Text("Simulation Setup");
+
+        std::vector<std::string> scenarios;
+        scenarios.push_back("Boundary Cell Circle");
+        scenarios.push_back("Gradient Test");
+        ImGui::Combo("Scenario", &scenario, scenarios);
+        if (scenario == 0) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &free_sites, 1, 10);
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Boundary Sites", &fixed_sites, 1, 10);
+        }
+        if (ImGui::Button("Generate")) {
+            generateScenario();
+            updateViewerData(viewer);
+        }
     };
 
     viewer.callback_key_pressed =
@@ -87,7 +117,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             };
 
 
-    foam.generateRandomVoronoi();
+    generateScenario();
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
     viewer.core().camera_zoom = 2.07;
@@ -98,6 +128,19 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
     viewer.data().shininess = 0;
 
     updateViewerData(viewer);
+}
+
+void Foam2DApp::generateScenario() {
+    switch (scenario) {
+        case 0:
+            foam.initRandomSitesInCircle(free_sites, fixed_sites);
+            break;
+        case 1:
+            foam.initBasicTestCase();
+            break;
+        default:
+            std::cout << "Error: scenario not implemented!";
+    }
 }
 
 void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {

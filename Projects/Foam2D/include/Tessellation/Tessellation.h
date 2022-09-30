@@ -41,8 +41,8 @@ public:
     // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
     std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXi &dual, const VectorXT &nodes);
 
-    // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
-    std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual);
+    // Computes list of indices of neighboring sites, ordered counterclockwise.
+    std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
 
 //    // Wrapper for getCells which computes the dual graph internally.
 //    std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXT &params) {
