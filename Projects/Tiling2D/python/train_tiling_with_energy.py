@@ -17,14 +17,23 @@ from Summary import *
 
 def relativeL2(y_true, y_pred):
     if (y_true.shape[1] > 1):
+        # loss = tf.constant(0.0, dtype=tf.float32)
+        # for i in range(y_true.shape[1]):
+        #     # y_true_normalized = tf.divide(y_true[:, i]+ K.epsilon(), y_true[:, i] + K.epsilon())
+        #     y_true_normalized = tf.ones(y_true[:, i].shape)
+        #     y_pred_normalized = tf.divide(y_pred[:, i] + tf.constant(1e-4), y_true[:, i] + tf.constant(1e-4))
+        #     loss +=  K.mean(K.square(y_true_normalized - y_pred_normalized))
+        # return loss
         stress_norm = tf.norm(y_true, ord='euclidean', axis=1)
         norm = tf.tile(tf.keras.backend.expand_dims(stress_norm, 1), tf.constant([1, 4]))
         y_true_normalized = tf.divide(y_true, norm + K.epsilon())
         y_pred_normalized = tf.divide(y_pred, norm + K.epsilon())
         return K.mean(K.square(y_true_normalized - y_pred_normalized))
     else:
-        y_true_normalized = tf.divide(y_true, y_true + K.epsilon())
-        y_pred_normalized = tf.divide(y_pred, y_true + K.epsilon())
+        # y_true_normalized = tf.divide(y_true, y_true + K.epsilon())
+        # y_pred_normalized = tf.divide(y_pred, y_true + K.epsilon())
+        y_true_normalized = tf.ones(y_true.shape)
+        y_pred_normalized = tf.divide(y_pred + K.epsilon(), y_true + K.epsilon())
         return K.mean(K.square(y_true_normalized - y_pred_normalized))
         
 
@@ -291,7 +300,7 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
     
     # model = buildSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParams(n_tiling_params)
-    # model.load_weights(save_path + model_name + '.tf')
+    
     train_vars = model.trainable_variables
     opt = Adam(learning_rate=1e-4)
     max_iter = 80000
@@ -301,7 +310,7 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
 
     losses = [[], []]
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    
+    model.load_weights("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/Models/67/" + model_name + '.tf')
     count = 0
     with open('counter.txt', 'r') as f:
         count = int(f.read().splitlines()[-1])
@@ -387,7 +396,8 @@ if __name__ == "__main__":
     uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/training_data_IH07_latest.txt"
     # uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/training_data_with_strain.txt"
     # uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/data_45_only_off_diagonal.txt"
-    full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH21_shuffled.txt"  
+    # full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH21_shuffled.txt"  
+    full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH50_shuffled.txt"  
     # full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/data.txt"   
     if not train_both:
         if train_uniaxial:
@@ -417,13 +427,13 @@ if __name__ == "__main__":
         else:
             model_name = "biaxial"
     else:
-        model_name = "full40k"
+        model_name = "IH5040k"
     
     
     # train(n_tiling_params, model_name, 
     #     train_data, train_label, validation_data, validation_label)
-    # validate(n_tiling_params, 52, 
+    # validate(n_tiling_params, 69, 
     #     model_name, validation_data, validation_label)
-    testUniAxial(n_tiling_params, 52, "full40k")
+    # testUniAxial(n_tiling_params, 20, "full40k")
     # plotPotentialPolar(n_tiling_params, result_folder, model_name)
     

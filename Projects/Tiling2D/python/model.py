@@ -196,9 +196,9 @@ def buildSrainStressModel():
     model = Model(inputS, output)
     return model
 
-def buildSingleFamilyModelSeparateTilingParams(num_params):
+def buildSingleFamilyModelSeparateTilingParams(num_params, data_type=tf.float32):
     
-    inputS = Input(shape=(4 + num_params,),dtype=tf.float32, name="inputS")
+    inputS = Input(shape=(4 + num_params,),dtype=data_type, name="inputS")
     tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
     strain = get_sub_tensor(1, num_params, num_params + 4)(inputS)
     num_hidden = 256

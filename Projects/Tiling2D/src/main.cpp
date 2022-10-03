@@ -83,11 +83,13 @@ int main(int argc, char** argv)
             viewer.launch();
         };
         // run3DSim();
+        tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.2);
         // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/Server/", 50, TV(0.8, 1.2), 0.24);
         // tiling.generatseGreenStrainSecondPKPairs("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
-        // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/27/structure_translation.txt";
-        // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/27/structure.vtk", PBC_XY);
-        runSimApp();
+        // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
+        // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
+        // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
+        // runSimApp();
     }
     return 0;
 }

@@ -857,6 +857,7 @@ void Tiling2D::generateOnePerodicUnit()
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
     int tiling_idx = 19;
+    // int tiling_idx = 46;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -870,8 +871,9 @@ void Tiling2D::generateOnePerodicUnit()
         T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
         diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
     }
-    params[0] = 0.15; params[1] = 0.65;
-    // params[0] = 0.15; params[1] = 0.5;
+    // params[0] = 0.15; params[1] = 0.65;
+    params[0] = 0.17; params[1] = 0.55;
+    
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
     fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, params, 
