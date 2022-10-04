@@ -38,12 +38,12 @@ void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
 }
 
 void Foam2D::initBasicTestCase() {
-    n_free = 2;
-    n_fixed = 4;
+    n_free = 4;
+    n_fixed = 8;
 
-    vertices.resize(6 * 2);
+    vertices.resize((n_free + n_fixed) * 2);
 
-    vertices << 0, 0.5, 0, -0.4, 0, 1, -0.4, 0, 0, -1, 0.4, 0;
+    vertices << -0.5, 0, 0.5, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
 
     resetVertexParams();
 }
@@ -89,11 +89,11 @@ void Foam2D::moveVertex(int idx, const TV &pos) {
 
 static TV3 getColor(double area, double target) {
     double r, g, b;
-    double q = (area - target);
-    if (q >= 0) q = sqrt(q); else q = -sqrt(-q);
-    r = 1 - q / 0.2;
+    double q = (area / target);
+    if (q >= 1) q = sqrt(q - 1); else q = -sqrt(1 - q);
+    r = 1 - q;
     g = 1;
-    b = 1 + q / 0.2;
+    b = 1 + q;
 
     r = fmin(fmax(r, 0), 1);
     g = fmin(fmax(g, 0), 1);
@@ -226,4 +226,74 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             edge++;
         }
     }
+}
+
+void Foam2D::getFastPlotData(VectorXT &areas, double &obj_value, double &gradient_norm, bool &hessian_pd) {
+    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
+    VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
+    std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
+    areas = getCellAreas(x, cells, n_free) / objective.area_target;
+
+    objective.tessellation = tessellations[tesselation];
+    objective.n_free = n_free;
+    objective.n_fixed = n_fixed;
+
+    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    objective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
+    VectorXT c_free = c.segment(0, n_free * dims);
+
+    obj_value = objective.evaluate(c_free);
+    gradient_norm = objective.get_dOdc(c_free).norm();
+    Eigen::SparseMatrix<double> hessian = objective.get_d2Odc2(c_free);
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
+    hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
+}
+
+void Foam2D::getObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
+                                           double &obj_min, double &obj_max) {
+    objective.tessellation = tessellations[tesselation];
+    objective.n_free = n_free;
+    objective.n_fixed = n_fixed;
+
+    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    objective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
+    VectorXT c_free = c.segment(0, n_free * dims);
+
+    obj.resize(image_size * image_size * 3);
+
+    obj_max = 0;
+    obj_min = INFINITY;
+
+    int xindex = selected_vertex * dims + 0;
+    int yindex = selected_vertex * dims + 1;
+    VectorXT DX = VectorXT::Zero(c_free.rows());
+    DX(xindex) = 1;
+    VectorXT DY = VectorXT::Zero(c_free.rows());
+    DY(yindex) = 1;
+    for (int i = 0; i < image_size; i++) {
+        for (int j = 0; j < image_size; j++) {
+            double dx = (double) (j - image_size / 2) / image_size * range;
+            double dy = (double) -(i - image_size / 2) / image_size * range;
+            double o;
+            if (type == 0) {
+                o = objective.evaluate(c_free + dx * DX + dy * DY);
+            } else if (type == 1) {
+                o = objective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+            } else {
+                // type == 2
+                o = objective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+            }
+
+            if (o > obj_max) obj_max = o;
+            if (o < obj_min) obj_min = o;
+
+            obj(i * image_size * 3 + j * 3 + 0) = o;
+            obj(i * image_size * 3 + j * 3 + 1) = o;
+            obj(i * image_size * 3 + j * 3 + 2) = o;
+        }
+    }
+
+    obj = (obj.array() - obj_min) / (obj_max - obj_min);
 }

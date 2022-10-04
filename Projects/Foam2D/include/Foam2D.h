@@ -25,6 +25,7 @@ using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
 using VectorXi = Vector<int, Eigen::Dynamic>;
+using VectorXf = Vector<float, Eigen::Dynamic>;
 
 class Foam2D {
 public:
@@ -53,19 +54,22 @@ public:
 
     void initBasicTestCase();
 
-    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
-
-    void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
-
     void optimize();
 
     void moveVertex(int idx, const TV &pos);
 
     int getClosestMovablePointThreshold(const TV &p, double threshold);
 
-    void checkGradients();
-
     void resetVertexParams();
+
+    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
+
+    void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
+
+    void getFastPlotData(VectorXT &areas, double &obj_value, double &gradient_norm, bool &hessian_pd);
+
+    void getObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
+                                       double &obj_min, double &obj_max);
 
 public:
 

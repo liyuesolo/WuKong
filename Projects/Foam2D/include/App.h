@@ -24,6 +24,15 @@ public:
     int free_sites = 40;
     int fixed_sites = 40;
 
+    VectorXf objImage;
+    double obj_min;
+    double obj_max;
+    int selected_vertex = -1;
+    int objImageResolution = 64;
+    float objImageRange = 0.1;
+    bool objImageContinuous = false;
+    int objImageType = 0;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);
@@ -31,6 +40,8 @@ public:
     void generateScenario();
 
     void updateViewerData(igl::opengl::glfw::Viewer &viewer);
+
+    void updatePlotData();
 
     Foam2DApp(Foam2D &_foam) : foam(_foam) {}
 

@@ -1,4 +1,5 @@
 #include "../include/App.h"
+#include "../src/implot/implot.h"
 
 void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
@@ -26,7 +27,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Target", &foam.objective.area_target, 0.005f, 0.005f, "%.3f");
+        if (ImGui::InputDouble("Area Target", &foam.objective.area_target, 0.005f, 0.005f, "%.3f")) {
+            updateViewerData(viewer);
+        }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.5f, 0.5f, "%.1f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -52,14 +55,24 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Combo("Scenario", &scenario, scenarios);
         if (scenario == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::InputInt("Cells", &free_sites, 1, 10);
+            ImGui::InputInt("Cells", &free_sites, 10, 100);
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::InputInt("Boundary Sites", &fixed_sites, 1, 10);
+            ImGui::InputInt("Boundary Sites", &fixed_sites, 10, 100);
         }
         if (ImGui::Button("Generate")) {
             generateScenario();
             updateViewerData(viewer);
         }
+    };
+
+    // Draw additional windows
+    menu.callback_draw_custom_window = [&]() {
+        if (!ImPlot::GetCurrentContext()) {
+            auto ctx = ImPlot::CreateContext();
+            ImPlot::SetCurrentContext(ctx);
+        }
+
+        updatePlotData();
     };
 
     viewer.callback_key_pressed =
@@ -83,6 +96,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 if (drag_idx == -1) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
+                    selected_vertex = drag_idx;
                 }
                 return true;
             };
@@ -109,9 +123,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                     foam.optimize();
                     updateViewerData(viewer);
                 } else {
-                    Eigen::Matrix<double, 4, 3> bb;
-                    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
-                    viewer.core().align_camera_center(bb);
+                    Eigen::Matrix<double, 4, 3> camera;
+                    camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
+                    viewer.core().align_camera_center(camera);
                 }
                 return false;
             };
@@ -119,8 +133,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     generateScenario();
 
-    viewer.core().viewport = Eigen::Vector4f(0, 0, 1000, 1000);
-    viewer.core().camera_zoom = 2.07;
+    viewer.core().viewport = Eigen::Vector4f(0, 0, 1500, 1000);
+    viewer.core().camera_zoom = 2.07 * 1.5;
     viewer.data().show_lines = 0;
     viewer.core().background_color.setOnes();
     viewer.data().point_size = 10;
@@ -180,5 +194,102 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
     viewer.data().add_edges(bb, bb_p2, bb_c);
 
-    viewer.core().align_camera_center(bb);
+    Eigen::Matrix<double, 4, 3> camera;
+    camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
+    viewer.core().align_camera_center(camera);
+}
+
+void Foam2DApp::updatePlotData() {
+    // Define next window position + size
+    ImGui::SetNextWindowPos(ImVec2(1000, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(500, 1000), ImGuiCond_FirstUseEver);
+    ImGui::Begin(
+            "New Window", nullptr,
+            ImGuiWindowFlags_NoSavedSettings
+    );
+
+    VectorXT areas;
+    double obj_val, gradient_norm;
+    bool hessian_pd;
+    foam.getFastPlotData(areas, obj_val, gradient_norm, hessian_pd);
+
+    if (ImGui::CollapsingHeader("Cell Area to Target Ratio Histogram", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImPlot::BeginPlot("Cell Area to Target Ratio Histogram")) {
+            ImPlot::SetupAxes(NULL, NULL, 0, 0);
+            ImPlot::SetupAxesLimits(0, 2, 0, areas.rows(), ImPlotCond_Always);
+
+            double halfbin = 0.025;
+
+            for (float c = 2 * halfbin; c < 2 - 2 * halfbin; c += 2 * halfbin) {
+                float r, g, b;
+                float q = c;
+                if (q >= 1) q = sqrt(q - 1); else q = -sqrt(1 - q);
+                r = 1 - q;
+                g = 1;
+                b = 1 + q;
+
+                r = fmin(fmax(r, 0), 1);
+                g = fmin(fmax(g, 0), 1);
+                b = fmin(fmax(b, 0), 1);
+
+                ImPlot::SetNextFillStyle({r, g, b, 1});
+                ImPlot::SetNextLineStyle({0, 0, 0, 1});
+                int count = (areas.array() > c - halfbin && areas.array() < c + halfbin).count();
+                VectorXT pile = c * VectorXT::Ones(count);
+                ImPlot::PlotHistogram("", pile.data(), count, 1, 1.0, ImPlotRange(c - halfbin, c + halfbin));
+            }
+//            ImPlot::PlotHistogram("a", areas.data(), areas.rows(), 39, 1.0, ImPlotRange(0, 2));
+            ImPlot::EndPlot();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Current Objective Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text(("Objective Value: " + std::to_string(obj_val)).c_str());
+        ImGui::Text(("Gradient Norm: " + std::to_string(gradient_norm)).c_str());
+        ImGui::Text((std::string("Hessian PD: ") + (hessian_pd ? "True" : "False")).c_str());
+    }
+
+    if (ImGui::CollapsingHeader("Objective Function Landscape", ImGuiTreeNodeFlags_DefaultOpen)) {
+        std::vector<std::string> objTypes;
+        objTypes.push_back("Objective");
+        objTypes.push_back("dOdx");
+        objTypes.push_back("dOdy");
+        ImGui::Combo("Function", &objImageType, objTypes);
+        ImGui::Text(("Selected Site: " + (selected_vertex != -1 ? std::to_string(selected_vertex) : "None")).c_str());
+        ImGui::DragInt("Resolution ", &objImageResolution, 1, 0, 512);
+        ImGui::DragFloat("Range ", &objImageRange, 0.001, 0.001, 1);
+        ImGui::Checkbox("Compute Continuously", &objImageContinuous);
+        if ((ImGui::Button("Compute") || objImageContinuous) && selected_vertex != -1) {
+            foam.getObjectiveFunctionLandscape(selected_vertex, objImageType, objImageResolution, objImageRange,
+                                               objImage, obj_min, obj_max);
+        }
+
+        if (ImPlot::BeginPlot("Objective Function Landscape", ImVec2(400, 400))) {
+            ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels,
+                              ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels);
+
+            static ImVec2 bmin(0, 0);
+            static ImVec2 bmax(1, 1);
+            static ImVec2 uv0(0, 0);
+            static ImVec2 uv1(1, 1);
+            static ImVec4 tint(1, 1, 1, 1);
+
+            GLuint _textureHandle;
+            glGenTextures(1, &_textureHandle);
+            glBindTexture(GL_TEXTURE_2D, _textureHandle);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, objImageResolution, objImageResolution, 0, GL_RGB, GL_FLOAT,
+                         objImage.data());
+            ImPlot::PlotImage("Objective Value", (void *) (intptr_t) _textureHandle, bmin, bmax, uv0, uv1, tint);
+            ImPlot::EndPlot();
+        }
+        ImGui::SameLine();
+        ImPlot::ColormapScale("", obj_max, obj_min, ImVec2(72, 400), "%g", ImPlotColormapScaleFlags_Invert,
+                              ImPlotColormap_Greys);
+    }
+
+    ImGui::End();
 }
