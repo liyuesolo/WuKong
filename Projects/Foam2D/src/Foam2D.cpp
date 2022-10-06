@@ -222,7 +222,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             int v3 = cell[j + 1];
 
             F.row(edge) = IV3(v1 + n_vtx, v2 + n_vtx, v3 + n_vtx);
-            C.row(edge) = getColor(areas(i), objective.area_target);
+            C.row(edge) = getColor(areas(i), objective.getAreaTarget(i));
             edge++;
         }
     }
@@ -232,7 +232,11 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
     std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
-    areas = getCellAreas(x, cells, n_free) / objective.area_target;
+    
+    areas = getCellAreas(x, cells, n_free);
+    for (int i = 0; i < areas.rows(); i++) {
+        areas(i) /= objective.getAreaTarget(i);
+    }
 }
 
 void Foam2D::getPlotObjectiveStats(double &obj_value, double &gradient_norm, bool &hessian_pd) {

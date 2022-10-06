@@ -10,7 +10,7 @@ public:
 
     VectorXd c_fixed;
 
-    double area_target = 0.05;
+    std::vector<double> area_targets = {0.05};
     double area_weight = 2;
     double length_weight = 0.01;
     double centroid_weight = 0.05;
@@ -32,4 +32,6 @@ public:
     virtual void getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const;
 
     Eigen::SparseMatrix<double> get_d2Odc2(const VectorXd &c_free) const;
+
+    double getAreaTarget(int cellIndex) const;
 };

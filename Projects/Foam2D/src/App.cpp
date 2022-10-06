@@ -26,9 +26,29 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Spacing();
 
         ImGui::Text("Objective Function Parameters");
-        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        if (ImGui::InputDouble("Area Target", &foam.objective.area_target, 0.005f, 0.005f, "%.3f")) {
-            updateViewerData(viewer);
+        ImGui::Text("Area Targets");
+        {
+            ImGui::Indent(10.0f);
+            for (int i = 0; i < foam.objective.area_targets.size(); i++) {
+                ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+                if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
+                                       &foam.objective.area_targets[i],
+                                       0.005f, 0.005f, "%.3f")) {
+                    updateViewerData(viewer);
+                }
+            }
+            if (ImGui::Button("+")) {
+                foam.objective.area_targets.push_back(foam.objective.area_targets[0]);
+                updateViewerData(viewer);
+            }
+            if (foam.objective.area_targets.size() > 1) {
+                ImGui::SameLine();
+                if (ImGui::Button("-")) {
+                    foam.objective.area_targets.pop_back();
+                    updateViewerData(viewer);
+                }
+            }
+            ImGui::Indent(-10.0f);
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.5f, 0.5f, "%.1f");
@@ -212,7 +232,7 @@ void Foam2DApp::updatePlotData() {
         VectorXT areas;
         foam.getPlotAreaHistogram(areas);
 
-        if (ImPlot::BeginPlot("Cell Area to Target Ratio Histogram")) {
+        if (ImPlot::BeginPlot("##Cell Area to Target Ratio Histogram")) {
             ImPlot::SetupAxes(NULL, NULL, 0, 0);
             ImPlot::SetupAxesLimits(0, 2, 0, areas.rows(), ImPlotCond_Always);
 
@@ -278,7 +298,7 @@ void Foam2DApp::updatePlotData() {
                 break;
         }
 
-        if (ImPlot::BeginPlot("Objective Function Landscape", ImVec2(400, 400))) {
+        if (ImPlot::BeginPlot("##Objective Function Landscape", ImVec2(400, 400))) {
             ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels,
                               ImPlotAxisFlags_NoTickMarks | ImPlotAxisFlags_NoTickLabels);
 
@@ -301,7 +321,8 @@ void Foam2DApp::updatePlotData() {
             ImPlot::EndPlot();
         }
         ImGui::SameLine();
-        ImPlot::ColormapScale("", obj_max, obj_min, ImVec2(72, 400), "%g", ImPlotColormapScaleFlags_Invert,
+        ImPlot::ColormapScale("##ObjectiveLandscapeColormap", obj_max, obj_min, ImVec2(72, 400), "%g",
+                              ImPlotColormapScaleFlags_Invert,
                               ImPlotColormap_Greys);
     }
 

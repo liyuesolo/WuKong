@@ -18,7 +18,7 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     }
 
     p_cell.resize(5);
-    p_cell << area_weight, length_weight, centroid_weight, area_target, n_neighbors;
+    p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors;
 }
 
 double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
@@ -118,5 +118,9 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
     }
 
     return d2Odc2;
+}
+
+double AreaLengthObjective::getAreaTarget(int cellIndex) const {
+    return area_targets[cellIndex % area_targets.size()];
 }
 
