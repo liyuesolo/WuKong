@@ -66,10 +66,12 @@ public:
 
     void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
 
-    void getFastPlotData(VectorXT &areas, double &obj_value, double &gradient_norm, bool &hessian_pd);
+    void getPlotAreaHistogram(VectorXT &areas);
 
-    void getObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
-                                       double &obj_min, double &obj_max);
+    void getPlotObjectiveStats(double &obj_value, double &gradient_norm, bool &hessian_pd);
+
+    void getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
+                                           double &obj_min, double &obj_max);
 
 public:
 

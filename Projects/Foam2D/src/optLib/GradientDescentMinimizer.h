@@ -22,8 +22,6 @@ public:
             dx.setZero();
             computeSearchDirection(function, x, dx);
 
-            std::cout << "gradient norm" << dx.norm() << std::endl;
-
             if (dx.norm() < solveResidual) {
                 optimizationConverged = true;
                 break;

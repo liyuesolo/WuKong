@@ -228,12 +228,14 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     }
 }
 
-void Foam2D::getFastPlotData(VectorXT &areas, double &obj_value, double &gradient_norm, bool &hessian_pd) {
+void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
     std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
     areas = getCellAreas(x, cells, n_free) / objective.area_target;
+}
 
+void Foam2D::getPlotObjectiveStats(double &obj_value, double &gradient_norm, bool &hessian_pd) {
     objective.tessellation = tessellations[tesselation];
     objective.n_free = n_free;
     objective.n_fixed = n_fixed;
@@ -250,8 +252,9 @@ void Foam2D::getFastPlotData(VectorXT &areas, double &obj_value, double &gradien
     hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
 }
 
-void Foam2D::getObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
-                                           double &obj_min, double &obj_max) {
+void
+Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
+                                          double &obj_min, double &obj_max) {
     objective.tessellation = tessellations[tesselation];
     objective.n_free = n_free;
     objective.n_fixed = n_fixed;

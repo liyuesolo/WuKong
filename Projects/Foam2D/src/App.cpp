@@ -208,12 +208,10 @@ void Foam2DApp::updatePlotData() {
             ImGuiWindowFlags_NoSavedSettings
     );
 
-    VectorXT areas;
-    double obj_val, gradient_norm;
-    bool hessian_pd;
-    foam.getFastPlotData(areas, obj_val, gradient_norm, hessian_pd);
-
     if (ImGui::CollapsingHeader("Cell Area to Target Ratio Histogram", ImGuiTreeNodeFlags_DefaultOpen)) {
+        VectorXT areas;
+        foam.getPlotAreaHistogram(areas);
+
         if (ImPlot::BeginPlot("Cell Area to Target Ratio Histogram")) {
             ImPlot::SetupAxes(NULL, NULL, 0, 0);
             ImPlot::SetupAxesLimits(0, 2, 0, areas.rows(), ImPlotCond_Always);
@@ -244,6 +242,10 @@ void Foam2DApp::updatePlotData() {
     }
 
     if (ImGui::CollapsingHeader("Current Objective Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+        double obj_val, gradient_norm;
+        bool hessian_pd;
+        foam.getPlotObjectiveStats(obj_val, gradient_norm, hessian_pd);
+
         ImGui::Text(("Objective Value: " + std::to_string(obj_val)).c_str());
         ImGui::Text(("Gradient Norm: " + std::to_string(gradient_norm)).c_str());
         ImGui::Text((std::string("Hessian PD: ") + (hessian_pd ? "True" : "False")).c_str());
@@ -251,7 +253,7 @@ void Foam2DApp::updatePlotData() {
 
     if (ImGui::CollapsingHeader("Objective Function Landscape", ImGuiTreeNodeFlags_DefaultOpen)) {
         std::vector<std::string> objTypes;
-        objTypes.push_back("Objective");
+        objTypes.push_back("Objective Value");
         objTypes.push_back("dOdx");
         objTypes.push_back("dOdy");
         ImGui::Combo("Function", &objImageType, objTypes);
@@ -260,8 +262,20 @@ void Foam2DApp::updatePlotData() {
         ImGui::DragFloat("Range ", &objImageRange, 0.001, 0.001, 1);
         ImGui::Checkbox("Compute Continuously", &objImageContinuous);
         if ((ImGui::Button("Compute") || objImageContinuous) && selected_vertex != -1) {
-            foam.getObjectiveFunctionLandscape(selected_vertex, objImageType, objImageResolution, objImageRange,
-                                               objImage, obj_min, obj_max);
+            foam.getPlotObjectiveFunctionLandscape(selected_vertex, objImageType, objImageResolution, objImageRange,
+                                                   objImage, obj_min, obj_max);
+        }
+        std::string legendLabel;
+        switch (objImageType) {
+            case 0:
+                legendLabel = "Objective Value";
+                break;
+            case 1:
+                legendLabel = "dOdx";
+                break;
+            case 2:
+                legendLabel = "dOdy";
+                break;
         }
 
         if (ImPlot::BeginPlot("Objective Function Landscape", ImVec2(400, 400))) {
@@ -283,7 +297,7 @@ void Foam2DApp::updatePlotData() {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, objImageResolution, objImageResolution, 0, GL_RGB, GL_FLOAT,
                          objImage.data());
-            ImPlot::PlotImage("Objective Value", (void *) (intptr_t) _textureHandle, bmin, bmax, uv0, uv1, tint);
+            ImPlot::PlotImage(legendLabel.c_str(), (void *) (intptr_t) _textureHandle, bmin, bmax, uv0, uv1, tint);
             ImPlot::EndPlot();
         }
         ImGui::SameLine();
