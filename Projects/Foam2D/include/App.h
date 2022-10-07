@@ -24,6 +24,8 @@ public:
     int free_sites = 40;
     int fixed_sites = 40;
 
+    int numAreaTargets = 1;
+
     VectorXf objImage;
     double obj_min;
     double obj_max;

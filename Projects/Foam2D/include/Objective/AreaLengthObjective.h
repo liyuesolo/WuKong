@@ -10,7 +10,7 @@ public:
 
     VectorXd c_fixed;
 
-    std::vector<double> area_targets = {0.05};
+    VectorXd area_targets = 0.05 * VectorXd::Ones(1);
     double area_weight = 0.1;
     double length_weight = 0.01;
     double centroid_weight = 0.05;

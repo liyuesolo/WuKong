@@ -27,25 +27,27 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Spacing();
 
         ImGui::Text("Objective Function Parameters");
-        ImGui::Text("Area Targets");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
+            if (numAreaTargets < 1) numAreaTargets = 1;
+            if (foam.objective.area_targets.rows() >= numAreaTargets) {
+                VectorXd areaTargets = foam.objective.area_targets.segment(0, numAreaTargets);
+                foam.objective.area_targets = areaTargets;
+            } else {
+                VectorXd areaTargets(numAreaTargets);
+                areaTargets << foam.objective.area_targets, foam.objective.area_targets(0) * VectorXd::Ones(
+                        numAreaTargets - foam.objective.area_targets.rows());
+                foam.objective.area_targets = areaTargets;
+            }
+            updateViewerData(viewer);
+        }
         {
             ImGui::Indent(10.0f);
-            for (int i = 0; i < foam.objective.area_targets.size(); i++) {
+            for (int i = 0; i < numAreaTargets; i++) {
                 ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
                 if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
-                                       &foam.objective.area_targets[i],
+                                       &foam.objective.area_targets(i),
                                        0.005f, 0.005f, "%.3f")) {
-                    updateViewerData(viewer);
-                }
-            }
-            if (ImGui::Button("+")) {
-                foam.objective.area_targets.push_back(foam.objective.area_targets[0]);
-                updateViewerData(viewer);
-            }
-            if (foam.objective.area_targets.size() > 1) {
-                ImGui::SameLine();
-                if (ImGui::Button("-")) {
-                    foam.objective.area_targets.pop_back();
                     updateViewerData(viewer);
                 }
             }

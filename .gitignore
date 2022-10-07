@@ -13,6 +13,7 @@ Libs/lbfgs
 Projects/Foam2D/codegen/*.so
 Projects/Foam2D/codegen/*.c
 Projects/Foam2D/codegen/*.h
+Projects/Foam2D/codegen/__pycache__/*
 .idea/*
 cmake-build-debug/*
 cmake-build-release/*

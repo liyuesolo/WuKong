@@ -20,10 +20,6 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
 
     p_cell.resize(5);
     p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors;
-
-    if (n_neighbors > 20 || n_neighbors < 3) {
-        std::cout << "Oh no! " << n_neighbors << " neighbors." << std::endl;
-    }
 }
 
 double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
