@@ -17,6 +17,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
         tesselationTypes.push_back("Sectional");
+        tesselationTypes.push_back("Power");
         if (ImGui::Combo("Tessellation Type", &foam.tesselation, tesselationTypes)) {
             foam.resetVertexParams();
             updateViewerData(viewer);
@@ -51,11 +52,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::Indent(-10.0f);
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.5f, 0.5f, "%.1f");
+        ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.005f, 0.005f, "%.3f");
+        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.005f, 0.005f, "%.3f");
+        ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.01f, 0.01f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();

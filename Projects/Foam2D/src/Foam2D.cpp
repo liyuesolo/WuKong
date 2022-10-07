@@ -2,6 +2,7 @@
 #include "../include/CodeGen.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Sectional.h"
+#include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../include/Constants.h"
 #include <random>
@@ -9,6 +10,7 @@
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
     tessellations.push_back(new Sectional());
+    tessellations.push_back(new Power());
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
 }
@@ -232,7 +234,7 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
     std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
-    
+
     areas = getCellAreas(x, cells, n_free);
     for (int i = 0; i < areas.rows(); i++) {
         areas(i) /= objective.getAreaTarget(i);

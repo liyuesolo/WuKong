@@ -13,25 +13,32 @@ area_target = ca.MX.sym('area_target', 1, 1)
 num_neighbors = ca.MX.sym('num_neighbors', 1, 1)
 p = ca.horzcat(area_weight, length_weight, centroid_weight, area_target, num_neighbors)
 
-# Input: Voronoi sites
-c = ca.MX.sym('c', 2, N)
-xc, yc = ca.vertsplit(c)
+# Input: power sites
+c = ca.MX.sym('c', 3, N)
+xc, yc, zc = ca.vertsplit(c)
 
 idx = 1 + ca.mod(ca.transpose(ca.linspace(0, N - 1, N)), num_neighbors)
 
 x1 = xc[0]
 y1 = yc[0]
+z1 = zc[0]
 x2 = xc[idx[:-1]]
 y2 = yc[idx[:-1]]
+z2 = zc[idx[:-1]]
 x3 = xc[idx[1:]]
 y3 = yc[idx[1:]]
+z3 = zc[idx[1:]]
 
-m = 0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1))
-xn = 0.5 * (x1 + x3) - m * (y3 - y1)
-yn = 0.5 * (y1 + y3) + m * (x3 - x1)
+m2 = -(y2 - y1) / (x2 - x1)
+c2 = (x2 * x2 - x1 * x1 + y2 * y2 - y1 * y1 + z2 - z1) / (2 * (x2 - x1))
+m3 = -(y3 - y1) / (x3 - x1)
+c3 = (x3 * x3 - x1 * x1 + y3 * y3 - y1 * y1 + z3 - z1) / (2 * (x3 - x1))
+
+yn = (c3 - c2) / (m2 - m3)
+xn = m2 * yn + c2
 
 Obj = obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
 
 # Generate and compile C code
-ident = 'voronoi_cell'
+ident = 'power_cell'
 gen_code(ident, c, p, Obj)

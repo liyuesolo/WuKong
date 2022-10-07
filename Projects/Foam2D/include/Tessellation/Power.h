@@ -2,21 +2,19 @@
 
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 
-class Voronoi : public Tessellation {
+class Power : public Tessellation {
 public:
-    Voronoi() {}
+    Power() {}
 
-    VectorXi delaunayJRS(const VectorXT &vertices);
-
-    VectorXi delaunayNaive(const VectorXT &vertices);
+    VectorXi powerDualNaive(const VectorXT &vertices3d);
 
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 
     virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual);
 
-    virtual int getNumVertexParams() { return 0; }
+    virtual int getNumVertexParams() { return 1; }
 
     virtual VectorXT getDefaultVertexParams(const VectorXT &vertices);
 
-    virtual TessellationType getTessellationType() { return VORONOI; }
+    virtual TessellationType getTessellationType() { return POWER; }
 };

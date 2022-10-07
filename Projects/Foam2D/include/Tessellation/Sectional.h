@@ -15,4 +15,6 @@ public:
     virtual int getNumVertexParams() { return 1; }
 
     virtual VectorXT getDefaultVertexParams(const VectorXT &vertices);
+
+    virtual TessellationType getTessellationType() { return SECTIONAL; }
 };

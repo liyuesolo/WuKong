@@ -10,6 +10,7 @@
 enum TessellationType {
     VORONOI,
     SECTIONAL,
+    POWER
 };
 
 using TV = Vector<double, 2>;
@@ -82,4 +83,6 @@ public:
             }
         }
     }
+
+    virtual TessellationType getTessellationType() = 0;
 };

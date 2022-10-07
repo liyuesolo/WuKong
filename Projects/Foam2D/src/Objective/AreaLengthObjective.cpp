@@ -12,6 +12,7 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     i_cell = VectorXi::Map(cell.data(), cell.size());
 
     int dims = 2 + tessellation->getNumVertexParams();
+
     c_cell.resize(20 * dims);
     for (int j = 0; j < i_cell.rows(); j++) {
         c_cell.segment(j * dims, dims) = c.segment(i_cell(j) * dims, dims);
@@ -19,6 +20,10 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
 
     p_cell.resize(5);
     p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors;
+
+    if (n_neighbors > 20 || n_neighbors < 3) {
+        std::cout << "Oh no! " << n_neighbors << " neighbors." << std::endl;
+    }
 }
 
 double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
@@ -37,14 +42,27 @@ double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
 
     double O = 0;
     for (int i = 0; i < cells.size(); i++) {
+        if (cells[i].size() > 18 || cells[i].size() < 3) {
+            O += 1e5;
+            continue;
+        }
+
         VectorXT c_cell, p_cell;
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-        if (tessellation->getNumVertexParams() == 0) {
-            add_O_voronoi_cell(c_cell, p_cell, O);
-        } else {
-            add_O_sectional_cell(c_cell, p_cell, O);
+        switch (tessellation->getTessellationType()) {
+            case VORONOI:
+                add_O_voronoi_cell(c_cell, p_cell, O);
+                break;
+            case SECTIONAL:
+                add_O_sectional_cell(c_cell, p_cell, O);
+                break;
+            case POWER:
+                add_O_power_cell(c_cell, p_cell, O);
+                break;
+            default:
+                break;
         }
     }
 
@@ -72,13 +90,26 @@ VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     int dims = 2 + tessellation->getNumVertexParams();
     VectorXT dOdc = VectorXT::Zero(n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
+        if (cells[i].size() > 18 || cells[i].size() < 3) {
+            continue;
+        }
+
         VectorXT c_cell, p_cell;
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
-        if (tessellation->getNumVertexParams() == 0) {
-            add_dOdc_voronoi_cell(c_cell, p_cell, i_cell, dOdc);
-        } else {
-            add_dOdc_sectional_cell(c_cell, p_cell, i_cell, dOdc);
+
+        switch (tessellation->getTessellationType()) {
+            case VORONOI:
+                add_dOdc_voronoi_cell(c_cell, p_cell, i_cell, dOdc);
+                break;
+            case SECTIONAL:
+                add_dOdc_sectional_cell(c_cell, p_cell, i_cell, dOdc);
+                break;
+            case POWER:
+                add_dOdc_power_cell(c_cell, p_cell, i_cell, dOdc);
+                break;
+            default:
+                break;
         }
     }
 
@@ -106,14 +137,26 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
     int dims = 2 + tessellation->getNumVertexParams();
     Eigen::SparseMatrix<double> d2Odc2(n_free * dims, n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
+        if (cells[i].size() > 18 || cells[i].size() < 3) {
+            continue;
+        }
+
         VectorXT c_cell, p_cell;
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-        if (tessellation->getNumVertexParams() == 0) {
-            add_d2Odc2_voronoi_cell(c_cell, p_cell, i_cell, d2Odc2);
-        } else {
-            add_d2Odc2_sectional_cell(c_cell, p_cell, i_cell, d2Odc2);
+        switch (tessellation->getTessellationType()) {
+            case VORONOI:
+                add_d2Odc2_voronoi_cell(c_cell, p_cell, i_cell, d2Odc2);
+                break;
+            case SECTIONAL:
+                add_d2Odc2_sectional_cell(c_cell, p_cell, i_cell, d2Odc2);
+                break;
+            case POWER:
+                add_d2Odc2_power_cell(c_cell, p_cell, i_cell, d2Odc2);
+                break;
+            default:
+                break;
         }
     }
 
