@@ -1,7 +1,32 @@
 #include <ipc/ipc.hpp>
+#include <igl/edges.h>
+#include <ipc/barrier/adaptive_stiffness.hpp>
 #include "../include/FEMSolver.h"
 
 #include <igl/writeOBJ.h>
+
+
+template <int dim>
+void FEMSolver<dim>::updateBarrierInfo(bool first_step)
+{
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
+    for (int i = 0; i < num_ipc_vtx; i++) 
+        ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+
+    ipc::Constraints ipc_constraints;
+    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+        
+    T current_min_dis = ipc::compute_minimum_distance(ipc_vertices, ipc_edges, ipc_faces, ipc_constraints);
+    if (first_step)
+        ipc_min_dis = current_min_dis;
+    else
+    {
+        T bb_diag = (max_corner - min_corner).norm();
+        ipc::update_barrier_stiffness(ipc_min_dis, current_min_dis, max_barrier_weight, barrier_weight, bb_diag);
+        ipc_min_dis = current_min_dis;
+    }
+}
 
 template <int dim>
 void FEMSolver<dim>::computeIPCRestData()
@@ -12,28 +37,13 @@ void FEMSolver<dim>::computeIPCRestData()
         ipc_vertices.row(i) = undeformed.segment<3>(i * 3);
     num_ipc_vtx = ipc_vertices.rows();
     
-    std::vector<Edge> edges;
+    
     ipc_faces.resize(num_surface_faces, 3);
     for (int i = 0; i < num_surface_faces; i++)
     {
         ipc_faces.row(i) = surface_indices.segment<3>(i * 3);
-        for (int j = 0; j < 3; j++)
-        {
-            int k = (j + 1) % 3;
-            Edge ei(ipc_faces(i, j), ipc_faces(i, k));
-            auto find_iter = std::find_if(edges.begin(), edges.end(), 
-                [&ei](const Edge e)->bool {return (ei[0] == e[0] && ei[1] == e[1] ) 
-                    || (ei[0] == e[1] && ei[1] == e[0]); });
-            if (find_iter == edges.end())
-            {
-                edges.push_back(ei);
-            }
-        }
     }
-    ipc_edges.resize(edges.size(), 2);
-    for (int i = 0; i < edges.size(); i++)
-        ipc_edges.row(i) = edges[i];    
-    
+    igl::edges(ipc_faces, ipc_edges);
 
     for (int i = 0; i < ipc_edges.rows(); i++)
     {
@@ -42,7 +52,18 @@ void FEMSolver<dim>::computeIPCRestData()
         if ((vi - vj).norm() < barrier_distance)
             std::cout << "edge " << edge.transpose() << " has length < 1e-6 " << std::endl;
     }
+    std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
     
+    
+    T bb_diag = (max_corner - min_corner).norm();
+    VectorXT dedx(num_nodes * dim), dbdx(num_nodes * dim);
+    dedx.setZero(); dbdx.setZero();
+    barrier_weight = 1.0;
+    addIPCForceEntries(dbdx); dbdx *= -1.0;
+    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
+    barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
+    if (verbose)
+        std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
 }
 template <int dim>
 T FEMSolver<dim>::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
@@ -176,5 +197,5 @@ void FEMSolver<dim>::addIPCHessianEntries(std::vector<Entry>& entries,bool proje
     }
 }
 
-template class FEMSolver<2>;
+// template class FEMSolver<2>;
 template class FEMSolver<3>;

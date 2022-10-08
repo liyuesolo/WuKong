@@ -75,6 +75,7 @@ public:
     bool project_block_PD = false;
 
     // IPC
+    T max_barrier_weight = 1e8;
     bool add_friction = false;
     T friction_mu = 0.5;
     T epsv_times_h = 1e-5;
@@ -82,7 +83,8 @@ public:
     bool use_ipc = false;
     int num_ipc_vtx = 0;
     T barrier_distance = 1e-5;
-    T barrier_weight = 1e6;
+    T barrier_weight = 1.0;
+    T ipc_min_dis = 1e-6;
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
@@ -304,10 +306,12 @@ public:
     void initializeElementData(Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void computeBoundingBox();
+    void intializeSceneFromTriMesh(const std::string& filename);
+    void generatePeriodicMesh(const std::string& filename);
     
     // FEMSolver.cpp
     void reset();
-    
+    void computeLinearModes();
     T computeInversionFreeStepsize(const VectorXT& _u, const VectorXT& du);
 
     T computeTotalEnergy(const VectorXT& _u);
@@ -341,6 +345,7 @@ public:
 
     //BoundaryCondition.cpp
     void dragMiddle();
+    void applyCompression(int dir, T percent);
     
 
     //Penalty.cpp
@@ -365,6 +370,7 @@ public:
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     // IPC.cpp
+    void updateBarrierInfo(bool first_step);
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void computeIPCRestData();
     void updateIPCVertices(const VectorXT& _u);

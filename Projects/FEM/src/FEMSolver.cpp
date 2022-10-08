@@ -3,7 +3,7 @@
 #include "../include/Timer.h"
 #include <Eigen/PardisoSupport>
 
-#include "../../Solver/CHOLMODSolver.hpp"
+#include <Eigen/CholmodSupport>
 
 #include <Spectra/SymEigsShiftSolver.h>
 #include <Spectra/MatOp/SparseSymShiftSolve.h>
@@ -12,6 +12,98 @@
 
 #include <fstream>
 #include <iomanip>
+
+template <int dim>
+void FEMSolver<dim>::computeLinearModes()
+{
+    int nmodes = 20;
+
+    StiffnessMatrix K(deformed.rows(), deformed.rows());
+    run_diff_test = true;
+    buildSystemMatrix(u, K);
+
+    bool use_Spectra = true;
+
+    if (use_Spectra)
+    {
+
+        Spectra::SparseSymShiftSolve<T, Eigen::Upper> op(K);
+
+        //0 cannot cannot be used as a shift
+        T shift = -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+            Spectra::LARGEST_MAGN, 
+            Spectra::SparseSymShiftSolve<T, Eigen::Upper> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values << std::endl;
+            std::ofstream out("./fem_eigen_vectors.txt");
+            out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+            for (int i = 0; i < eigen_vectors.cols(); i++)
+                out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+            out << std::endl;
+            for (int i = 0; i < eigen_vectors.rows(); i++)
+            {
+                // for (int j = 0; j < eigen_vectors.cols(); j++)
+                for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                    out << eigen_vectors(i, j) << " ";
+                out << std::endl;
+            }       
+            out << std::endl;
+            out.close();
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+    else
+    {
+        Eigen::MatrixXd A_dense = K;
+        Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+        eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
+        auto eigen_values = eigen_solver.eigenvalues();
+        auto eigen_vectors = eigen_solver.eigenvectors();
+        
+        std::vector<T> ev_all(A_dense.cols());
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            ev_all[i] = eigen_values[i].real();
+        }
+        
+        std::vector<int> indices;
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            indices.push_back(i);    
+        }
+        std::sort(indices.begin(), indices.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
+        // std::sort(ev_all.begin(), ev_all.end());
+
+        for (int i = 0; i < nmodes; i++)
+            std::cout << ev_all[indices[i]] << std::endl;
+        
+
+        std::ofstream out("fem_eigen_vectors.txt");
+        out << nmodes << " " << A_dense.cols() << std::endl;
+        for (int i = 0; i < nmodes; i++)
+            out << ev_all[indices[i]] << " ";
+        out << std::endl;
+        for (int i = 0; i < nmodes; i++)
+        {
+            out << eigen_vectors.col(indices[i]).real() << std::endl;
+        }
+
+        out.close();
+    }
+}
 
 template <int dim>
 T FEMSolver<dim>::computeInteralEnergy(const VectorXT& _u)
@@ -187,68 +279,75 @@ template <int dim>
 bool FEMSolver<dim>::linearSolve(StiffnessMatrix& K, 
     VectorXT& residual, VectorXT& du)
 {
-
     Timer t(true);
-    // StiffnessMatrix I(K.rows(), K.cols());
-    // I.setIdentity();
-    T alpha = 10e-6;
-    // StiffnessMatrix H = K;
-    std::unordered_map<int, int> diagonal_entry_location;
-    
-    // Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::ColMajor, typename StiffnessMatrix::StorageIndex>> solver;
-    Eigen::PardisoLLT<Eigen::SparseMatrix<T, Eigen::RowMajor, int>> solver;
-    
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    T alpha = 1e-6;
+    StiffnessMatrix H(K.rows(), K.cols());
+    H.setIdentity(); H.diagonal().array() = 1e-10;
+    K += H;
     solver.analyzePattern(K);
-    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
     
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+
     for (int i = 0; i < 50; i++)
     {
         solver.factorize(K);
+        // std::cout << "factorize" << std::endl;
         if (solver.info() == Eigen::NumericalIssue)
         {
-            indefinite_count_reg_cnt++;
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)
-            {
-                K.coeffRef(row, row) += alpha;
-            });
-            
-            // K = H + alpha * I;        
+            K.diagonal().array() += alpha;
             alpha *= 10;
+            indefinite_count_reg_cnt++;
             continue;
         }
-        du = solver.solve(residual);
 
+        du = solver.solve(residual);
+        
         T dot_dx_g = du.normalized().dot(residual.normalized());
 
         int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
         bool positive_definte = num_negative_eigen_values == 0;
-        bool search_dir_correct_sign = dot_dx_g > 1e-5;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
         if (!search_dir_correct_sign)
+        {   
             invalid_search_dir_cnt++;
-        bool solve_success = (K*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        }
+        
+        // bool solve_success = true;
+        // bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        bool solve_success = du.norm() < 1e3;
+        
         if (!solve_success)
             invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
         if (positive_definte && search_dir_correct_sign && solve_success)
         {
             t.stop();
-            std::cout << "\t===== Linear Solve ===== " << std::endl;
-            std::cout << "\tnnz: " << K.nonZeros() << std::endl;
-            std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
-            std::cout << "\t# regularization step " << i 
-                << " indefinite " << indefinite_count_reg_cnt 
-                << " invalid search dir " << invalid_search_dir_cnt
-                << " invalid solve " << invalid_residual_cnt << std::endl;
-            std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
-            std::cout << "\t======================== " << std::endl;
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << (K.selfadjointView<Eigen::Lower>() * du + UV * UV.transpose()*du - residual).norm() << std::endl;
+                std::cout << "\t======================== " << std::endl;
+            }
             return true;
         }
         else
         {
-            // K = H + alpha * I;      
-            tbb::parallel_for(0, (int)K.rows(), [&](int row)    
-            {
-                K.coeffRef(row, row) += alpha;
-            });  
+            K.diagonal().array() += alpha;
             alpha *= 10;
         }
     }
@@ -342,17 +441,21 @@ bool FEMSolver<dim>::staticSolveStep(int step)
         {
             f[offset] = 0;
         });
-        u.setRandom();
-        u *= 1.0 / u.norm();
-        u *= 0.001;
+        if (use_ipc) 
+            computeIPCRestData();
     }
 
     VectorXT residual(deformed.rows());
     residual.setZero();
 
     T residual_norm = computeResidual(u, residual);
-    // saveIPCMesh("/home/yueli/Documents/ETH/WuKong/output/ThickShell/IPC_mesh_iter_" + std::to_string(step) + ".obj");
-    // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
+    if (use_ipc)
+    {
+        updateBarrierInfo(step == 0);
+        std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+        // std::getchar();
+        updateIPCVertices(u);
+    }
     std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol)
@@ -360,20 +463,18 @@ bool FEMSolver<dim>::staticSolveStep(int step)
     
 
     T dq_norm = lineSearchNewton(u, residual);
-    // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
-    saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/structure_iter_" + std::to_string(step) + ".obj");
-    // iterateDirichletDoF([&](int offset, T target)
-    // {
-    //     u[offset] = target;
-    // });
-    // deformed = undeformed + u;
+    
 
-    if(step == max_newton_iter || dq_norm > 1e10)
+    if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
+    {
+        
         return true;
+    }
     
     return false;
 
 }
+
 
 template <int dim>
 bool FEMSolver<dim>::staticSolve()
@@ -393,7 +494,13 @@ bool FEMSolver<dim>::staticSolve()
         residual.setZero();
 
         residual_norm = computeResidual(u, residual);
-        // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
+        if (use_ipc)
+        {
+            updateBarrierInfo(cnt == 0);
+            updateIPCVertices(u);
+            if (verbose)
+                std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+        }
         
         if (verbose)
             std::cout << "iter " << cnt << "/" << max_newton_iter 
