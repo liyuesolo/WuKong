@@ -167,7 +167,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             
             for (int i = 0; i < evalues.rows(); i++)
             {
-                if (evalues[i] > 1e-6)
+                if (evalues[i] > 1e-6) // skip rigid modes
                 {
                     modes = i;
                     return true;
@@ -205,7 +205,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         return false;
     };
-    // solver.generatePeriodicMesh("/home/yueli/Documents/ETH/WuKong/Projects/FEM/data/simulationTest.STL");
+    
     
     updateScreen(viewer);
     viewer.core().background_color.setOnes();

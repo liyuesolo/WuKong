@@ -11,9 +11,10 @@
 int main()
 {
     FEMSolver<3> solver;
+    // solver.generatePeriodicMesh("/home/yueli/Documents/ETH/WuKong/Projects/FEM/data/simulationTest.STL");
     solver.intializeSceneFromTriMesh("/home/yueli/Documents/ETH/WuKong/Projects/FEM/data/simulationTest.obj");
     
-    // solver.applyCompression(1, 0.2);
+    solver.applyCompression(1, 0.1);
     
     igl::opengl::glfw::Viewer viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;

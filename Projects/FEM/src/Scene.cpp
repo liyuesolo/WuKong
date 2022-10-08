@@ -17,7 +17,8 @@ void FEMSolver<dim>::intializeSceneFromTriMesh(const std::string& filename)
     Eigen::MatrixXi TT;
     Eigen::MatrixXi TF;
     
-    igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
+    // igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.414Y", TV,TT,TF);
+    igl::copyleft::tetgen::tetrahedralize(V,F, "pq1.2", TV,TT,TF);
     initializeElementData(TV, TF, TT);
 }
 
@@ -27,15 +28,22 @@ void FEMSolver<dim>::generatePeriodicMesh(const std::string& filename)
     Eigen::MatrixXd V, C, N;
     Eigen::MatrixXi F;
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/FEM/data/simulationTest.obj", V, F);
-    T eps = 1e-5;
+    T eps = 1e-3;
     gmsh::initialize();
     
     TV min_corner, max_corner;
     computeBBox(V, min_corner, max_corner);
+
     std::cout << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
     gmsh::model::add("SpacerFarbic");
     gmsh::logger::start();
+    gmsh::open(filename);
 
+
+    gmsh::model::mesh::classifySurfaces(1.0, false);
+
+    gmsh::model::mesh::createGeometry();
+    
     gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
     gmsh::option::setNumber("Geometry.Tolerance", eps);
     gmsh::option::setNumber("Mesh.ElementOrder", 1);
@@ -45,33 +53,37 @@ void FEMSolver<dim>::generatePeriodicMesh(const std::string& filename)
     gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
 
-    TV t1(max_corner[0], min_corner[1], min_corner[2]);
-    TV t2(min_corner[0], max_corner[1], min_corner[2]);
-    TV t3(min_corner[0], min_corner[1], max_corner[2]);
+    // TV t1(max_corner[0], min_corner[1], min_corner[2]);
+    // TV t2(min_corner[0], max_corner[1], min_corner[2]);
+    // TV t3(min_corner[0], min_corner[1], max_corner[2]);
     
-    std::vector<double> translation_hor({1, 0, 0, t1[0], 0, 1, 0, t1[1], 0, 0, 1, t1[2], 0, 0, 0, 1});
-    std::vector<double> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, t2[2], 0, 0, 0, 1});
+    std::vector<double> translation_hor({1, 0, 0, max_corner[0], 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+    // std::vector<double> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, t2[2], 0, 0, 0, 1});
 
     gmsh::model::occ::synchronize();
 
     std::vector<std::pair<int, int>> sleft;
     gmsh::model::getEntitiesInBoundingBox(
-        std::min(0.0,t2[0])-eps, std::min(0.0,t2[1])-eps, std::min(0.0,t2[2])-eps, 
-        std::max(0.0,t2[0])+eps, std::max(0.0,t2[1])+eps, std::max(0.0,t2[2])+eps, sleft, 2);
-    std::cout << sleft.size() << std::endl;
+        min_corner[0]-eps, min_corner[1]-eps, min_corner[2]-eps, 
+        min_corner[0]+eps, max_corner[1]+eps, max_corner[2]+eps, sleft, 2);
+    // std::cout << "left " << sleft.size() << std::endl;
     for(auto i : sleft) {
         T xmin, ymin, zmin, xmax, ymax, zmax;
         gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
         std::vector<std::pair<int, int> > sright;
-        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t1[0], ymin-eps+t1[1], zmin - eps, xmax+eps+t1[0], ymax+eps+t1[1], zmax + eps, sright, 2);
-        std::cout << sright.size() << std::endl;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+max_corner[0], ymin-eps, zmin - eps, 
+                        xmax+eps+max_corner[0], ymax+eps, zmax + eps, sright, 2);
+        // std::cout << sright.size() << std::endl;
+        // std::getchar();
         for(auto j : sright) {
             T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
             gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
-            xmin2 -= t1[0];
-            ymin2 -= t1[1];
-            xmax2 -= t1[0];
-            ymax2 -= t1[1];
+            xmin2 -= max_corner[0];
+            // ymin2 -= min_corner[1];
+            // zmin2 -= min_corner[2];
+            xmax2 -= max_corner[0];
+            // ymax2 -= max_corner[1];
+            // zmax2 -= max_corner[2];
             if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
                 std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
                 std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) {
@@ -157,8 +169,7 @@ void FEMSolver<dim>::initializeElementData(Eigen::MatrixXd& TV,
     if (use_ipc)
     {
         add_friction = false;
-        barrier_distance = 1e-3;
-        barrier_weight = 1e10;
+        barrier_distance = 1e-3 * (max_corner - min_corner).norm();
         computeIPCRestData();
     }
 
@@ -168,6 +179,8 @@ void FEMSolver<dim>::initializeElementData(Eigen::MatrixXd& TV,
     
     penalty_weight = 1e8;
     use_penalty = false;
+    verbose = false;
+    project_block_PD = false;
 }
 
 template <int dim>

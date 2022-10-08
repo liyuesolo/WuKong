@@ -82,7 +82,7 @@ public:
     bool self_contact = false;
     bool use_ipc = false;
     int num_ipc_vtx = 0;
-    T barrier_distance = 1e-5;
+    T barrier_distance = 1e-2;
     T barrier_weight = 1.0;
     T ipc_min_dis = 1e-6;
     Eigen::MatrixXd ipc_vertices;
