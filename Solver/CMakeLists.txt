@@ -1,12 +1,7 @@
-if(CUDA_FOUND)
-set(DEPS tbbmalloc tbbmalloc_proxy amgcl VexCL::CUDA)
-else()
-set(DEPS tbbmalloc tbbmalloc_proxy amgcl)
-endif()
+set(DEPS tbbmalloc tbbmalloc_proxy)
 
-set(SuiteSparse_ROOT "/home/yueli/Documents/SuiteSparse-5.9.0")
+set(SuiteSparse_ROOT ${CMAKE_SOURCE_DIR}/../SuiteSparse-5.12.0)
 include_directories(${SuiteSparse_ROOT})
-
   
 add_definitions(-DUSE_CHOLMOD)
 include_directories(${SuiteSparse_ROOT}/include)
