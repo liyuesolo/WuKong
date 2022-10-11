@@ -29,7 +29,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> dragModes;
         dragModes.push_back("Set Target");
         dragModes.push_back("Set Position");
-        ImGui::Combo("Drag Mode", &drag_mode, dragModes);
+        if (ImGui::Combo("Drag Mode", &drag_mode, dragModes)) {
+            foam.objective.drag_idx = -1;
+        }
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -67,6 +69,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.0005f, 0.0005f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Drag Target Weight", &foam.objective.drag_target_weight, 0.01f, 0.01f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -128,6 +132,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
                     selected_vertex = drag_idx;
+                    if (drag_mode == 0) {
+                        foam.objective.drag_idx = drag_idx;
+                        foam.objective.drag_target_pos = p;
+                    }
                 }
                 return true;
             };
@@ -142,7 +150,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
                 if (drag_idx != -1) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
-                    foam.moveVertex(drag_idx, p);
+                    if (drag_mode == 0) {
+                        foam.objective.drag_target_pos = p;
+                    } else {
+                        foam.moveVertex(drag_idx, p);
+                    }
                     updateViewerData(viewer);
                 }
                 return true;

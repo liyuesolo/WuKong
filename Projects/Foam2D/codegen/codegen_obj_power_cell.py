@@ -8,12 +8,8 @@ def codegen_obj_power_cell():
     N = 20  # max number of neighbor sites + 2 (?)
 
     # Input: Objective function parameters
-    area_weight = ca.MX.sym('area_weight', 1, 1)
-    length_weight = ca.MX.sym('length_weight', 1, 1)
-    centroid_weight = ca.MX.sym('centroid_weight', 1, 1)
-    area_target = ca.MX.sym('area_target', 1, 1)
-    num_neighbors = ca.MX.sym('num_neighbors', 1, 1)
-    p = ca.horzcat(area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+    p = ca.MX.sym('p', 1, 8)
+    num_neighbors = p[4]
 
     # Input: power sites
     c = ca.MX.sym('c', 3, N)
@@ -39,7 +35,7 @@ def codegen_obj_power_cell():
     yn = (c3 - c2) / (m2 - m3)
     xn = m2 * yn + c2
 
-    Obj = obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+    Obj = obj_base(x1, y1, x2, y2, xn, yn, p)
 
     # Generate and compile C code
     ident = 'power_cell'

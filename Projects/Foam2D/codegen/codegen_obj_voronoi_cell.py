@@ -8,12 +8,8 @@ def codegen_obj_voronoi_cell():
     N = 20  # max number of neighbor sites + 2 (?)
 
     # Input: Objective function parameters
-    area_weight = ca.MX.sym('area_weight', 1, 1)
-    length_weight = ca.MX.sym('length_weight', 1, 1)
-    centroid_weight = ca.MX.sym('centroid_weight', 1, 1)
-    area_target = ca.MX.sym('area_target', 1, 1)
-    num_neighbors = ca.MX.sym('num_neighbors', 1, 1)
-    p = ca.horzcat(area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+    p = ca.MX.sym('p', 1, 8)
+    num_neighbors = p[4]
 
     # Input: Voronoi sites
     c = ca.MX.sym('c', 2, N)
@@ -32,7 +28,7 @@ def codegen_obj_voronoi_cell():
     xn = 0.5 * (x1 + x3) - m * (y3 - y1)
     yn = 0.5 * (y1 + y3) + m * (x3 - x1)
 
-    Obj = obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+    Obj = obj_base(x1, y1, x2, y2, xn, yn, p)
 
     # Generate and compile C code
     ident = 'voronoi_cell'

@@ -19,8 +19,9 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
         c_cell.segment(j * dims, dims) = c.segment(i_cell(j) * dims, dims);
     }
 
-    p_cell.resize(5);
-    p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors;
+    p_cell.resize(8);
+    p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors,
+            (cellIndex == drag_idx) * drag_target_weight, drag_target_pos(0), drag_target_pos(1);
 }
 
 double AreaLengthObjective::evaluate(const VectorXd &c_free) const {

@@ -2,7 +2,16 @@ import casadi as ca
 import os
 
 
-def obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors):
+def obj_base(x1, y1, x2, y2, xn, yn, p):
+    area_weight = p[0]
+    length_weight = p[1]
+    centroid_weight = p[2]
+    area_target = p[3]
+    num_neighbors = p[4]
+    drag_target_weight = p[5]
+    drag_x = p[6]
+    drag_y = p[7]
+
     xb = x2
     yb = y2
 
@@ -14,6 +23,9 @@ def obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight
     idx = ca.transpose(ca.linspace(0, 18, 19))
 
     Obj = ca.MX.zeros(1, 1)
+
+    # Target position objective
+    Obj += drag_target_weight * ((x1 - drag_x) * (x1 - drag_x) + (y1 - drag_y) * (y1 - drag_y))
 
     # Area objective
     a = ca.if_else(
