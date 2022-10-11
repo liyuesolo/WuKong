@@ -17,6 +17,7 @@ public:
     Foam2D &foam;
 
     int drag_idx = -1;
+    int drag_mode = 0;
     bool optimize = false;
     bool show_dual = false;
 

@@ -26,6 +26,14 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Spacing();
         ImGui::Spacing();
 
+        std::vector<std::string> dragModes;
+        dragModes.push_back("Set Target");
+        dragModes.push_back("Set Position");
+        ImGui::Combo("Drag Mode", &drag_mode, dragModes);
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
         ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {

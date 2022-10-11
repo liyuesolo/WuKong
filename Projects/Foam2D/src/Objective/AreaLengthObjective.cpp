@@ -48,19 +48,7 @@ double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-        switch (tessellation->getTessellationType()) {
-            case VORONOI:
-                add_O_voronoi_cell(c_cell, p_cell, O);
-                break;
-            case SECTIONAL:
-                add_O_sectional_cell(c_cell, p_cell, O);
-                break;
-            case POWER:
-                add_O_power_cell(c_cell, p_cell, O);
-                break;
-            default:
-                break;
-        }
+        add_O_cell(tessellation, c_cell, p_cell, O);
     }
 
     return O;
@@ -95,19 +83,7 @@ VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-        switch (tessellation->getTessellationType()) {
-            case VORONOI:
-                add_dOdc_voronoi_cell(c_cell, p_cell, i_cell, dOdc);
-                break;
-            case SECTIONAL:
-                add_dOdc_sectional_cell(c_cell, p_cell, i_cell, dOdc);
-                break;
-            case POWER:
-                add_dOdc_power_cell(c_cell, p_cell, i_cell, dOdc);
-                break;
-            default:
-                break;
-        }
+        add_dOdc_cell(tessellation, c_cell, p_cell, i_cell, dOdc);
     }
 
     return dOdc;
@@ -142,19 +118,7 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
         VectorXi i_cell;
         getInputs(c, i, cells[i], c_cell, p_cell, i_cell);
 
-        switch (tessellation->getTessellationType()) {
-            case VORONOI:
-                add_d2Odc2_voronoi_cell(c_cell, p_cell, i_cell, d2Odc2);
-                break;
-            case SECTIONAL:
-                add_d2Odc2_sectional_cell(c_cell, p_cell, i_cell, d2Odc2);
-                break;
-            case POWER:
-                add_d2Odc2_power_cell(c_cell, p_cell, i_cell, d2Odc2);
-                break;
-            default:
-                break;
-        }
+        add_d2Odc2_cell(tessellation, c_cell, p_cell, i_cell, d2Odc2);
     }
 
     return d2Odc2;
