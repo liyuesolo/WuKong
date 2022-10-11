@@ -14,6 +14,7 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     int dims = 2 + tessellation->getNumVertexParams();
 
     c_cell.resize(20 * dims);
+    c_cell.setZero();
     for (int j = 0; j < i_cell.rows(); j++) {
         c_cell.segment(j * dims, dims) = c.segment(i_cell(j) * dims, dims);
     }

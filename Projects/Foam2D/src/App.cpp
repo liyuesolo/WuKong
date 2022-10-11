@@ -56,7 +56,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.001f, 0.001f, "%.4f");
+        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.0005f, 0.0005f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.01f, 0.01f, "%.4f");
 

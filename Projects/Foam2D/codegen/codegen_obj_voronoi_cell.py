@@ -30,7 +30,7 @@ m = 0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x
 xn = 0.5 * (x1 + x3) - m * (y3 - y1)
 yn = 0.5 * (y1 + y3) + m * (x3 - x1)
 
-Obj = obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+Obj = obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
 
 # Generate and compile C code
 ident = 'voronoi_cell'

@@ -37,7 +37,7 @@ c3 = (x3 * x3 - x1 * x1 + y3 * y3 - y1 * y1 + z3 * z3 - z1 * z1) / (2 * (x3 - x1
 yn = (c3 - c2) / (m2 - m3)
 xn = m2 * yn + c2
 
-Obj = obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
+Obj = obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors)
 
 # Generate and compile C code
 ident = 'sectional_cell'

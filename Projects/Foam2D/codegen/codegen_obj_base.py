@@ -2,7 +2,10 @@ import casadi as ca
 import os
 
 
-def obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors):
+def obj_base(x1, y1, x2, y2, xn, yn, area_weight, length_weight, centroid_weight, area_target, num_neighbors):
+    xb = x2
+    yb = y2
+
     x2 = xn
     y2 = yn
     x3 = ca.horzcat(xn[1:], xn[0])
@@ -24,7 +27,7 @@ def obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_t
     # Perimeter minimization objective
     l2 = ca.if_else(
         idx < num_neighbors,
-        (x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2),
+        ca.sqrt((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2) + 1e-14),
         0
     )
     L = ca.sum2(l2)
@@ -46,6 +49,15 @@ def obj_base(x1, y1, xn, yn, area_weight, length_weight, centroid_weight, area_t
     D = (x1 - px) * (x1 - px) + (y1 - py) * (y1 - py)
     Obj += centroid_weight * D
 
+    # Soft constraints
+    Obj += 1e-14 / ca.constpow(A, 5)  # Prevent area going to zero
+    d = ca.if_else(
+        idx < num_neighbors,
+        1e-12 / ca.constpow((xb - x1) * (xb - x1) + (yb - y1) * (yb - y1), 2),
+        0
+    )
+    Obj += ca.sum2(d)
+
     return Obj
 
 
@@ -54,7 +66,7 @@ def gen_code(ident, c, p, Obj):
 
     ca_O = ca.Function('ca_O_{}'.format(ident), [c, p], [Obj])
     ca_O.generate('ca_O_{}'.format(ident), opts)
-    print('compiling generated code for power objective function...')
+    print('compiling generated code for {} objective function...'.format(ident))
     cmd = 'gcc -fPIC -shared -O0 ca_O_{}.c -o libca_O_{}.so'.format(ident, ident)
     status = os.system(cmd)
     if status != 0:
@@ -66,7 +78,7 @@ def gen_code(ident, c, p, Obj):
 
     ca_dOdc = ca.Function('ca_dOdc_{}'.format(ident), [c, p], [ca.jacobian(Obj, c)])
     ca_dOdc.generate('ca_dOdc_{}'.format(ident), opts)
-    print('compiling generated code for gradient of power objective function...')
+    print('compiling generated code for gradient of {} objective function...'.format(ident))
     cmd = 'gcc -fPIC -shared -O0 ca_dOdc_{}.c -o libca_dOdc_{}.so'.format(ident, ident)
     status = os.system(cmd)
     if status != 0:
@@ -78,7 +90,7 @@ def gen_code(ident, c, p, Obj):
 
     ca_d2Odc2 = ca.Function('ca_d2Odc2_{}'.format(ident), [c, p], [ca.hessian(Obj, c)[0]])
     ca_d2Odc2.generate('ca_d2Odc2_{}'.format(ident), opts)
-    print('compiling generated code for hessian of power objective function...')
+    print('compiling generated code for hessian of {} objective function...'.format(ident))
     cmd = 'gcc -fPIC -shared -O0 ca_d2Odc2_{}.c -o libca_d2Odc2_{}.so'.format(ident, ident)
     status = os.system(cmd)
     if status != 0:

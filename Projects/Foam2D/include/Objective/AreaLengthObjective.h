@@ -12,7 +12,7 @@ public:
 
     VectorXd area_targets = 0.05 * VectorXd::Ones(1);
     double area_weight = 0.1;
-    double length_weight = 0.01;
+    double length_weight = 0.003;
     double centroid_weight = 0.05;
 
     int n_free;
