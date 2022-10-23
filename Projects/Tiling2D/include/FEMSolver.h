@@ -24,6 +24,7 @@ public:
     using TV = Vector<T, 2>;
     using IV = Vector<int, 2>;
     using IV3 = Vector<int, 3>;
+    using IV4 = Vector<int, 4>;
     using TV3 = Vector<T, 3>;
     using TM = Matrix<T, 2, 2>;
 
@@ -413,10 +414,11 @@ public:
 
     // PBC.cpp
     void computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density);
+    void computeHomogenizationDataCauchy(TM& cauchy_stress, TM& cauchy_strain, T& energy_density);
     void computeHomogenizedStressStrain(TM& sigma, TM& epsilon);
     void computeHomogenizedStressStrain(TM& sigma, TM& Cauchy_strain, TM& Green_strain);
     void computeMarcoBoundaryIndices();
-    void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X);
+    void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X, IV4& bd_indices);
     void addPBCPairInX();
     void addPBCPairsXY();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);

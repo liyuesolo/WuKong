@@ -83,23 +83,23 @@ void FEMSolver::computeIPCRestData()
         else
             ipc_faces.row(i) = indices.segment<3>(i * 3);
     }
-    // igl::edges(ipc_faces, ipc_edges);
-    std::vector<std::vector<int>> boundary_vertices;
-    igl::boundary_loop(ipc_faces, boundary_vertices);
+    igl::edges(ipc_faces, ipc_edges);
+    // std::vector<std::vector<int>> boundary_vertices;
+    // igl::boundary_loop(ipc_faces, boundary_vertices);
 
-    int n_bd_edge = 0;
-    for (auto loop : boundary_vertices)
-    {
-        n_bd_edge += loop.size();
-    }
+    // int n_bd_edge = 0;
+    // for (auto loop : boundary_vertices)
+    // {
+    //     n_bd_edge += loop.size();
+    // }
     
-    ipc_edges.resize(n_bd_edge, 2);
-    int edge_cnt = 0;
-    for (auto loop : boundary_vertices)
-    {
-        for (int i = 0; i < loop.size(); i++)
-            ipc_edges.row(edge_cnt++) = Edge(loop[i], loop[(i+1)%loop.size()]);
-    }
+    // ipc_edges.resize(n_bd_edge, 2);
+    // int edge_cnt = 0;
+    // for (auto loop : boundary_vertices)
+    // {
+    //     for (int i = 0; i < loop.size(); i++)
+    //         ipc_edges.row(edge_cnt++) = Edge(loop[i], loop[(i+1)%loop.size()]);
+    // }
     ipc_faces.resize(0, 0);
     
     

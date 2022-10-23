@@ -856,8 +856,8 @@ void Tiling2D::generateOnePerodicUnit()
     
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
-    int tiling_idx = 19;
-    // int tiling_idx = 46;
+    // int tiling_idx = 19;
+    int tiling_idx = 46;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -871,8 +871,8 @@ void Tiling2D::generateOnePerodicUnit()
         T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
         diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
     }
-    // params[0] = 0.15; params[1] = 0.65;
-    params[0] = 0.17; params[1] = 0.55;
+    params[0] = 0.175; params[1] = 0.582;
+    // params[0] = 0.17; params[1] = 0.35;
     
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
@@ -880,6 +880,7 @@ void Tiling2D::generateOnePerodicUnit()
         cubic_weights, data_folder + "a_structure.txt");
     
     generatePeriodicMesh(polygons, pbc_corners, true, data_folder + "a_structure");
+    // generateHomogenousMesh(polygons, pbc_corners, true, data_folder + "a_structure");
     // generateSandwichMeshPerodicInX(polygons, pbc_corners, true, 
     //     data_folder + "a_structure.vtk");   
     solver.pbc_translation_file = data_folder + "a_structure_translation.txt";
@@ -1571,7 +1572,146 @@ void Tiling2D::generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& pol
     
 }
 
+void Tiling2D::generateHomogenousMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix)
+{
+    T eps = 1e-5;
+    gmsh::initialize();
 
+    T mult = 10000000.0;
+
+    gmsh::model::add("tiling");
+    gmsh::logger::start();
+
+    gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
+    gmsh::option::setNumber("Geometry.Tolerance", eps);
+    gmsh::option::setNumber("Mesh.ElementOrder", 2);
+
+    gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
+    
+    //Points
+    int acc = 1;
+    pbc_corners = {TV(0, 0), TV(10,0), TV(10,10), TV(0,10)};
+
+    // clamping box 1 2 3 4
+    for (int i = 0; i < pbc_corners.size(); ++i)
+		gmsh::model::occ::addPoint(pbc_corners[i][0], pbc_corners[i][1], 0, 1, acc++);
+
+    
+    //Lines
+    acc = 1;
+    int starting_vtx = 1;
+
+    // add clipping box
+    gmsh::model::occ::addLine(1, 2, acc++); 
+    gmsh::model::occ::addLine(2, 3, acc++); 
+    gmsh::model::occ::addLine(3, 4, acc++); 
+    gmsh::model::occ::addLine(4, 1, acc++);
+
+    starting_vtx = 5;
+
+    
+    
+    acc = 1;
+    int acc_loop = 1;
+
+    gmsh::model::occ::addCurveLoop({1, 2, 3, 4}, acc++);
+   
+
+    gmsh::model::occ::addPlaneSurface({1});
+
+    gmsh::model::occ::synchronize();
+
+    int zero_idx;
+    for(int i=0; i < pbc_corners.size(); i++)
+    {
+        if(pbc_corners[i].norm()<1e-6)
+        {
+            zero_idx = i;
+            break;
+        }
+    }
+
+    TV2 t1 = pbc_corners[(zero_idx+1)%pbc_corners.size()];
+    TV2 t2 = pbc_corners[(zero_idx+3)%pbc_corners.size()];
+
+    std::vector<T> translation_hor({1, 0, 0, t1[0], 0, 1, 0, t1[1], 0, 0, 1, 0, 0, 0, 0, 1});
+	std::vector<T> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, 0, 0, 0, 0, 1});
+
+    std::vector<std::pair<int, int>> sleft;
+    gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t2[0])-eps, std::min(0.0,t2[1])-eps, -eps, std::max(0.0,t2[0])+eps, std::max(0.0,t2[1])+eps, eps, sleft, 1);
+    // std::ofstream pbc_output(data_folder + "pbc_data.txt");
+    for(auto i : sleft) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > sright;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t1[0], ymin-eps+t1[1], zmin - eps, xmax+eps+t1[0], ymax+eps+t1[1], zmax + eps, sright, 1);
+
+        for(auto j : sright) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t1[0];
+            ymin2 -= t1[1];
+            xmax2 -= t1[0];
+            ymax2 -= t1[1];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_hor);
+                // pbc_output << "X " << j.second << " " << i.second << std::endl;
+            }
+        }
+    }
+
+    std::vector<std::pair<int, int>> sbottom;
+    gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t1[0])-eps, std::min(0.0,t1[1])-eps, -eps, std::max(0.0,t1[0])+eps, std::max(0.0,t1[1])+eps, eps, sbottom, 1);
+
+    for(auto i : sbottom) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > stop;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t2[0], ymin-eps+t2[1], zmin - eps, xmax+eps+t2[0], ymax+eps+t2[1], zmax + eps, stop, 1);
+
+        for(auto j : stop) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t2[0];
+            ymin2 -= t2[1];
+            xmax2 -= t2[0];
+            ymax2 -= t2[1];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_ver);
+                // pbc_output << "Y " << j.second << " " << i.second << std::endl;
+            }
+        }
+    }
+    gmsh::model::mesh::field::add("Distance", 1);
+
+    gmsh::model::mesh::field::add("Threshold", 2);
+    gmsh::model::mesh::field::setNumber(2, "InField", 1);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.2);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.3);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
+    gmsh::model::mesh::field::setAsBackgroundMesh(2);
+    gmsh::model::occ::synchronize();
+
+    gmsh::model::mesh::generate(2);
+
+    
+    gmsh::write(prefix + ".vtk");
+    std::ofstream translation(prefix + "_translation.txt");
+    translation << t1.transpose() << std::endl;
+    translation << t2.transpose() << std::endl;
+    translation.close();
+    gmsh::finalize();
+}
 void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
     std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix)
 {
@@ -1635,90 +1775,6 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
         poly_lines.push_back(acc);
         ++starting_vtx;
     }
-
-    // std::vector<T> poly_lines;
-    // for(int i=0; i<polygons.size(); ++i)
-    // {
-    //     for(int j=1; j<polygons[i].size(); ++j)
-    //     {
-    //         TV q1 = polygons[i][j-1];
-    //         TV q2 = polygons[i][j];
-
-    //         T t_left1 = closestTToLine(p1, p4, q1);
-    //         T t_right1 = closestTToLine(p2, p3, q1);
-    //         T t_bottom1 = closestTToLine(p1, p2, q1);
-    //         T t_top1 = closestTToLine(p4, p3, q1);
-
-    //         T t_left2 = closestTToLine(p1, p4, q2);
-    //         T t_right2 = closestTToLine(p2, p3, q2);
-    //         T t_bottom2 = closestTToLine(p1, p2, q2);
-    //         T t_top2 = closestTToLine(p4, p3, q2);
-
-    //         bool pass1 = false;
-    //         bool pass2 = false;
-
-    //         if(evalDistance(p1, p4, q1, t_left1)<th)
-    //             pass1 = true;
-    //         if(evalDistance(p2, p3, q1, t_right1)<th)
-    //             pass1 = true;
-    //         if(evalDistance(p1, p2, q1, t_bottom1)<th)
-    //             pass1 = true;
-    //         if(evalDistance(p4, p3, q1, t_top1)<th)
-    //             pass1 = true;
-
-    //         if(evalDistance(p1, p4, q2, t_left2)<th)
-    //             pass2 = true;
-    //         if(evalDistance(p2, p3, q2, t_right2)<th)
-    //             pass2 = true;
-    //         if(evalDistance(p1, p2, q2, t_bottom2)<th)
-    //             pass2 = true;
-    //         if(evalDistance(p4, p3, q2, t_top2)<th)
-    //             pass2 = true;
-
-    //         if(!pass1 || !pass2)
-    //             poly_lines.push_back(acc);
-    //         gmsh::model::occ::addLine(starting_vtx++, starting_vtx, acc++);
-    //     }
-
-    //     TV q1 = polygons[i].back();
-    //     TV q2 = polygons[i][0];
-
-    //     T t_left1 = closestTToLine(p1, p4, q1);
-    //     T t_right1 = closestTToLine(p2, p3, q1);
-    //     T t_bottom1 = closestTToLine(p1, p2, q1);
-    //     T t_top1 = closestTToLine(p4, p3, q1);
-
-    //     T t_left2 = closestTToLine(p1, p4, q2);
-    //     T t_right2 = closestTToLine(p2, p3, q2);
-    //     T t_bottom2 = closestTToLine(p1, p2, q2);
-    //     T t_top2 = closestTToLine(p4, p3, q2);
-
-    //     bool pass1 = false;
-    //     bool pass2 = false;
-
-    //     if(evalDistance(p1, p4, q1, t_left1)<th)
-    //         pass1 = true;
-    //     if(evalDistance(p2, p3, q1, t_right1)<th)
-    //         pass1 = true;
-    //     if(evalDistance(p1, p2, q1, t_bottom1)<th)
-    //         pass1 = true;
-    //     if(evalDistance(p4, p3, q1, t_top1)<th)
-    //         pass1 = true;
-
-    //     if(evalDistance(p1, p4, q2, t_left2)<th)
-    //         pass2 = true;
-    //     if(evalDistance(p2, p3, q2, t_right2)<th)
-    //         pass2 = true;
-    //     if(evalDistance(p1, p2, q2, t_bottom2)<th)
-    //         pass2 = true;
-    //     if(evalDistance(p4, p3, q2, t_top2)<th)
-    //         pass2 = true;
-
-    //     if(!pass1 || !pass2)
-    //         poly_lines.push_back(acc);
-    //     gmsh::model::occ::addLine(starting_vtx, starting_vtx-polygons[i].size()+1, acc++);
-    //     ++starting_vtx;
-    // }
 
     gmsh::model::mesh::field::add("Distance", 1);
     // gmsh::model::mesh::field::setNumbers(1, "CurvesList", poly_lines);
@@ -1837,139 +1893,6 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     translation << t2.transpose() << std::endl;
     translation.close();
     gmsh::finalize();
-    // T eps = 1e-5;
-    // gmsh::initialize();
-
-    // T mult = 10000000.0;
-
-    // gmsh::model::add("tiling");
-    // gmsh::logger::start();
-
-    // gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
-    // gmsh::option::setNumber("Geometry.Tolerance", eps);
-    // gmsh::option::setNumber("Mesh.ElementOrder", 2);
-
-    // gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
-    // gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
-    // gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
     
-    // //Points
-    // int acc = 1;
-    // // pbc_corners = {TV(0, 0), TV(1,0), TV(1,1), TV(0,1)};
-
-    // // clamping box 1 2 3 4
-    // for (int i = 0; i < pbc_corners.size(); ++i)
-	// 	gmsh::model::occ::addPoint(pbc_corners[i][0], pbc_corners[i][1], 0, 1, acc++);
-
-    
-    // //Lines
-    // acc = 1;
-    // int starting_vtx = 1;
-
-    // // add clipping box
-    // gmsh::model::occ::addLine(1, 2, acc++); 
-    // gmsh::model::occ::addLine(2, 3, acc++); 
-    // gmsh::model::occ::addLine(3, 4, acc++); 
-    // gmsh::model::occ::addLine(4, 1, acc++);
-
-    // starting_vtx = 5;
-
-    
-    
-    // acc = 1;
-    // int acc_loop = 1;
-
-    // gmsh::model::occ::addCurveLoop({1, 2, 3, 4}, acc++);
-   
-
-    // gmsh::model::occ::addPlaneSurface({1});
-
-    // gmsh::model::occ::synchronize();
-
-    // int zero_idx;
-    // for(int i=0; i < pbc_corners.size(); i++)
-    // {
-    //     if(pbc_corners[i].norm()<1e-6)
-    //     {
-    //         zero_idx = i;
-    //         break;
-    //     }
-    // }
-
-    // TV2 t1 = pbc_corners[(zero_idx+1)%pbc_corners.size()];
-    // TV2 t2 = pbc_corners[(zero_idx+3)%pbc_corners.size()];
-
-    // std::vector<T> translation_hor({1, 0, 0, t1[0], 0, 1, 0, t1[1], 0, 0, 1, 0, 0, 0, 0, 1});
-	// std::vector<T> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, 0, 0, 0, 0, 1});
-
-    // std::vector<std::pair<int, int>> sleft;
-    // gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t2[0])-eps, std::min(0.0,t2[1])-eps, -eps, std::max(0.0,t2[0])+eps, std::max(0.0,t2[1])+eps, eps, sleft, 1);
-    // // std::ofstream pbc_output(data_folder + "pbc_data.txt");
-    // for(auto i : sleft) {
-    //     T xmin, ymin, zmin, xmax, ymax, zmax;
-    //     gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
-    //     std::vector<std::pair<int, int> > sright;
-    //     gmsh::model::getEntitiesInBoundingBox(xmin-eps+t1[0], ymin-eps+t1[1], zmin - eps, xmax+eps+t1[0], ymax+eps+t1[1], zmax + eps, sright, 1);
-
-    //     for(auto j : sright) {
-    //         T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
-    //         gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
-    //         xmin2 -= t1[0];
-    //         ymin2 -= t1[1];
-    //         xmax2 -= t1[0];
-    //         ymax2 -= t1[1];
-    //         if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
-    //             std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
-    //             std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
-    //         {
-    //             gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_hor);
-    //             // pbc_output << "X " << j.second << " " << i.second << std::endl;
-    //         }
-    //     }
-    // }
-
-    // std::vector<std::pair<int, int>> sbottom;
-    // gmsh::model::getEntitiesInBoundingBox(std::min(0.0,t1[0])-eps, std::min(0.0,t1[1])-eps, -eps, std::max(0.0,t1[0])+eps, std::max(0.0,t1[1])+eps, eps, sbottom, 1);
-
-    // for(auto i : sbottom) {
-    //     T xmin, ymin, zmin, xmax, ymax, zmax;
-    //     gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
-    //     std::vector<std::pair<int, int> > stop;
-    //     gmsh::model::getEntitiesInBoundingBox(xmin-eps+t2[0], ymin-eps+t2[1], zmin - eps, xmax+eps+t2[0], ymax+eps+t2[1], zmax + eps, stop, 1);
-
-    //     for(auto j : stop) {
-    //         T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
-    //         gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
-    //         xmin2 -= t2[0];
-    //         ymin2 -= t2[1];
-    //         xmax2 -= t2[0];
-    //         ymax2 -= t2[1];
-    //         if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
-    //             std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
-    //             std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
-    //         {
-    //             gmsh::model::mesh::setPeriodic(1, {j.second}, {i.second}, translation_ver);
-    //             // pbc_output << "Y " << j.second << " " << i.second << std::endl;
-    //         }
-    //     }
-    // }
-    // gmsh::model::mesh::field::add("Distance", 1);
-
-    // gmsh::model::mesh::field::add("Threshold", 2);
-    // gmsh::model::mesh::field::setNumber(2, "InField", 1);
-    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 2.0);
-    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 5.0);
-    // gmsh::model::mesh::field::setAsBackgroundMesh(2);
-    // gmsh::model::occ::synchronize();
-
-    // gmsh::model::mesh::generate(2);
-
-    
-    // gmsh::write(prefix + ".vtk");
-    // std::ofstream translation(prefix + "_translation.txt");
-    // translation << t1.transpose() << std::endl;
-    // translation << t2.transpose() << std::endl;
-    // translation.close();
-    // gmsh::finalize();
 }
 

@@ -68,6 +68,8 @@ public:
     Tiling2D(FEMSolver& _solver) : solver(_solver) {}
     ~Tiling2D() {}
 
+    void inverseDesignFD();
+
     // ########################## Tiling2D.cpp ########################## 
     void generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file);
     void initializeSimulationDataFromVTKFile(const std::string& filename);
@@ -83,7 +85,8 @@ public:
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
-    // ################ Generate Training Data ###############pragma endregion
+    // ################ Generate Training Data ###############
+    void generateNHHomogenousData(const std::string& result_folder);
     void sampleUniaxialStrain(const std::string& result_folder, T strain);
     void sampleSingleFamily(const std::string& result_folder, 
         const TV& uniaxial_strain_range, const TV& biaxial_strain_range, 
@@ -96,7 +99,7 @@ public:
         const VectorXT& tiling_params);
     void sampleUniAxialStrainAlongDirection(const std::string& result_folder,
         int n_sample, const TV& strain_range, T theta);
-    void sampleDirectionWithStrain(const std::string& result_folder,
+    void sampleDirectionWithUniaxialStrain(const std::string& result_folder,
         int n_sample, const TV& theta_range, T strain);
     void computeEnergyForSimData(const std::string& result_folder);
     void generateGreenStrainSecondPKPairs(const std::string& result_folder);
@@ -104,13 +107,17 @@ public:
         int IH, const std::string& prefix,
         const std::string& result_folder, int resume_start = 0);
     void sampleStrain(const std::string& result_folder);
+    void sampleTilingParamsAlongStrain(const std::string& result_folder);
+
+    void sampleFixedTilingParamsAlongStrain(const std::string& result_folder);
 
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, 
         std::string prefix = "");
-    
+    void generateHomogenousMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix);
     
     void generateSandwichMeshPerodicInX(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, 

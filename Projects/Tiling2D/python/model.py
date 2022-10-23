@@ -4,6 +4,7 @@ from tensorflow.keras.layers import Input, Dense, Lambda
 from tensorflow.keras import Sequential, Model
 from tensorflow.keras import activations
 from tensorflow.keras.layers import Input, Dense, Lambda, Concatenate, BatchNormalization, Dropout, Add
+from tensorflow.keras import regularizers
 import math
 import numpy as np
 import tensorflow as tf
@@ -196,21 +197,119 @@ def buildSrainStressModel():
     model = Model(inputS, output)
     return model
 
+def buildConstitutiveModel(n_strain_entry):
+    inputS = Input(shape=(n_strain_entry,),dtype=tf.float32, name="inputS")
+    num_hidden = 256
+    # x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(inputS)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
+    for _ in range(5):
+        # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+        x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(x)
+    output = Dense(1, activation=tf.keras.activations.softplus)(x)
+    model = Model(inputS, output)
+    return model
+
+def buildSingleFamilyModelSeparateTilingParamsSwish(num_params, data_type=tf.float32):
+    
+    inputS = Input(shape=(3 + num_params,),dtype=data_type, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 3)(inputS)
+    num_hidden = 256
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(tiling_params)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(strain)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
+    model = Model(inputS, output)
+    return model
+
 def buildSingleFamilyModelSeparateTilingParams(num_params, data_type=tf.float32):
     
     inputS = Input(shape=(4 + num_params,),dtype=data_type, name="inputS")
     tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
     strain = get_sub_tensor(1, num_params, num_params + 4)(inputS)
+
+
     num_hidden = 256
     x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(tiling_params)
     x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
     y = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(strain)
+    y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
+    # y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(z)
+    # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
+    model = Model(inputS, output)
+    return model
+
+def buildSingleFamilyModel3Strain(num_params, data_type=tf.float32):
+    
+    inputS = Input(shape=(3 + num_params,),dtype=data_type, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 3)(inputS)
+
+
+    num_hidden = 256
+    x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(tiling_params)
+    x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    y = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(strain)
+    y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
     y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
     z = Concatenate()([x, y]) 
     for i in range(5):
         z = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(z)
-    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(z)
     
 
+    model = Model(inputS, output)
+    return model
+
+def buildSingleFamilyModelSeparateTilingParamsAux(num_params, data_type=tf.float32):
+    num_hidden = 256
+    
+    inputS = Input(shape=(4 + num_params + 5,),dtype=data_type, name="inputS")
+    # tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    # strain = get_sub_tensor(1, num_params, num_params + 4)(inputS)
+    # aux = get_sub_tensor(1, num_params + 4, num_params + 9)(inputS)
+    
+    # batch_dim = tf.shape(strain)[0]
+    
+    # strain_tensor = tf.reshape(strain, (batch_dim, 2, 2))
+    # s, u, v = tf.linalg.svd(strain_tensor)
+    # v = tf.reshape(v, (batch_dim, 4))
+    # u = tf.reshape(u, (batch_dim, 4))
+    # strain = tf.concat((strain, tf.concat((s, tf.concat((u, v), axis=-1)), axis=-1)), axis=-1)
+    
+    # x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(tiling_params)
+    # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    # y = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(strain)
+    # y = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(y)
+    # z = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(aux)
+    # z = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(z)
+    # xy = Concatenate()([x, y])
+    # xyz = Concatenate()([xy, z])
+    # for i in range(5):
+    #     xyz = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(xyz)
+    # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(z)
+    # output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+    x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(inputS)
+    for i in range(10):
+        x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
+    output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(x)
     model = Model(inputS, output)
     return model

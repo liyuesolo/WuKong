@@ -6,6 +6,7 @@
 #include <imgui/imgui.h>
 #include <igl/png/writePNG.h>
 #include <igl/writeOBJ.h>
+#include <igl/readOBJ.h>
 #include <igl/jet.h>
 
 #include "../include/app.h"
@@ -61,6 +62,8 @@ int main(int argc, char** argv)
         
         auto run3DSim = [&]()
         {
+            
+
             HexFEMSolver hex_fem_solver;
             igl::opengl::glfw::Viewer viewer;
             igl::opengl::glfw::imgui::ImGuiMenu menu;
@@ -71,9 +74,9 @@ int main(int argc, char** argv)
             hex_fem_solver.buildGrid3D(TV3::Zero(), TV3(1.0, dx, 1.0), dx);
             Vector<bool, 4> flag;
             flag << true, false, true, false;
-            hex_fem_solver.E = 0.0;
-            hex_fem_solver.nu = 0.3;
-            hex_fem_solver.updateLameParams();
+            // hex_fem_solver.E = 0.0;
+            // hex_fem_solver.nu = 0.3;
+            // hex_fem_solver.updateLameParams();
             hex_fem_solver.KL_stiffness = 1e6;
             hex_fem_solver.KL_stiffness_shear = 0;
             hex_fem_solver.addCornerVtxToDirichletVertices(flag);
@@ -82,8 +85,48 @@ int main(int argc, char** argv)
             app.setViewer(viewer, menu);
             viewer.launch();
         };
+
+        auto renderScene = [&]()
+        {
+            igl::opengl::glfw::Viewer viewer;
+            igl::opengl::glfw::imgui::ImGuiMenu menu;
+
+            viewer.plugins.push_back(&menu);
+            SimulationApp app(tiling);
+            
+            app.setViewer(viewer, menu);
+            std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/";
+            int width = 2000, height = 2000;
+            CMat R(width,height), G(width,height), B(width,height), A(width,height);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 10.0;
+            viewer.core().camera_zoom *= 1.4;
+            viewer.launch_init();
+            int n_sp_strain = 50;
+            TV range_strain(0.001, 0.2);
+            T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
+            int cnt = 0;
+            for (T strain = range_strain[0]; strain < range_strain[1] + delta_strain; strain += delta_strain)
+            {
+                igl::readOBJ(folder + std::to_string(strain) + ".obj", app.V, app.F);
+                    
+                viewer.data().clear();
+                viewer.data().set_mesh(app.V, app.F);
+                app.C.resize(app.F.rows(), 3);
+                app.C.col(0).setConstant(0.0); app.C.col(1).setConstant(0.3); app.C.col(2).setConstant(1.0);
+                viewer.data().set_colors(app.C);
+                viewer.core().align_camera_center(app.V);
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                igl::png::writePNG(R,G,B,A, folder + std::to_string(cnt++)+".png");
+            }
+        };
+        // renderScene();
         // run3DSim();
-        tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.2);
+        // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
+        tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.05);
         // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/Server/", 50, TV(0.8, 1.2), 0.24);
         // tiling.generatseGreenStrainSecondPKPairs("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";

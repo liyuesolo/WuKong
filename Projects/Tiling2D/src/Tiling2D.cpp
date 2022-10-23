@@ -122,14 +122,14 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         {
             solver.addPBCPairsXY();
             solver.add_pbc_strain = true;
-            solver.strain_theta = 0.;
-            solver.uniaxial_strain = 1.02667;
-            solver.uniaxial_strain_ortho = 0.91;
+            solver.strain_theta = 0;
+            solver.uniaxial_strain = 1.0 + 0.0954451;
+            solver.uniaxial_strain_ortho = 1.09;
             solver.biaxial = false;
-            solver.pbc_strain_w = 1e6;
+            solver.pbc_strain_w = 1e7;
             solver.pbc_w = 1e6;
-            solver.prescribe_strain_tensor = true;
-            solver.target_strain = TV3(0.0270336, -0.0211052, -0.00195281);
+            solver.prescribe_strain_tensor = false;
+            solver.target_strain = TV3(0.01, -0.15, 0.001);
             // solver.target_strain = TV3(0.44765, -0.0656891, 0.0956651);
             
             solver.computeMarcoBoundaryIndices();
@@ -190,14 +190,14 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         solver.addIPCForceEntries(contact_force);
         if (contact_force.norm() > 1e-8)
         {
-            std::cout << contact_force.norm() << std::endl;
+            std::cout << "contact force norm " << contact_force.norm() << std::endl;
             return false;
         }
     }
 
-    solver.project_block_PD = false;
+    solver.project_block_PD = true;
     solver.verbose = true;
-    solver.max_newton_iter = 500;
+    solver.max_newton_iter = 3000;
     return true;
 }
 
@@ -592,7 +592,7 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
         int n_sample, const TV& theta_range, T strain)
 {
     int IH = 19;
-    std::ofstream out(result_folder + "sample_theta_"+std::to_string(strain)+".txt");
+    std::ofstream out(result_folder + "sample_theta_"+std::to_string(strain)+"_full.txt");
     csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -603,6 +603,7 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
     {
         params[j] = new_params[j];
     }
+    params[0] = 0.25; params[1] = 0.6;
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
     Vector<T, 4> cubic_weights;
@@ -611,15 +612,20 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
         cubic_weights, result_folder + "structure.txt");
     
     generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    // generateHomogenousMesh(polygons, pbc_corners, true, result_folder + "structure");
     
     solver.pbc_translation_file = result_folder + "structure_translation.txt";
     initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
-    solver.verbose = true;
+    solver.verbose = false;
     solver.prescribe_strain_tensor = false;
     solver.biaxial = false;
+    solver.pbc_strain_w = 1e6;
+    solver.project_block_PD = false;
     auto runSim = [&](T theta, T strain, T strain_ortho)
     {
-            
+        TV d(std::cos(theta), std::sin(theta));
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain;
         bool solve_succeed = solver.staticSolve();
 
         VectorXT residual(solver.num_nodes * 2); residual.setZero();
@@ -627,13 +633,26 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
         TM secondPK_stress, Green_strain;
         T psi;
         solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        TM cauchy_stress, cauchy_strain;
+        solver.computeHomogenizationDataCauchy(cauchy_stress, cauchy_strain, psi);
+        T strain_d = d.transpose() * (cauchy_strain * d);
+        T stress_d = d.transpose() * (cauchy_stress * d);
+        
+        T stiffness = stress_d / strain_d;
+        // T stiffness2 = 2.0 * psi / (strain - 1.0) / (strain - 1.0);
+        // T stiffness2 = 2.0 * psi / strain_d/strain_d;
+        
         for (int m = 0; m < params.size(); m++)
         {
             out << params[m] << " ";
         }
         out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
             << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
-            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << secondPK_stress(1, 0) << " " 
+            << cauchy_strain(0, 0) << " " << cauchy_strain(1, 1) << " " << cauchy_strain(0, 1) << " "
+            << cauchy_stress(0, 0) << " " << cauchy_stress(1, 1) << " " << cauchy_stress(0, 1) << " "
+            << stiffness << " "
+            << psi << " " << theta << " " << strain 
             << " " << strain_ortho << " "
             << residual.norm() << std::endl;
         if (!solve_succeed)
@@ -648,8 +667,7 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
     {
         solver.reset();
         T theta = theta_range[0] + ((double)i/(double)n_sample)*(theta_range[1] - theta_range[0]);
-        solver.strain_theta = theta;
-        solver.uniaxial_strain = strain;
+        
         runSim(theta, strain, 0.0);
     }
     
@@ -682,13 +700,14 @@ void Tiling2D::sampleUniAxialStrainAlongDirection(const std::string& result_fold
     
     solver.pbc_translation_file = result_folder + "structure_translation.txt";
     initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
-    solver.verbose = true;
+    solver.verbose = false;
     solver.prescribe_strain_tensor = false;
     T delta_strain = (strain_range[1] - strain_range[0]) / T(n_sample);
 
     auto runSim = [&](T theta, T strain, T strain_ortho)
     {
-            
+        
+
         bool solve_succeed = solver.staticSolve();
 
         VectorXT residual(solver.num_nodes * 2); residual.setZero();
@@ -696,6 +715,7 @@ void Tiling2D::sampleUniAxialStrainAlongDirection(const std::string& result_fold
         TM secondPK_stress, Green_strain;
         T psi;
         solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        
         for (int m = 0; m < params.size(); m++)
         {
             out << params[m] << " ";
@@ -733,16 +753,16 @@ void Tiling2D::sampleUniAxialStrainAlongDirection(const std::string& result_fold
 void Tiling2D::sampleFixedTilingParamsAlongStrain(const std::string& result_folder)
 {
     int IH = 19;
-    std::ofstream out(result_folder + "monotonic_test.txt");
-    int n_sp_strain = 20;
-    TV range_strain(0.2, 0.5);
+    std::ofstream out(result_folder + "constant_energy.txt");
+    int n_sp_strain = 50;
+    TV range_strain(0.001, 0.2);
     T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
 
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
-    std::vector<T> params = {0.146, 0.655};
+    std::vector<T> params = {0.175, 0.582};
     
     fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
         cubic_weights, result_folder + "structure.txt");
@@ -756,8 +776,9 @@ void Tiling2D::sampleFixedTilingParamsAlongStrain(const std::string& result_fold
     for (T strain = range_strain[0]; strain < range_strain[1] + delta_strain; strain += delta_strain)
     {
         solver.prescribe_strain_tensor = true;
-        solver.target_strain = TV3(strain, 0.109, 0.001);
+        solver.target_strain = TV3(strain, -0.2, 0.001);
         bool solve_succeed = solver.staticSolve();
+        solver.saveToOBJ(result_folder + std::to_string(strain) + ".obj");
         TM secondPK_stress, Green_strain;
         T psi;
         solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
@@ -831,6 +852,126 @@ void Tiling2D::sampleTilingParamsAlongStrain(const std::string& result_folder)
             }
             // break;
         }
+    }
+    
+    out.close();
+}
+
+void Tiling2D::generateNHHomogenousData(const std::string& result_folder)
+{
+    std::ofstream out;
+    out.open(result_folder + "homo_uni_bi.txt");
+    
+    TV range_strain(0.7, 1.5);
+    TV range_strain_biaixial(0.9, 1.2);
+	TV range_theta(0.0, M_PI);
+    
+    int n_sp_params = 10;
+    int n_sp_strain = 50;
+    int n_sp_strain_bi = 10;
+    int n_sp_theta = 50;
+
+    T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
+    T delta_strain_bi = (range_strain_biaixial[1] - range_strain_biaixial[0]) / T(n_sp_strain_bi);
+
+    auto runSim = [&](int& sim_cnt, T theta, T strain, T strain_ortho)
+    {
+        // std::cout << "###### theta " << theta << " #####" << std::endl;
+        sim_cnt++;
+        
+        bool solve_succeed = solver.staticSolve();
+
+        VectorXT residual(solver.num_nodes * 2); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        
+        out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << " " << strain_ortho << " "
+            << residual.norm() << std::endl;
+        if (!solve_succeed)
+        {
+            solver.reset();
+            solver.saveToOBJ(result_folder + "_failure_theta_" + std::to_string(theta)
+                +"_strain_" + std::to_string(strain) + "_strain_ortho_" + std::to_string(strain_ortho)+".obj");
+        }
+    };
+
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    
+    generateHomogenousMesh(polygons, pbc_corners, true, result_folder + "structure");
+    
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    
+    bool valid_structure = initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    if (!valid_structure)
+        return;
+    solver.verbose = false;
+    solver.prescribe_strain_tensor = false;
+    int sim_cnt = 0;
+    for(int l = 0; l < n_sp_theta; l++)
+    {
+        solver.biaxial = false;
+        T theta = range_theta[0] + ((double)l/(double)n_sp_theta)*(range_theta[1] - range_theta[0]);
+        // uniaxial tension
+        solver.strain_theta = theta;
+        solver.reset();
+        for (T strain = 1.0 + delta_strain; strain < range_strain[1]; strain += delta_strain)
+        {    
+            solver.uniaxial_strain = strain;
+            runSim(sim_cnt, theta, strain, 0.0);
+            // break;
+        }
+        // uniaxial compression
+        solver.reset();
+        for (T strain = 1.0 - delta_strain; strain > range_strain[0]; strain -= delta_strain)
+        {    
+            solver.uniaxial_strain = strain;
+            runSim(sim_cnt, theta, strain, 0.0);
+            // break;
+        }
+        // biaxial tension
+        // continue;
+        // solver.reset();
+        solver.biaxial = true;
+        for (T strain = 1.0 + delta_strain; strain < range_strain_biaixial[1]; strain += delta_strain_bi)
+        {   
+            solver.reset(); 
+            solver.uniaxial_strain = strain;
+            for (T strain_ortho = 1.0 + delta_strain; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(sim_cnt, theta, strain, strain_ortho);
+            }
+            solver.reset();
+            for (T strain_ortho = 1.0 - delta_strain; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(sim_cnt, theta, strain, strain_ortho);
+            }
+        }
+        // solver.reset();
+        for (T strain = 1.0 - delta_strain; strain > range_strain_biaixial[0]; strain -= delta_strain_bi)
+        {   
+            solver.reset(); 
+            solver.uniaxial_strain = strain;
+            for (T strain_ortho = 1.0 + delta_strain; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(sim_cnt, theta, strain, strain_ortho);
+            }
+            solver.reset();
+            for (T strain_ortho = 1.0 - delta_strain; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(sim_cnt, theta, strain, strain_ortho);
+            }
+        }
+        solver.biaxial = false;
     }
     
     out.close();

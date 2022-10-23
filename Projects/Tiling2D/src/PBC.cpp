@@ -1,5 +1,6 @@
 #include "../include/FEMSolver.h"
 #include "../include/autodiff/PBCEnergy.h"
+#include "../include/autodiff/FEMEnergy.h"
 
 void FEMSolver::addPBCPairsXY()
 {
@@ -441,7 +442,7 @@ void FEMSolver::getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X, IV4
     bd_indices << pbc_pairs[0][0][0], pbc_pairs[0][0][1], pbc_pairs[1][0][0], pbc_pairs[1][0][1];
 }
 
-void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density)
+void FEMSolver::computeHomogenizationDataCauchy(TM& cauchy_stress, TM& cauchy_strain, T& energy_density)
 {
     TV xi = deformed.segment<2>(pbc_pairs[0][0][0] * 2);
     TV xj = deformed.segment<2>(pbc_pairs[0][0][1] * 2);
@@ -471,6 +472,115 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
         f1 += inner_force.segment<2>(pbc_pair[1] * 2) / l0 / thickness;
     }
 
+        
+    // f0 /= 1e-6; f1 /= 1e-6;
+    // std::cout << f0.norm() << std::endl;
+    TM R90 = TM::Zero();
+    R90.row(0) = TV(0, -1);
+    R90.row(1) = TV(1, 0);
+
+    TM _X = TM::Zero(), _x = TM::Zero();
+    _X.col(0) = (Xj - Xi);
+    _X.col(1) = (Xk - Xl);
+
+    _x.col(0) = (xj - xi);
+    _x.col(1) = (xk - xl);
+
+    TM F_macro = _x * _X.inverse();
+    
+    cauchy_strain = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+
+    TV n1 = (R90 * (xj - xi)).normalized(), 
+        n0 = (R90 * (xl - xk)).normalized();
+
+    if (f1.dot(n1) < 0.0)
+    {
+        f1 *= -1.0;
+        f0 *= -1.0;
+    }
+
+    TM f_bc = TM::Zero(), n_bc = TM::Zero();
+    
+    f_bc.col(0) = f0; f_bc.col(1) = f1;
+    
+    n_bc.col(0) = n0; n_bc.col(1) = n1;
+
+    cauchy_stress = f_bc * n_bc.inverse();
+    TV dx = Xj - Xi, dy = Xk - Xl;
+    // std::cout << dx.norm() << " " << dy.norm() << " " << thickness << " " << E << " " << nu << std::endl;
+    if ((Xi - Xl).norm() > 1e-6)
+    {
+        if ((Xk - Xj).norm() > 1e-6)
+        {
+            std::cout << "ALERT" << std::endl;
+            std::cout << (Xi - Xl).norm() << " " << Xi.transpose() << " " << Xl.transpose() << " " << Xk.transpose() << " " << Xj.transpose() << std::endl;
+            std::getchar();
+        }
+        else
+        {
+            dx = Xi - Xj;
+            dy = Xl - Xk;
+        }
+    }
+
+    T volume = TV3(dx[0], dx[1], 0).cross(TV3(dy[0], dy[1], 0)).norm() * thickness;
+    
+    T total_energy = computeTotalEnergy(u);
+    energy_density = total_energy / volume;
+}
+
+void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density)
+{
+    
+    TV xi = deformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV xj = deformed.segment<2>(pbc_pairs[0][0][1] * 2);
+
+    TV xk = deformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV xl = deformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+
+    TV Xi = undeformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    TV Xj = undeformed.segment<2>(pbc_pairs[0][0][1] * 2);
+    TV Xk = undeformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    TV Xl = undeformed.segment<2>(pbc_pairs[1][0][1] * 2);
+
+    T sign = 1.0;
+
+    TV dx = Xj - Xi, dy = Xk - Xl;
+    // std::cout << dx.norm() << " " << dy.norm() << " " << thickness << " " << E << " " << nu << std::endl;
+    if ((Xi - Xl).norm() > 1e-6)
+    {
+        if ((Xk - Xj).norm() > 1e-6)
+        {
+            std::cout << "ALERT" << std::endl;
+            std::cout << (Xi - Xl).norm() << " " << Xi.transpose() << " " << Xl.transpose() << " " << Xk.transpose() << " " << Xj.transpose() << std::endl;
+            std::getchar();
+        }
+        else
+        {
+            sign = -1.0;
+            dx = Xi - Xj;
+            dy = Xl - Xk;
+        }
+    }
+
+    VectorXT inner_force(num_nodes * 2);
+    inner_force.setZero(); 
+    addPBCForceEntries(inner_force);
+    
+    // computeResidual(u, inner_force);
+    TV f0 = TV::Zero(), f1 = TV::Zero();
+    T l0 = (xj - xi).norm(), l1 = (xl - xk).norm();
+    for (auto pbc_pair : pbc_pairs[0])
+    {
+        f0 += inner_force.segment<2>(pbc_pair[0] * 2) / l1 / thickness;
+    }
+    for (auto pbc_pair : pbc_pairs[1])
+    {
+        f1 += inner_force.segment<2>(pbc_pair[1] * 2) / l0 / thickness;
+    }
+
+        
     // f0 /= 1e-6; f1 /= 1e-6;
     // std::cout << f0.norm() << std::endl;
     TM R90 = TM::Zero();
@@ -486,12 +596,16 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
 
     TM F_macro = _x * _X.inverse();
     Green_strain = 0.5 * (F_macro.transpose() * F_macro - TM::Identity());
-    
+    TM cauchy_strain = 0.5 * (F_macro.transpose() + F_macro) - TM::Identity();
+    // std::cout << 0.5 * (F_macro.transpose() + F_macro) - TM::Identity() << std::endl;
     // std::cout << F_macro << std::endl;
 
     TV n1 = (R90 * (xj - xi)).normalized(), 
         n0 = (R90 * (xl - xk)).normalized();
 
+    f1 *= sign;
+    f0 *= sign;
+    
     TM f_bc = TM::Zero(), n_bc = TM::Zero();
     
     f_bc.col(0) = f0; f_bc.col(1) = f1;
@@ -499,26 +613,13 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
     n_bc.col(0) = n0; n_bc.col(1) = n1;
 
     TM cauchy_stress = f_bc * n_bc.inverse();
-
+    
+    
     //https://engcourses-uofa.ca/books/introduction-to-solid-mechanics/stress/first-and-second-piola-kirchhoff-stress-tensors/
     TM F_inv = F_macro.inverse();
     secondPK_stress = F_macro.determinant() * F_inv * cauchy_stress.transpose() * F_inv.transpose();
 
-    TV dx = Xj - Xi, dy = Xk - Xl;
-    if ((Xi - Xl).norm() > 1e-6)
-    {
-        if ((Xk - Xj).norm() > 1e-6)
-        {
-            std::cout << "ALERT" << std::endl;
-            std::cout << (Xi - Xl).norm() << " " << Xi.transpose() << " " << Xl.transpose() << " " << Xk.transpose() << " " << Xj.transpose() << std::endl;
-            std::getchar();
-        }
-        else
-        {
-            dx = Xi - Xj;
-            dy = Xl - Xk;
-        }
-    }
+    
     T volume = TV3(dx[0], dx[1], 0).cross(TV3(dy[0], dy[1], 0)).norm() * thickness;
     // volume /= 1e-9;
     // std::cout << "volume " << volume << std::endl;
@@ -527,6 +628,20 @@ void FEMSolver::computeHomogenizationData(TM& secondPK_stress, TM& Green_strain,
     // std::cout << "potential " << total_energy << std::endl;
     energy_density = total_energy / volume;
 
+    // Vector<T, 4> Green_strain_vector;
+    // Green_strain_vector << Green_strain(0, 0), Green_strain(0, 1), Green_strain(1, 0), Green_strain(1, 1);
+    // T energy_AD;
+    // computeNHEnergyFromGreenStrain(E, nu, Green_strain_vector, energy_AD);
+    // std::cout << "green strain " << std::endl;
+    // std::cout << Green_strain << std::endl;
+    // std::cout << "energy_density homo " << energy_density << " energy_density AD " << energy_AD << std::endl;
+    // Vector<T, 4> secondPK_stress_vector;
+    // computeNHEnergyFromGreenStrainGradient(E, nu, Green_strain_vector, secondPK_stress_vector);
+    // TM secondPK_stress_AD;
+    // secondPK_stress_AD << secondPK_stress_vector(0), secondPK_stress_vector(1), secondPK_stress_vector(2), secondPK_stress_vector(3);
+    // std::cout << "second PK homo " << secondPK_stress << std::endl << "second PK AD " << secondPK_stress_AD << std::endl;
+    // std::cout << "##############################" << std::endl;
+    // std::getchar();
     // auto computedPsidE = [&](const Eigen::Matrix<double,2,2> & Green_strain, 
     //         double& energy, TM& dPsidE)
     // {

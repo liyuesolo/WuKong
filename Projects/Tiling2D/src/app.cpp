@@ -130,7 +130,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 {
                     updateScreen(viewer);
                 }
-                if (ImGui::Checkbox("TilingUnitCell", &tile_XY))
+                if (ImGui::Checkbox("TileUnitCell", &tile_XY))
                 {
                     updateScreen(viewer);
                 }
