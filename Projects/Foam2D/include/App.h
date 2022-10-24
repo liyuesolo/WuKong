@@ -36,6 +36,10 @@ public:
     bool objImageContinuous = false;
     int objImageType = 0;
 
+    bool dynamics = false;
+    double dynamics_dt = 0.1;
+    double dynamics_m = 0.2;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);

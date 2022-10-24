@@ -30,7 +30,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         dragModes.push_back("Set Target");
         dragModes.push_back("Set Position");
         if (ImGui::Combo("Drag Mode", &drag_mode, dragModes)) {
-            foam.objective.drag_idx = -1;
+            foam.energyObjective.drag_idx = -1;
         }
 
         ImGui::Spacing();
@@ -40,14 +40,14 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
             if (numAreaTargets < 1) numAreaTargets = 1;
-            if (foam.objective.area_targets.rows() >= numAreaTargets) {
-                VectorXd areaTargets = foam.objective.area_targets.segment(0, numAreaTargets);
-                foam.objective.area_targets = areaTargets;
+            if (foam.energyObjective.area_targets.rows() >= numAreaTargets) {
+                VectorXd areaTargets = foam.energyObjective.area_targets.segment(0, numAreaTargets);
+                foam.energyObjective.area_targets = areaTargets;
             } else {
                 VectorXd areaTargets(numAreaTargets);
-                areaTargets << foam.objective.area_targets, foam.objective.area_targets(0) * VectorXd::Ones(
-                        numAreaTargets - foam.objective.area_targets.rows());
-                foam.objective.area_targets = areaTargets;
+                areaTargets << foam.energyObjective.area_targets, foam.energyObjective.area_targets(0) * VectorXd::Ones(
+                        numAreaTargets - foam.energyObjective.area_targets.rows());
+                foam.energyObjective.area_targets = areaTargets;
             }
             updateViewerData(viewer);
         }
@@ -56,7 +56,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             for (int i = 0; i < numAreaTargets; i++) {
                 ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
                 if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
-                                       &foam.objective.area_targets(i),
+                                       &foam.energyObjective.area_targets(i),
                                        0.005f, 0.005f, "%.3f")) {
                     updateViewerData(viewer);
                 }
@@ -64,13 +64,13 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::Indent(-10.0f);
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Weight", &foam.objective.area_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Area Weight", &foam.energyObjective.area_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Length Weight", &foam.objective.length_weight, 0.0005f, 0.0005f, "%.4f");
+        ImGui::InputDouble("Length Weight", &foam.energyObjective.length_weight, 0.0005f, 0.0005f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Centroid Weight", &foam.objective.centroid_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Centroid Weight", &foam.energyObjective.centroid_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Drag Target Weight", &foam.objective.drag_target_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Drag Target Weight", &foam.energyObjective.drag_target_weight, 0.01f, 0.01f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -98,6 +98,27 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             generateScenario();
             updateViewerData(viewer);
         }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        ImGui::Text("Dynamics");
+
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Timestep", &dynamics_dt, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Inertia", &dynamics_m, 0.01f, 0.01f, "%.4f");
+        if (ImGui::Button("Start Dynamics")) {
+            dynamics = true;
+            foam.dynamicsInit(dynamics_dt, dynamics_m);
+        }
+        if (ImGui::Button("Step") || (dynamics && foam.isConvergedDynamic())) {
+            foam.dynamicsNewStep();
+        }
+        if (ImGui::Button("Stop Dynamics")) {
+            dynamics = false;
+        }
+
+
     };
 
     // Draw additional windows
@@ -133,8 +154,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                     drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
                     selected_vertex = drag_idx;
                     if (drag_mode == 0) {
-                        foam.objective.drag_idx = drag_idx;
-                        foam.objective.drag_target_pos = p;
+                        foam.energyObjective.drag_idx = drag_idx;
+                        foam.energyObjective.drag_target_pos = p;
                     }
                 }
                 return true;
@@ -151,7 +172,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 if (drag_idx != -1) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     if (drag_mode == 0) {
-                        foam.objective.drag_target_pos = p;
+                        foam.energyObjective.drag_target_pos = p;
                     } else {
                         foam.moveVertex(drag_idx, p);
                     }
@@ -163,7 +184,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
     viewer.callback_pre_draw =
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
                 if (optimize) {
-                    foam.optimize();
+                    foam.optimize(dynamics);
                     updateViewerData(viewer);
                 } else {
                     Eigen::Matrix<double, 4, 3> camera;
@@ -211,7 +232,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     if (show_dual) {
         foam.getTriangulationViewerData(points, nodes, lines, V, F, C);
     } else {
-        foam.getTessellationViewerData(points, nodes, lines, V, F, C);
+        foam.getTessellationViewerData(points, nodes, lines, V, F, C, selected_vertex);
     }
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -287,7 +308,7 @@ void Foam2DApp::updatePlotData() {
     if (ImGui::CollapsingHeader("Current Objective Status", ImGuiTreeNodeFlags_DefaultOpen)) {
         double obj_val, gradient_norm;
         bool hessian_pd;
-        foam.getPlotObjectiveStats(obj_val, gradient_norm, hessian_pd);
+        foam.getPlotObjectiveStats(dynamics, obj_val, gradient_norm, hessian_pd);
 
         ImGui::Text(("Objective Value: " + std::to_string(obj_val)).c_str());
         ImGui::Text(("Gradient Norm: " + std::to_string(gradient_norm)).c_str());

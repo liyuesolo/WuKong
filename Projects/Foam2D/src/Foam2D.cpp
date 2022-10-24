@@ -50,17 +50,36 @@ void Foam2D::initBasicTestCase() {
     resetVertexParams();
 }
 
-void Foam2D::optimize() {
-    objective.tessellation = tessellations[tesselation];
-    objective.n_free = n_free;
-    objective.n_fixed = n_fixed;
-
+void Foam2D::dynamicsInit(double dt, double m) {
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    objective.c_fixed = c.segment(n_free * (2 + tessellations[tesselation]->getNumVertexParams()),
-                                  n_fixed * (2 + tessellations[tesselation]->getNumVertexParams()));
     VectorXT c_free = c.segment(0,
                                 n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
-    minimizers[opttype]->minimize(&objective, c_free);
+    dynamicObjective.init(c_free, dt, m, &energyObjective);
+}
+
+void Foam2D::dynamicsNewStep() {
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    VectorXT c_free = c.segment(0,
+                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
+    dynamicObjective.newStep(c_free);
+}
+
+void Foam2D::optimize(bool dynamic) {
+    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.n_free = n_free;
+    energyObjective.n_fixed = n_fixed;
+
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    energyObjective.c_fixed = c.segment(n_free * (2 + tessellations[tesselation]->getNumVertexParams()),
+                                        n_fixed * (2 + tessellations[tesselation]->getNumVertexParams()));
+    VectorXT c_free = c.segment(0,
+                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
+
+    if (dynamic) {
+        minimizers[opttype]->minimize(&dynamicObjective, c_free);
+    } else {
+        minimizers[opttype]->minimize(&energyObjective, c_free);
+    }
 
     c.segment(0, n_free * (2 + tessellations[tesselation]->getNumVertexParams())) = c_free;
 
@@ -167,7 +186,8 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
     }
 }
 
-void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C) {
+void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C,
+                                       int selected) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
@@ -224,7 +244,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             int v3 = cell[j + 1];
 
             F.row(edge) = IV3(v1 + n_vtx, v2 + n_vtx, v3 + n_vtx);
-            C.row(edge) = getColor(areas(i), objective.getAreaTarget(i));
+            C.row(edge) = (i == selected ? TV3(0.1, 0.1, 0.1) : getColor(areas(i), energyObjective.getAreaTarget(i)));
             edge++;
         }
     }
@@ -237,23 +257,43 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
 
     areas = getCellAreas(x, cells, n_free);
     for (int i = 0; i < areas.rows(); i++) {
-        areas(i) /= objective.getAreaTarget(i);
+        areas(i) /= energyObjective.getAreaTarget(i);
     }
 }
 
-void Foam2D::getPlotObjectiveStats(double &obj_value, double &gradient_norm, bool &hessian_pd) {
-    objective.tessellation = tessellations[tesselation];
-    objective.n_free = n_free;
-    objective.n_fixed = n_fixed;
+bool Foam2D::isConvergedDynamic() {
+    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.n_free = n_free;
+    energyObjective.n_fixed = n_fixed;
 
     int dims = 2 + tessellations[tesselation]->getNumVertexParams();
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    objective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
+    energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 
-    obj_value = objective.evaluate(c_free);
-    gradient_norm = objective.get_dOdc(c_free).norm();
-    Eigen::SparseMatrix<double> hessian = objective.get_d2Odc2(c_free);
+    return dynamicObjective.getGradient(c_free).norm() < 1e-4;
+}
+
+void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gradient_norm, bool &hessian_pd) {
+    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.n_free = n_free;
+    energyObjective.n_fixed = n_fixed;
+
+    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
+    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
+    VectorXT c_free = c.segment(0, n_free * dims);
+
+    Eigen::SparseMatrix<double> hessian;
+    if (dynamics) {
+        obj_value = dynamicObjective.evaluate(c_free);
+        gradient_norm = dynamicObjective.getGradient(c_free).norm();
+        dynamicObjective.getHessian(c_free, hessian);
+    } else {
+        obj_value = energyObjective.evaluate(c_free);
+        gradient_norm = energyObjective.getGradient(c_free).norm();
+        hessian = energyObjective.get_d2Odc2(c_free);
+    }
     Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
     hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
 }
@@ -261,13 +301,13 @@ void Foam2D::getPlotObjectiveStats(double &obj_value, double &gradient_norm, boo
 void
 Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
                                           double &obj_min, double &obj_max) {
-    objective.tessellation = tessellations[tesselation];
-    objective.n_free = n_free;
-    objective.n_fixed = n_fixed;
+    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.n_free = n_free;
+    energyObjective.n_fixed = n_fixed;
 
     int dims = 2 + tessellations[tesselation]->getNumVertexParams();
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    objective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
+    energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 
     obj.resize(image_size * image_size * 3);
@@ -287,12 +327,12 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
             double dy = (double) -(i - image_size / 2) / image_size * range;
             double o;
             if (type == 0) {
-                o = objective.evaluate(c_free + dx * DX + dy * DY);
+                o = energyObjective.evaluate(c_free + dx * DX + dy * DY);
             } else if (type == 1) {
-                o = objective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+                o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
             } else {
                 // type == 2
-                o = objective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+                o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
             }
 
             if (o > obj_max) obj_max = o;

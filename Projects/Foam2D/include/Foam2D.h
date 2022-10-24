@@ -12,7 +12,7 @@
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 #include "../include/Objective/EnergyObjective.h"
-#include "../include/Objective/EnergyObjective.h"
+#include "../include/Objective/DynamicObjective.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 
 using TV = Vector<double, 2>;
@@ -31,16 +31,13 @@ class Foam2D {
 public:
     using Edge = Vector<int, 2>;
 
-    typedef int StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
-    using Entry = Eigen::Triplet<T>;
-
     std::vector<Tessellation *> tessellations;
     int tesselation = 0;
     std::vector<GradientDescentLineSearch *> minimizers;
     int opttype = 0;
 
-    EnergyObjective objective;
+    EnergyObjective energyObjective;
+    DynamicObjective dynamicObjective;
 
     VectorXT vertices;
     VectorXT params;
@@ -54,7 +51,11 @@ public:
 
     void initBasicTestCase();
 
-    void optimize();
+    void dynamicsInit(double dt, double m);
+
+    void dynamicsNewStep();
+
+    void optimize(bool dynamic);
 
     void moveVertex(int idx, const TV &pos);
 
@@ -62,16 +63,19 @@ public:
 
     void resetVertexParams();
 
-    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
+    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C,
+                                   int selected);
 
     void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
 
     void getPlotAreaHistogram(VectorXT &areas);
 
-    void getPlotObjectiveStats(double &obj_value, double &gradient_norm, bool &hessian_pd);
+    void getPlotObjectiveStats(bool dynamics, double &obj_value, double &gradient_norm, bool &hessian_pd);
 
     void getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
                                            double &obj_min, double &obj_max);
+
+    bool isConvergedDynamic();
 
 public:
 
