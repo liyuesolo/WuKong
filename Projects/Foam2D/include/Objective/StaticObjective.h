@@ -3,7 +3,7 @@
 #include "../../src/optLib/ObjectiveFunction.h"
 #include "../../include/Tessellation/Tessellation.h"
 
-class AreaLengthObjective : public ObjectiveFunction {
+class StaticObjective : public ObjectiveFunction {
 
 public:
     Tessellation *tessellation;

@@ -1,11 +1,11 @@
-#include "../../include/Objective/AreaLengthObjective.h"
+#include "../../include/Objective/StaticObjective.h"
 #include "../../include/CodeGen.h"
 #include "../../include/Constants.h"
 
 void
-AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &c_cell,
-                               VectorXT &p_cell,
-                               VectorXi &i_cell) const {
+StaticObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &c_cell,
+                           VectorXT &p_cell,
+                           VectorXi &i_cell) const {
     int n_neighbors = cell.size();
 
     cell.insert(cell.begin(), cellIndex);
@@ -20,11 +20,12 @@ AreaLengthObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     }
 
     p_cell.resize(8);
-    p_cell << area_weight, length_weight, centroid_weight, getAreaTarget(cellIndex), n_neighbors,
-            (cellIndex == drag_idx) * drag_target_weight, drag_target_pos(0), drag_target_pos(1);
+    p_cell << area_weight, length_weight, ((cellIndex == drag_idx) ? 1 : centroid_weight), getAreaTarget(
+            cellIndex), n_neighbors,
+            ((cellIndex == drag_idx) ? drag_target_weight : 0), drag_target_pos(0), drag_target_pos(1);
 }
 
-double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
+double StaticObjective::evaluate(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -55,11 +56,11 @@ double AreaLengthObjective::evaluate(const VectorXd &c_free) const {
     return O;
 }
 
-void AreaLengthObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
+void StaticObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
     grad += get_dOdc(c_free);
 }
 
-VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
+VectorXd StaticObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -90,11 +91,11 @@ VectorXd AreaLengthObjective::get_dOdc(const VectorXd &c_free) const {
     return dOdc;
 }
 
-void AreaLengthObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
+void StaticObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
     hessian = get_d2Odc2(c_free);
 }
 
-Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_free) const {
+Eigen::SparseMatrix<double> StaticObjective::get_d2Odc2(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -125,7 +126,7 @@ Eigen::SparseMatrix<double> AreaLengthObjective::get_d2Odc2(const VectorXd &c_fr
     return d2Odc2;
 }
 
-double AreaLengthObjective::getAreaTarget(int cellIndex) const {
+double StaticObjective::getAreaTarget(int cellIndex) const {
     return area_targets[cellIndex % area_targets.size()];
 }
 
