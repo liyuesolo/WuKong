@@ -1,9 +1,9 @@
-#include "../../include/Objective/StaticObjective.h"
+#include "../../include/Objective/EnergyObjective.h"
 #include "../../include/CodeGen.h"
 #include "../../include/Constants.h"
 
 void
-StaticObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &c_cell,
+EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &c_cell,
                            VectorXT &p_cell,
                            VectorXi &i_cell) const {
     int n_neighbors = cell.size();
@@ -25,7 +25,7 @@ StaticObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<i
             ((cellIndex == drag_idx) ? drag_target_weight : 0), drag_target_pos(0), drag_target_pos(1);
 }
 
-double StaticObjective::evaluate(const VectorXd &c_free) const {
+double EnergyObjective::evaluate(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -56,11 +56,11 @@ double StaticObjective::evaluate(const VectorXd &c_free) const {
     return O;
 }
 
-void StaticObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
+void EnergyObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
     grad += get_dOdc(c_free);
 }
 
-VectorXd StaticObjective::get_dOdc(const VectorXd &c_free) const {
+VectorXd EnergyObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -91,11 +91,11 @@ VectorXd StaticObjective::get_dOdc(const VectorXd &c_free) const {
     return dOdc;
 }
 
-void StaticObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
+void EnergyObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
     hessian = get_d2Odc2(c_free);
 }
 
-Eigen::SparseMatrix<double> StaticObjective::get_d2Odc2(const VectorXd &c_free) const {
+Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
@@ -126,7 +126,7 @@ Eigen::SparseMatrix<double> StaticObjective::get_d2Odc2(const VectorXd &c_free) 
     return d2Odc2;
 }
 
-double StaticObjective::getAreaTarget(int cellIndex) const {
+double EnergyObjective::getAreaTarget(int cellIndex) const {
     return area_targets[cellIndex % area_targets.size()];
 }
 

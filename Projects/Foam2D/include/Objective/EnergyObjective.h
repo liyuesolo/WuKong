@@ -3,7 +3,7 @@
 #include "../../src/optLib/ObjectiveFunction.h"
 #include "../../include/Tessellation/Tessellation.h"
 
-class StaticObjective : public ObjectiveFunction {
+class EnergyObjective : public ObjectiveFunction {
 
 public:
     Tessellation *tessellation;
