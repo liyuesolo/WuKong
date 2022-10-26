@@ -13,6 +13,7 @@
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 #include "../include/Objective/EnergyObjective.h"
 #include "../include/Objective/DynamicObjective.h"
+#include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 
 using TV = Vector<double, 2>;
@@ -39,9 +40,10 @@ public:
     EnergyObjective energyObjective;
     DynamicObjective dynamicObjective;
 
+    TrajectoryOptNLP nlp;
+
     VectorXT vertices;
     VectorXT params;
-    int dim = 2;
 
     int n_free;
     int n_fixed;
@@ -76,6 +78,12 @@ public:
                                            double &obj_min, double &obj_max);
 
     bool isConvergedDynamic(double tol);
+
+    void trajectoryOptSetInit();
+
+    void trajectoryOptGenerateExampleSol(int N);
+
+    void trajectoryOptGetFrame(int frame);
 
 public:
 

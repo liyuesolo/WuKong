@@ -13,6 +13,8 @@ Foam2D::Foam2D() {
     tessellations.push_back(new Power());
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
+
+    nlp.energy = &energyObjective;
 }
 
 void Foam2D::resetVertexParams() {
@@ -106,6 +108,43 @@ int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
 
 void Foam2D::moveVertex(int idx, const TV &pos) {
     vertices.segment<2>(idx * 2) = pos;
+}
+
+void Foam2D::trajectoryOptSetInit() {
+    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
+    nlp.c0 = energyObjective.tessellation->combineVerticesParams(vertices, params).segment(0, n_free * dims);
+    nlp.v0 = VectorXd::Zero(2 * n_free);
+}
+
+void Foam2D::trajectoryOptGenerateExampleSol(int N) {
+    nlp.N = N;
+    nlp.agent = energyObjective.drag_idx;
+    nlp.target_pos = energyObjective.drag_target_pos;
+
+    nlp.x_guess.resize(N * (nlp.c0.rows() + nlp.v0.rows() + 2));
+    VectorXd u_guess = VectorXT::Zero(2 * N);
+
+    // x format is [c1 ... cN v1 ... vN u1 ... uN]
+    nlp.x_guess << nlp.c0.replicate(N, 1), nlp.v0.replicate(N, 1), u_guess;
+    nlp.x_sol = nlp.x_guess;
+
+    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
+    TV pos0 = nlp.c0.segment<2>(dims * nlp.agent);
+    TV posN = nlp.target_pos;
+    for (int i = 0; i < N; i++) {
+        nlp.x_sol.segment<2>(i * n_free * dims + dims * nlp.agent) = pos0 + (posN - pos0) * (i + 1.0) / N;
+    }
+}
+
+void Foam2D::trajectoryOptGetFrame(int frame) {
+    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
+    VectorXT c_frame = frame == 0 ? nlp.c0 : nlp.x_sol.segment((frame - 1) * n_free * dims, n_free * dims);
+
+    VectorXT verts_free;
+    VectorXT params_free;
+    energyObjective.tessellation->separateVerticesParams(c_frame, verts_free, params_free);
+    vertices.segment(0, n_free * dims) = verts_free;
+    params.segment(0, n_free * (dims - 2)) = params_free;
 }
 
 static TV3 getColor(double area, double target) {

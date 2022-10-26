@@ -15,7 +15,9 @@ public:
 
     VectorXd c0; // Initial positions of free sites (+ additional tessellation degrees of freedom)
     VectorXd v0; // Initial velocities of free sites
-    VectorXd x_guess;
+
+    VectorXd x_guess; // Initial guess for solution.
+    VectorXd x_sol; // Solution.
 
 public:
     double get_f(const VectorXd &x) const;

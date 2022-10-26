@@ -41,6 +41,12 @@ public:
     double dynamics_m = 0.01;
     double dynamics_tol = 1e-4;
 
+    bool trajOptMode = false;
+    bool trajOptOptimized = false;
+    int trajOpt_N = 30;
+    int trajOpt_frame = 0;
+    double trajOpt_dt = 0.01;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);

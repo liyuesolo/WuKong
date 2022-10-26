@@ -118,6 +118,32 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             dynamics = false;
         }
 
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        ImGui::Text("Trajectory Optimization");
+        if (ImGui::Button("Set Initial State")) {
+            optimize = false;
+            dynamics = false;
+            trajOptMode = true;
+            trajOpt_frame = 0;
+            foam.trajectoryOptSetInit();
+        }
+        if (ImGui::Button("Optimize (placeholder)")) {
+            trajOptOptimized = true;
+            foam.trajectoryOptGenerateExampleSol(trajOpt_N);
+        }
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+        ImGui::InputInt("Steps", &trajOpt_N, 1, 10);
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+        ImGui::InputDouble("Timestep", &trajOpt_dt, 0.001f, 0.1f, "%.4f");
+        if (trajOptOptimized) {
+            ImGui::SliderInt("Frame", &trajOpt_frame, 0, trajOpt_N);
+        }
+        if (ImGui::Button("Clear")) {
+            trajOptMode = false;
+            trajOptOptimized = false;
+        }
 
     };
 
@@ -183,7 +209,14 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.callback_pre_draw =
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
-                if (optimize) {
+                if (trajOptMode) {
+                    if (trajOptOptimized) {
+                        foam.trajectoryOptGetFrame(trajOpt_frame);
+                    } else {
+                        foam.trajectoryOptGetFrame(0);
+                    }
+                    updateViewerData(viewer);
+                } else if (optimize) {
                     foam.optimize(dynamics);
                     if (dynamics && foam.isConvergedDynamic(dynamics_tol)) {
                         foam.dynamicsNewStep();
