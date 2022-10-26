@@ -104,15 +104,15 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         ImGui::Text("Dynamics");
 
-        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputDouble("Timestep", &dynamics_dt, 0.01f, 0.01f, "%.4f");
-        ImGui::InputDouble("Inertia", &dynamics_m, 0.01f, 0.01f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+        ImGui::InputDouble("Inertia", &dynamics_m, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+        ImGui::InputDouble("Tolerance", &dynamics_tol, 0.000001, 0.00001f, "%.6f");
         if (ImGui::Button("Start Dynamics")) {
             dynamics = true;
             foam.dynamicsInit(dynamics_dt, dynamics_m);
-        }
-        if (ImGui::Button("Step") || (dynamics && foam.isConvergedDynamic())) {
-            foam.dynamicsNewStep();
         }
         if (ImGui::Button("Stop Dynamics")) {
             dynamics = false;
@@ -185,6 +185,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
                 if (optimize) {
                     foam.optimize(dynamics);
+                    if (dynamics && foam.isConvergedDynamic(dynamics_tol)) {
+                        foam.dynamicsNewStep();
+                    }
                     updateViewerData(viewer);
                 } else {
                     Eigen::Matrix<double, 4, 3> camera;

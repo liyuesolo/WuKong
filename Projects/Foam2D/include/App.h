@@ -38,7 +38,8 @@ public:
 
     bool dynamics = false;
     double dynamics_dt = 0.1;
-    double dynamics_m = 0.2;
+    double dynamics_m = 0.01;
+    double dynamics_tol = 1e-4;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,

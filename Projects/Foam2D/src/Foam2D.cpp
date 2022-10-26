@@ -261,7 +261,7 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     }
 }
 
-bool Foam2D::isConvergedDynamic() {
+bool Foam2D::isConvergedDynamic(double tol) {
     energyObjective.tessellation = tessellations[tesselation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
@@ -271,7 +271,7 @@ bool Foam2D::isConvergedDynamic() {
     energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 
-    return dynamicObjective.getGradient(c_free).norm() < 1e-4;
+    return dynamicObjective.getGradient(c_free).norm() < tol;
 }
 
 void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gradient_norm, bool &hessian_pd) {

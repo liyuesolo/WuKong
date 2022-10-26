@@ -75,7 +75,7 @@ public:
     void getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
                                            double &obj_min, double &obj_max);
 
-    bool isConvergedDynamic();
+    bool isConvergedDynamic(double tol);
 
 public:
 
