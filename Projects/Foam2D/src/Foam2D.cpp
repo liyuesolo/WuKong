@@ -15,6 +15,7 @@ Foam2D::Foam2D() {
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
 
     nlp.energy = &energyObjective;
+    nlp.dynamics = &dynamicObjective;
 }
 
 void Foam2D::resetVertexParams() {
@@ -113,7 +114,7 @@ void Foam2D::moveVertex(int idx, const TV &pos) {
 void Foam2D::trajectoryOptSetInit() {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
     nlp.c0 = energyObjective.tessellation->combineVerticesParams(vertices, params).segment(0, n_free * dims);
-    nlp.v0 = VectorXd::Zero(2 * n_free);
+    nlp.v0 = VectorXd::Zero(n_free * dims);
 }
 
 void Foam2D::trajectoryOptGenerateExampleSol(int N) {
@@ -121,11 +122,11 @@ void Foam2D::trajectoryOptGenerateExampleSol(int N) {
     nlp.agent = energyObjective.drag_idx;
     nlp.target_pos = energyObjective.drag_target_pos;
 
-    nlp.x_guess.resize(N * (nlp.c0.rows() + nlp.v0.rows() + 2));
+    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
     VectorXd u_guess = VectorXT::Zero(2 * N);
 
-    // x format is [c1 ... cN v1 ... vN u1 ... uN]
-    nlp.x_guess << nlp.c0.replicate(N, 1), nlp.v0.replicate(N, 1), u_guess;
+    // x format is [c1 ... cN u1 ... uN]
+    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
     nlp.x_sol = nlp.x_guess;
 
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;

@@ -131,12 +131,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         }
         if (ImGui::Button("Optimize (placeholder)")) {
             trajOptOptimized = true;
+            foam.dynamicsInit(dynamics_dt, dynamics_m);
             foam.trajectoryOptGenerateExampleSol(trajOpt_N);
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputInt("Steps", &trajOpt_N, 1, 10);
-        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-        ImGui::InputDouble("Timestep", &trajOpt_dt, 0.001f, 0.1f, "%.4f");
         if (trajOptOptimized) {
             ImGui::SliderInt("Frame", &trajOpt_frame, 0, trajOpt_N);
         }

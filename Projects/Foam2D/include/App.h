@@ -45,7 +45,6 @@ public:
     bool trajOptOptimized = false;
     int trajOpt_N = 30;
     int trajOpt_frame = 0;
-    double trajOpt_dt = 0.01;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
