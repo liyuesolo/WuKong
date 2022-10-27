@@ -134,6 +134,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             foam.dynamicsInit(dynamics_dt, dynamics_m);
             foam.trajectoryOptGenerateExampleSol(trajOpt_N);
         }
+        if (ImGui::Button("Optimize IPOPT")) {
+            trajOptOptimized = true;
+            foam.dynamicsInit(dynamics_dt, dynamics_m);
+            foam.trajectoryOptOptimizeIPOPT(trajOpt_N);
+        }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputInt("Steps", &trajOpt_N, 1, 10);
         if (trajOptOptimized) {

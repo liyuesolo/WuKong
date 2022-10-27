@@ -37,8 +37,8 @@ public:
     int objImageType = 0;
 
     bool dynamics = false;
-    double dynamics_dt = 0.1;
-    double dynamics_m = 0.01;
+    double dynamics_dt = 0.03;
+    double dynamics_m = 0.002;
     double dynamics_tol = 1e-4;
 
     bool trajOptMode = false;

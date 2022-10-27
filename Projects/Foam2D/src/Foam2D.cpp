@@ -6,6 +6,7 @@
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../include/Constants.h"
 #include <random>
+#include "../include/TrajectoryOpt/IpoptSolver.h"
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
@@ -137,6 +138,78 @@ void Foam2D::trajectoryOptGenerateExampleSol(int N) {
     }
 }
 
+bool Foam2D::trajectoryOptOptimizeIPOPT(int N) {
+    /** NLP INITIALIZATION **/
+    nlp.N = N;
+    nlp.agent = energyObjective.drag_idx;
+    nlp.target_pos = energyObjective.drag_target_pos;
+
+    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
+    VectorXd u_guess = VectorXT::Zero(2 * N);
+
+    // x format is [c1 ... cN u1 ... uN]
+    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
+    nlp.x_sol = nlp.x_guess;
+
+    /** IPOPT SOLVE **/
+    int b = 0;
+    std::cout << b++ << std::endl;
+    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+    std::cout << b++ << std::endl;
+    app->RethrowNonIpoptException(true);
+
+    std::cout << b++ << std::endl;
+    app->Options()->SetNumericValue("tol", 1e-5);
+//    app->Options()->SetStringValue("mu_strategy", "monotone");
+    // app->Options()->SetStringValue("mu_strategy", "adaptive");
+
+//    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
+    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
+//    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
+    //        app->Options()->SetNumericValue("mu_max", 0.0001);
+    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
+    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
+    //        bound_relax_factor
+    //        app->Options()->SetStringValue("derivative_test", "first-order");
+    // The following overwrites the default name (ipopt.opt) of the
+    // options file
+    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
+
+    // Initialize the IpoptApplication and process the options
+    std::cout << b++ << std::endl;
+    Ipopt::ApplicationReturnStatus status;
+    status = app->Initialize();
+    if (status != Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** Error during initialization!" << std::endl;
+        return (int) status;
+    }
+    std::cout << b++ << std::endl;
+    // Ask Ipopt to solve the problem
+    std::cout << "Solving problem using IPOPT" << std::endl;
+    std::cout << b++ << std::endl;
+    // objective.bound[0] = 1e-5;
+    // objective.bound[1] = 12.0 * simulation.cells.unit;
+    std::cout << b++ << std::endl;
+    Ipopt::SmartPtr<IpoptSolver> mynlp = new IpoptSolver(nlp);
+    std::cout << b++ << std::endl;
+    status = app->OptimizeTNLP(mynlp);
+    std::cout << b++ << std::endl;
+    if (status == Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** The problem solved!" << std::endl;
+    } else {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** The problem FAILED!" << std::endl;
+    }
+    std::cout << b++ << status << std::endl;
+    return (int) status;
+}
+
 void Foam2D::trajectoryOptGetFrame(int frame) {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
     VectorXT c_frame = frame == 0 ? nlp.c0 : nlp.x_sol.segment((frame - 1) * n_free * dims, n_free * dims);
@@ -144,7 +217,7 @@ void Foam2D::trajectoryOptGetFrame(int frame) {
     VectorXT verts_free;
     VectorXT params_free;
     energyObjective.tessellation->separateVerticesParams(c_frame, verts_free, params_free);
-    vertices.segment(0, n_free * dims) = verts_free;
+    vertices.segment(0, n_free * 2) = verts_free;
     params.segment(0, n_free * (dims - 2)) = params_free;
 }
 

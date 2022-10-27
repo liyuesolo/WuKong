@@ -83,6 +83,8 @@ public:
 
     void trajectoryOptGenerateExampleSol(int N);
 
+    bool trajectoryOptOptimizeIPOPT(int N);
+
     void trajectoryOptGetFrame(int frame);
 
 public:

@@ -14,7 +14,7 @@ public:
     double area_weight = 0.1;
     double length_weight = 0.003;
     double centroid_weight = 0.05;
-    double drag_target_weight = 0.05;
+    double drag_target_weight = 0.00;
 
     int drag_idx = -1;
     TV drag_target_pos;

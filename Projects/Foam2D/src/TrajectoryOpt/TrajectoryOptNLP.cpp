@@ -1,7 +1,7 @@
 #include "../../include/TrajectoryOpt/TrajectoryOptNLP.h"
 
-#define IDX_C(k, i) (((k - 1) * n_free + i) * dims)
-#define IDX_U(k) ((N * n_free * dims) + k * 2)
+#define IDX_C(k, i) (((k) * n_free + (i)) * dims)
+#define IDX_U(k) ((N * n_free * dims) + (k) * 2)
 #define NX_C (N * n_free * dims)
 #define NX_U (N * 2)
 #define NX (N * n_free * dims + N * 2)
@@ -10,7 +10,7 @@
 double TrajectoryOptNLP::eval_f(const Eigen::VectorXd &x) const {
     int dims = energy->tessellation->getNumVertexParams() + 2;
     int n_free = energy->n_free;
-    TV final_pos = x.segment<2>(IDX_C(N, agent));
+    TV final_pos = x.segment<2>(IDX_C(N - 1, agent));
 
     double target_f = (final_pos - target_pos).squaredNorm();
     double input_f = x.segment(IDX_U(0), NX_U).squaredNorm();
@@ -22,9 +22,9 @@ VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
 
     int dims = energy->tessellation->getNumVertexParams() + 2;
     int n_free = energy->n_free;
-    TV final_pos = x.segment<2>(IDX_C(N, agent));
+    TV final_pos = x.segment<2>(IDX_C(N - 1, agent));
 
-    grad_f.segment<2>(IDX_C(N, agent)) = target_weight * (final_pos - target_pos);
+    grad_f.segment<2>(IDX_C(N - 1, agent)) = target_weight * (final_pos - target_pos);
     grad_f.segment(IDX_U(0), NX_U) = input_weight * x.segment(IDX_U(0), NX_U);
 
     return grad_f;
@@ -74,7 +74,7 @@ Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g(const Eigen::VectorXd &
     // dG{k}/dc{k} Energy hessians
     for (int k = 0; k < N; k++) {
         Eigen::SparseMatrix<double> d2Edc2 = energy->get_d2Odc2(c_curr.segment(IDX_C(k, 0), NC));
-        for (int i = 0; i < d2Edc2.outerSize(); ++k) {
+        for (int i = 0; i < d2Edc2.outerSize(); ++i) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(d2Edc2, i); it; ++it) {
                 jac.coeffRef(it.row() + NC * k, it.col() + NC * k) += it.value();
             }
