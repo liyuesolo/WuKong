@@ -30,8 +30,10 @@ import scipy
 from scipy.optimize import check_grad
 from tactile import IsohedralTiling, tiling_types, EdgeShape, mul, Point
 import dearpygui.dearpygui as dpg
-
+from scipy.optimize import BFGS
 from scipy.linalg import lu_factor, lu_solve
+from scipy.optimize import NonlinearConstraint
+from scipy.optimize import LinearConstraint
 
 @tf.function
 def psiGradHessNH(strain, data_type = tf.float32):
@@ -124,6 +126,38 @@ def testStep(n_tiling_params, lambdas, model):
     return dstress_dp, stress, de_dp, elastic_potential
 
 
+@tf.function
+def objGradPsiSum(n_tiling_params, inputs, ti, model):
+    batch_dim = int(inputs.shape[0] // 3)
+    
+    with tf.GradientTape() as tape:
+        tape.watch(inputs)
+        ti_batch = tf.tile(tf.expand_dims(ti, 0), (batch_dim, 1))
+        strain = tf.reshape(inputs, (batch_dim, 3))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+        psi = tf.math.reduce_sum(psi, axis=0)
+    grad = tape.gradient(psi, inputs)
+    del tape
+    return tf.squeeze(psi), tf.squeeze(grad)
+
+@tf.function
+def hessPsiSum(n_tiling_params, inputs, ti, model):
+    batch_dim = int(inputs.shape[0] // 3)
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(inputs)
+        with tf.GradientTape() as tape:
+            tape.watch(inputs)
+            ti_batch = tf.tile(tf.expand_dims(ti, 0), (batch_dim, 1))
+            strain = tf.reshape(inputs, (batch_dim, 3))
+            nn_inputs = tf.concat((ti_batch, strain), axis=1)
+            psi = model(nn_inputs, training=False)
+            psi = tf.math.reduce_sum(psi, axis=0)
+        grad = tape.gradient(psi, inputs)
+    hess = tape_outer.jacobian(grad, inputs)
+    del tape
+    del tape_outer
+    return tf.squeeze(hess)
 
 @tf.function
 def testStepd2edp2(n_tiling_params, lambdas, model):
@@ -230,6 +264,223 @@ def objGradUniaxialStress(n_tiling_params, ti, uniaxial_strain, theta, model):
     return tf.squeeze(dTSd), tf.squeeze(grad), tf.squeeze(dOdE)
 
 @tf.function
+def objGradPhiColocation(n_tiling_params, inputs, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    indices = np.arange(2, len(inputs), 1)
+    with tf.GradientTape() as tape:
+        tape.watch(inputs)
+        ti = tf.gather(inputs, [0, 1], axis=0)
+        strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+        ti = tf.expand_dims(ti, 0)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+        psi = tf.math.reduce_sum(psi, axis=0)
+    grad = tape.gradient(psi, inputs)
+    del tape
+    return tf.squeeze(psi), tf.squeeze(grad)
+
+@tf.function
+def hessPhiColocation(n_tiling_params, inputs, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    indices = np.arange(2, len(inputs), 1)
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(inputs)
+        with tf.GradientTape() as tape:
+            tape.watch(inputs)
+            ti = tf.gather(inputs, [0, 1], axis=0)
+            strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+            ti = tf.expand_dims(ti, 0)
+            ti_batch = tf.tile(ti, (batch_dim, 1))
+            nn_inputs = tf.concat((ti_batch, strain), axis=1)
+            psi = model(nn_inputs, training=False)
+            psi = tf.math.reduce_sum(psi, axis=0)
+        grad = tape.gradient(psi, inputs)
+    hess = tape_outer.jacobian(grad, inputs)
+    del tape
+    del tape_outer
+    return tf.squeeze(hess)
+
+
+@tf.function
+def objUniaxialStressColocation(n_tiling_params, inputs, theta, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    thetas = tf.tile(theta, (batch_dim, 1))
+    
+    d = tf.concat((tf.math.cos(thetas),
+                        tf.math.sin(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    
+    with tf.GradientTape() as tape:
+        tape.watch(inputs)
+        ti = tf.gather(inputs, [0, 1], axis=0)
+        indices = tf.range(2, len(inputs), 1)
+        strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+        ti = tf.expand_dims(ti, 0)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+
+        dedlambda = tape.gradient(psi, nn_inputs)
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+        stress_xx = tf.gather(stress, [0], axis = 1)
+        stress_yy = tf.gather(stress, [1], axis = 1)
+        stress_xy = tf.gather(stress, [2], axis = 1)
+        stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+        stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+        Sd = tf.linalg.matvec(stress_tensor, d)
+        
+        dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+    del tape
+    return tf.squeeze(dTSd)
+
+@tf.function
+def gradUniaxialStressColocation(n_tiling_params, inputs, theta, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    thetas = tf.tile(theta, (batch_dim, 1))
+    
+    d = tf.concat((tf.math.cos(thetas),
+                        tf.math.sin(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(inputs)
+        ti = tf.gather(inputs, [0, 1], axis=0)
+        indices = tf.range(2, len(inputs), 1)
+        strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+        ti = tf.expand_dims(ti, 0)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+
+        dedlambda = tape.gradient(psi, nn_inputs)
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+        stress_xx = tf.gather(stress, [0], axis = 1)
+        stress_yy = tf.gather(stress, [1], axis = 1)
+        stress_xy = tf.gather(stress, [2], axis = 1)
+        stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+        stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+        Sd = tf.linalg.matvec(stress_tensor, d)
+        
+        dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+        # print(dTSd)
+    grad = tape.jacobian(dTSd, inputs)
+    del tape
+    return tf.squeeze(grad)
+
+@tf.function
+def objUniaxialStressColocationNormal(n_tiling_params, inputs, theta, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    thetas = tf.tile(theta, (batch_dim, 1))
+    
+    d = tf.concat((-tf.math.sin(thetas),
+                        tf.math.cos(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    
+    with tf.GradientTape() as tape:
+        tape.watch(inputs)
+        ti = tf.gather(inputs, [0, 1], axis=0)
+        indices = tf.range(2, len(inputs), 1)
+        strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+        ti = tf.expand_dims(ti, 0)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+
+        dedlambda = tape.gradient(psi, nn_inputs)
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+        stress_xx = tf.gather(stress, [0], axis = 1)
+        stress_yy = tf.gather(stress, [1], axis = 1)
+        stress_xy = tf.gather(stress, [2], axis = 1)
+        stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+        stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+        Sd = tf.linalg.matvec(stress_tensor, d)
+        
+        dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+    del tape
+    return tf.squeeze(dTSd)
+
+@tf.function
+def gradUniaxialStressColocationNormal(n_tiling_params, inputs, theta, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    thetas = tf.tile(theta, (batch_dim, 1))
+    
+    d = tf.concat((-tf.math.sin(thetas),
+                        tf.math.cos(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(inputs)
+        ti = tf.gather(inputs, [0, 1], axis=0)
+        indices = tf.range(2, len(inputs), 1)
+        strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+        ti = tf.expand_dims(ti, 0)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.concat((ti_batch, strain), axis=1)
+        psi = model(nn_inputs, training=False)
+
+        dedlambda = tape.gradient(psi, nn_inputs)
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+        stress_xx = tf.gather(stress, [0], axis = 1)
+        stress_yy = tf.gather(stress, [1], axis = 1)
+        stress_xy = tf.gather(stress, [2], axis = 1)
+        stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+        stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+        Sd = tf.linalg.matvec(stress_tensor, d)
+        
+        dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+        # print(dTSd)
+    grad = tape.jacobian(dTSd, inputs)
+    del tape
+    return tf.squeeze(grad)
+
+@tf.function
+def hessUniaxialStressColocation(n_tiling_params, inputs, theta, model):
+    batch_dim = int(len(inputs) - n_tiling_params) // 3
+    thetas = tf.tile(theta, (batch_dim, 1))
+    
+    d = tf.concat((tf.math.cos(thetas),
+                        tf.math.sin(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(inputs)
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(inputs)
+            ti = tf.gather(inputs, [0, 1], axis=0)
+            indices = tf.range(2, len(inputs), 1)
+            strain = tf.reshape(tf.gather(inputs, indices, axis=0), (batch_dim, 3))
+            ti = tf.expand_dims(ti, 0)
+            ti_batch = tf.tile(ti, (batch_dim, 1))
+            nn_inputs = tf.concat((ti_batch, strain), axis=1)
+            psi = model(nn_inputs, training=False)
+
+            dedlambda = tape.gradient(psi, nn_inputs)
+            stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+            stress_xx = tf.gather(stress, [0], axis = 1)
+            stress_yy = tf.gather(stress, [1], axis = 1)
+            stress_xy = tf.gather(stress, [2], axis = 1)
+            stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+            stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+            Sd = tf.linalg.matvec(stress_tensor, d)
+            
+            dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+        grad = tape.jacobian(dTSd, inputs)
+    hess = tape_outer.jacobian(grad, inputs)
+    del tape
+    del tape_outer
+    return tf.squeeze(hess)
+
+@tf.function
 def hessUniaxialStress(n_tiling_params, ti, uniaxial_strain, theta, model):
     batch_dim = uniaxial_strain.shape[0]
     thetas = tf.tile(theta, (uniaxial_strain.shape[0], 1))
@@ -288,6 +539,31 @@ def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
     return stiffness, stiffness2
 
 @tf.function
+def computedPsidEEnergy(n_tiling_params, model_input, model):
+    with tf.GradientTape() as tape:
+        tape.watch(model_input)
+        psi = model(model_input, training=False)
+        dedlambda = psi.gradient(psi, model_input)
+        batch_dim = psi.shape[0]
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+    del tape
+    return tf.squeeze(stress)
+
+@tf.function
+def computedPsidEGrad(n_tiling_params, inputs, model):
+    batch_dim = inputs.shape[0]
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(inputs)
+        with tf.GradientTape() as tape:
+            tape.watch(inputs)
+            
+            psi = model(inputs, training=False)
+            dedlambda = tape.gradient(psi, inputs)
+            stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+    C = tape_outer.batch_jacobian(stress, inputs)[:, :, n_tiling_params:]
+    return tf.squeeze(C)
+
+@tf.function
 def computedStressdp(n_tiling_params, opt_model_input, model):
     with tf.GradientTape() as tape_outer:
         tape_outer.watch(opt_model_input)
@@ -318,6 +594,74 @@ def computeStiffnessTensor(n_tiling_params, inputs, model):
     C = tape_outer.batch_jacobian(stress, inputs)[:, :, n_tiling_params:]
     return tf.squeeze(C)
 
+
+def computedCdE(d):
+    _i_var = np.zeros(7)
+    _i_var[0] = (d[1])*(d[0])
+    _i_var[1] = (d[0])*(d[1])
+    _i_var[2] = 0.5
+    _i_var[3] = (_i_var[1])+(_i_var[0])
+    _i_var[4] = (d[0])*(d[0])
+    _i_var[5] = (d[1])*(d[1])
+    _i_var[6] = (_i_var[3])*(_i_var[2])
+    return np.array(_i_var[4:7])
+
+def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+    theta, strains, tiling_params, verbose = True):
+
+    d = np.array([np.cos(theta), np.sin(theta)])
+    strain_init = []
+    for strain in strains:
+        strain_tensor_init = np.outer(d, d) * strain
+        strain_init.append(np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]]))
+
+    strain_init = np.array(strain_init).flatten()
+    
+    m = len(strain_init) // 3
+    n = len(strain_init)
+    A = np.zeros((m, n))
+    lb = []
+    ub = []
+
+    for i in range(m):
+        A[i, i * 3:i * 3 + 3] = computedCdE(d)
+        lb.append(strains[i])
+        ub.append(strains[i])
+
+    uniaxial_strain_constraint = LinearConstraint(A, lb, ub)
+
+    def hessian(x):
+        
+        H = hessPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
+            tf.convert_to_tensor(tiling_params), model)
+        H = H.numpy()
+        # alpha = 1e-6
+        # while not np.all(np.linalg.eigvals(H) > 0):
+        #     H += np.diag(np.full(len(x),alpha))
+        #     alpha *= 10.0
+        return H
+
+    def objAndEnergy(x):
+        obj, grad = objGradPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
+            tf.convert_to_tensor(tiling_params), model)
+        
+        obj = obj.numpy()
+        grad = grad.numpy().flatten()
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+
+    if verbose:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints=[uniaxial_strain_constraint],
+            options={'disp' : True})
+    else:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, 
+            hess=hessian,
+            constraints= [uniaxial_strain_constraint],
+            options={'disp' : False})
+    
+    return np.reshape(result.x, (m, 3))
+
 def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, 
     theta, strain, tiling_params, verbose = True):
     
@@ -328,16 +672,7 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
     strain_init = np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]])
     n = np.array([-np.sin(theta), np.cos(theta)])
 
-    def computedCdE(d):
-        _i_var = np.zeros(7)
-        _i_var[0] = (d[1])*(d[0])
-        _i_var[1] = (d[0])*(d[1])
-        _i_var[2] = 0.5
-        _i_var[3] = (_i_var[1])+(_i_var[0])
-        _i_var[4] = (d[0])*(d[0])
-        _i_var[5] = (d[1])*(d[1])
-        _i_var[6] = (_i_var[3])*(_i_var[2])
-        return np.array(_i_var[4:7])
+    
 
     def constraint(x):
         strain_tensor = np.reshape([x[0], 0.5 * x[-1], 0.5 * x[-1], x[1]], (2, 2))
@@ -389,66 +724,6 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
     dqdp = lu_solve((lu, piv), -d2Ldqdp)
 
     return result.x, dqdp
-
-
-
-def optimizeUniaxialStrain():
-    filename = "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/sample_theta_1.050000.txt"
-    all_data = []
-    all_label = [] 
-    n_tiling_params = 2
-    thetas = []
-    for line in open(filename).readlines():
-        item = [float(i) for i in line.strip().split(" ")]
-    
-        data = item[0:n_tiling_params]
-        for i in range(2):
-            data.append(item[n_tiling_params+i])
-        data.append(2.0 * item[n_tiling_params+2])
-        thetas.append(item[-4])
-
-        label = item[n_tiling_params+3:n_tiling_params+7]
-        
-        
-        all_data.append(data)
-        all_label.append(label)
-    
-    thetas = np.array(thetas[0:]).astype(np.float32)
-    all_data = np.array(all_data[0:]).astype(np.float32)
-    all_label = np.array(all_label[0:]).astype(np.float32) 
-
-    n_tiling_params = 2
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    # save_path = os.path.join(current_dir, 'Models/' + str(221) + "/")
-    # model = buildSingleFamilyModel3Strain(n_tiling_params)
-    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH21" + '.tf')
-    theta = 0.0
-    strain_eng = 0.05
-    strain_green = strain_eng + 0.5 * np.power(strain_eng, 2.0)
-
-    tiling_params = np.array([0.104512, 0.65])
-    
-    strain_nn_opt = []
-    thetas = np.arange(0.0, np.pi, np.pi/float(50.0))
-    for theta in thetas:
-        strain_nn_opt.append(optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain_green, tiling_params))
-        # strain_nn_opt.append([0, 0, 0])
-    error = []
-    for i in range(len(strain_nn_opt)):
-        error.append(np.linalg.norm(strain_nn_opt[i] - all_data[i][2:5]) / np.linalg.norm(all_data[i][2:5]) * 100.0)
-    
-    for i in range(len(strain_nn_opt)):
-        thetas = np.append(thetas, thetas[i] - np.pi)
-        error = np.append(error, error[i])
-
-    thetas = np.append(thetas, thetas[0])
-    error = np.append(error, error[0])
-    print("max error: {}".format(np.max(error)))
-    plt.polar(thetas, error, linewidth=3.0)
-    # plt.show()
-    plt.savefig(save_path + "error.png", dpi=300)
 
 
 
@@ -571,10 +846,7 @@ def optimizeStiffnessProfile():
     plt.close()
 
 
-
-
-
-def optimizeUniaxialStress():
+def optimizeUniaxialStressSA():
     n_tiling_params = 2
     bounds = []
     bounds.append([0.105, 0.195])
@@ -674,6 +946,221 @@ def optimizeUniaxialStress():
     plt.close()
     print(result.x)
 
+
+
+
+def optimizeUniaxialStress():
+    n_tiling_params = 2
+    bounds = []
+    bounds.append([0.105, 0.195])
+    bounds.append([0.505, 0.795])
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
+    # model = loadSingleFamilyModel(n_tiling_params)
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
+    model.load_weights(save_path + "IH21" + '.tf')
+
+    ti0 = np.array([0.15, 0.6])
+    # ti0 = np.array([0.115, 0.75])
+    theta = 0.0
+    d = np.array([np.cos(theta), np.sin(theta)])
+    strain_range = [-0.05, 0.1]
+    n_sp_strain = 10
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+    
+    # uniaxial_strain = []
+    # for strain in strain_samples:
+    #     green = strain #+ 0.5 * strain * strain
+    #     uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, green, ti0, False)
+    #     uniaxial_strain.append(uni_strain)
+    # ti_TF = tf.convert_to_tensor(ti0)
+    # uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+    # obj_init, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+    # obj_init = obj_init.numpy()
+
+    uniaxial_strain_batch = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+                            theta, strain_samples, 
+                            ti0, model)
+
+    obj_init, _ , _ = objGradUniaxialStress(n_tiling_params, tf.convert_to_tensor(ti0), 
+                                tf.convert_to_tensor(uniaxial_strain_batch), tf.constant([[theta]]), model)
+    obj_init = obj_init.numpy()
+    
+    sample_points_indices = [2, 5, len(uniaxial_strain_batch)-1]
+    strain_init = []
+    # stress_targets = []
+    for i in range(len(sample_points_indices)):
+        strain_init.append(uniaxial_strain_batch[sample_points_indices[i]])
+    strain_init = np.array(strain_init)
+    
+    # stress_targets = [obj[2], obj[5], obj[-1]]
+    stress_targets = np.array([-0.00683177, 0.02369076, 0.06924471]) #ti0 = np.array([0.115, 0.75])
+    # stress_targets = [-0.03666779, 0.03493858, 4.71111735]
+    
+    design_variables = np.hstack((ti0, strain_init.flatten()))
+
+    # obj_init = objUniaxialStressColocation(n_tiling_params, tf.convert_to_tensor(design_variables), tf.constant([[theta]]), model)
+    # obj_init = obj_init.numpy()
+    
+    for i in range(len(design_variables) - n_tiling_params):
+        bounds.append([-100.0, 100.0])
+
+    def cons_f(x):
+        c = objUniaxialStressColocation(n_tiling_params, tf.convert_to_tensor(x), tf.constant([[theta]]), model)
+        return c.numpy().flatten()
+    def cons_J(x):
+        dc = gradUniaxialStressColocation(n_tiling_params, tf.convert_to_tensor(x), tf.constant([[theta]]), model)
+        return dc.numpy()
+
+    def cons_H(x, v):
+        hess = hessUniaxialStressColocation(n_tiling_params, tf.convert_to_tensor(x), tf.constant([[theta]]), model)
+        hess = hess.numpy()
+        Hv = np.zeros((len(x), len(x)))
+        for i in range(len(v)):
+            Hv += hess[i] * v[i]
+        return Hv
+
+    
+    def consFuncStressNormal(x):
+        c = objUniaxialStressColocationNormal(n_tiling_params, tf.convert_to_tensor(x), tf.constant([[theta]]), model)
+        return c.numpy().flatten()
+    def consJacStressNormal(x):
+        dc = gradUniaxialStressColocationNormal(n_tiling_params, tf.convert_to_tensor(x), tf.constant([[theta]]), model)
+        return dc.numpy()
+    
+    A = np.zeros((n_tiling_params + len(stress_targets), len(design_variables)))
+    lb = []
+    ub = []
+
+    for i in range(n_tiling_params):
+        A[i][i] = 1.0
+        lb.append(bounds[i][0])
+        ub.append(bounds[i][1])
+    for i in range(len(stress_targets)):
+        A[n_tiling_params + i, n_tiling_params + i * 3: n_tiling_params + i * 3 + 3] = computedCdE(d)
+        lb.append(strain_samples[sample_points_indices[i]])
+        ub.append(strain_samples[sample_points_indices[i]])
+    
+    
+    uniaxial_stress_constraint = NonlinearConstraint(cons_f, stress_targets, 
+                                    stress_targets, jac=cons_J, hess=BFGS())
+    
+    normal_stress_constraint = NonlinearConstraint(consFuncStressNormal, np.zeros(len(stress_targets)), 
+                                    np.zeros(len(stress_targets)), jac=consJacStressNormal, hess=BFGS())
+    
+    uniaxial_strain_constraint = LinearConstraint(A, lb, ub)
+
+
+    def hessian(x):
+        hess = hessPhiColocation(n_tiling_params, tf.convert_to_tensor(x), model)
+        H = hess.numpy()        
+        alpha = 1e-6
+        while not np.all(np.linalg.eigvals(H) > 1e-8):
+            H += np.diag(np.full(len(x),alpha))
+            alpha *= 10.0
+        return hess
+
+    def objAndGradient(x):
+
+        obj, grad = objGradPhiColocation(n_tiling_params, tf.convert_to_tensor(x), model)
+        obj = obj.numpy()
+        grad = grad.numpy().flatten()
+
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+    
+    def fdGradient(x0):
+        eps = 1e-4
+        fd_grad = []
+        _, grad = objAndGradient(x0)
+        for i in range(len(x0)):
+            x0[i] -= eps
+            E0, _ = cons_f(x0)
+            x0[i] += 2.0 * eps
+            E1, _ = cons_f(x0)
+            x0[i] -= eps
+            fd_grad.append((E1 - E0)/2.0/eps)
+        print(grad)
+        print(fd_grad)
+
+    def fdConstraint(x0):
+        eps = 1e-4
+        fd_Jacobian = []
+        Jacobian = cons_J(x0)
+        for i in range(len(x0)):
+            x0[i] -= eps
+            E0 = cons_f(x0)
+            x0[i] += 2.0 * eps
+            E1 = cons_f(x0)
+            x0[i] -= eps
+            fd_Jacobian.append((E1 - E0)/2.0/eps)
+        
+        print(Jacobian)
+        print(fd_Jacobian)
+
+    # fdConstraint(design_variables)
+    # exit(0)
+    # result = minimize(objAndGradient, ti0, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+    result = minimize(objAndGradient, design_variables, 
+            method='trust-constr', jac=True, 
+            # hess=hessian,
+            options={'disp' : True}, 
+            # bounds=bounds,
+            constraints = [uniaxial_strain_constraint, 
+                            uniaxial_stress_constraint,
+                            normal_stress_constraint])
+
+    
+    # obj_opt = objUniaxialStressColocation(n_tiling_params, tf.convert_to_tensor(result.x), tf.constant([[theta]]), model)
+    # obj_opt = obj_opt.numpy()
+
+    # uniaxial_strain = []
+    # for strain in strain_samples:
+    #     green = strain #+ 0.5 * strain * strain
+    #     # uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, green, result.x[0:2], False)
+    #     uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, green, ti0, False)
+    #     uniaxial_strain.append(uni_strain)
+    
+    # for i in range(len(sample_points_indices)):
+    #     uniaxial_strain[sample_points_indices[i]] = np.array(result.x[n_tiling_params + i * 3:n_tiling_params + i*3+3])
+    
+    
+    # ti_TF = tf.convert_to_tensor(result.x[0:2])
+    # ti_TF = tf.convert_to_tensor(ti0)
+    # uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+    # obj_opt, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+    # obj_opt = obj_opt.numpy()
+
+    uniaxial_strain_batch_opt = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+        theta, strain_samples, 
+        result.x[0:2], model)
+
+    obj_opt, _ , _ = objGradUniaxialStress(n_tiling_params, tf.convert_to_tensor(result.x[0:2]), 
+                        tf.convert_to_tensor(uniaxial_strain_batch_opt), tf.constant([[theta]]), model)
+    obj_opt = obj_opt.numpy()
+
+    strain_points = [strain_samples[2], strain_samples[5], strain_samples[-1]]
+    plt.plot(strain_samples, obj_init, label="stress initial")
+    plt.plot(strain_samples, obj_opt, label = "stress optimized")
+    # plt.plot(strain_samples, obj_init, label="opt batch")
+    # plt.plot(strain_samples, obj_opt, label = "opt separate")
+    plt.scatter(strain_points, stress_targets, s=4.0)
+    plt.legend(loc="upper left")
+    plt.xlabel("strain")
+    plt.ylabel("stress")
+    plt.savefig("uniaxial_stress.png", dpi=300)
+    plt.close()
+    np.set_printoptions(suppress=True)
+    print(result.x)
+    # print(A.dot(result.x))
+    # for i in range(len(sample_points_indices)):
+    #     x = uniaxial_strain_batch_opt[sample_points_indices[i]]
+    #     strain_tensor = np.reshape([x[0], 0.5 * x[-1], 0.5 * x[-1], x[1]], (2, 2))
+    #     dTEd = np.dot(d, np.dot(strain_tensor, np.transpose(d)))
+    #     print(x, dTEd)
+        
+        
+        
 
 if __name__ == "__main__":
     optimizeUniaxialStress()

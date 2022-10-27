@@ -1540,8 +1540,8 @@ def sampleDir():
 
 if __name__ == "__main__":
     # sampleDir()
-    explorer()
-    # optimizeStiffnessProfile()
+    # explorer()
+    optimizeStiffnessProfile()
     # optimizeUniaxialStrain()
     # optimizeUniaxialStrainNH()
     # optimizeStessProfile()
