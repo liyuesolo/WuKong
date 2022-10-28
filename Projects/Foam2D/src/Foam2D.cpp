@@ -7,6 +7,7 @@
 #include "../include/Constants.h"
 #include <random>
 #include "../include/TrajectoryOpt/IpoptSolver.h"
+#include <thread>
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
@@ -138,27 +139,12 @@ void Foam2D::trajectoryOptGenerateExampleSol(int N) {
     }
 }
 
-bool Foam2D::trajectoryOptOptimizeIPOPT(int N) {
-    /** NLP INITIALIZATION **/
-    nlp.N = N;
-    nlp.agent = energyObjective.drag_idx;
-    nlp.target_pos = energyObjective.drag_target_pos;
-
-    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
-    VectorXd u_guess = VectorXT::Zero(2 * N);
-
-    // x format is [c1 ... cN u1 ... uN]
-    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
-    nlp.x_sol = nlp.x_guess;
-
+static void threadIPOPT(TrajectoryOptNLP *nlp) {
     /** IPOPT SOLVE **/
-    int b = 0;
-    std::cout << b++ << std::endl;
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-    std::cout << b++ << std::endl;
+
     app->RethrowNonIpoptException(true);
 
-    std::cout << b++ << std::endl;
     app->Options()->SetNumericValue("tol", 1e-5);
 //    app->Options()->SetStringValue("mu_strategy", "monotone");
     // app->Options()->SetStringValue("mu_strategy", "adaptive");
@@ -179,26 +165,24 @@ bool Foam2D::trajectoryOptOptimizeIPOPT(int N) {
     // app->Options()->SetStringValue("option_file_name", "hs071.opt");
 
     // Initialize the IpoptApplication and process the options
-    std::cout << b++ << std::endl;
     Ipopt::ApplicationReturnStatus status;
     status = app->Initialize();
     if (status != Ipopt::Solve_Succeeded) {
         std::cout << std::endl
                   << std::endl
                   << "*** Error during initialization!" << std::endl;
-        return (int) status;
+        return;
     }
-    std::cout << b++ << std::endl;
+
     // Ask Ipopt to solve the problem
     std::cout << "Solving problem using IPOPT" << std::endl;
-    std::cout << b++ << std::endl;
+
     // objective.bound[0] = 1e-5;
     // objective.bound[1] = 12.0 * simulation.cells.unit;
-    std::cout << b++ << std::endl;
+
     Ipopt::SmartPtr<IpoptSolver> mynlp = new IpoptSolver(nlp);
-    std::cout << b++ << std::endl;
+
     status = app->OptimizeTNLP(mynlp);
-    std::cout << b++ << std::endl;
     if (status == Ipopt::Solve_Succeeded) {
         std::cout << std::endl
                   << std::endl
@@ -208,8 +192,24 @@ bool Foam2D::trajectoryOptOptimizeIPOPT(int N) {
                   << std::endl
                   << "*** The problem FAILED!" << std::endl;
     }
-    std::cout << b++ << status << std::endl;
-    return (int) status;
+}
+
+void Foam2D::trajectoryOptOptimizeIPOPT(int N) {
+    /** NLP INITIALIZATION **/
+    nlp.N = N;
+    nlp.agent = energyObjective.drag_idx;
+    nlp.target_pos = energyObjective.drag_target_pos;
+
+    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
+    VectorXd u_guess = VectorXT::Zero(2 * N);
+
+    // x format is [c1 ... cN u1 ... uN]
+    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
+    nlp.x_sol = nlp.x_guess;
+
+    /** IPOPT SOLVE **/
+    std::thread t1(threadIPOPT, &nlp);
+    t1.detach();
 }
 
 void Foam2D::trajectoryOptGetFrame(int frame) {
@@ -261,7 +261,8 @@ static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, in
     return A;
 }
 
-void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C) {
+void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                        MatrixXi &F, MatrixXT &Fc) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
@@ -293,16 +294,48 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 
     F.resize(n_faces, 3);
     F.setZero();
-    C.resize(n_faces, 3);
-    C.setZero();
+    Fc.resize(n_faces, 3);
+    Fc.setZero();
     for (int i = 0; i < n_faces; i++) {
         F.row(i) = tri.segment<3>(i * 3);
-        C.row(i) = TV3(0.5, 0.5, 0.5);
+        Fc.row(i) = TV3(0.5, 0.5, 0.5);
+    }
+
+    Sc.resize(S.rows(), 3);
+    Sc.setZero();
+
+    Ec.resize(E.rows(), 3);
+    Ec.setZero();
+
+    if (energyObjective.drag_idx >= 0) {
+        MatrixXT V_target;
+        V_target.resize(3, 3);
+        V_target.col(2) = TV3(0.01, 0.01, 0.01);
+
+        V_target.row(0).segment<2>(0) = energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI_2), sin(M_PI_2));
+        V_target.row(1).segment<2>(0) =
+                energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI * 7.0 / 6.0), sin(M_PI * 7.0 / 6.0));
+        V_target.row(2).segment<2>(0) =
+                energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI * 11.0 / 6.0), sin(M_PI * 11.0 / 6.0));
+
+        MatrixXT V_temp = V;
+        V.resize(V_temp.rows() + V_target.rows(), 3);
+        V << V_temp, V_target;
+
+        MatrixXi F_target = IV3(V_temp.rows() + 0, V_temp.rows() + 1, V_temp.rows() + 2).transpose();
+        MatrixXi F_temp = F;
+        F.resize(F_temp.rows() + F_target.rows(), 3);
+        F << F_temp, F_target;
+
+        MatrixXT Fc_target = TV3(0, 0.4, 0).transpose();
+        MatrixXT Fc_temp = Fc;
+        Fc.resize(Fc_temp.rows() + Fc_target.rows(), 3);
+        Fc << Fc_temp, Fc_target;
     }
 }
 
-void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C,
-                                       int selected) {
+void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                       MatrixXi &F, MatrixXT &Fc) {
     VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
@@ -347,8 +380,8 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
     F.resize(num_voronoi_edges * 2, 3);
     F.setZero();
-    C.resize(num_voronoi_edges * 2, 3);
-    C.setZero();
+    Fc.resize(num_voronoi_edges * 2, 3);
+    Fc.setZero();
     VectorXT areas = getCellAreas(x, cells, n_free);
     edge = 0;
     for (int i = 0; i < n_cells; i++) {
@@ -359,10 +392,86 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             int v3 = cell[j + 1];
 
             F.row(edge) = IV3(v1 + n_vtx, v2 + n_vtx, v3 + n_vtx);
-            C.row(edge) = (i == selected ? TV3(0.1, 0.1, 0.1) : getColor(areas(i), energyObjective.getAreaTarget(i)));
+            Fc.row(edge) = (i == energyObjective.drag_idx ? TV3(0.1, 0.1, 0.1) : getColor(areas(i),
+                                                                                          energyObjective.getAreaTarget(
+                                                                                                  i)));
             edge++;
         }
     }
+
+    Sc.resize(S.rows(), 3);
+    Sc.setZero();
+
+    Ec.resize(E.rows(), 3);
+    Ec.setZero();
+
+    if (energyObjective.drag_idx >= 0) {
+        MatrixXT V_target;
+        V_target.resize(3, 3);
+        V_target.col(2) = TV3(0.01, 0.01, 0.01);
+
+        V_target.row(0).segment<2>(0) = energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI_2), sin(M_PI_2));
+        V_target.row(1).segment<2>(0) =
+                energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI * 7.0 / 6.0), sin(M_PI * 7.0 / 6.0));
+        V_target.row(2).segment<2>(0) =
+                energyObjective.drag_target_pos + 0.03 * TV(cos(M_PI * 11.0 / 6.0), sin(M_PI * 11.0 / 6.0));
+
+        MatrixXT V_temp = V;
+        V.resize(V_temp.rows() + V_target.rows(), 3);
+        V << V_temp, V_target;
+
+        MatrixXi F_target = IV3(V_temp.rows() + 0, V_temp.rows() + 1, V_temp.rows() + 2).transpose();
+        MatrixXi F_temp = F;
+        F.resize(F_temp.rows() + F_target.rows(), 3);
+        F << F_temp, F_target;
+
+        MatrixXT Fc_target = TV3(0, 0.4, 0).transpose();
+        MatrixXT Fc_temp = Fc;
+        Fc.resize(Fc_temp.rows() + Fc_target.rows(), 3);
+        Fc << Fc_temp, Fc_target;
+    }
+}
+
+void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                        MatrixXi &F, MatrixXT &Fc) {
+    MatrixXT S_traj(nlp.N + 1, 3);
+    S_traj.setZero();
+
+    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
+    S_traj(0, 0) = nlp.c0(nlp.agent * dims + 0);
+    S_traj(0, 1) = nlp.c0(nlp.agent * dims + 1);
+    for (int k = 0; k < nlp.N; k++) {
+        S_traj(k + 1, 0) = nlp.x_sol(k * nlp.c0.rows() + nlp.agent * dims + 0);
+        S_traj(k + 1, 1) = nlp.x_sol(k * nlp.c0.rows() + nlp.agent * dims + 1);
+    }
+
+    MatrixXT S_temp = S;
+    S.resize(S_temp.rows() + S_traj.rows(), 3);
+    S << S_temp, S_traj;
+
+    MatrixXT X_temp = X;
+    X.resize(X_temp.rows() + S_traj.rows(), 3);
+    X << X_temp, S_traj;
+
+    MatrixXT Sc_traj = TV3(1, 0, 0).transpose().replicate(nlp.N + 1, 1);
+    MatrixXT Sc_temp = Sc;
+    Sc.resize(Sc_temp.rows() + Sc_traj.rows(), 3);
+    Sc << Sc_temp, Sc_traj;
+
+    MatrixXi E_traj(nlp.N, 2);
+    for (int k = 0; k < nlp.N; k++) {
+        E_traj(k, 0) = X_temp.rows() + k + 0;
+        E_traj(k, 1) = X_temp.rows() + k + 1;
+    }
+
+    MatrixXi E_temp = E;
+    E.resize(E_temp.rows() + E_traj.rows(), 2);
+    E << E_temp, E_traj;
+
+    MatrixXT Ec_traj = TV3(1, 0, 0).transpose().replicate(nlp.N, 1);
+    MatrixXT Ec_temp = Ec;
+    Ec.resize(Ec_temp.rows() + Ec_traj.rows(), 3);
+    Ec << Ec_temp, Ec_traj;
 }
 
 void Foam2D::getPlotAreaHistogram(VectorXT &areas) {

@@ -65,10 +65,14 @@ public:
 
     void resetVertexParams();
 
-    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C,
-                                   int selected);
+    void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                   MatrixXi &F, MatrixXT &Fc);
 
-    void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &V, MatrixXi &F, MatrixXT &C);
+    void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                    MatrixXi &F, MatrixXT &Fc);
+
+    void addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
+                                    MatrixXi &F, MatrixXT &Fc);
 
     void getPlotAreaHistogram(VectorXT &areas);
 
@@ -83,7 +87,7 @@ public:
 
     void trajectoryOptGenerateExampleSol(int N);
 
-    bool trajectoryOptOptimizeIPOPT(int N);
+    void trajectoryOptOptimizeIPOPT(int N);
 
     void trajectoryOptGetFrame(int frame);
 

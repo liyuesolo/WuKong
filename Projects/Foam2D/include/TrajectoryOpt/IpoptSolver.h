@@ -27,7 +27,7 @@
 
 class IpoptSolver : public Ipopt::TNLP {
 public:
-    TrajectoryOptNLP &trajectoryOptNlp;
+    TrajectoryOptNLP *trajectoryOptNlp;
 
     int nx = 0;
     int ng = 0;
@@ -36,10 +36,10 @@ public:
     double *primal;
 
     /** default constructor */
-    IpoptSolver(TrajectoryOptNLP &_trajectoryOptNlp)
+    IpoptSolver(TrajectoryOptNLP *_trajectoryOptNlp)
             : trajectoryOptNlp(_trajectoryOptNlp) {
-        N = trajectoryOptNlp.N;
-        nc = trajectoryOptNlp.c0.rows();
+        N = trajectoryOptNlp->N;
+        nc = trajectoryOptNlp->c0.rows();
         nx = N * (nc + 2);
         primal = new double[nx];
         ng = N * nc;
@@ -116,7 +116,7 @@ public:
         assert(init_lambda == false);
 
         for (int i = 0; i < n; ++i)
-            x[i] = trajectoryOptNlp.x_guess[i];
+            x[i] = trajectoryOptNlp->x_guess[i];
 
         return true;
     }
@@ -127,7 +127,7 @@ public:
                         bool new_x,
                         Ipopt::Number &obj_value) {
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        obj_value = trajectoryOptNlp.eval_f(x_eigen);
+        obj_value = trajectoryOptNlp->eval_f(x_eigen);
 
 //        std::cout << "[ipopt] eval_f: " << obj_value << std::endl;
         return true;
@@ -141,7 +141,7 @@ public:
 //        std::cout << "[ipopt] eval_grad" << std::endl;
 
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        Eigen::VectorXd grad_f_eigen = trajectoryOptNlp.eval_grad_f(x_eigen);
+        Eigen::VectorXd grad_f_eigen = trajectoryOptNlp->eval_grad_f(x_eigen);
 
         tbb::parallel_for(0, n, [&](int i) {
             grad_f[i] = grad_f_eigen(i);
@@ -158,7 +158,7 @@ public:
 //        std::cout << "[ipopt] eval_g" << std::endl;
 
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        Eigen::VectorXd g_eigen = trajectoryOptNlp.eval_g(x_eigen);
+        Eigen::VectorXd g_eigen = trajectoryOptNlp->eval_g(x_eigen);
 
         tbb::parallel_for(0, m, [&](int i) {
             g[i] = g_eigen(i);
@@ -181,7 +181,7 @@ public:
 //        std::cout << "[ipopt] eval_jac_g" << std::endl;
         // Reminder: nnz_jac_g = (N * nc * nc) + ((2 * N - 3) * nc) + (N * 2);
 
-        int dims = trajectoryOptNlp.energy->tessellation->getNumVertexParams() + 2;
+        int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
         if (iRow != NULL) {
             assert(jCol != NULL);
             assert(values == NULL);
@@ -209,10 +209,10 @@ public:
                 }
 
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp.agent;
+                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent;
                 jCol[idx] = N * nc + 2 * k;
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp.agent + 1;
+                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent + 1;
                 jCol[idx] = N * nc + 2 * k + 1;
             });
         } else {
@@ -221,7 +221,7 @@ public:
 
             // Subsequent calls. Provide constraint Jacobian values.
             Eigen::Map<const VectorXd> x_eigen(x, n);
-            Eigen::SparseMatrix<double> jac_g_eigen = trajectoryOptNlp.eval_jac_g(x_eigen);
+            Eigen::SparseMatrix<double> jac_g_eigen = trajectoryOptNlp->eval_jac_g_sparsematrix(x_eigen);
 
             tbb::parallel_for(0, N, [&](int k) {
                 int idx, rr, cc;
@@ -248,17 +248,63 @@ public:
                 }
 
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                rr = k * nc + dims * trajectoryOptNlp.agent;
+                rr = k * nc + dims * trajectoryOptNlp->agent;
                 cc = N * nc + 2 * k;
                 values[idx] = jac_g_eigen.coeff(rr, cc);
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                rr = k * nc + dims * trajectoryOptNlp.agent + 1;
+                rr = k * nc + dims * trajectoryOptNlp->agent + 1;
                 cc = N * nc + 2 * k + 1;
                 values[idx] = jac_g_eigen.coeff(rr, cc);
             });
         }
 
         return true;
+
+//        assert(jac_g_eigen.size() == nele_jac);
+//        if (iRow != NULL) {
+//            assert(jCol != NULL);
+//            assert(values == NULL);
+//
+//            int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
+//            tbb::parallel_for(0, N, [&](int k) {
+//                int idx;
+//                for (int i = 0; i < nc; i++) {
+//                    for (int j = 0; j < nc; j++) {
+//                        idx = k * nc * nc + i * nc + j;
+//                        iRow[idx] = i + k * nc;
+//                        jCol[idx] = j + k * nc;
+//                    }
+//
+//                    if (k > 0) {
+//                        idx = N * nc * nc + (k - 1) * nc + i;
+//                        iRow[idx] = k * nc + i;
+//                        jCol[idx] = (k - 1) * nc + i;
+//                    }
+//                    if (k > 1) {
+//                        idx = N * nc * nc + (N - 1 + k - 2) * nc + i;
+//                        iRow[idx] = k * nc + i;
+//                        jCol[idx] = (k - 2) * nc + i;
+//                    }
+//                }
+//
+//                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
+//                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent;
+//                jCol[idx] = N * nc + 2 * k;
+//                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
+//                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent + 1;
+//                jCol[idx] = N * nc + 2 * k + 1;
+//            });
+//        } else {
+//            assert(jCol == NULL);
+//            assert(values != NULL);
+//
+//            Eigen::Map<const VectorXd> x_eigen(x, n);
+//            std::vector<Eigen::Triplet<double>> jac_g_eigen = trajectoryOptNlp->eval_jac_g(x_eigen);
+//
+//            for (int i = 0; i < jac_g_eigen.size(); i++) {
+//                values[i] = jac_g_eigen[i].value();
+//            }
+//        }
     }
 
 //    /** Method to return:
@@ -321,10 +367,44 @@ public:
                                    const Ipopt::IpoptData *ip_data,
                                    Ipopt::IpoptCalculatedQuantities *ip_cq) {
         for (int i = 0; i < n; i++) {
-            trajectoryOptNlp.x_sol[i] = x[i];
+            trajectoryOptNlp->x_sol[i] = x[i];
         }
     }
     //@}
+
+    virtual bool intermediate_callback(Ipopt::AlgorithmMode mode,
+                                       Ipopt::Index iter, Ipopt::Number obj_value,
+                                       Ipopt::Number inf_pr, Ipopt::Number inf_du,
+                                       Ipopt::Number mu, Ipopt::Number d_norm,
+                                       Ipopt::Number regularization_size,
+                                       Ipopt::Number alpha_du, Ipopt::Number alpha_pr,
+                                       Ipopt::Index ls_trials,
+                                       const Ipopt::IpoptData *ip_data,
+                                       Ipopt::IpoptCalculatedQuantities *ip_cq) {
+        Ipopt::TNLP::intermediate_callback(mode, iter, obj_value, inf_pr, inf_du, mu, d_norm, regularization_size,
+                                           alpha_du, alpha_pr, ls_trials, ip_data, ip_cq);
+
+        using namespace Ipopt;
+        Ipopt::TNLPAdapter *tnlp_adapter = NULL;
+        if (ip_cq != NULL) {
+            Ipopt::OrigIpoptNLP *orignlp;
+            orignlp = dynamic_cast<OrigIpoptNLP *>(GetRawPtr(ip_cq->GetIpoptNLP()));
+            if (orignlp != NULL)
+                tnlp_adapter = dynamic_cast<TNLPAdapter *>(GetRawPtr(orignlp->nlp()));
+            tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
+
+            if (tnlp_adapter != NULL) {
+                double *intermediate = new double[nx];
+                tnlp_adapter->ResortX(*ip_data->curr()->x(), intermediate);
+
+                for (int i = 0; i < nx; i++) {
+                    trajectoryOptNlp->x_sol[i] = intermediate[i];
+                }
+            }
+        }
+
+        return true;
+    }
 
 //    virtual bool intermediate_callback(Ipopt::AlgorithmMode mode,
 //                                       Ipopt::Index iter, Ipopt::Number obj_value,

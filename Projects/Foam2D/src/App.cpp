@@ -263,29 +263,26 @@ void Foam2DApp::generateScenario() {
 
 void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<double, -1, -1> points;
+    Eigen::Matrix<double, -1, -1> points_c;
     Eigen::Matrix<double, -1, -1> nodes;
     Eigen::Matrix<int, -1, -1> lines;
+    Eigen::Matrix<double, -1, -1> lines_c;
     Eigen::Matrix<double, -1, -1> V;
     Eigen::Matrix<int, -1, -1> F;
-    Eigen::Matrix<double, -1, -1> C;
+    Eigen::Matrix<double, -1, -1> Fc;
 
     if (show_dual) {
-        foam.getTriangulationViewerData(points, nodes, lines, V, F, C);
+        foam.getTriangulationViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
     } else {
-        foam.getTessellationViewerData(points, nodes, lines, V, F, C, selected_vertex);
+        foam.getTessellationViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
     }
+    if (trajOptMode && trajOptOptimized) {
+        foam.addTrajectoryOptViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
+    }
+
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
-    viewer.data().set_colors(C);
-
-    Eigen::Matrix<double, -1, -1> points_c;
-    points_c.resize(points.rows(), 3);
-    points_c.setZero();
-//    points_c(0, 0) = 1; // Make the first point red.
-
-    Eigen::Matrix<double, -1, -1> lines_c;
-    lines_c.resize(lines.rows(), 3);
-    lines_c.setZero();
+    viewer.data().set_colors(Fc);
 
     viewer.data().set_points(points, points_c);
     viewer.data().set_edges(nodes, lines, lines_c);

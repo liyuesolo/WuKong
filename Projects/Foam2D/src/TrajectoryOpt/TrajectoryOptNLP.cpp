@@ -63,7 +63,7 @@ VectorXd TrajectoryOptNLP::eval_g(const Eigen::VectorXd &x) const {
     return G;
 }
 
-Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g(const Eigen::VectorXd &x) const {
+Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g_sparsematrix(const Eigen::VectorXd &x) const {
     int dims = energy->tessellation->getNumVertexParams() + 2;
     int n_free = energy->n_free;
 
@@ -76,7 +76,7 @@ Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g(const Eigen::VectorXd &
     c_2prev.segment(NC, (N - 1) * NC) = c_prev.segment(0, (N - 1) * NC);
 
     Eigen::SparseMatrix<double> jac(NX_C, NX);
-    
+
     // dG{k}/dc{k} Energy hessians
     for (int k = 0; k < N; k++) {
         Eigen::SparseMatrix<double> d2Edc2 = energy->get_d2Odc2(c_curr.segment(IDX_C(k, 0), NC));
@@ -100,6 +100,53 @@ Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g(const Eigen::VectorXd &
     for (int k = 0; k < N; k++) {
         jac.coeffRef(IDX_C(k, agent), IDX_U(k)) += -1;
         jac.coeffRef(IDX_C(k, agent) + 1, IDX_U(k) + 1) += -1;
+    }
+
+    return jac;
+}
+
+std::vector<Eigen::Triplet<double>> TrajectoryOptNLP::eval_jac_g_triplets(const Eigen::VectorXd &x) const {
+    int dims = energy->tessellation->getNumVertexParams() + 2;
+    int n_free = energy->n_free;
+
+    std::vector<Eigen::Triplet<double>> jac((N * NC * NC) + ((2 * N - 3) * NC) + (N * 2));
+    std::fill(jac.begin(), jac.end(), Eigen::Triplet<double>(0, 0, 0));
+
+    Eigen::VectorXd Mhh = dynamics->M / (dynamics->h * dynamics->h);
+    for (int k = 0; k < N; k++) {
+        Eigen::SparseMatrix<double> d2Edc2 = energy->get_d2Odc2(x.segment(IDX_C(k, 0), NC));
+
+        int idx, rr, cc;
+        for (int i = 0; i < NC; i++) {
+            for (int j = 0; j < NC; j++) {
+                idx = k * NC * NC + i * NC + j;
+                rr = i + k * NC;
+                cc = j + k * NC;
+                jac[idx] = Eigen::Triplet<double>(rr, cc, d2Edc2.coeff(i, j) + ((i == j) ? Mhh(i) : 0));
+            }
+
+            if (k > 0) {
+                idx = N * NC * NC + (k - 1) * NC + i;
+                rr = k * NC + i;
+                cc = (k - 1) * NC + i;
+                jac[idx] = Eigen::Triplet<double>(rr, cc, -2 * Mhh(i));
+            }
+            if (k > 1) {
+                idx = N * NC * NC + (N - 1 + k - 2) * NC + i;
+                rr = k * NC + i;
+                cc = (k - 2) * NC + i;
+                jac[idx] = Eigen::Triplet<double>(rr, cc, Mhh(i));
+            }
+        }
+
+        idx = N * NC * NC + (2 * N - 3) * NC + 2 * k;
+        rr = k * NC + dims * agent;
+        cc = N * NC + 2 * k;
+        jac[idx] = Eigen::Triplet<double>(rr, cc, -1);
+        idx = N * NC * NC + (2 * N - 3) * NC + 2 * k + 1;
+        rr = k * NC + dims * agent + 1;
+        cc = N * NC + 2 * k + 1;
+        jac[idx] = Eigen::Triplet<double>(rr, cc, -1);
     }
 
     return jac;

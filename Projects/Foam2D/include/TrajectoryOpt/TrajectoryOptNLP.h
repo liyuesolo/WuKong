@@ -29,5 +29,7 @@ public:
 
     VectorXd eval_g(const VectorXd &x) const;
 
-    Eigen::SparseMatrix<double> eval_jac_g(const VectorXd &x) const;
+    Eigen::SparseMatrix<double> eval_jac_g_sparsematrix(const VectorXd &x) const;
+
+    std::vector<Eigen::Triplet<double>> eval_jac_g_triplets(const VectorXd &x) const;
 };
