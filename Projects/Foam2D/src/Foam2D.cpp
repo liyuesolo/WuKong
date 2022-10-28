@@ -165,6 +165,8 @@ bool Foam2D::trajectoryOptOptimizeIPOPT(int N) {
 
 //    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
     app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    app->Options()->SetStringValue("linear_solver", "ma57");
+//    app->Options()->SetStringValue("linear_solver", "pardisomkl");
     // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
 //    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
     //        app->Options()->SetNumericValue("mu_max", 0.0001);
