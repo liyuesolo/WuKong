@@ -9,6 +9,10 @@
 using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 using VectorXi = Vector<int, Eigen::Dynamic>;
 
+struct CasadiFunctions;
+
+CasadiFunctions getCasadiFunctions(Tessellation *tessellation, int num_neighbors);
+
 void add_O_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, double &out);
 
 void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, const VectorXi &map,

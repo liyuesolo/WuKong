@@ -2,7 +2,7 @@ import casadi as ca
 import os
 
 
-def obj_base(x1, y1, x2, y2, xn, yn, p):
+def obj_base(N, x1, y1, x2, y2, xn, yn, p):
     area_weight = p[0]
     length_weight = p[1]
     centroid_weight = p[2]
@@ -20,7 +20,7 @@ def obj_base(x1, y1, x2, y2, xn, yn, p):
     x3 = ca.horzcat(xn[1:], xn[0])
     y3 = ca.horzcat(yn[1:], yn[0])
 
-    idx = ca.transpose(ca.linspace(0, 18, 19))
+    idx = ca.transpose(ca.linspace(0, N - 2, N - 1))
 
     Obj = ca.MX.zeros(1, 1)
 
@@ -73,17 +73,17 @@ def obj_base(x1, y1, x2, y2, xn, yn, p):
     return Obj
 
 
-def gen_code(ident, c, p, Obj):
+def gen_code(ident, c, p, Obj, opt=3):
     opts = dict(with_header=True)
 
     ca_O = ca.Function('ca_O_{}'.format(ident), [c, p], [Obj])
     ca_O.generate('ca_O_{}'.format(ident), opts)
     print('compiling generated code for {} objective function...'.format(ident))
-    cmd = 'gcc -fPIC -shared -O0 ca_O_{}.c -o libca_O_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_O_{}.c -o libca_O_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))
-    cmd = 'gcc -fPIC -shared -O0 ca_O_{}.c -o ca_O_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_O_{}.c -o ca_O_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))
@@ -91,11 +91,11 @@ def gen_code(ident, c, p, Obj):
     ca_dOdc = ca.Function('ca_dOdc_{}'.format(ident), [c, p], [ca.jacobian(Obj, c)])
     ca_dOdc.generate('ca_dOdc_{}'.format(ident), opts)
     print('compiling generated code for gradient of {} objective function...'.format(ident))
-    cmd = 'gcc -fPIC -shared -O0 ca_dOdc_{}.c -o libca_dOdc_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_dOdc_{}.c -o libca_dOdc_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))
-    cmd = 'gcc -fPIC -shared -O0 ca_dOdc_{}.c -o ca_dOdc_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_dOdc_{}.c -o ca_dOdc_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))
@@ -103,11 +103,11 @@ def gen_code(ident, c, p, Obj):
     ca_d2Odc2 = ca.Function('ca_d2Odc2_{}'.format(ident), [c, p], [ca.hessian(Obj, c)[0]])
     ca_d2Odc2.generate('ca_d2Odc2_{}'.format(ident), opts)
     print('compiling generated code for hessian of {} objective function...'.format(ident))
-    cmd = 'gcc -fPIC -shared -O0 ca_d2Odc2_{}.c -o libca_d2Odc2_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_d2Odc2_{}.c -o libca_d2Odc2_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))
-    cmd = 'gcc -fPIC -shared -O0 ca_d2Odc2_{}.c -o ca_d2Odc2_{}.so'.format(ident, ident)
+    cmd = 'gcc -fPIC -shared -O{} ca_d2Odc2_{}.c -o ca_d2Odc2_{}.so'.format(opt, ident, ident)
     status = os.system(cmd)
     if status != 0:
         raise Exception('Command {} failed'.format(cmd))

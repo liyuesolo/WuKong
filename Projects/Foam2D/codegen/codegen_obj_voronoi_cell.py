@@ -3,9 +3,9 @@ import os
 from codegen_obj_base import obj_base, gen_code
 
 
-def codegen_obj_voronoi_cell():
+def codegen_obj_voronoi_cell(N, opt=3):
     # Problem dimensions
-    N = 20  # max number of neighbor sites + 2 (?)
+    # N = 20  # max number of neighbor sites + 2 (?)
 
     # Input: Objective function parameters
     p = ca.MX.sym('p', 1, 8)
@@ -28,12 +28,12 @@ def codegen_obj_voronoi_cell():
     xn = 0.5 * (x1 + x3) - m * (y3 - y1)
     yn = 0.5 * (y1 + y3) + m * (x3 - x1)
 
-    Obj = obj_base(x1, y1, x2, y2, xn, yn, p)
+    Obj = obj_base(N, x1, y1, x2, y2, xn, yn, p)
 
     # Generate and compile C code
-    ident = 'voronoi_cell'
-    gen_code(ident, c, p, Obj)
+    ident = 'voronoi_cell_' + str(N)
+    gen_code(ident, c, p, Obj, opt)
 
 
 if __name__ == "__main__":
-    codegen_obj_voronoi_cell()
+    codegen_obj_voronoi_cell(20)

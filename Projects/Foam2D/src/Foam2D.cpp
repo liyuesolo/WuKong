@@ -117,6 +117,18 @@ void Foam2D::trajectoryOptSetInit() {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
     nlp.c0 = energyObjective.tessellation->combineVerticesParams(vertices, params).segment(0, n_free * dims);
     nlp.v0 = VectorXd::Zero(n_free * dims);
+
+//    std::cout << "c_fixed" << std::endl;
+//    for (int i = 0; i < nlp.energy->c_fixed.rows(); i++) {
+//        std::cout << nlp.energy->c_fixed(i) << ", ";
+//    }
+//    std::cout << std::endl;
+//
+//    std::cout << "c0" << std::endl;
+//    for (int i = 0; i < nlp.c0.rows(); i++) {
+//        std::cout << nlp.c0(i) << ", ";
+//    }
+//    std::cout << std::endl;
 }
 
 void Foam2D::trajectoryOptGenerateExampleSol(int N) {
@@ -221,6 +233,14 @@ void Foam2D::trajectoryOptGetFrame(int frame) {
     energyObjective.tessellation->separateVerticesParams(c_frame, verts_free, params_free);
     vertices.segment(0, n_free * 2) = verts_free;
     params.segment(0, n_free * (dims - 2)) = params_free;
+
+//    if (rand() > RAND_MAX * 0.98) {
+//        std::cout << "x_sol" << std::endl;
+//        for (int i = 0; i < nlp.x_sol.rows(); i++) {
+//            std::cout << nlp.x_sol(i) << ", ";
+//        }
+//        std::cout << std::endl;
+//    }
 }
 
 static TV3 getColor(double area, double target) {
