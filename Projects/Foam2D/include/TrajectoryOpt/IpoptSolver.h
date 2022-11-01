@@ -391,9 +391,10 @@ public:
             orignlp = dynamic_cast<OrigIpoptNLP *>(GetRawPtr(ip_cq->GetIpoptNLP()));
             if (orignlp != NULL)
                 tnlp_adapter = dynamic_cast<TNLPAdapter *>(GetRawPtr(orignlp->nlp()));
-            tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
 
             if (tnlp_adapter != NULL) {
+                tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
+
                 double *intermediate = new double[nx];
                 tnlp_adapter->ResortX(*ip_data->curr()->x(), intermediate);
 
