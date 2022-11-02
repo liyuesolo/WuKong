@@ -15,7 +15,7 @@ double TrajectoryOptNLP::eval_f(const Eigen::VectorXd &x) const {
 
     double target_f = (final_pos - target_pos).squaredNorm();
     double velocity_f = (final_pos - final_pos2).squaredNorm() / (dynamics->h * dynamics->h);
-    double input_f = dynamics->h * x.segment(IDX_U(0), NX_U).squaredNorm();
+    double input_f = x.segment(IDX_U(0), NX_U).squaredNorm();
     return target_weight * target_f + velocity_weight * velocity_f + input_weight * input_f;
 }
 
@@ -31,7 +31,7 @@ VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
             target_weight * (final_pos - target_pos) +
             velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
     grad_f.segment<2>(IDX_C(N - 2, agent)) = -velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
-    grad_f.segment(IDX_U(0), NX_U) = input_weight * dynamics->h * x.segment(IDX_U(0), NX_U);
+    grad_f.segment(IDX_U(0), NX_U) = input_weight * x.segment(IDX_U(0), NX_U);
 
     return grad_f;
 }
