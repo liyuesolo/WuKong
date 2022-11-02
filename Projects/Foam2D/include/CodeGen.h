@@ -20,6 +20,6 @@ void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT
 
 void
 add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, const VectorXi &map,
-                Eigen::SparseMatrix<double> &out);
+                MatrixXT &out);
 
 #endif

@@ -179,7 +179,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.callback_mouse_down =
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
-                if (drag_idx == -1) {
+                if (drag_idx == -1 && !trajOptOptimized) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
                     selected_vertex = drag_idx;
@@ -199,7 +199,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.callback_mouse_move =
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
-                if (drag_idx != -1) {
+                if (drag_idx != -1 && !trajOptOptimized) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     if (drag_mode == 0) {
                         foam.energyObjective.drag_target_pos = p;

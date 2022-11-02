@@ -220,7 +220,7 @@ void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT
 
 void
 add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, const VectorXi &map,
-                Eigen::SparseMatrix<double> &out) {
+                MatrixXT &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 2, p(4));
 
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
@@ -248,14 +248,14 @@ add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p
     int dims = 2 + tessellation->getNumVertexParams();
     casadi_int rr, cc, el;
     int nzidx = 0;
-    for (cc = 0; cc < ncol; ++cc) {                    /* loop over columns */
+    for (cc = 0; cc < map.rows() * dims; ++cc) {                    /* loop over columns */
+        int ic = map(cc / dims) * dims + (cc % dims);
         for (el = colind[cc]; el < colind[cc + 1]; ++el) { /* loop over the nonzeros entries of the column */
             rr = row[el];
-            if (rr < map.rows() * dims && cc < map.rows() * dims) {
+            if (rr < map.rows() * dims) {
                 int ir = map(rr / dims) * dims + (rr % dims);
-                int ic = map(cc / dims) * dims + (cc % dims);
                 if (ir < out.rows() && ic < out.cols()) {
-                    out.coeffRef(ir, ic) += d2Odc2[nzidx];
+                    out(ir, ic) += d2Odc2[nzidx];
                 }
             }
             nzidx++;

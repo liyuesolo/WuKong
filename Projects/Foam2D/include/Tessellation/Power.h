@@ -8,6 +8,8 @@ public:
 
     VectorXi powerDualNaive(const VectorXT &vertices3d);
 
+    VectorXi powerDualCGAL(const VectorXT &vertices3d);
+
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 
     virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual);

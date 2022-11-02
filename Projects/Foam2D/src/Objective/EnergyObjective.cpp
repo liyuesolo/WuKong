@@ -110,7 +110,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
     std::vector<std::vector<int>> cells = tessellation->getNeighbors(vertices, tri, n_free);
 
     int dims = 2 + tessellation->getNumVertexParams();
-    Eigen::SparseMatrix<double> d2Odc2(n_free * dims, n_free * dims);
+    MatrixXT d2Odc2 = MatrixXT::Zero(n_free * dims, n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
         if (cells[i].size() > 18 || cells[i].size() < 3) {
             continue;
@@ -123,7 +123,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
         add_d2Odc2_cell(tessellation, c_cell, p_cell, i_cell, d2Odc2);
     }
 
-    return d2Odc2;
+    return d2Odc2.sparseView();
 }
 
 double EnergyObjective::getAreaTarget(int cellIndex) const {
