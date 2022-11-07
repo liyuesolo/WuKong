@@ -182,8 +182,9 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             std::string fname = igl::file_dialog_open();
             if (fname.length() != 0)
             {
-                tiling.initializeSimulationDataFromFiles(fname, PBC_X);
-                updateScreen(viewer);
+                bool valid_structure = tiling.initializeSimulationDataFromFiles(fname, PBC_XY);
+                if (valid_structure)
+                    updateScreen(viewer);
             }
         }
         if (ImGui::Button("LoadMesh", ImVec2(-1,0)))

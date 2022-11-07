@@ -420,7 +420,7 @@ public:
     void computeMarcoBoundaryIndices();
     void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X, IV4& bd_indices);
     void addPBCPairInX();
-    void addPBCPairsXY();
+    bool addPBCPairsXY();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);
     void reorderPBCPairs();
     void addPBCEnergy(T& energy);

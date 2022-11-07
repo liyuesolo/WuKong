@@ -118,11 +118,15 @@ void FEMSolver::computeIPCRestData()
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
     T bb_diag = (max_corner - min_corner).norm();
+    
     VectorXT dedx(num_nodes * 2), dbdx(num_nodes * 2);
     dedx.setZero(); dbdx.setZero();
     barrier_weight = 1.0;
     addIPCForceEntries(dbdx); dbdx *= -1.0;
+    // std::cout << dbdx.norm() << std::endl;
     computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
+    // std::cout << dedx.norm() << std::endl;
+    
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
     if (verbose)
         std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;

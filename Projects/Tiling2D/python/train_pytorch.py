@@ -215,7 +215,7 @@ def train(n_tiling_params, model_name,
     
     model = model.to(device)
 
-    n_epoch = 1
+    n_epoch = 100
     batch_size = 10000
 
     opt = torch.optim.Adam(
@@ -257,6 +257,7 @@ def train(n_tiling_params, model_name,
                 validation_loss_grad, validation_loss_e))
 
     torch.cuda.empty_cache()
+    model = model.double()
     model_scripted = torch.jit.script(model) # Export to TorchScript
     model_scripted.save('model_scripted.pt') # Save
     # torch.save(model.module.state_dict(), "test")

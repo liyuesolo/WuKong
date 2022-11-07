@@ -140,6 +140,12 @@ public:
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base);
 
+    void fetchUnitCellFromOneFamily(int IH, int n_unit,
+        std::vector<std::vector<TV2>>& eigen_polygons,
+        std::vector<TV2>& eigen_base, 
+        const std::vector<T>& params,
+        const Vector<T, 4>& eij, const std::string& filename);
+        
 private:
     void generate3DSandwichMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
@@ -154,11 +160,6 @@ private:
         std::vector<TV2>& eigen_base, const Vector<T, 4>& eij,
         bool save_to_file, std::string filename);
 
-    void fetchUnitCellFromOneFamily(int IH, int n_unit,
-        std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base, 
-        const std::vector<T>& params,
-        const Vector<T, 4>& eij, const std::string& filename);
     
     void sampleSandwichFromOneFamilyFromDiffParamsDilation(int IH, 
         std::vector<std::vector<TV2>>& eigen_polygons,

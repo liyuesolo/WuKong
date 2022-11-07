@@ -844,7 +844,7 @@ void Tiling2D::fetchSandwichFromOneFamilyFromParamsDilation(int IH,
     c.Execute(final_shape, distance*mult);
 
 
-    saveClip(final_shape, periodic, mult, "tiling_unit_clip_in_x.obj", false);
+    // saveClip(final_shape, periodic, mult, "tiling_unit_clip_in_x.obj", false);
     
     shapeToPolygon(final_shape, eigen_polygons, mult);
     periodicToBase(periodic, eigen_base);
@@ -856,8 +856,10 @@ void Tiling2D::generateOnePerodicUnit()
     
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
-    // int tiling_idx = 19;
-    int tiling_idx = 46;
+    int tiling_idx = 19;
+    // int tiling_idx = 46;
+    // int tiling_idx = 60;
+    // int tiling_idx = 26;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -865,17 +867,17 @@ void Tiling2D::generateOnePerodicUnit()
     std::vector<T> params(num_params);
     for (int j = 0; j < num_params;j ++)
         params[j] = new_params[j];
-    std::vector<T> diff_params = params;
-    for (int k = 0; k < num_params; k++)
-    {
-        T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
-        diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
-    }
-    params[0] = 0.175; params[1] = 0.582;
+    // std::vector<T> diff_params = params;
+    // for (int k = 0; k < num_params; k++)
+    // {
+    //     T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
+    //     diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
+    // }
+    params[0] = 0.150485; params[1] = 0.54993;
     // params[0] = 0.17; params[1] = 0.35;
-    
+     
     Vector<T, 4> cubic_weights;
-    cubic_weights << 0.25, 0, 0.75, 0;
+    cubic_weights << 0.25, 0., 0.75, 0.;
     fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, params, 
         cubic_weights, data_folder + "a_structure.txt");
     
@@ -1726,7 +1728,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::initialize();
 
     gmsh::model::add("tiling");
-    gmsh::logger::start();
+    // gmsh::logger::start();
+    // gmsh::logger::stop();
 
     gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
     gmsh::option::setNumber("Geometry.Tolerance", eps);
@@ -1784,7 +1787,7 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
     gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.0);
     gmsh::model::mesh::field::setNumber(2, "DistMin", 0.005);
-	// gmsh::model::mesh::field::setNumber(2, "DistMax", 10.0);
+
     gmsh::model::mesh::field::setAsBackgroundMesh(2);
     
     acc = 1;
@@ -1889,8 +1892,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     
     gmsh::write(prefix + ".vtk");
     std::ofstream translation(prefix + "_translation.txt");
-    translation << t1.transpose() << std::endl;
-    translation << t2.transpose() << std::endl;
+    translation << std::setprecision(14) << t1.transpose() << std::endl;
+    translation << std::setprecision(14) << t2.transpose() << std::endl;
     translation.close();
     gmsh::finalize();
     

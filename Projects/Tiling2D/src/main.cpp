@@ -11,9 +11,11 @@
 
 #include "../include/app.h"
 #include "../include/SensitivityAnalysis.h"
-#include "../include/Objective.h"
+#include "../include/TilingObjectives.h"
 #include "../include/HexFEMSolver.h"
 #include <boost/filesystem.hpp>
+#include "../include/TorchModel.h"
+
 
 inline bool fileExist (const std::string& name) {
     std::ifstream f(name.c_str());
@@ -27,7 +29,7 @@ using VectorXT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 int main(int argc, char** argv)
 {
-    tbb::task_scheduler_init init(1);
+    
     FEMSolver fem_solver;
     Tiling2D tiling(fem_solver);
     
@@ -123,16 +125,59 @@ int main(int argc, char** argv)
                 igl::png::writePNG(R,G,B,A, folder + std::to_string(cnt++)+".png");
             }
         };
+
+
+        auto testNeuralConstitutiveModel = [&]()
+        {
+            TorchModel ncm;
+            ncm.load("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/model_scripted.pt");
+            ncm.test();
+        };
+
+        auto inverseDesign = [&]()
+        {
+            UniaxialStressObjective ti_obj(tiling);
+            SensitivityAnalysis sa(fem_solver, ti_obj);
+            VectorXT strain_samples;
+            strain_samples.resize(3);
+            // strain_samples << 1.0-0.025, 1.0+0.025, 1.0+0.085;
+            strain_samples << 1.0 - 0.025, 1.0 + 0.025, 1.0 + 0.085;
+            // TV strain_range(-0.05, 0.1);
+            // int n_sp_strain = 10;
+            // strain_samples.resize(n_sp_strain);
+            // for (int i = 0; i < n_sp_strain; i++)
+            // {
+            //     strain_samples[i] = 1.0 + strain_range[0] + T(i) * (strain_range[1] - strain_range[0]) / T(n_sp_strain);
+            //     // std::cout << strain_samples[i] - 1.0 << ", ";
+            // }
+            // std::exit(0);
+            ti_obj.strain_samples = strain_samples;
+            // VectorXT stress_samples;
+            // ti_obj.computeStressForDifferentStrain(TV(0.115, 0.75), stress_samples);
+            // ti_obj.computeStressForDifferentStrain(TV(0.104123,  0.53023), stress_samples);
+            // for (int i = 0; i < n_sp_strain; i++)
+            //     std::cout << stress_samples[i] << ", ";
+            
+            // std::cout << ti_obj.generateSingleTarget(ti) << std::endl;
+            // sa.optimizeMMA();
+            // sa.optimizeLBFGSB();
+            //-0.00700946   0.0239969   0.0720543
+            sa.sampleGradientDirection();
+
+        };
+        inverseDesign();
         // renderScene();
         // run3DSim();
         // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
-        tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.05);
-        // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/Server/", 50, TV(0.8, 1.2), 0.24);
+        // tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.05);
+        // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/Server/", 50, TV(0.95, 1.1), 0.);
         // tiling.generatseGreenStrainSecondPKPairs("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
         // runSimApp();
+
+        
     }
     return 0;
 }

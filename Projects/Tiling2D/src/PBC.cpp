@@ -2,7 +2,7 @@
 #include "../include/autodiff/PBCEnergy.h"
 #include "../include/autodiff/FEMEnergy.h"
 
-void FEMSolver::addPBCPairsXY()
+bool FEMSolver::addPBCPairsXY()
 {
     std::cout << pbc_translation_file << std::endl;
     std::ifstream in(pbc_translation_file);
@@ -22,28 +22,32 @@ void FEMSolver::addPBCPairsXY()
     alpha = angleToXaxis(t2);
     rotate(alpha);
     getPBCPairsAxisDirection(dir1_side0, dir1_side1, 1);
-    rotate(-alpha);
+    // rotate(-alpha);
 
+    bool same_num_nodes_dir0 = dir0_side0.size() == dir0_side1.size();
+    bool same_num_nodes_dir1 = dir1_side0.size() == dir1_side1.size();
+    std::cout << same_num_nodes_dir0 << " " << same_num_nodes_dir1 << std::endl;
+    
     pbc_pairs = {std::vector<IV>(), std::vector<IV>()};
     // std::cout <<  dir0_side0.size() << " " << dir0_side1.size()
     //     << " " << dir1_side0.size() << " " << dir1_side1.size() << std::endl;
     
-    for (int i = 0; i < dir0_side0.size(); i++)
+    for (int i = 0; i < std::min(dir0_side0.size(), dir0_side1.size()); i++)
     {
         pbc_pairs[0].push_back(IV(dir0_side0[i], dir0_side1[i]));
     }
-    for (int i = 0; i < dir1_side0.size(); i++)
+    for (int i = 0; i < std::min(dir1_side0.size(), dir1_side1.size()); i++)
     {
         pbc_pairs[1].push_back(IV(dir1_side0[i], dir1_side1[i]));
     }
-
+    return same_num_nodes_dir0 && same_num_nodes_dir1;
 }
 
 void FEMSolver::getPBCPairsAxisDirection(std::vector<int>& side0, 
     std::vector<int>& side1, int direction)
 {
-    T thres_hold = 1e-3;
-    bool ortho = !direction;
+    T thres_hold = 1e-4;
+    int ortho = !direction;
     // std::cout << "dir " << direction << " " << ortho << std::endl;
     side0.clear(); side1.clear();
     TV min_corner, max_corner;

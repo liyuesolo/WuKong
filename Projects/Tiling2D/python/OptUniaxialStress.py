@@ -204,9 +204,10 @@ def objUniaxialStress(n_tiling_params, ti, uniaxial_strain, theta, model):
     ti = tf.expand_dims(ti, 0)
     
     with tf.GradientTape() as tape:
-        tape.watch(ti)
+        
         ti_batch = tf.tile(ti, (batch_dim, 1))
         inputs = tf.concat((ti_batch, uniaxial_strain), axis=1)
+        tape.watch(inputs)
         psi = model(inputs, training=False)
         dedlambda = tape.gradient(psi, inputs)
         stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
@@ -802,10 +803,11 @@ def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params,
         H = hessPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
             tf.convert_to_tensor(tiling_params), model)
         H = H.numpy()
-        # alpha = 1e-6
-        # while not np.all(np.linalg.eigvals(H) > 0):
-        #     H += np.diag(np.full(len(x),alpha))
-        #     alpha *= 10.0
+        
+        # ev_H = np.linalg.eigvals(H)
+        # min_ev = np.min(ev_H)
+        # if min_ev < 0.0:
+        #     H += np.diag(np.full(len(x),min_ev + 1e-6))
         return H
 
     def objAndEnergy(x):
@@ -818,7 +820,8 @@ def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params,
         return obj, grad
 
     if verbose:
-        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True,
+         hess=hessian,
             constraints=[uniaxial_strain_constraint],
             options={'disp' : True})
     else:
@@ -851,12 +854,10 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
         model_input = tf.convert_to_tensor([np.hstack((tiling_params, x))])
         C = computeStiffnessTensor(n_tiling_params, model_input, model)
         H = C.numpy()
-        alpha = 1e-6
-        while not np.all(np.linalg.eigvals(H) > 0):
-            H += np.diag(np.full(3,alpha))
-            alpha *= 10.0
-        # print(H[0])
-        # exit(0)
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-6))
         return H
 
     def objAndEnergy(x):
@@ -897,6 +898,52 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
     
     return result.x, dqdp
 
+def optimizeUniaxialStrainSingleDirection(model, n_tiling_params, 
+    theta, strain, tiling_params, verbose = True):
+    
+    strain_init = np.array([0.105, 0.2, 0.01])
+
+    d = np.array([np.cos(theta), np.sin(theta)])
+    strain_tensor_init = np.outer(d, d) * strain
+    strain_init = np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]])
+    n = np.array([-np.sin(theta), np.cos(theta)])
+
+    
+
+    def constraint(x):
+        strain_tensor = np.reshape([x[0], 0.5 * x[-1], 0.5 * x[-1], x[1]], (2, 2))
+        dTEd = np.dot(d, np.dot(strain_tensor, np.transpose(d)))
+        c = dTEd - strain
+        return c
+
+    def hessian(x):
+        model_input = tf.convert_to_tensor([np.hstack((tiling_params, x))])
+        C = computeStiffnessTensor(n_tiling_params, model_input, model)
+        H = C.numpy()
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-6))
+        return H
+
+    def objAndEnergy(x):
+        model_input = tf.convert_to_tensor([np.hstack((np.hstack((tiling_params, x))))])
+        _, stress, _, psi = testStep(n_tiling_params, model_input, model)
+        
+        obj = np.squeeze(psi.numpy()) 
+        grad = stress.numpy().flatten()
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+    if verbose:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : True})
+    else:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : False})
+    
+    return result.x
 
 
 def toPolarData(half):
@@ -1029,7 +1076,7 @@ def optimizeUniaxialStressSA():
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH21" + '.tf')
 
-    ti0 = np.array([0.15, 0.6])
+    ti0 = np.array([0.15, 0.55])
     # ti0 = np.array([0.115, 0.75])
     theta = 0.0
     strain_range = [-0.05, 0.1]
@@ -1048,8 +1095,8 @@ def optimizeUniaxialStressSA():
     # print(obj_init)
     # exit(0)
     # stress_targets = [obj[2], obj[5], obj[-1]]
-    # stress_targets = [-0.00683177, 0.02369076, 0.06924471] #ti0 = np.array([0.115, 0.75])
-    stress_targets = np.array([-0.006, 0.03, 0.06]) #ti0 = np.array([0.115, 0.75])
+    stress_targets = [-0.00683177, 0.02369076, 0.06924471] #ti0 = np.array([0.115, 0.75])
+    # stress_targets = np.array([-0.006, 0.03, 0.06]) #ti0 = np.array([0.115, 0.75])
     # stress_targets = [-0.03666779, 0.03493858, 4.71111735]
     
 
@@ -1491,6 +1538,75 @@ def optimizeUniaxialStressConstraints():
     #     dTEd = np.dot(d, np.dot(strain_tensor, np.transpose(d)))
     #     print(x, dTEd)
 
+def plotEnergyAlongDirection():
+    n_tiling_params = 2
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
+    # model = loadSingleFamilyModel(n_tiling_params)
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
+    model.load_weights(save_path + "IH21" + '.tf')
+    cauchy = [-0.025-0.5*(-0.025 * -0.025), 0.025+ 0.5 * 0.025*0.025, 0.085 + 0.5 * 0.085*0.085]
+    # cauchy = [-0.025, 0.025, 0.085]
+    strain_samples = []
+    for strain in cauchy:
+        if (strain < 0):
+            strain_samples.append(strain - 0.5 * strain* strain)
+        else:
+            strain_samples.append(strain + 0.5 * strain* strain)
+    
+    # strain_samples = [-0.025, 0.025, 0.085]
+    theta = 0.0
+    ti = np.array([0.15, 0.55])
+    # uniaxial_strain_batch = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+    #                             theta, strain_samples, 
+    #                             ti, model)
+    # ti_TF = tf.convert_to_tensor(ti)
+    # uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain_batch)
+    
+    # stress_d = objUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+    # print(stress_d)
+    # exit(0)
+    # test_dir = np.array([0.801549, 0.597929])
+    test_dir = np.array([0.130998, -0.0189072])
+    # test_dir = np.array([0.195, 0.795]) - np.array([0.105, 0.505])
+    # test_dir /= np.linalg.norm(test_dir)
+    step = 100
+    step_size = 1e-4
+    steps = np.arange(-0.5 * float(step) * step_size, 0.5 * float(step) * step_size, step_size)
+    
+    theta = 0.0
+    stress_targets = [-0.0062526,  0.0239273,  0.0717616]
+    # stress_targets = [-0.00581623,  0.02364756,  0.06924607]
+    obj = []
+    x_axis = []
+    for xi in steps:
+        ti_step = ti + xi * test_dir
+        x_axis.append(ti_step[0])
+        uniaxial_strain_batch = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+                                theta, strain_samples, 
+                                ti_step, model)
+        # uniaxial_strain_batch = []
+        # for strain in strain_samples:
+        #     uni_strain = optimizeUniaxialStrainSingleDirection(model, 
+        #                 n_tiling_params, theta, strain, ti_step, True)
+        #     uniaxial_strain_batch.append(uni_strain)
+        ti_TF = tf.convert_to_tensor(ti_step)
+        uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain_batch)
+        # print("tiling params", ti_TF)
+        # print("stress", uniaxial_strain_TF)
+        stress_d = objUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+        error = (stress_d.numpy().flatten() - stress_targets)
+        # print(error)
+        obj.append(0.5 * np.dot(error, error))
+    # print(obj)
+    # print(steps.tolist())
+    plt.plot(x_axis, obj, linewidth=3.0, label="energy_NN")
+    plt.legend(loc="upper left")
+    plt.savefig("energy_NN.png", dpi=300)
+    
+
+
 if __name__ == "__main__":
     # optimizeUniaxialStressConstraints()
-    optimizeUniaxialStressSA()
+    # optimizeUniaxialStressSA()
+    plotEnergyAlongDirection()

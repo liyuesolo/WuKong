@@ -687,7 +687,7 @@ def stiffnessOptimizationSA():
         return obj, grad
 
     result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds, tol=1e-7)
-    print(result.x)
+    
 
     uniaxial_strain_opt = []
     for theta in thetas:
@@ -709,9 +709,11 @@ def stiffnessOptimizationSA():
     stiffness_opt = np.append(stiffness_opt, stiffness_opt[0])
     plt.polar(thetas, stiffness, label = "stiffness initial", linewidth=3.0)
     plt.polar(thetas, stiffness_opt, label = "stiffness optimized", linewidth=3.0)
+    plt.scatter(sample_points_theta, stiffness_targets, s=4.0)
     plt.legend(loc='upper left')
     plt.savefig("stiffness_optimization.png", dpi=300)
     plt.close()
+    print(result.x)
 
 if __name__ == "__main__":
     # computeStiffness()

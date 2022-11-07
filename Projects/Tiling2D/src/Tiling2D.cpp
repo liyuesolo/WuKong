@@ -97,7 +97,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     solver.undeformed *= 50; // use milimeters
     solver.thickness = 50.0;
     solver.computeBoundingBox(min_corner, max_corner);
-    std::cout << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
     // std::getchar();
     solver.E = 2.6 * 1e1;
 
@@ -120,19 +120,21 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             solver.addPBCPairInX();
         else if (pbc_type == PBC_XY)
         {
-            solver.addPBCPairsXY();
+            bool valid_structure = solver.addPBCPairsXY();
+            if (!valid_structure)
+                return false;
             solver.add_pbc_strain = true;
             solver.strain_theta = 0;
-            solver.uniaxial_strain = 1.0 + 0.0954451;
+            solver.uniaxial_strain = 1.0+0.085 + 0.5 * 0.085*0.085;
             solver.uniaxial_strain_ortho = 1.09;
             solver.biaxial = false;
-            solver.pbc_strain_w = 1e7;
+            solver.pbc_strain_w = 1e6;
             solver.pbc_w = 1e6;
             solver.prescribe_strain_tensor = false;
             solver.target_strain = TV3(0.01, -0.15, 0.001);
             // solver.target_strain = TV3(0.44765, -0.0656891, 0.0956651);
             
-            solver.computeMarcoBoundaryIndices();
+            // solver.computeMarcoBoundaryIndices();
         }
     }
     if (pbc_type == PBC_XY)
@@ -160,8 +162,10 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
             TV(0, -percent * dy));
     }
-    
-
+    int n_pbc_pairs = solver.pbc_pairs[0].size() + solver.pbc_pairs[1].size();
+    std::cout << "pbc_pairs size " << n_pbc_pairs << std::endl;
+    if (n_pbc_pairs < 4)
+        return false;
     // solver.unilateral_qubic = true;
     solver.penalty_weight = 1e6;
     // solver.y_bar = max_corner[1] - 0.2 * dy;
@@ -616,7 +620,7 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
     
     solver.pbc_translation_file = result_folder + "structure_translation.txt";
     initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
-    solver.verbose = false;
+    solver.verbose = true;
     solver.prescribe_strain_tensor = false;
     solver.biaxial = false;
     solver.pbc_strain_w = 1e6;
@@ -627,7 +631,7 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
         solver.strain_theta = theta;
         solver.uniaxial_strain = strain;
         bool solve_succeed = solver.staticSolve();
-
+        
         VectorXT residual(solver.num_nodes * 2); residual.setZero();
         solver.computeResidual(solver.u, residual);
         TM secondPK_stress, Green_strain;

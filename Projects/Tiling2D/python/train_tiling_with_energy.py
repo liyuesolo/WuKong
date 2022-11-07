@@ -523,16 +523,9 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
                          validation_loss_grad, validation_loss_e, \
                         g_norm_sum, g_norm0))
         summary.saveToTensorboard(train_loss_grad, train_loss_e, validation_loss_grad, validation_loss_e, iteration)
-        if iteration == 10000:
+        if iteration % 10000 ==0:
             model.save_weights(save_path + model_name + '.tf')
-        if iteration == 20000:
-            model.save_weights(save_path + model_name + '.tf')
-        if iteration == 40000:
-            model.save_weights(save_path + model_name + '.tf')
-        if iteration == 60000:
-            model.save_weights(save_path + model_name + '.tf')
-        if iteration == 70000:
-            model.save_weights(save_path + model_name + '.tf')
+
     
     
     model.save_weights(save_path + model_name + '.tf')

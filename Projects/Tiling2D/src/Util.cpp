@@ -41,7 +41,7 @@ void loadQuadraticTriangleMeshFromVTKFile(const std::string& filename, Eigen::Ma
     int cell_type;
 	std::vector<IV3> faces;
     std::vector<IV6> quad_node_indices;
-    std::cout << n_cells << std::endl;
+    // std::cout << n_cells << std::endl;
 	for(int i=0; i<n_cells; ++i)
 	{
 		in >> cell_type;
