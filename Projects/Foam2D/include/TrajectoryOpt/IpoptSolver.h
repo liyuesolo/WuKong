@@ -78,6 +78,8 @@ public:
         return true;
     }
 
+#define IDX_C(k, i) (((k) * n_free + (i)) * dims)
+
     /** Method to return the bounds for my problem */
     virtual bool get_bounds_info(Ipopt::Index n,
                                  Ipopt::Number *x_l,
@@ -87,10 +89,22 @@ public:
                                  Ipopt::Number *g_u) {
         std::cout << "[ipopt] get bounds" << std::endl;
 
+        int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
+        int n_free = trajectoryOptNlp->energy->n_free;
         tbb::parallel_for(0, n, [&](int i) {
             x_l[i] = -1e19;
             x_u[i] = 1e19;
         });
+        // Final state
+        x_l[IDX_C(N - 1, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
+        x_u[IDX_C(N - 1, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
+        x_l[IDX_C(N - 1, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
+        x_u[IDX_C(N - 1, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
+        // Second-to-last state
+        x_l[IDX_C(N - 2, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
+        x_u[IDX_C(N - 2, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
+        x_l[IDX_C(N - 2, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
+        x_u[IDX_C(N - 2, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
 
         tbb::parallel_for(0, m, [&](int i) {
             g_l[i] = 0;
@@ -404,7 +418,7 @@ public:
             }
         }
 
-        return true;
+        return !trajectoryOptNlp->early_stop;
     }
 
 //    virtual bool intermediate_callback(Ipopt::AlgorithmMode mode,

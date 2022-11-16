@@ -62,13 +62,13 @@ def obj_base(N, x1, y1, x2, y2, xn, yn, p):
     Obj += centroid_weight * D
 
     # Soft constraints
-    # Obj += 1e-14 / ca.constpow(A, 5)  # Prevent area going to zero
-    # d = ca.if_else(
-    #     idx < num_neighbors,
-    #     1e-12 / ca.constpow((xb - x1) * (xb - x1) + (yb - y1) * (yb - y1), 2),
-    #     0
-    # )
-    # Obj += ca.sum2(d)
+    Obj += 1e-14 / ca.constpow(A, 5)  # Prevent area going to zero
+    d = ca.if_else(
+        idx < num_neighbors,
+        1e-12 / ca.constpow((xb - x1) * (xb - x1) + (yb - y1) * (yb - y1), 2),
+        0
+    )
+    Obj += ca.sum2(d)
 
     return Obj
 

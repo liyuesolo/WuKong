@@ -55,11 +55,11 @@ void Foam2D::initBasicTestCase() {
     resetVertexParams();
 }
 
-void Foam2D::dynamicsInit(double dt, double m) {
+void Foam2D::dynamicsInit(double dt, double m, double mu) {
     VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
                                 n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
-    dynamicObjective.init(c_free, dt, m, &energyObjective);
+    dynamicObjective.init(c_free, dt, m, mu, &energyObjective);
 }
 
 void Foam2D::dynamicsNewStep() {
@@ -131,26 +131,6 @@ void Foam2D::trajectoryOptSetInit() {
 //    std::cout << std::endl;
 }
 
-void Foam2D::trajectoryOptGenerateExampleSol(int N) {
-    nlp.N = N;
-    nlp.agent = energyObjective.drag_idx;
-    nlp.target_pos = energyObjective.drag_target_pos;
-
-    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
-    VectorXd u_guess = VectorXT::Zero(2 * N);
-
-    // x format is [c1 ... cN u1 ... uN]
-    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
-    nlp.x_sol = nlp.x_guess;
-
-    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
-    TV pos0 = nlp.c0.segment<2>(dims * nlp.agent);
-    TV posN = nlp.target_pos;
-    for (int i = 0; i < N; i++) {
-        nlp.x_sol.segment<2>(i * n_free * dims + dims * nlp.agent) = pos0 + (posN - pos0) * (i + 1.0) / N;
-    }
-}
-
 static void threadIPOPT(TrajectoryOptNLP *nlp) {
     /** IPOPT SOLVE **/
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
@@ -219,6 +199,8 @@ void Foam2D::trajectoryOptOptimizeIPOPT(int N) {
     nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
     nlp.x_sol = nlp.x_guess;
 
+    nlp.early_stop = false;
+
     /** IPOPT SOLVE **/
     std::thread t1(threadIPOPT, &nlp);
     t1.detach();
@@ -233,14 +215,22 @@ void Foam2D::trajectoryOptGetFrame(int frame) {
     energyObjective.tessellation->separateVerticesParams(c_frame, verts_free, params_free);
     vertices.segment(0, n_free * 2) = verts_free;
     params.segment(0, n_free * (dims - 2)) = params_free;
+}
 
-//    if (rand() > RAND_MAX * 0.98) {
-//        std::cout << "x_sol" << std::endl;
-//        for (int i = 0; i < nlp.x_sol.rows(); i++) {
-//            std::cout << nlp.x_sol(i) << ", ";
-//        }
-//        std::cout << std::endl;
-//    }
+void Foam2D::trajectoryOptGetForces(VectorXd &forceX, VectorXd &forceY) {
+    int dims = energyObjective.tessellation->getNumVertexParams() + 2;
+    VectorXT u = nlp.x_sol.segment(nlp.N * n_free * dims, nlp.N * 2);
+    forceX.resize(u.rows() / 2);
+    forceY.resize(u.rows() / 2);
+
+    for (int i = 0; i < forceX.rows(); i++) {
+        forceX(i) = u(i * 2 + 0);
+        forceY(i) = u(i * 2 + 1);
+    }
+}
+
+void Foam2D::trajectoryOptStop() {
+    nlp.early_stop = true;
 }
 
 static TV3 getColor(double area, double target) {

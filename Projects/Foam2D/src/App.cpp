@@ -109,10 +109,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputDouble("Inertia", &dynamics_m, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+        ImGui::InputDouble("Viscosity", &dynamics_eta, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputDouble("Tolerance", &dynamics_tol, 0.000001, 0.00001f, "%.6f");
         if (ImGui::Button("Start Dynamics")) {
             dynamics = true;
-            foam.dynamicsInit(dynamics_dt, dynamics_m);
+            foam.dynamicsInit(dynamics_dt, dynamics_m, dynamics_eta);
         }
         if (ImGui::Button("Stop Dynamics")) {
             dynamics = false;
@@ -129,15 +131,13 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             trajOpt_frame = 0;
             foam.trajectoryOptSetInit();
         }
-        if (ImGui::Button("Optimize (placeholder)")) {
-            trajOptOptimized = true;
-            foam.dynamicsInit(dynamics_dt, dynamics_m);
-            foam.trajectoryOptGenerateExampleSol(trajOpt_N);
-        }
         if (ImGui::Button("Optimize IPOPT")) {
             trajOptOptimized = true;
-            foam.dynamicsInit(dynamics_dt, dynamics_m);
+            foam.dynamicsInit(dynamics_dt, dynamics_m, dynamics_eta);
             foam.trajectoryOptOptimizeIPOPT(trajOpt_N);
+        }
+        if (ImGui::Button("Stop Optimization")) {
+            foam.trajectoryOptStop();
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputInt("Steps", &trajOpt_N, 1, 10);
@@ -352,7 +352,7 @@ void Foam2DApp::updatePlotData() {
         ImGui::Text((std::string("Hessian PD: ") + (hessian_pd ? "True" : "False")).c_str());
     }
 
-    if (ImGui::CollapsingHeader("Objective Function Landscape", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Objective Function Landscape", ImGuiTreeNodeFlags_None)) {
         std::vector<std::string> objTypes;
         objTypes.push_back("Objective Value");
         objTypes.push_back("dOdx");
@@ -405,6 +405,22 @@ void Foam2DApp::updatePlotData() {
         ImPlot::ColormapScale("##ObjectiveLandscapeColormap", obj_max, obj_min, ImVec2(72, 400), "%g",
                               ImPlotColormapScaleFlags_Invert,
                               ImPlotColormap_Greys);
+    }
+
+    if (ImGui::CollapsingHeader("Trajectory Optimization Forces", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (trajOptOptimized) {
+            VectorXT forceX, forceY;
+            foam.trajectoryOptGetForces(forceX, forceY);
+
+            if (ImPlot::BeginPlot("##Trajectory Optimization Forces")) {
+                ImPlot::SetupAxes(NULL, NULL, 0, 0);
+                //            ImPlot::SetupAxesLimits(0, forceX.rows(), 0, areas.rows(), ImPlotCond_Always);
+
+                ImPlot::PlotLine("f_x", forceX.data(), forceX.rows());
+                ImPlot::PlotLine("f_y", forceY.data(), forceY.rows());
+                ImPlot::EndPlot();
+            }
+        }
     }
 
     ImGui::End();

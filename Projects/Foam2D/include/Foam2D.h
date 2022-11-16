@@ -53,7 +53,7 @@ public:
 
     void initBasicTestCase();
 
-    void dynamicsInit(double dt, double m);
+    void dynamicsInit(double dt, double m, double mu);
 
     void dynamicsNewStep();
 
@@ -85,11 +85,13 @@ public:
 
     void trajectoryOptSetInit();
 
-    void trajectoryOptGenerateExampleSol(int N);
-
     void trajectoryOptOptimizeIPOPT(int N);
 
     void trajectoryOptGetFrame(int frame);
+
+    void trajectoryOptGetForces(VectorXd &forceX, VectorXd &forceY);
+
+    void trajectoryOptStop();
 
 public:
 

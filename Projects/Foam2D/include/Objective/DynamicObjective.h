@@ -10,13 +10,14 @@ public:
     VectorXd c_prev;
     VectorXd v_prev;
     VectorXd M;
+    VectorXd H;
     double h;
 
 public:
 
-    VectorXd get_a(const VectorXd &c_free) const { return (c_free - c_prev) / (h * h) - v_prev / h; }
+    VectorXd get_a(const VectorXd &c_free) const;
 
-    void init(const VectorXd &c_init, double dt, double m, EnergyObjective *energy);
+    void init(const VectorXd &c_init, double dt, double m, double mu, EnergyObjective *energy);
 
     void newStep(const Eigen::VectorXd &c_free);
 

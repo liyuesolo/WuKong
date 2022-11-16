@@ -39,6 +39,7 @@ public:
     bool dynamics = false;
     double dynamics_dt = 0.03;
     double dynamics_m = 0.002;
+    double dynamics_eta = 0.01;
     double dynamics_tol = 1e-4;
 
     bool trajOptMode = false;

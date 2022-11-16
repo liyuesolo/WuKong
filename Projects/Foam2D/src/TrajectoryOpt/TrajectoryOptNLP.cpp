@@ -51,7 +51,9 @@ VectorXd TrajectoryOptNLP::eval_g(const Eigen::VectorXd &x) const {
     VectorXd force_int = VectorXd::Zero(NX_C);
     VectorXd force_ext = VectorXd::Zero(NX_C);
     for (int k = 0; k < N; k++) {
-        force_int.segment(IDX_C(k, 0), NC) = -1.0 * energy->get_dOdc(c_curr.segment(IDX_C(k, 0), NC));
+        force_int.segment(IDX_C(k, 0), NC) = -1.0 * energy->get_dOdc(c_curr.segment(IDX_C(k, 0), NC))
+                                             -
+                                             dynamics->H.replicate(N, 1).asDiagonal() * (c_curr - c_prev) / dynamics->h;
         force_ext.segment<2>(IDX_C(k, agent)) = x.segment<2>(IDX_U(k));
     }
 
@@ -88,11 +90,12 @@ Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g_sparsematrix(const Eige
     }
     // Diagonals
     Eigen::VectorXd Mhh = dynamics->M / (dynamics->h * dynamics->h);
+    Eigen::VectorXd Hh = dynamics->H / dynamics->h;
     for (int k = 0; k < N; k++) {
         for (int i = 0; i < NC; i++) {
             int idx = k * NC + i;
-            jac.coeffRef(idx, idx) += Mhh(i); //dG{k}/dc{k}
-            if (k > 0) jac.coeffRef(idx, idx - NC) += -2 * Mhh(i); //dG{k}/dc{k-1}
+            jac.coeffRef(idx, idx) += Mhh(i) + Hh[i]; //dG{k}/dc{k}
+            if (k > 0) jac.coeffRef(idx, idx - NC) += -2 * Mhh(i) - Hh[i]; //dG{k}/dc{k-1}
             if (k > 1) jac.coeffRef(idx, idx - 2 * NC) += Mhh(i); //dG{k}/dc{k-2}
         }
     }

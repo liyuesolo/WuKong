@@ -12,8 +12,8 @@ public:
 
     int agent; // Index of site whose trajectory is being optimized
     TV target_pos; // Target position for agent
-    double target_weight = 1e-2;
-    double velocity_weight = 1e-3;
+    double target_weight = 0;
+    double velocity_weight = 0;
     double input_weight = 1e-2;
 
     VectorXd c0; // Initial positions of free sites (+ additional tessellation degrees of freedom)
@@ -21,6 +21,8 @@ public:
 
     VectorXd x_guess; // Initial guess for solution.
     VectorXd x_sol; // Solution.
+
+    bool early_stop;
 
 public:
     double eval_f(const VectorXd &x) const;
