@@ -10,7 +10,9 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Regular_triangulation_2<K> Regular_triangulation;
 
-static TV3 getCircumcentre(const TV3 &v1, const TV3 &v2, const TV3 &v3) {
+TV Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3) {
+    assert(v1.rows() == 3 && v2.rows() == 3 && v3.rows() == 3);
+
     double x1 = v1(0);
     double y1 = v1(1);
     double z1 = v1(2);
@@ -38,9 +40,29 @@ static TV3 getCircumcentre(const TV3 &v1, const TV3 &v2, const TV3 &v3) {
     double xn = xp2 + a2 * xl2;
     double yn = yp2 + a2 * yl2;
 
-    TV3 ret = {xn, yn, 0};
+    return {xn, yn};
+}
 
-    return ret;
+TV Power::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1) {
+    assert(v1.rows() == 3 && v2.rows() == 3);
+
+    double rsq = (v2(0) - v1(0)) * (v2(0) - v1(0)) + (v2(1) - v1(1)) * (v2(1) - v1(1));
+    double d = 0.5 + 0.5 * (v2(2) - v1(2)) / rsq;
+
+    double x1 = d * v2(0) + (1 - d) * v1(0);
+    double y1 = d * v2(1) + (1 - d) * v1(1);
+    double x2 = x1 + (v2(1) - v1(1));
+    double y2 = y1 - (v2(0) - v1(0));
+    double x3 = b0(0);
+    double y3 = b0(1);
+    double x4 = b1(0);
+    double y4 = b1(1);
+
+    double t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / (-(x4 - x3) * (y2 - y1) + (x2 - x1) * (y4 - y3));
+    double xn = x1 + t * (x2 - x1);
+    double yn = y1 + t * (y2 - y1);
+
+    return {xn, yn};
 }
 
 int idxClosest(const TV &p, const VectorXT &vertices3d) {
@@ -117,7 +139,8 @@ VectorXi Power::powerDualNaive(const VectorXT &vertices3d) {
                 if (k == i || k == j) continue;
 
                 TV3 vk = vertices3d.segment<3>(k * 3);
-                TV3 vc = getCircumcentre(vi, vj, vk);
+                TV vc2d = getNode(vi, vj, vk);
+                TV3 vc = {vc2d(0), vc2d(1), 0};
                 double d = vc.dot(line);
 
                 if ((vk - vi).dot(line) > 0) {
@@ -189,6 +212,8 @@ VectorXi Power::getDualGraph(const VectorXT &vertices, const VectorXT &params) {
 }
 
 VectorXT Power::getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) {
+    VectorXT vertices3d = combineVerticesParams(vertices, params);
+
     int n_faces = dual.rows() / 3;
     VectorXT nodes(2 * n_faces);
 
@@ -197,34 +222,8 @@ VectorXT Power::getNodes(const VectorXT &vertices, const VectorXT &params, const
         int v2 = dual(i * 3 + 1);
         int v3 = dual(i * 3 + 2);
 
-        double x1 = vertices(v1 * 2 + 0);
-        double y1 = vertices(v1 * 2 + 1);
-        double z1 = params(v1);
-        double x2 = vertices(v2 * 2 + 0);
-        double y2 = vertices(v2 * 2 + 1);
-        double z2 = params(v2);
-        double x3 = vertices(v3 * 2 + 0);
-        double y3 = vertices(v3 * 2 + 1);
-        double z3 = params(v3);
-
-        double rsq2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-        double d2 = 0.5 + 0.5 * (z2 - z1) / rsq2;
-        double xp2 = x1 + d2 * (x2 - x1);
-        double yp2 = y1 + d2 * (y2 - y1);
-        double xl2 = -(y2 - y1);
-        double yl2 = (x2 - x1);
-        double rsq3 = (x3 - x1) * (x3 - x1) + (y3 - y1) * (y3 - y1);
-        double d3 = 0.5 + 0.5 * (z3 - z1) / rsq3;
-        double xp3 = x1 + d3 * (x3 - x1);
-        double yp3 = y1 + d3 * (y3 - y1);
-        double xl3 = -(y3 - y1);
-        double yl3 = (x3 - x1);
-
-        double a2 = (yl3 * (xp3 - xp2) - xl3 * (yp3 - yp2)) / (xl2 * yl3 - xl3 * yl2);
-        double xn = xp2 + a2 * xl2;
-        double yn = yp2 + a2 * yl2;
-
-        nodes.segment<2>(i * 2) = TV(xn, yn);
+        nodes.segment<2>(i * 2) = getNode(vertices3d.segment<3>(v1 * 3), vertices3d.segment<3>(v2 * 3),
+                                          vertices.segment<3>(v3 * 3));
     }
 
     return nodes;

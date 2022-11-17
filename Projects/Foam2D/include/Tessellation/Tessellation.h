@@ -9,7 +9,6 @@
 
 enum TessellationType {
     VORONOI,
-    SECTIONAL,
     POWER
 };
 
@@ -34,10 +33,11 @@ public:
     // Returns the tesselation nodes corresponding to faces in the dual graph. For standard Voronoi tessellation, these are the circumcentres of Delaunay triangles.
     virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) = 0;
 
-//    // Wrapper for getNodes which computes the dual graph internally.
-//    VectorXT getNodes(const VectorXT &vertices, const VectorXT &params) {
-//        return getNodes(vertices, params, getDualGraph(vertices, params));
-//    }
+    // Get the tessellation node at the intersection of three cells.
+    virtual TV getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2) = 0;
+
+    // Get the tessellation node at the intersection of two cells and a domain boundary.
+    virtual TV getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1) = 0;
 
     // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
     std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXi &dual, const VectorXT &nodes);
@@ -45,11 +45,10 @@ public:
     // Computes list of indices of neighboring sites, ordered counterclockwise.
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
 
-//    // Wrapper for getCells which computes the dual graph internally.
-//    std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXT &params) {
-//        VectorXi dual = getDualGraph(vertices, params);
-//        return getCells(vertices, dual, getNodes(vertices, params, dual));
-//    }
+    // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
+    std::vector<std::vector<int>>
+    getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual,
+                        const VectorXT &boundary, int n_cells);
 
     virtual int getNumVertexParams() = 0;
 

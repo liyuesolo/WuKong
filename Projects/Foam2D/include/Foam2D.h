@@ -30,10 +30,8 @@ using VectorXf = Vector<float, Eigen::Dynamic>;
 
 class Foam2D {
 public:
-    using Edge = Vector<int, 2>;
-
     std::vector<Tessellation *> tessellations;
-    int tesselation = 0;
+    int tessellation = 0;
     std::vector<GradientDescentLineSearch *> minimizers;
     int opttype = 0;
 
@@ -47,11 +45,15 @@ public:
 
     int n_free;
     int n_fixed;
+
+    VectorXT boundary;
 public:
 
     void initRandomSitesInCircle(int n_free_in, int n_fixed_in);
 
     void initBasicTestCase();
+
+    void initRandomCellsInBox(int n_free_in);
 
     void dynamicsInit(double dt, double m, double mu);
 

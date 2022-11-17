@@ -16,9 +16,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
-        tesselationTypes.push_back("Sectional");
         tesselationTypes.push_back("Power");
-        if (ImGui::Combo("Tessellation Type", &foam.tesselation, tesselationTypes)) {
+        if (ImGui::Combo("Tessellation Type", &foam.tessellation, tesselationTypes)) {
             foam.resetVertexParams();
             updateViewerData(viewer);
         }
@@ -87,12 +86,16 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> scenarios;
         scenarios.push_back("Boundary Cell Circle");
         scenarios.push_back("Gradient Test");
+        scenarios.push_back("Bounding Box");
         ImGui::Combo("Scenario", &scenario, scenarios);
         if (scenario == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &free_sites, 10, 100);
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Boundary Sites", &fixed_sites, 10, 100);
+        } else if (scenario == 2) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &free_sites, 10, 100);
         }
         if (ImGui::Button("Generate")) {
             generateScenario();
@@ -256,6 +259,9 @@ void Foam2DApp::generateScenario() {
         case 1:
             foam.initBasicTestCase();
             break;
+        case 2:
+            foam.initRandomCellsInBox(free_sites);
+            break;
         default:
             std::cout << "Error: scenario not implemented!";
     }
@@ -287,13 +293,25 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     viewer.data().set_points(points, points_c);
     viewer.data().set_edges(nodes, lines, lines_c);
 
-    Eigen::Matrix<double, 4, 3> bb;
-    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
-    Eigen::Matrix<double, 4, 3> bb_p2;
-    bb_p2 << 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 0;
-    Eigen::Matrix<double, 4, 3> bb_c;
-    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
-    viewer.data().add_edges(bb, bb_p2, bb_c);
+//    Eigen::Matrix<double, 4, 3> bb;
+//    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
+//    Eigen::Matrix<double, 4, 3> bb_p2;
+//    bb_p2 << 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 0;
+//    Eigen::Matrix<double, 4, 3> bb_c;
+//    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
+//    viewer.data().add_edges(bb, bb_p2, bb_c);
+
+    int nb = foam.boundary.rows() / 2;
+    MatrixXd b1, b2, bc;
+    b1.resize(nb, 3);
+    b2.resize(nb, 3);
+    bc.resize(nb, 3);
+    for (int i = 0; i < nb; i++) {
+        b1.row(i) = TV3(foam.boundary(2 * i + 0), foam.boundary(2 * i + 1), 0);
+        b2.row(i) = TV3(foam.boundary(2 * ((i + 1) % nb) + 0), foam.boundary(2 * ((i + 1) % nb) + 1), 0);
+        bc.row(i) = TV3(1, 0, 0);
+    }
+    viewer.data().add_edges(b1, b2, bc);
 
     Eigen::Matrix<double, 4, 3> camera;
     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;

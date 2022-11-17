@@ -1,7 +1,6 @@
 #include "../include/Foam2D.h"
 #include "../include/CodeGen.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
-#include "Projects/Foam2D/include/Tessellation/Sectional.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../include/Constants.h"
@@ -11,7 +10,6 @@
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
-    tessellations.push_back(new Sectional());
     tessellations.push_back(new Power());
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
@@ -21,7 +19,7 @@ Foam2D::Foam2D() {
 }
 
 void Foam2D::resetVertexParams() {
-    params = tessellations[tesselation]->getDefaultVertexParams(vertices);
+    params = tessellations[tessellation]->getDefaultVertexParams(vertices);
 }
 
 void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
@@ -41,6 +39,7 @@ void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
     vertices = VectorXT::Zero((n_free + n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment(n_free * 2, n_fixed * 2) = boundary_points;
 
+    boundary.resize(0);
     resetVertexParams();
 }
 
@@ -52,33 +51,57 @@ void Foam2D::initBasicTestCase() {
 
     vertices << -0.5, 0, 0.5, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
 
+    boundary.resize(0);
+    resetVertexParams();
+}
+
+void Foam2D::initRandomCellsInBox(int n_free_in) {
+    n_free = n_free_in;
+    n_fixed = 8;
+
+    double hw = 0.75;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-hw, hw);
+
+    VectorXT inf_points(n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    vertices = VectorXT::Zero((n_free + n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment(n_free * 2, n_fixed * 2) = inf_points;
+
+    boundary.resize(4 * 2);
+    boundary << -hw, -hw, hw, -hw, hw, hw, -hw, hw;
+
     resetVertexParams();
 }
 
 void Foam2D::dynamicsInit(double dt, double m, double mu) {
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
-                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
+                                n_free * (2 + tessellations[tessellation]->getNumVertexParams()));
     dynamicObjective.init(c_free, dt, m, mu, &energyObjective);
 }
 
 void Foam2D::dynamicsNewStep() {
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
-                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
+                                n_free * (2 + tessellations[tessellation]->getNumVertexParams()));
     dynamicObjective.newStep(c_free);
 }
 
 void Foam2D::optimize(bool dynamic) {
-    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
 
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
-    energyObjective.c_fixed = c.segment(n_free * (2 + tessellations[tesselation]->getNumVertexParams()),
-                                        n_fixed * (2 + tessellations[tesselation]->getNumVertexParams()));
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
+    energyObjective.c_fixed = c.segment(n_free * (2 + tessellations[tessellation]->getNumVertexParams()),
+                                        n_fixed * (2 + tessellations[tessellation]->getNumVertexParams()));
     VectorXT c_free = c.segment(0,
-                                n_free * (2 + tessellations[tesselation]->getNumVertexParams()));
+                                n_free * (2 + tessellations[tessellation]->getNumVertexParams()));
 
     if (dynamic) {
         minimizers[opttype]->minimize(&dynamicObjective, c_free);
@@ -86,9 +109,9 @@ void Foam2D::optimize(bool dynamic) {
         minimizers[opttype]->minimize(&energyObjective, c_free);
     }
 
-    c.segment(0, n_free * (2 + tessellations[tesselation]->getNumVertexParams())) = c_free;
+    c.segment(0, n_free * (2 + tessellations[tessellation]->getNumVertexParams())) = c_free;
 
-    tessellations[tesselation]->separateVerticesParams(c, vertices, params);
+    tessellations[tessellation]->separateVerticesParams(c, vertices, params);
 }
 
 int Foam2D::getClosestMovablePointThreshold(const TV &p, double threshold) {
@@ -273,7 +296,7 @@ static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, in
 
 void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                         MatrixXi &F, MatrixXT &Fc) {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
+    VectorXi tri = tessellations[tessellation]->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
     S.resize(n_vtx, 3);
@@ -346,8 +369,8 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                        MatrixXi &F, MatrixXT &Fc) {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
-    long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
+    VectorXi tri = tessellations[tessellation]->getDualGraph(vertices, params);
+    long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3, n_bdy = boundary.rows() / 2;
 
     // Overlay points and edges
     S.resize(n_vtx, 3);
@@ -356,58 +379,115 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         S.row(i).segment<2>(0) = vertices.segment<2>(i * 2);
     }
 
-    VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
-    X.resize(n_faces, 3);
-    X.setZero();
-    for (int i = 0; i < n_faces; i++) {
-        X.row(i).segment<2>(0) = x.segment<2>(i * 2);
-    }
+    std::vector<TV> face0;
+    std::vector<TV> face1;
+    std::vector<TV> face2;
 
-    int num_voronoi_edges = 2 * n_faces - n_vtx + 1;
-    E.resize(num_voronoi_edges * 2, 2);
-    E.setZero();
-
-    std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
-    int edge = 0;
     int n_cells = n_free;
+    VectorXT areas = VectorXT::Zero(n_cells);
+
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+
+//    std::vector<std::vector<int>> neighborLists = tessellations[tessellation]->getNeighbors(vertices, tri, n_free);
+    std::vector<std::vector<int>> neighborLists = tessellations[tessellation]->getNeighborsClipped(vertices, params,
+                                                                                                   tri, boundary,
+                                                                                                   n_cells);
     for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &cell = cells[i];
-        size_t degree = cell.size();
+        std::vector<int> &neighbors = neighborLists[i];
+        size_t degree = neighbors.size();
+
+        TV v0 = vertices.segment<2>(i * 2);
+        VectorXT c0 = c.segment(i * dims, dims);
 
         for (size_t j = 0; j < degree; j++) {
-            int v1 = cell[j];
-            int v2 = cell[(j + 1) % degree];
+            TV v1, v2;
 
-            // TODO: This adds most edges twice (once per adjacent cell), fine for now.
-            E.row(edge) = IV(v1, v2);
-            edge++;
+            int n1 = neighbors[j];
+            int n2 = neighbors[(j + 1) % degree];
+            int n3 = neighbors[(j + 2) % degree];
+
+            if (n1 < n_vtx && n2 < n_vtx) {
+                // Normal node.
+                v1 = tessellations[tessellation]->getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims));
+            } else if (n1 < n_vtx && n2 >= n_vtx) {
+                // Boundary node with n2 a boundary edge.
+                v1 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n1 * dims, dims),
+                                                                  boundary.segment<2>((n2 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n2 - n_vtx + 1) % n_bdy) * 2));
+            } else if (n1 >= n_vtx && n2 < n_vtx) {
+                // Boundary node with n1 a boundary edge.
+                v1 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n2 * dims, dims),
+                                                                  boundary.segment<2>((n1 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n1 - n_vtx + 1) % n_bdy) * 2));
+            } else {
+                // Boundary vertex.
+                assert(n1 >= n_vtx && n2 >= n_vtx);
+                v1 = boundary.segment<2>((n2 - n_vtx) * 2);
+            }
+
+            if (n2 < n_vtx && n3 < n_vtx) {
+                // Normal node.
+                v2 = tessellations[tessellation]->getNode(c0, c.segment(n2 * dims, dims), c.segment(n3 * dims, dims));
+            } else if (n2 < n_vtx && n3 >= n_vtx) {
+                // Boundary node with n3 a boundary edge.
+                v2 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n2 * dims, dims),
+                                                                  boundary.segment<2>((n3 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n3 - n_vtx + 1) % n_bdy) * 2));
+            } else if (n2 >= n_vtx && n3 < n_vtx) {
+                // Boundary node with n2 a boundary edge.
+                v2 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n3 * dims, dims),
+                                                                  boundary.segment<2>((n2 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n2 - n_vtx + 1) % n_bdy) * 2));
+            } else {
+                // Boundary vertex.
+                assert(n2 >= n_vtx && n3 >= n_vtx);
+                v2 = boundary.segment<2>((n3 - n_vtx) * 2);
+            }
+
+            face0.push_back(v0);
+            face1.push_back(v1);
+            face2.push_back(v2);
+
+            areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
         }
     }
 
-    // Mesh points and faces
-    V.resize(n_vtx + n_faces, 3);
-    V << S, X;
-
-    F.resize(num_voronoi_edges * 2, 3);
+    V.resize(face0.size() * 3, 3);
+    V.setZero();
+    E.resize(face0.size(), 2);
+    E.setZero();
+    F.resize(face0.size(), 3);
     F.setZero();
-    Fc.resize(num_voronoi_edges * 2, 3);
+    Fc.resize(face0.size(), 3);
     Fc.setZero();
-    VectorXT areas = getCellAreas(x, cells, n_free);
-    edge = 0;
-    for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &cell = cells[i];
-        for (size_t j = 1; j < cells[i].size() - 1; j++) {
-            int v1 = cell[0];
-            int v2 = cell[j];
-            int v3 = cell[j + 1];
 
-            F.row(edge) = IV3(v1 + n_vtx, v2 + n_vtx, v3 + n_vtx);
-            Fc.row(edge) = (i == energyObjective.drag_idx ? TV3(0.1, 0.1, 0.1) : getColor(areas(i),
-                                                                                          energyObjective.getAreaTarget(
-                                                                                                  i)));
-            edge++;
+    int currentCell = 0;
+    int currentIdxInCell = 0;
+
+    for (int i = 0; i < face0.size(); i++) {
+        TV v0 = face0[i];
+        TV v1 = face1[i];
+        TV v2 = face2[i];
+
+        V.row(i * 3 + 0).segment<2>(0) = v0;
+        V.row(i * 3 + 1).segment<2>(0) = v1;
+        V.row(i * 3 + 2).segment<2>(0) = v2;
+
+        E.row(i) = IV(i * 3 + 1, i * 3 + 2);
+        F.row(i) = IV3(i * 3 + 0, i * 3 + 1, i * 3 + 2);
+        Fc.row(i) = (currentCell == energyObjective.drag_idx ? TV3(0.1, 0.1, 0.1) : getColor(areas(currentCell),
+                                                                                             energyObjective.getAreaTarget(
+                                                                                                     i)));
+
+        currentIdxInCell++;
+        if (currentIdxInCell == neighborLists[currentCell].size()) {
+            currentIdxInCell = 0;
+            currentCell++;
         }
     }
+
+    X = V;
 
     Sc.resize(S.rows(), 3);
     Sc.setZero();
@@ -485,23 +565,89 @@ void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 }
 
 void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
-    VectorXi tri = tessellations[tesselation]->getDualGraph(vertices, params);
-    VectorXT x = tessellations[tesselation]->getNodes(vertices, params, tri);
-    std::vector<std::vector<int>> cells = tessellations[tesselation]->getCells(vertices, tri, x);
+    VectorXi tri = tessellations[tessellation]->getDualGraph(vertices, params);
 
-    areas = getCellAreas(x, cells, n_free);
+    int n_cells = n_free;
+    areas.resize(n_cells);
+    areas.setZero();
+
+    int n_vtx = vertices.rows() / 2, n_bdy = boundary.rows() / 2;
+
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+
+//    std::vector<std::vector<int>> neighborLists = tessellations[tessellation]->getNeighbors(vertices, tri, n_free);
+    std::vector<std::vector<int>> neighborLists = tessellations[tessellation]->getNeighborsClipped(vertices, params,
+                                                                                                   tri, boundary,
+                                                                                                   n_cells);
+    for (int i = 0; i < n_cells; i++) {
+        std::vector<int> &neighbors = neighborLists[i];
+        size_t degree = neighbors.size();
+
+        TV v0 = vertices.segment<2>(i * 2);
+        VectorXT c0 = c.segment(i * dims, dims);
+
+        for (size_t j = 0; j < degree; j++) {
+            TV v1, v2;
+
+            int n1 = neighbors[j];
+            int n2 = neighbors[(j + 1) % degree];
+            int n3 = neighbors[(j + 2) % degree];
+
+            if (n1 < n_vtx && n2 < n_vtx) {
+                // Normal node.
+                v1 = tessellations[tessellation]->getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims));
+            } else if (n1 < n_vtx && n2 >= n_vtx) {
+                // Boundary node with n2 a boundary edge.
+                v1 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n1 * dims, dims),
+                                                                  boundary.segment<2>((n2 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n2 - n_vtx + 1) % n_bdy) * 2));
+            } else if (n1 >= n_vtx && n2 < n_vtx) {
+                // Boundary node with n1 a boundary edge.
+                v1 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n2 * dims, dims),
+                                                                  boundary.segment<2>((n1 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n1 - n_vtx + 1) % n_bdy) * 2));
+            } else {
+                // Boundary vertex.
+                assert(n1 >= n_vtx && n2 >= n_vtx);
+                v1 = boundary.segment<2>((n2 - n_vtx) * 2);
+            }
+
+            if (n2 < n_vtx && n3 < n_vtx) {
+                // Normal node.
+                v2 = tessellations[tessellation]->getNode(c0, c.segment(n2 * dims, dims), c.segment(n3 * dims, dims));
+            } else if (n2 < n_vtx && n3 >= n_vtx) {
+                // Boundary node with n3 a boundary edge.
+                v2 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n2 * dims, dims),
+                                                                  boundary.segment<2>((n3 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n3 - n_vtx + 1) % n_bdy) * 2));
+            } else if (n2 >= n_vtx && n3 < n_vtx) {
+                // Boundary node with n2 a boundary edge.
+                v2 = tessellations[tessellation]->getBoundaryNode(c0, c.segment(n3 * dims, dims),
+                                                                  boundary.segment<2>((n2 - n_vtx) * 2),
+                                                                  boundary.segment<2>(((n2 - n_vtx + 1) % n_bdy) * 2));
+            } else {
+                // Boundary vertex.
+                assert(n2 >= n_vtx && n3 >= n_vtx);
+                v2 = boundary.segment<2>((n3 - n_vtx) * 2);
+            }
+
+            areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
+        }
+    }
+
     for (int i = 0; i < areas.rows(); i++) {
         areas(i) /= energyObjective.getAreaTarget(i);
     }
 }
 
 bool Foam2D::isConvergedDynamic(double tol) {
-    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
 
-    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 
@@ -509,12 +655,12 @@ bool Foam2D::isConvergedDynamic(double tol) {
 }
 
 void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gradient_norm, bool &hessian_pd) {
-    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
 
-    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 
@@ -535,12 +681,12 @@ void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gra
 void
 Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int image_size, double range, VectorXf &obj,
                                           double &obj_min, double &obj_max) {
-    energyObjective.tessellation = tessellations[tesselation];
+    energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
 
-    int dims = 2 + tessellations[tesselation]->getNumVertexParams();
-    VectorXT c = tessellations[tesselation]->combineVerticesParams(vertices, params);
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+    VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     energyObjective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
     VectorXT c_free = c.segment(0, n_free * dims);
 

@@ -4,7 +4,9 @@
 #include "Projects/Foam2D/include/CodeGen.h"
 #include <iostream>
 
-static TV getCircumcentre(const TV &v1, const TV &v2, const TV &v3) {
+TV Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3) {
+    assert(v1.rows() == 2 && v2.rows() == 2 && v3.rows() == 2);
+
     double x1 = v1(0);
     double y1 = v1(1);
     double x2 = v2(0);
@@ -15,6 +17,25 @@ static TV getCircumcentre(const TV &v1, const TV &v2, const TV &v3) {
     double m = 0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1));
     double xn = 0.5 * (x1 + x3) - m * (y3 - y1);
     double yn = 0.5 * (y1 + y3) + m * (x3 - x1);
+    return {xn, yn};
+}
+
+TV Voronoi::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1) {
+    assert(v1.rows() == 2 && v2.rows() == 2);
+
+    double x1 = (v1(0) + v2(0)) / 2;
+    double y1 = (v1(1) + v2(1)) / 2;
+    double x2 = x1 + (v2(1) - v1(1));
+    double y2 = y1 - (v2(0) - v1(0));
+    double x3 = b0(0);
+    double y3 = b0(1);
+    double x4 = b1(0);
+    double y4 = b1(1);
+
+    double t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / (-(x4 - x3) * (y2 - y1) + (x2 - x1) * (y4 - y3));
+    double xn = x1 + t * (x2 - x1);
+    double yn = y1 + t * (y2 - y1);
+
     return {xn, yn};
 }
 
@@ -41,7 +62,7 @@ VectorXi Voronoi::delaunayNaive(const VectorXT &vertices) {
                 if (k == i || k == j) continue;
 
                 TV vk = vertices.segment<2>(k * 2);
-                TV vc = getCircumcentre(vi, vj, vk);
+                TV vc = getNode(vi, vj, vk);
                 double d = vc.dot(line);
 
                 if ((vk - vi).dot(line) > 0) {
@@ -144,19 +165,8 @@ VectorXT Voronoi::getNodes(const VectorXT &vertices, const VectorXT &params, con
         int v2 = dual(i * 3 + 1);
         int v3 = dual(i * 3 + 2);
 
-        double x1 = vertices(v1 * 2 + 0);
-        double y1 = vertices(v1 * 2 + 1);
-        double x2 = vertices(v2 * 2 + 0);
-        double y2 = vertices(v2 * 2 + 1);
-        double x3 = vertices(v3 * 2 + 0);
-        double y3 = vertices(v3 * 2 + 1);
-
-        double m =
-                0.5 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1));
-        double xn = 0.5 * (x1 + x3) - m * (y3 - y1);
-        double yn = 0.5 * (y1 + y3) + m * (x3 - x1);
-
-        nodes.segment<2>(i * 2) = TV(xn, yn);
+        nodes.segment<2>(i * 2) = getNode(vertices.segment<2>(v1 * 2), vertices.segment<2>(v2 * 2),
+                                          vertices.segment<2>(v3 * 2));
     }
 
     return nodes;

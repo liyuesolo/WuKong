@@ -39,11 +39,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.sparsity = &ca_O_voronoi_cell_10_sparsity_out;
                     casadiFunctions.evaluate = &ca_O_voronoi_cell_10;
                     break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_O_sectional_cell_10_work;
-                    casadiFunctions.sparsity = &ca_O_sectional_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_sectional_cell_10;
-                    break;
                 case POWER:
                     casadiFunctions.work = &ca_O_power_cell_10_work;
                     casadiFunctions.sparsity = &ca_O_power_cell_10_sparsity_out;
@@ -58,11 +53,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.work = &ca_O_voronoi_cell_20_work;
                     casadiFunctions.sparsity = &ca_O_voronoi_cell_20_sparsity_out;
                     casadiFunctions.evaluate = &ca_O_voronoi_cell_20;
-                    break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_O_sectional_cell_20_work;
-                    casadiFunctions.sparsity = &ca_O_sectional_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_sectional_cell_20;
                     break;
                 case POWER:
                     casadiFunctions.work = &ca_O_power_cell_20_work;
@@ -81,11 +71,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.sparsity = &ca_dOdc_voronoi_cell_10_sparsity_out;
                     casadiFunctions.evaluate = &ca_dOdc_voronoi_cell_10;
                     break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_dOdc_sectional_cell_10_work;
-                    casadiFunctions.sparsity = &ca_dOdc_sectional_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_sectional_cell_10;
-                    break;
                 case POWER:
                     casadiFunctions.work = &ca_dOdc_power_cell_10_work;
                     casadiFunctions.sparsity = &ca_dOdc_power_cell_10_sparsity_out;
@@ -100,11 +85,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.work = &ca_dOdc_voronoi_cell_20_work;
                     casadiFunctions.sparsity = &ca_dOdc_voronoi_cell_20_sparsity_out;
                     casadiFunctions.evaluate = &ca_dOdc_voronoi_cell_20;
-                    break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_dOdc_sectional_cell_20_work;
-                    casadiFunctions.sparsity = &ca_dOdc_sectional_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_sectional_cell_20;
                     break;
                 case POWER:
                     casadiFunctions.work = &ca_dOdc_power_cell_20_work;
@@ -123,11 +103,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.sparsity = &ca_d2Odc2_voronoi_cell_10_sparsity_out;
                     casadiFunctions.evaluate = &ca_d2Odc2_voronoi_cell_10;
                     break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_d2Odc2_sectional_cell_10_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_sectional_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_sectional_cell_10;
-                    break;
                 case POWER:
                     casadiFunctions.work = &ca_d2Odc2_power_cell_10_work;
                     casadiFunctions.sparsity = &ca_d2Odc2_power_cell_10_sparsity_out;
@@ -142,11 +117,6 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
                     casadiFunctions.work = &ca_d2Odc2_voronoi_cell_20_work;
                     casadiFunctions.sparsity = &ca_d2Odc2_voronoi_cell_20_sparsity_out;
                     casadiFunctions.evaluate = &ca_d2Odc2_voronoi_cell_20;
-                    break;
-                case SECTIONAL:
-                    casadiFunctions.work = &ca_d2Odc2_sectional_cell_20_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_sectional_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_sectional_cell_20;
                     break;
                 case POWER:
                     casadiFunctions.work = &ca_d2Odc2_power_cell_20_work;
