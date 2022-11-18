@@ -96,6 +96,7 @@ void Foam2D::optimize(bool dynamic) {
     energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
+    energyObjective.boundary = boundary;
 
     VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     energyObjective.c_fixed = c.segment(n_free * (2 + tessellations[tessellation]->getNumVertexParams()),
@@ -645,6 +646,7 @@ bool Foam2D::isConvergedDynamic(double tol) {
     energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
+    energyObjective.boundary = boundary;
 
     int dims = 2 + tessellations[tessellation]->getNumVertexParams();
     VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
@@ -658,6 +660,7 @@ void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gra
     energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
+    energyObjective.boundary = boundary;
 
     int dims = 2 + tessellations[tessellation]->getNumVertexParams();
     VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
@@ -672,9 +675,9 @@ void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gra
     } else {
         obj_value = energyObjective.evaluate(c_free);
         gradient_norm = energyObjective.getGradient(c_free).norm();
-        hessian = energyObjective.get_d2Odc2(c_free);
+        energyObjective.getHessian(c_free, hessian);
     }
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
+    Eigen::SimplicialLLT <Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
     hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
 }
 
@@ -684,6 +687,7 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
     energyObjective.tessellation = tessellations[tessellation];
     energyObjective.n_free = n_free;
     energyObjective.n_fixed = n_fixed;
+    energyObjective.boundary = boundary;
 
     int dims = 2 + tessellations[tessellation]->getNumVertexParams();
     VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);

@@ -3,18 +3,12 @@
 #include "../codegen/ca_O_voronoi_cell_10.h"
 #include "../codegen/ca_dOdc_voronoi_cell_10.h"
 #include "../codegen/ca_d2Odc2_voronoi_cell_10.h"
-#include "../codegen/ca_O_sectional_cell_10.h"
-#include "../codegen/ca_dOdc_sectional_cell_10.h"
-#include "../codegen/ca_d2Odc2_sectional_cell_10.h"
 #include "../codegen/ca_O_power_cell_10.h"
 #include "../codegen/ca_dOdc_power_cell_10.h"
 #include "../codegen/ca_d2Odc2_power_cell_10.h"
 #include "../codegen/ca_O_voronoi_cell_20.h"
 #include "../codegen/ca_dOdc_voronoi_cell_20.h"
 #include "../codegen/ca_d2Odc2_voronoi_cell_20.h"
-#include "../codegen/ca_O_sectional_cell_20.h"
-#include "../codegen/ca_dOdc_sectional_cell_20.h"
-#include "../codegen/ca_d2Odc2_sectional_cell_20.h"
 #include "../codegen/ca_O_power_cell_20.h"
 #include "../codegen/ca_dOdc_power_cell_20.h"
 #include "../codegen/ca_d2Odc2_power_cell_20.h"
@@ -132,7 +126,8 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
     return casadiFunctions;
 }
 
-void add_O_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, double &out) {
+void add_O_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+                double &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 0, p(4));
 
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
@@ -143,8 +138,10 @@ void add_O_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
-    arg[1] = p.data();
+    arg[0] = p.data();
+    arg[1] = n.data();
+    arg[2] = c.data();
+    arg[3] = b.data();
 
     casadi_real Obj[1];
     res[0] = Obj;
@@ -153,8 +150,10 @@ void add_O_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p
     out += Obj[0];
 }
 
-void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, const VectorXi &map,
-                   VectorXT &out) {
+void
+add_dOdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+              const VectorXi &map,
+              VectorXT &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 1, p(4));
 
     casadi_int sz_arg, sz_res, sz_iw, sz_w;
@@ -165,8 +164,10 @@ void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
-    arg[1] = p.data();
+    arg[0] = p.data();
+    arg[1] = n.data();
+    arg[2] = c.data();
+    arg[3] = b.data();
 
     const casadi_int *sp_i = casadiFunctions.sparsity(0);
     casadi_int nrow = *sp_i++; /* Number of rows */
@@ -189,7 +190,8 @@ void add_dOdc_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT
 }
 
 void
-add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p, const VectorXi &map,
+add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+                const VectorXi &map,
                 MatrixXT &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 2, p(4));
 
@@ -201,8 +203,10 @@ add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &c, const VectorXT &p
     casadi_int iw[sz_iw];
     casadi_real w[sz_w];
 
-    arg[0] = c.data();
-    arg[1] = p.data();
+    arg[0] = p.data();
+    arg[1] = n.data();
+    arg[2] = c.data();
+    arg[3] = b.data();
 
     const casadi_int *sp_i = casadiFunctions.sparsity(0);
     casadi_int nrow = *sp_i++; /* Number of rows */

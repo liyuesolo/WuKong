@@ -9,6 +9,7 @@ public:
     Tessellation *tessellation;
 
     VectorXd c_fixed;
+    VectorXd boundary;
 
     VectorXd area_targets = 0.05 * VectorXd::Ones(1);
     double area_weight = 0.1;
@@ -24,8 +25,9 @@ public:
 
 public:
     void
-    getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &c_cell, VectorXT &p_cell,
-              VectorXi &i_cell) const;
+    getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &p_in,
+              VectorXT &n_in, VectorXT &c_in, VectorXT &b_in,
+              VectorXi &map) const;
 
     virtual double evaluate(const VectorXd &c_free) const;
 
