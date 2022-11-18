@@ -2,7 +2,7 @@ import casadi as ca
 import os
 
 
-def obj_base(N, x1, y1, x2, y2, xn, yn, p):
+def obj_base(N, x1, y1, xn, yn, p):
     area_weight = p[0]
     length_weight = p[1]
     centroid_weight = p[2]
@@ -11,9 +11,6 @@ def obj_base(N, x1, y1, x2, y2, xn, yn, p):
     drag_target_weight = p[5]
     drag_x = p[6]
     drag_y = p[7]
-
-    xb = x2
-    yb = y2
 
     x2 = xn
     y2 = yn
@@ -63,12 +60,12 @@ def obj_base(N, x1, y1, x2, y2, xn, yn, p):
 
     # Soft constraints
     Obj += 1e-14 / ca.constpow(A, 5)  # Prevent area going to zero
-    d = ca.if_else(
-        idx < num_neighbors,
-        1e-12 / ca.constpow((xb - x1) * (xb - x1) + (yb - y1) * (yb - y1), 2),
-        0
-    )
-    Obj += ca.sum2(d)
+    # d = ca.if_else(
+    #     idx < num_neighbors,
+    #     1e-12 / ca.constpow((xb - x1) * (xb - x1) + (yb - y1) * (yb - y1), 2),
+    #     0
+    # )
+    # Obj += ca.sum2(d)  # Prevent sites from getting too close. TODO: I broke this, might need to restore.
 
     return Obj
 

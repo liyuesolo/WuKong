@@ -52,7 +52,7 @@ def codegen_obj_power_cell(N, opt=3):
     # yn = (c3 - c2) / (m2 - m3)
     # xn = m2 * yn + c2
 
-    Obj = obj_base(N, x1, y1, x2, y2, xn, yn, p)
+    Obj = obj_base(N, x1, y1, xn, yn, p)
 
     # Generate and compile C code
     ident = 'power_cell_' + str(N)
