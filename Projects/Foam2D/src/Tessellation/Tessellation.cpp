@@ -145,7 +145,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             int n1 = neighborsClipped[i][j];
             int n2 = neighborsClipped[i][(j + 1) % clippedDegree];
 
-            if (n1 > n_vtx && n2 > n_vtx) {
+            if (n1 >= n_vtx && n2 >= n_vtx) {
                 if (n1 == n2) {
                     neighborsClipped[i].erase(neighborsClipped[i].begin() + j);
                     clippedDegree--;
