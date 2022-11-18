@@ -21,6 +21,7 @@ int main() {
     DynamicObjective dynamics;
     dynamics.energyObjective = &energy;
     dynamics.M = 0.002 * VectorXd::Ones(energy.n_free * (2 + tessellation.getNumVertexParams()));
+    dynamics.H = 0.002 * VectorXd::Ones(energy.n_free * (2 + tessellation.getNumVertexParams()));
     dynamics.h = 0.03;
 
     TrajectoryOptNLP nlp;

@@ -479,7 +479,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         F.row(i) = IV3(i * 3 + 0, i * 3 + 1, i * 3 + 2);
         Fc.row(i) = (currentCell == energyObjective.drag_idx ? TV3(0.1, 0.1, 0.1) : getColor(areas(currentCell),
                                                                                              energyObjective.getAreaTarget(
-                                                                                                     i)));
+                                                                                                     currentCell)));
 
         currentIdxInCell++;
         if (currentIdxInCell == neighborLists[currentCell].size()) {
@@ -677,7 +677,7 @@ void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gra
         gradient_norm = energyObjective.getGradient(c_free).norm();
         energyObjective.getHessian(c_free, hessian);
     }
-    Eigen::SimplicialLLT <Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
     hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
 }
 
