@@ -64,10 +64,10 @@ def codegen_obj_power_cell(N, opt=3):
 
     # Input: Objective function parameters
     p = ca.MX.sym('p', 1, 8)
+    num_neighbors = p[4]
 
     # Input: Neighbor indices and type (cell or boundary edge)
-    n = ca.MX.sym('n', 2, N + 3)
-    nt, ni = ca.vertsplit(n)
+    n = ca.MX.sym('n', 1, N + 1)
 
     # Input: Voronoi sites
     c = ca.MX.sym('c', 3, N + 1)
@@ -77,10 +77,10 @@ def codegen_obj_power_cell(N, opt=3):
     b = ca.MX.sym('b', 4, N + 1)
     xbs, ybs, xbe, ybe = ca.vertsplit(b)
 
-    i1 = ni[1:-1]
-    i2 = ni[2:]
-    t1 = nt[1:-1]
-    t2 = nt[2:]
+    i1 = 1 + ca.mod(ca.transpose(ca.linspace(0, N, N + 1)), num_neighbors)
+    i2 = ca.horzcat(i1[1:], i1[0])
+    t1 = n[i1]
+    t2 = n[i2]
 
     x0 = xc[0]
     y0 = yc[0]

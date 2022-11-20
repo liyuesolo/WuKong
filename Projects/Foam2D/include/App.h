@@ -21,7 +21,7 @@ public:
     bool optimize = false;
     bool show_dual = false;
 
-    int scenario = 0;
+    int scenario = 2;
     int free_sites = 40;
     int fixed_sites = 40;
 
@@ -37,14 +37,14 @@ public:
     int objImageType = 0;
 
     bool dynamics = false;
-    double dynamics_dt = 0.03;
+    double dynamics_dt = 0.01;
     double dynamics_m = 0.002;
     double dynamics_eta = 0.01;
     double dynamics_tol = 1e-4;
 
     bool trajOptMode = false;
     bool trajOptOptimized = false;
-    int trajOpt_N = 30;
+    int trajOpt_N = 50;
     int trajOpt_frame = 0;
 
 public:

@@ -35,7 +35,7 @@ EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<i
 
     int maxN = 20;
 
-    n_in.resize((maxN + 3) * 2);
+    n_in.resize((maxN + 1) * 1);
     n_in.setZero();
 
     c_in.resize((maxN + 1) * dims);
@@ -48,8 +48,7 @@ EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<i
     map = VectorXi::Map(cell.data(), cell.size());
 
     for (int i = 0; i < cell.size(); i++) {
-        n_in(i * 2 + 0) = map(i) >= n_vtx;
-        n_in(i * 2 + 1) = i;
+        n_in(i) = map(i) >= n_vtx;
 
         if (cell[i] < n_vtx) {
             c_in.segment(i * dims, dims) = c.segment(map(i) * dims, dims);
@@ -58,10 +57,6 @@ EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<i
             b_in.segment<2>(i * 4 + 2) = boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
         }
     }
-    n_in(cell.size() * 2 + 0) = n_in(1 * 2 + 0);
-    n_in(cell.size() * 2 + 1) = n_in(1 * 2 + 1);
-    n_in(cell.size() * 2 + 2) = n_in(2 * 2 + 0);
-    n_in(cell.size() * 2 + 3) = n_in(2 * 2 + 1);
 }
 
 double EnergyObjective::evaluate(const VectorXd &c_free) const {
