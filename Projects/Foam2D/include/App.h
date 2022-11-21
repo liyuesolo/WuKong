@@ -47,6 +47,13 @@ public:
     int trajOpt_N = 50;
     int trajOpt_frame = 0;
 
+    int matchSource = 0;
+    float opacityImage = 1;
+    float opacitySegmentation = 0;
+    float opacityModel = 0;
+    bool showImage = false;
+    std::string sourceImagePath;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);
@@ -54,6 +61,8 @@ public:
     void generateScenario();
 
     void updateViewerData(igl::opengl::glfw::Viewer &viewer);
+
+    void displaySourceImage(igl::opengl::glfw::Viewer &viewer);
 
     void updatePlotData();
 

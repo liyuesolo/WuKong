@@ -78,6 +78,18 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     resetVertexParams();
 }
 
+void Foam2D::initImageMatch() { //TODO: Implement
+    n_free = 1;
+    n_fixed = 4;
+
+    vertices.resize((n_free + n_fixed) * 2);
+
+    vertices << 3, 3, 2, 2, 4, 2, 4, 4, 2, 4;
+
+    boundary.resize(0);
+    resetVertexParams();
+}
+
 void Foam2D::dynamicsInit(double dt, double m, double mu) {
     VectorXT c = tessellations[tessellation]->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
@@ -477,7 +489,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
         E.row(i) = IV(i * 3 + 1, i * 3 + 2);
         F.row(i) = IV3(i * 3 + 0, i * 3 + 1, i * 3 + 2);
-        Fc.row(i) = (currentCell == energyObjective.drag_idx ? TV3(0.1, 0.1, 0.1) : getColor(areas(currentCell),
+        Fc.row(i) = (currentCell == energyObjective.drag_idx ? TV3(0.4, 0.4, 0.4) : getColor(areas(currentCell),
                                                                                              energyObjective.getAreaTarget(
                                                                                                      currentCell)));
 

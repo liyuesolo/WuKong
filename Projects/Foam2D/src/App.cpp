@@ -1,6 +1,10 @@
 #include "../include/App.h"
 #include "../src/implot/implot.h"
 
+#include <filesystem>
+#include <opencv4/opencv2/opencv.hpp>
+#include <opencv4/opencv2/core/eigen.hpp>
+
 void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
@@ -87,6 +91,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Boundary Cell Circle");
         scenarios.push_back("Gradient Test");
         scenarios.push_back("Bounding Box");
+        scenarios.push_back("Image Match");
+        std::vector<std::string> sourceImages;
+        std::string path = std::filesystem::current_path().append("../../../Projects/Foam2D/images");
+        for (const auto &entry: std::filesystem::directory_iterator(path)) {
+            sourceImages.push_back(proximate(entry.path(), path));
+        }
         ImGui::Combo("Scenario", &scenario, scenarios);
         if (scenario == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -96,10 +106,20 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         } else if (scenario == 2) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &free_sites, 10, 100);
+        } else if (scenario == 3) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+            ImGui::Combo("Source", &matchSource, sourceImages);
         }
         if (ImGui::Button("Generate")) {
             generateScenario();
+            sourceImagePath = "../../../Projects/Foam2D/images/" + sourceImages[matchSource];
             updateViewerData(viewer);
+        }
+        if (scenario == 3) {
+            ImGui::Text("Opacity");
+            ImGui::SliderFloat("Image", &opacityImage, 0, 1);
+            ImGui::SliderFloat("Segmentation", &opacitySegmentation, 0, 1);
+            ImGui::SliderFloat("Model", &opacityModel, 0, 1);
         }
 
         ImGui::Spacing();
@@ -242,16 +262,18 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1500, 1000);
     viewer.core().camera_zoom = 2.07 * 1.5;
-    viewer.data().show_lines = 0;
+    viewer.data(0).show_lines = 0;
     viewer.core().background_color.setOnes();
-    viewer.data().point_size = 10;
+    viewer.data(0).point_size = 10;
     viewer.core().is_animating = true;
-    viewer.data().shininess = 0;
+    viewer.data(0).shininess = 0;
+    viewer.core().lighting_factor = 0;
 
     updateViewerData(viewer);
 }
 
 void Foam2DApp::generateScenario() {
+    showImage = false;
     switch (scenario) {
         case 0:
             foam.initRandomSitesInCircle(free_sites, fixed_sites);
@@ -261,6 +283,10 @@ void Foam2DApp::generateScenario() {
             break;
         case 2:
             foam.initRandomCellsInBox(free_sites);
+            break;
+        case 3:
+            foam.initImageMatch();
+            showImage = true;
             break;
         default:
             std::cout << "Error: scenario not implemented!";
@@ -286,12 +312,12 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         foam.addTrajectoryOptViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
     }
 
-    viewer.data().clear();
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_colors(Fc);
+    viewer.data(0).clear();
+    viewer.data(0).set_mesh(V, F);
+    viewer.data(0).set_colors(Fc);
 
-    viewer.data().set_points(points, points_c);
-    viewer.data().set_edges(nodes, lines, lines_c);
+    viewer.data(0).set_points(points, points_c);
+    viewer.data(0).set_edges(nodes, lines, lines_c);
 
 //    Eigen::Matrix<double, 4, 3> bb;
 //    bb << -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0;
@@ -299,7 +325,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
 //    bb_p2 << 1, -1, 0, 1, 1, 0, -1, 1, 0, -1, -1, 0;
 //    Eigen::Matrix<double, 4, 3> bb_c;
 //    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
-//    viewer.data().add_edges(bb, bb_p2, bb_c);
+//    viewer.data(0).add_edges(bb, bb_p2, bb_c);
 
     int nb = foam.boundary.rows() / 2;
     MatrixXd b1, b2, bc;
@@ -311,11 +337,60 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         b2.row(i) = TV3(foam.boundary(2 * ((i + 1) % nb) + 0), foam.boundary(2 * ((i + 1) % nb) + 1), 0);
         bc.row(i) = TV3(1, 0, 0);
     }
-    viewer.data().add_edges(b1, b2, bc);
+    viewer.data(0).add_edges(b1, b2, bc);
 
     Eigen::Matrix<double, 4, 3> camera;
     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
     viewer.core().align_camera_center(camera);
+
+    if (showImage) {
+        displaySourceImage(viewer);
+    } else {
+        for (int i = 1; i < viewer.data_list.size(); i++) {
+            viewer.data(i).clear();
+        }
+    }
+}
+
+void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
+    if (viewer.data_list.size() < 2) {
+        viewer.append_mesh(true);
+    }
+
+    cv::Mat imageCV = cv::imread(sourceImagePath, cv::IMREAD_COLOR);
+    cv::Mat bgrCV[3];
+    cv::split(imageCV, bgrCV);
+    Eigen::MatrixXf b, g, r;
+    cv::cv2eigen(bgrCV[0], b);
+    cv::cv2eigen(bgrCV[1], g);
+    cv::cv2eigen(bgrCV[2], r);
+    Eigen::MatrixXf a = 255 * opacityImage * Eigen::MatrixXf::Ones(b.rows(), b.cols());
+
+    double dx = b.cols() * 0.8 / std::max(b.rows(), b.cols());
+    double dy = b.rows() * 0.8 / std::max(b.rows(), b.cols());
+
+    Eigen::Matrix<double, -1, -1> V;
+    Eigen::Matrix<double, -1, -1> UV;
+    Eigen::Matrix<int, -1, -1> F;
+
+    V.resize(4, 3);
+    V << -dx, -dy, 0, dx, -dy, 0, dx, dy, 0, -dx, dy, 0;
+
+    UV.resize(4, 2);
+    UV << 1, 0, 1, 1, 0, 1, 0, 0;
+
+    F.resize(2, 3);
+    F << 0, 1, 2, 2, 3, 0;
+
+    viewer.data(1).set_mesh(V, F);
+    viewer.data(1).set_colors(Eigen::RowVector3d(1, 1, 1));
+    viewer.data(1).show_lines = false;
+    viewer.data(1).show_texture = true;
+    viewer.data(1).shininess = 0;
+
+    viewer.data(1).set_texture(r.cast<unsigned char>(), g.cast<unsigned char>(),
+                               b.cast<unsigned char>(), a.cast<unsigned char>());
+    viewer.data(1).set_uv(UV);
 }
 
 void Foam2DApp::updatePlotData() {

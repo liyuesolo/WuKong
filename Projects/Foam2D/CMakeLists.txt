@@ -34,6 +34,10 @@ else ()
     message("MKL Not Found!")
 endif ()
 
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+target_link_libraries(Foam2D ${OpenCV_LIBS})
+
 target_link_libraries(Foam2D ${CODEGENLIBS} ${DEPS})
 
 add_subdirectory(src/optLib)

@@ -55,6 +55,8 @@ public:
 
     void initRandomCellsInBox(int n_free_in);
 
+    void initImageMatch();
+
     void dynamicsInit(double dt, double m, double mu);
 
     void dynamicsNewStep();
