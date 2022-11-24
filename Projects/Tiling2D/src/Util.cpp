@@ -303,7 +303,7 @@ void loadPBCDataFromMSHFile(const std::string& filename,
 
     int n_pairs;
     in >> n_pairs;
-    std::cout << "n_pairs " << n_pairs << std::endl;
+    // std::cout << "n_pairs " << n_pairs << std::endl;
     int dir, node0, node1;
     for (int i = 0; i < n_pairs; i++)
     {

@@ -2,12 +2,12 @@ import os
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed, parallel_backend
 def process(i, data):
-    IH = 60
+    IH = 26
     params = data[i]
     # result_folder = "/home/DockerMountFolder/SandwichStructure/TrainingData/" + str(i) + "/"
     # exe_file = "/home/DockerMountFolder/WuKong/build/Projects/Tiling2D/Tiling2D"
     exe_file = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D"
-    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH67/" + str(i) + "/"
+    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH28/" + str(i) + "/"
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     os.environ['OMP_THREAD_LIMIT'] = '1'
@@ -17,7 +17,7 @@ def process(i, data):
 
 
 param_list = []
-params_range = [[0.1,0.3], [0.6, 1.1]]
+params_range = [[0.005,0.8], [0.005, 1.0]]
 n_sp_params = 20
 
 

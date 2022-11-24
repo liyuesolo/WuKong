@@ -128,15 +128,21 @@ void HexFEMSolver::checkGreenStrain()
         return dN_dxi;
     };
 
-    iterateHexElementSerial([&](int cell_idx){
+    int cnt = 0;
+    iterateHexElementSerial([&](int cell_idx)
+    {
+        if (cnt > 0 )
+            return;
+        cnt++;
         HexIdx nodal_indices = indices.segment<8>(cell_idx * 8);
     
         HexNodes x = getHexNodesDeformed(cell_idx);
         HexNodes X = getHexNodesUndeformed(cell_idx);
 
-        int cnt = 0;
         for (int i = 1; i < 3; i++)
+        {
             for (int j = 1; j < 3; j++)
+            {
                 for (int k = 1; k < 3; k++)
                 {
                     TV xi(pow(-1.0, i) / sqrt(3.0), pow(-1.0, j) / sqrt(3.0), pow(-1.0, k) / sqrt(3.0));
@@ -149,7 +155,13 @@ void HexFEMSolver::checkGreenStrain()
                     TM GreenStrain = 0.5 * (defGrad.transpose() * defGrad - TM::Identity());
                     std::cout << GreenStrain << std::endl;
                     std::cout << std::endl;
+                    break;
                 }
+                break;
+            }
+            break;
+        }
+        return;
         
     });
 }

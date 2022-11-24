@@ -22,11 +22,12 @@ bool FEMSolver::addPBCPairsXY()
     alpha = angleToXaxis(t2);
     rotate(alpha);
     getPBCPairsAxisDirection(dir1_side0, dir1_side1, 1);
-    // rotate(-alpha);
+    rotate(-alpha);
 
     bool same_num_nodes_dir0 = dir0_side0.size() == dir0_side1.size();
     bool same_num_nodes_dir1 = dir1_side0.size() == dir1_side1.size();
-    std::cout << same_num_nodes_dir0 << " " << same_num_nodes_dir1 << std::endl;
+    if (same_num_nodes_dir0 != same_num_nodes_dir1)
+        std::cout << same_num_nodes_dir0 << " " << same_num_nodes_dir1 << std::endl;
     
     pbc_pairs = {std::vector<IV>(), std::vector<IV>()};
     // std::cout <<  dir0_side0.size() << " " << dir0_side1.size()

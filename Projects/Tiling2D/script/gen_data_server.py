@@ -7,12 +7,12 @@ def process(i, data):
     # result_folder = "/home/DockerMountFolder/SandwichStructure/TrainingData/" + str(i) + "/"
     # exe_file = "/home/DockerMountFolder/WuKong/build/Projects/Tiling2D/Tiling2D"
     exe_file = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D"
-    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/Server/" + str(i) + "/"
+    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH21/" + str(i) + "/"
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     os.environ['OMP_THREAD_LIMIT'] = '1'
     # if os.path.exists(result_folder + "structure.vtk"):
-    os.system(exe_file+" "+str(IH)+" " + result_folder + " 2 " + str(params[0]) + " " + str(params[1]))
+    os.system(exe_file+" "+str(IH)+" " + result_folder + " 2 " + str(params[0]) + " " + str(params[1]) + " 0")
     
 
 

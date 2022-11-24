@@ -352,7 +352,7 @@ def validate(n_tiling_params, count, model_name, validation_data, validation_lab
     current_dir = os.path.dirname(os.path.realpath(__file__))
     save_path = os.path.join(current_dir, 'Models/' + str(count) + "/")
     # model = loadSingleFamilyModel(n_tiling_params)
-    model = buildSingleFamilyModelSeparateTilingParams(n_tiling_params)
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + model_name + '.tf')
     # model.save(save_path + model_name + '.h5')
     grad_loss, e_loss, sigma, energy = testStep(n_tiling_params,validation_data, validation_label, model)
@@ -560,7 +560,7 @@ if __name__ == "__main__":
     uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/training_data_IH07_latest.txt"
     # uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/training_data_with_strain.txt"
     # uniaxial_data = "/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/data_45_only_off_diagonal.txt"
-    full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH21_shuffled.txt"  
+    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH21/all_data_IH21_shuffled.txt"  
     # full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH50_shuffled.txt"
     # full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH01/all_data_IH01_shuffled.txt"
     # full_data = "./stvk_gt.txt"  
@@ -571,7 +571,7 @@ if __name__ == "__main__":
         data_all, label_all = loadDataSplitTest(n_tiling_params, full_data, False, True)
     
 
-    five_percent = int(len(data_all) * 0.05)
+    five_percent = int(len(data_all) * 0.5)
     # five_percent = int(len(data_all) * 0.2)
     
     train_data =  data_all[:-five_percent]
@@ -592,14 +592,14 @@ if __name__ == "__main__":
         else:
             model_name = "biaxial"
     else:
-        model_name = "IH50"
+        model_name = "IH21"
     
     
     # train(n_tiling_params, model_name, 
     #     train_data, train_label, validation_data, validation_label)
-    # validate(n_tiling_params, 180, 
-    #     model_name, train_data, train_label)
+    validate(n_tiling_params, 334, 
+        model_name, train_data, train_label)
     # testUniAxial(n_tiling_params, 20, "full40k")
-    testMonotonic(n_tiling_params, 52, "full40k")
+    # testMonotonic(n_tiling_params, 52, "full40k")
     # plotPotentialPolar(n_tiling_params, result_folder, model_name)
     

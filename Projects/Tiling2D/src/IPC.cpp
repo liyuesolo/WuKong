@@ -113,7 +113,8 @@ void FEMSolver::computeIPCRestData()
     //             std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
     //     }
     // }
-    std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
+    if (verbose)
+        std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
     
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);

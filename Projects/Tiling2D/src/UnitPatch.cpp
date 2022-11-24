@@ -856,10 +856,11 @@ void Tiling2D::generateOnePerodicUnit()
     
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
-    int tiling_idx = 19;
+    // int tiling_idx = 21;
+    // int tiling_idx = 19;
     // int tiling_idx = 46;
     // int tiling_idx = 60;
-    // int tiling_idx = 26;
+    int tiling_idx = 26;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -873,8 +874,9 @@ void Tiling2D::generateOnePerodicUnit()
     //     T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
     //     diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
     // }
-    params[0] = 0.150485; params[1] = 0.54993;
-    // params[0] = 0.17; params[1] = 0.35;
+    // params[0] = 0.10521948; params[1] = 0.76036263;
+    params[0] = 0.8; params[1] = 1.0;
+    // params[2] = 0.38;
      
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0., 0.75, 0.;
@@ -1181,7 +1183,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     std::vector<std::vector<dvec2>> polygons_v;
 
     Vector<T, 4> transf; TV2 xy;
-    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 5.0, 5.0, xy);
+    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 10.0, 10.0, xy);
 
     Vector<T, 8> periodic;
     periodic.head<2>() = TV2(0,0);
@@ -1735,6 +1737,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::option::setNumber("Geometry.Tolerance", eps);
     gmsh::option::setNumber("Mesh.ElementOrder", 2);
 
+    gmsh::option::setNumber("General.Verbosity", 0);
+
     gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
     gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
@@ -1892,8 +1896,8 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     
     gmsh::write(prefix + ".vtk");
     std::ofstream translation(prefix + "_translation.txt");
-    translation << std::setprecision(14) << t1.transpose() << std::endl;
-    translation << std::setprecision(14) << t2.transpose() << std::endl;
+    translation << std::setprecision(20) << t1.transpose() << std::endl;
+    translation << std::setprecision(20) << t2.transpose() << std::endl;
     translation.close();
     gmsh::finalize();
     

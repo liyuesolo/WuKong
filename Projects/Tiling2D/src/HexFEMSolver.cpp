@@ -465,12 +465,12 @@ bool HexFEMSolver::staticSolveStep(int step)
 
     T residual_norm = computeResidual(u, residual);
     std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
+    checkGreenStrain();
+    T e;
+    addPlainStrainElastsicPotential(e);
+    std::cout << "elastic potential " << e << std::endl;
     if (residual_norm < newton_tol)
     {
-        checkGreenStrain();
-        T e;
-        addPlainStrainElastsicPotential(e);
-        std::cout << "elastic potential " << e << std::endl;
         return true;
     }
     

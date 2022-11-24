@@ -201,10 +201,12 @@ def buildConstitutiveModel(n_strain_entry):
     inputS = Input(shape=(n_strain_entry,),dtype=tf.float32, name="inputS")
     num_hidden = 256
     # x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(inputS)
-    x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
+    # x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
+    x = Dense(num_hidden, activation='tanh')(inputS)
     for _ in range(5):
         # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
-        x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+        # x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+        x = Dense(num_hidden, activation='tanh')(x)
     # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(x)
     output = Dense(1, activation=tf.keras.activations.softplus)(x)
     model = Model(inputS, output)

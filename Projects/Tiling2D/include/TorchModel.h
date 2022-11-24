@@ -101,6 +101,7 @@ public:
 
     void dpsi(const TV3& Green_strain, const VectorXT& ti, TV3& dPsidE);
     void dpsiBatch(const VectorXT& Green_strain, const VectorXT& ti, VectorXT& dPsidE);
+    void ddpsiBatch(const VectorXT& Green_strain, const VectorXT& ti, VectorXT& d2PsidE2);
 
     void psiBatch(const VectorXT& Green_strain, 
         VectorXT& psi_batch, const VectorXT& ti); 

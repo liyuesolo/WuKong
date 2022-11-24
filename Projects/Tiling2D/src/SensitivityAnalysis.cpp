@@ -139,21 +139,22 @@ void SensitivityAnalysis::sampleGradientDirection()
     design_parameters = ti;
     n_dof_design = objective.n_dof_design; 
     objective.targets.resize(3);
-    objective.targets << -0.00629592,   0.0239969,   0.0720543;
+    objective.targets << -0.0062526045597, 0.0239273131735, 0.0717615511869;
     VectorXT dOdp(n_dof_design); dOdp.setZero();
     design_parameters = ti;
     T O = 0.0;
     // T g_norm = objective.gradient(design_parameters, dOdp, O);
-    dOdp << 0.130998, -0.0189072;
+    // dOdp << 0.130998, -0.0189072;
+    dOdp << 1., 0.;
     // dOdp = TV(0.195, 0.795) - TV(0.105, 0.505);
     // std::cout << dOdp.transpose() << std::endl;
     // std::exit(0);
     VectorXT search_direction = dOdp;
     // std::cout << search_direction.transpose() << std::endl;
     
-    // T step_size = 5e-3;
-    T step_size = 1e-4;
-    int step = 100; 
+    T step_size = 1e-5;
+    // T step_size = 1e-3;
+    int step = 300; 
 
     std::vector<T> energies;
     std::vector<T> energies_gd;
@@ -251,8 +252,9 @@ void SensitivityAnalysis::optimizeMMA()
 
 void SensitivityAnalysis::optimizeLBFGSB()
 {
+    T epsilon = 1e-7;
     objective.targets.resize(3);
-    objective.targets << -0.00629592,   0.0239969,   0.0720543;
+    objective.targets << -0.0062526, 0.0239273, 0.0717616;
 
     // TV ti(0.15, 0.65);
     TV ti(0.12, 0.60);
@@ -276,10 +278,19 @@ void SensitivityAnalysis::optimizeLBFGSB()
 //     VectorXT x_previous = design_parameters;
     auto computeObjAndGradient = [&](const VectorXT& x, VectorXT& grad)
     {
-        design_parameters = x;
         T energy = 0.0;
-        T g_norm = objective.gradient(design_parameters, grad, energy);
-        std::cout << "[L-BFGS-B] iter " << cnt << " |g|: " << grad.norm() << " obj: " << energy << std::endl;
+        T g_norm = objective.gradient(x, grad, energy);
+        VectorXT feasible_point_gradients = grad;
+        for (int i = 0; i < n_dof_design; i++)
+        {
+            if (design_parameters[i] < min_p[i] + epsilon && grad[i] >= 0)
+                feasible_point_gradients[i] = 0.0;
+            if (design_parameters[i] > max_p[i] - epsilon && grad[i] <= 0)
+                feasible_point_gradients[i] = 0.0;
+        }
+        g_norm = feasible_point_gradients.norm();
+
+        std::cout << "[L-BFGS-B] iter " << cnt << " proj |g|: " << g_norm << " obj: " << energy << std::endl;
         cnt++;
         return energy;
     };

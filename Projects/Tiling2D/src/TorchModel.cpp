@@ -26,8 +26,49 @@ void TorchModel::test()
     }
     VectorXT psi_batch(n_sample);
     // psiBatch(Green_strain_batch, psi_batch, ti);
-    VectorXT dPsidE_batch;
-    dpsiBatch(Green_strain_batch, ti, dPsidE_batch);
+    // VectorXT dPsidE_batch;
+    // dpsiBatch(Green_strain_batch, ti, dPsidE_batch);
+    VectorXT d2PsidE2_batch;
+    ddpsiBatch(Green_strain_batch, ti, d2PsidE2_batch);
+}
+
+void TorchModel::ddpsiBatch(const VectorXT& Green_strain, const VectorXT& ti, VectorXT& d2PsidE2)
+{
+    int n_samples = Green_strain.rows() / 3;
+    std::vector<torch::jit::IValue> input;
+    torch::Tensor nn_input_tensor;
+    int n_tiling_params = ti.rows();
+
+    MatrixXT nn_input(n_samples, 3 + n_tiling_params);
+    for (int i = 0; i < n_samples; i++)
+    {
+        nn_input.row(i).segment(0, n_tiling_params) = ti;
+        nn_input.row(i).segment(n_tiling_params, 3) = Green_strain;
+    }
+    toTorchGPU(nn_input, nn_input_tensor, true);
+
+    input.push_back(nn_input_tensor);
+    auto output = torch_module.forward(input);
+    torch::Tensor psi_torch = output.toTensor(); 
+
+    int input_dim = n_samples;
+    int output_dim = 1;
+    auto options = torch::TensorOptions().dtype(torch::kFloat64);
+    // torch::Tensor J = torch::zeros({output_dim, input_dim}, options).to(torch::kCUDA);
+    torch::Tensor grad_output = torch::ones({input_dim, output_dim}, options).to(torch::kCUDA);
+    auto gradient = torch::autograd::grad({psi_torch},
+                                        {nn_input_tensor},
+                                        /*grad_outputs=*/{grad_output},
+                                        /*retain_graph=*/true,
+                                        /*create_graph=*/true);
+
+    torch::Tensor hess_output = torch::ones({input_dim, 5}, options).to(torch::kCUDA);                                        
+    auto hessian = torch::autograd::grad({gradient},
+                                        {nn_input_tensor},
+                                        /*grad_outputs=*/{hess_output},
+                                        /*retain_graph=*/true,
+                                        /*create_graph=*/true);
+    std::cout << hessian << std::endl;
 }
 
 void TorchModel::dpsiBatch(const VectorXT& Green_strain, const VectorXT& ti, VectorXT& dPsidE)

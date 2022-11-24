@@ -88,6 +88,9 @@ public:
     // ################ Generate Training Data ###############
     void generateNHHomogenousData(const std::string& result_folder);
     void sampleUniaxialStrain(const std::string& result_folder, T strain);
+    void sampleSingleStructurePoissonDisk(const std::string& result_folder, 
+        const TV& uniaxial_strain_range, const TV& biaxial_strain_range, 
+        const TV& theta_range, int n_sample_total, int IH);
     void sampleSingleFamily(const std::string& result_folder, 
         const TV& uniaxial_strain_range, const TV& biaxial_strain_range, 
         const TV& theta_range, int n_sp_params, int n_sp_uni, 

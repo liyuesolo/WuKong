@@ -804,10 +804,10 @@ def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params,
             tf.convert_to_tensor(tiling_params), model)
         H = H.numpy()
         
-        # ev_H = np.linalg.eigvals(H)
-        # min_ev = np.min(ev_H)
-        # if min_ev < 0.0:
-        #     H += np.diag(np.full(len(x),min_ev + 1e-6))
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-6))
         return H
 
     def objAndEnergy(x):
@@ -923,7 +923,7 @@ def optimizeUniaxialStrainSingleDirection(model, n_tiling_params,
         ev_H = np.linalg.eigvals(H)
         min_ev = np.min(ev_H)
         if min_ev < 0.0:
-            H += np.diag(np.full(len(x),min_ev + 1e-6))
+            H += np.diag(np.full(len(x),min_ev + 1e-4))
         return H
 
     def objAndEnergy(x):
@@ -1541,12 +1541,12 @@ def optimizeUniaxialStressConstraints():
 def plotEnergyAlongDirection():
     n_tiling_params = 2
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
+    save_path = os.path.join(current_dir, 'Models/' + str(334) + "/")
     # model = loadSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH21" + '.tf')
-    cauchy = [-0.025-0.5*(-0.025 * -0.025), 0.025+ 0.5 * 0.025*0.025, 0.085 + 0.5 * 0.085*0.085]
-    # cauchy = [-0.025, 0.025, 0.085]
+    # cauchy = [-0.025-0.5*(-0.025 * -0.025), 0.025+ 0.5 * 0.025*0.025, 0.085 + 0.5 * 0.085*0.085]
+    cauchy = [-0.025, 0.025, 0.085]
     strain_samples = []
     for strain in cauchy:
         if (strain < 0):
@@ -1567,21 +1567,26 @@ def plotEnergyAlongDirection():
     # print(stress_d)
     # exit(0)
     # test_dir = np.array([0.801549, 0.597929])
-    test_dir = np.array([0.130998, -0.0189072])
+    # test_dir = np.array([0.130998, -0.0189072])
+    test_dir = np.array([1.0, 0.0])
     # test_dir = np.array([0.195, 0.795]) - np.array([0.105, 0.505])
     # test_dir /= np.linalg.norm(test_dir)
-    step = 100
-    step_size = 1e-4
+    step = 300
+    step_size = 1e-5
     steps = np.arange(-0.5 * float(step) * step_size, 0.5 * float(step) * step_size, step_size)
     
     theta = 0.0
-    stress_targets = [-0.0062526,  0.0239273,  0.0717616]
+    stress_targets = [-0.0062526045597, 0.0239273131735, 0.0717615511869]
     # stress_targets = [-0.00581623,  0.02364756,  0.06924607]
     obj = []
     x_axis = []
+    cnt = 0
     for xi in steps:
+        cnt += 1
+        if (cnt > 50):
+            break
         ti_step = ti + xi * test_dir
-        x_axis.append(ti_step[0])
+        x_axis.append(xi)
         uniaxial_strain_batch = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
                                 theta, strain_samples, 
                                 ti_step, model)
@@ -1598,11 +1603,11 @@ def plotEnergyAlongDirection():
         error = (stress_d.numpy().flatten() - stress_targets)
         # print(error)
         obj.append(0.5 * np.dot(error, error))
-    # print(obj)
+    print(obj)
     # print(steps.tolist())
     plt.plot(x_axis, obj, linewidth=3.0, label="energy_NN")
     plt.legend(loc="upper left")
-    plt.savefig("energy_NN.png", dpi=300)
+    plt.savefig("energy_NN_large.png", dpi=300)
     
 
 

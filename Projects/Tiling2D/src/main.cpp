@@ -15,7 +15,7 @@
 #include "../include/HexFEMSolver.h"
 #include <boost/filesystem.hpp>
 #include "../include/TorchModel.h"
-
+#include "../include/PoissonDisk.h"
 
 inline bool fileExist (const std::string& name) {
     std::ifstream f(name.c_str());
@@ -76,14 +76,14 @@ int main(int argc, char** argv)
             hex_fem_solver.buildGrid3D(TV3::Zero(), TV3(1.0, dx, 1.0), dx);
             Vector<bool, 4> flag;
             flag << true, false, true, false;
-            // hex_fem_solver.E = 0.0;
+            hex_fem_solver.E = 0.0;
             // hex_fem_solver.nu = 0.3;
-            // hex_fem_solver.updateLameParams();
+            hex_fem_solver.updateLameParams();
             hex_fem_solver.KL_stiffness = 1e6;
-            hex_fem_solver.KL_stiffness_shear = 0;
+            hex_fem_solver.KL_stiffness_shear = 1e6;
             hex_fem_solver.addCornerVtxToDirichletVertices(flag);
             // hex_fem_solver.setBCBendCorner(4.0, 0.0);
-            hex_fem_solver.penaltyInPlane(0, 0.2);
+            hex_fem_solver.penaltyInPlane(0, 0.1);
             app.setViewer(viewer, menu);
             viewer.launch();
         };
@@ -155,8 +155,8 @@ int main(int argc, char** argv)
             // VectorXT stress_samples;
             // ti_obj.computeStressForDifferentStrain(TV(0.115, 0.75), stress_samples);
             // ti_obj.computeStressForDifferentStrain(TV(0.104123,  0.53023), stress_samples);
-            // for (int i = 0; i < n_sp_strain; i++)
-            //     std::cout << stress_samples[i] << ", ";
+            // for (int i = 0; i < strain_samples.size(); i++)
+                // std::cout << std::setprecision(12) << stress_samples[i] << ", ";
             
             // std::cout << ti_obj.generateSingleTarget(ti) << std::endl;
             // sa.optimizeMMA();
@@ -165,7 +165,8 @@ int main(int argc, char** argv)
             sa.sampleGradientDirection();
 
         };
-        inverseDesign();
+        // testNeuralConstitutiveModel();
+        // inverseDesign();
         // renderScene();
         // run3DSim();
         // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
@@ -176,8 +177,25 @@ int main(int argc, char** argv)
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
         // runSimApp();
-
-        
+        // tiling.sampleSingleStructurePoissonDisk("/home/yueli/Documents/ETH/SandwichStructure/IH21_PoissonDisk/", TV(0.7, 1.5), TV(0.9, 1.2), TV(0, M_PI), 100, 19);
+        PoissonDisk pd;
+        // Vector<T, 4> min_corner; min_corner << 0.05, 0.25, 0.05, 0.4;
+        // Vector<T, 4> max_corner; max_corner << 0.3, 0.75, 0.15, 0.8;
+        Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.05, 0.2;
+        Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
+        VectorXT samples;
+        pd.sampleNDBox<4>(min_corner, max_corner, 2000, samples);
+        std::ofstream out("PD_IH23.txt");
+        out << "[ ";
+        for (int i = 0; i < 2000; i++)
+        {
+            out << "[";
+            for (int j = 0; j < 3; j++)
+                out << std::setprecision(12) << samples[i * 4  + j] << ", ";
+            out << samples[i * 4  + 3] << "], " << std::endl;
+        }
+        out << "]";
+        out.close();
     }
     return 0;
 }

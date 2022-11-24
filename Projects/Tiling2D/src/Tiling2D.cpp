@@ -2,6 +2,7 @@
 #include <igl/readMSH.h>
 #include <igl/jet.h>
 #include "../include/Tiling2D.h"
+#include "../include/PoissonDisk.h"
 
 void Tiling2D::generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file)
 {
@@ -9,18 +10,18 @@ void Tiling2D::generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const
 }
 
 /*
-Triangle:               Triangle6:          Triangle9/10:          Triangle12/15:
+Triangle:               Triangle6:         
 
 v
-^                                                                   2
-|                                                                   | \
-2                       2                    2                      9   8
-|`\                     |`\                  | \                    |     \
-|  `\                   |  `\                7   6                 10 (14)  7
-|    `\                 5    `4              |     \                |         \
-|      `\               |      `\            8  (9)  5             11 (12) (13) 6
-|        `\             |        `\          |         \            |             \
-0----------1 --> u      0-----3----1         0---3---4---1          0---3---4---5---1
+^                                                                   
+|                                           
+2                       2                   
+|`\                     |`\                  
+|  `\                   |  `\                
+|    `\                 5    `4              
+|      `\               |      `\            
+|        `\             |        `\          
+0----------1 --> u      0-----3----1         
 
 */
 bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PBCType pbc_type)
@@ -97,7 +98,8 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     solver.undeformed *= 50; // use milimeters
     solver.thickness = 50.0;
     solver.computeBoundingBox(min_corner, max_corner);
-    std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    if (solver.verbose)
+        std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
     // std::getchar();
     solver.E = 2.6 * 1e1;
 
@@ -124,9 +126,9 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             if (!valid_structure)
                 return false;
             solver.add_pbc_strain = true;
-            solver.strain_theta = 0;
-            solver.uniaxial_strain = 1.0+0.085 + 0.5 * 0.085*0.085;
-            solver.uniaxial_strain_ortho = 1.09;
+            solver.strain_theta = 0.0;
+            solver.uniaxial_strain = 1.1;
+            solver.uniaxial_strain_ortho = 0.9;
             solver.biaxial = false;
             solver.pbc_strain_w = 1e6;
             solver.pbc_w = 1e6;
@@ -163,7 +165,8 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             TV(0, -percent * dy));
     }
     int n_pbc_pairs = solver.pbc_pairs[0].size() + solver.pbc_pairs[1].size();
-    std::cout << "pbc_pairs size " << n_pbc_pairs << std::endl;
+    if (solver.verbose)
+        std::cout << "pbc_pairs size " << n_pbc_pairs << std::endl;
     if (n_pbc_pairs < 4)
         return false;
     // solver.unilateral_qubic = true;
@@ -180,7 +183,8 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
 
     T total_area = solver.computeTotalArea();
     T bbox_area = (max_corner[0] - min_corner[0]) * (max_corner[1] - min_corner[1]);
-    std::cout << "Material Percentage: " << total_area / bbox_area << std::endl;
+    // if (solver.verbose)
+        // std::cout << "Material Percentage: " << total_area / bbox_area << std::endl;
     solver.use_ipc = true;
     solver.add_friction = false;
     solver.barrier_distance = 1e-4;
@@ -199,9 +203,9 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         }
     }
 
-    solver.project_block_PD = true;
+    solver.project_block_PD = false;
     solver.verbose = true;
-    solver.max_newton_iter = 3000;
+    solver.max_newton_iter = 500;
     return true;
 }
 
@@ -411,9 +415,9 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
 
 void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit)
 {
-    Eigen::MatrixXd V_tile(V.rows() * 4, 3);
-    Eigen::MatrixXi F_tile(F.rows() * 4, 3);
-    Eigen::MatrixXd C_tile(F.rows() * 4, 3);
+    Eigen::MatrixXd V_tile(V.rows() * 9, 3);
+    Eigen::MatrixXi F_tile(F.rows() * 9, 3);
+    Eigen::MatrixXd C_tile(F.rows() * 9, 3);
 
     TV left0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][0] * 2);
     TV right0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][1] * 2);
@@ -423,34 +427,39 @@ void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Matri
     TV dy = (top0 - bottom0);
 
     int n_face = F.rows(), n_vtx = V.rows();
-    V_tile.block(0, 0, n_vtx, 3) = V;
-    V_tile.block(n_vtx, 0, n_vtx, 3) = V;
-    V_tile.block(2 * n_vtx, 0, n_vtx, 3) = V;
-    V_tile.block(3 * n_vtx, 0, n_vtx, 3) = V;
+    for (int i = 0; i < 9; i++)
+        V_tile.block(i * n_vtx, 0, n_vtx, 3) = V;
     
     tbb::parallel_for(0, n_vtx, [&](int i){
         V_tile.row(n_vtx + i).head<2>() += dx;
         V_tile.row(3 * n_vtx + i).head<2>() += dx;
         V_tile.row(2 * n_vtx + i).head<2>() += dy;
         V_tile.row(3 * n_vtx + i).head<2>() += dy;
+        V_tile.row(4 * n_vtx + i).head<2>() += dx;
+        V_tile.row(4 * n_vtx + i).head<2>() -= dy;
+        V_tile.row(5 * n_vtx + i).head<2>() -= dx;
+        V_tile.row(5 * n_vtx + i).head<2>() -= dy;
+        V_tile.row(6 * n_vtx + i).head<2>() -= dx;
+        V_tile.row(7 * n_vtx + i).head<2>() -= dy;
+        V_tile.row(8 * n_vtx + i).head<2>() -= dx;
+        V_tile.row(8 * n_vtx + i).head<2>() += dy;
     });
     
 
     V = V_tile;
     Eigen::MatrixXi offset(n_face, 3);
     offset.setConstant(n_vtx);
-    F_tile.block(0, 0, n_face, 3) = F;
-    F_tile.block(n_face, 0, n_face, 3) = F + offset;
-    F_tile.block(2 * n_face, 0, n_face, 3) = F + 2 * offset;
-    F_tile.block(3 * n_face, 0, n_face, 3) = F + 3 * offset;
+
+    for (int i = 0; i < 9; i++)
+        F_tile.block(i * n_face, 0, n_face, 3) = F + i * offset;
+    
     F = F_tile;
 
     Eigen::MatrixXd C_unit = C;
     C_unit.col(2).setConstant(0.3); C_unit.col(1).setConstant(1.0);
-    C_tile.block(0, 0, n_face, 3) = C_unit;
-    C_tile.block(n_face, 0, n_face, 3) = C;
-    C_tile.block(2 * n_face, 0, n_face, 3) = C;
-    C_tile.block(3 * n_face, 0, n_face, 3) = C;
+    C_tile.block(0, 0, n_face, 3) = C;
+    for (int i = 1; i < 9; i++)
+        C_tile.block(i * n_face, 0, n_face, 3) = C;
     C = C_tile;
 
 }
@@ -979,6 +988,82 @@ void Tiling2D::generateNHHomogenousData(const std::string& result_folder)
     }
     
     out.close();
+}
+
+void Tiling2D::sampleSingleStructurePoissonDisk(const std::string& result_folder, 
+        const TV& uniaxial_strain_range, const TV& biaxial_strain_range, 
+        const TV& theta_range, int n_sample_total, int IH)
+{
+    std::vector<T> params = {0.15, 0.6};
+    std::ofstream out;
+    out.open(result_folder + "data_poisson_disk.txt");
+    PoissonDisk pd;
+    Vector<T, 4> min_corner; 
+    min_corner << biaxial_strain_range[0], biaxial_strain_range[0], 
+                    uniaxial_strain_range[0], theta_range[0];
+    Vector<T, 4> max_corner; 
+    max_corner << biaxial_strain_range[1], biaxial_strain_range[1],
+                    uniaxial_strain_range[1], theta_range[1];
+
+    VectorXT samples;
+    pd.sampleNDBox<4>(min_corner, max_corner, n_sample_total, samples);
+
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    
+    bool valid_structure = initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    if (!valid_structure)
+        return;
+    
+    auto runSim = [&](T theta, T strain, T strain_ortho)
+    {
+            
+        bool solve_succeed = solver.staticSolve();
+
+        VectorXT residual(solver.num_nodes * 2); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        for (int m = 0; m < params.size(); m++)
+        {
+            out << params[m] << " ";
+        }
+        out << std::setprecision(20) << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << " " << strain_ortho << " "
+            << residual.norm() << std::endl;
+        if (!solve_succeed)
+        {
+            solver.reset();
+            solver.saveToOBJ(result_folder + "_failure_theta_" + std::to_string(theta)
+                +"_strain_" + std::to_string(strain) + "_strain_ortho_" + std::to_string(strain_ortho)+".obj");
+        }
+    };
+
+    solver.verbose = false;
+    solver.biaxial = false;
+
+    for (int i = 0; i < n_sample_total; i++)
+    {
+        solver.uniaxial_strain = samples[i * 4 + 2];
+        runSim(samples[i * 4 + 3], samples[i * 4 + 2], 0.0);
+    }
+    solver.biaxial = true;
+    for (int i = 0; i < n_sample_total; i++)
+    {
+        solver.uniaxial_strain = samples[i * 4 + 0];
+        solver.uniaxial_strain_ortho = samples[i * 4 + 1];
+        runSim(samples[i * 4 + 3], samples[i * 4 + 0], samples[i * 4 + 1]);
+    }
 }
 
 void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& params, 
