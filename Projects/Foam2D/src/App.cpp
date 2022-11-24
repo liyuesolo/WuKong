@@ -5,6 +5,8 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <opencv4/opencv2/core/eigen.hpp>
 
+#include "../include/ImageMatch/Segmentation.h"
+
 void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
@@ -97,29 +99,33 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         for (const auto &entry: std::filesystem::directory_iterator(path)) {
             sourceImages.push_back(proximate(entry.path(), path));
         }
-        ImGui::Combo("Scenario", &scenario, scenarios);
+        if (ImGui::Combo("Scenario", &scenario, scenarios)) {
+            matchShowImage = true;
+        }
         if (scenario == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &free_sites, 10, 100);
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Boundary Sites", &fixed_sites, 10, 100);
-        } else if (scenario == 2) {
+        }
+        if (scenario == 2) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &free_sites, 10, 100);
-        } else if (scenario == 3) {
-            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-            ImGui::Combo("Source", &matchSource, sourceImages);
-        }
-        if (ImGui::Button("Generate")) {
-            generateScenario();
-            sourceImagePath = "../../../Projects/Foam2D/images/" + sourceImages[matchSource];
-            updateViewerData(viewer);
         }
         if (scenario == 3) {
-            ImGui::Text("Opacity");
-            ImGui::SliderFloat("Image", &opacityImage, 0, 1);
-            ImGui::SliderFloat("Segmentation", &opacitySegmentation, 0, 1);
-            ImGui::SliderFloat("Model", &opacityModel, 0, 1);
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
+            ImGui::Combo("Source", &matchSource, sourceImages);
+            ImGui::Checkbox("Show Image", &matchShowImage);
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0);
+        } else {
+            matchShowImage = false;
+        }
+
+        if (ImGui::Button("Generate")) {
+            generateScenario();
+            matchSourcePath = "../../../Projects/Foam2D/images/" + sourceImages[matchSource];
+            updateViewerData(viewer);
         }
 
         ImGui::Spacing();
@@ -273,7 +279,6 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 }
 
 void Foam2DApp::generateScenario() {
-    showImage = false;
     switch (scenario) {
         case 0:
             foam.initRandomSitesInCircle(free_sites, fixed_sites);
@@ -286,7 +291,6 @@ void Foam2DApp::generateScenario() {
             break;
         case 3:
             foam.initImageMatch();
-            showImage = true;
             break;
         default:
             std::cout << "Error: scenario not implemented!";
@@ -343,7 +347,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
     viewer.core().align_camera_center(camera);
 
-    if (showImage) {
+    if (matchShowImage) {
         displaySourceImage(viewer);
     } else {
         for (int i = 1; i < viewer.data_list.size(); i++) {
@@ -357,14 +361,17 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
         viewer.append_mesh(true);
     }
 
-    cv::Mat imageCV = cv::imread(sourceImagePath, cv::IMREAD_COLOR);
-    cv::Mat bgrCV[3];
-    cv::split(imageCV, bgrCV);
+    cv::Mat image = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
+    cv::Mat segmentation = imageMatchSegmentation(image);
+    cv::Mat combined;
+    cv::addWeighted(image, 1 - matchImageW, segmentation, matchImageW, 0, combined);
+
+    cv::Mat bgr[3];
+    cv::split(combined, bgr);
     Eigen::MatrixXf b, g, r;
-    cv::cv2eigen(bgrCV[0], b);
-    cv::cv2eigen(bgrCV[1], g);
-    cv::cv2eigen(bgrCV[2], r);
-    Eigen::MatrixXf a = 255 * opacityImage * Eigen::MatrixXf::Ones(b.rows(), b.cols());
+    cv::cv2eigen(bgr[0], b);
+    cv::cv2eigen(bgr[1], g);
+    cv::cv2eigen(bgr[2], r);
 
     double dx = b.cols() * 0.8 / std::max(b.rows(), b.cols());
     double dy = b.rows() * 0.8 / std::max(b.rows(), b.cols());
@@ -382,6 +389,7 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
     F.resize(2, 3);
     F << 0, 1, 2, 2, 3, 0;
 
+    viewer.data(1).clear();
     viewer.data(1).set_mesh(V, F);
     viewer.data(1).set_colors(Eigen::RowVector3d(1, 1, 1));
     viewer.data(1).show_lines = false;
@@ -389,7 +397,7 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
     viewer.data(1).shininess = 0;
 
     viewer.data(1).set_texture(r.cast<unsigned char>(), g.cast<unsigned char>(),
-                               b.cast<unsigned char>(), a.cast<unsigned char>());
+                               b.cast<unsigned char>());
     viewer.data(1).set_uv(UV);
 }
 

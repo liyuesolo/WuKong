@@ -47,12 +47,10 @@ public:
     int trajOpt_N = 50;
     int trajOpt_frame = 0;
 
+    bool matchShowImage = false;
+    float matchImageW = 0.5;
     int matchSource = 0;
-    float opacityImage = 1;
-    float opacitySegmentation = 0;
-    float opacityModel = 0;
-    bool showImage = false;
-    std::string sourceImagePath;
+    std::string matchSourcePath;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
