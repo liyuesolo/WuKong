@@ -1,9 +1,10 @@
 import casadi as ca
 import os
-from codegen_obj_base_clip import obj_base, gen_code
+from codegen_energy_clip import energy
+from codegen_base import gen_code
 
 
-def obj_power_cell_node_ss(x0, y0, z0, xc1, yc1, zc1, xc2, yc2, zc2):
+def power_cell_node_ss(x0, y0, z0, xc1, yc1, zc1, xc2, yc2, zc2):
     x1 = x0
     y1 = y0
     z1 = z0
@@ -34,7 +35,7 @@ def obj_power_cell_node_ss(x0, y0, z0, xc1, yc1, zc1, xc2, yc2, zc2):
     return [xn, yn]
 
 
-def obj_power_cell_node_sb(x0, y0, z0, xc1, yc1, zc1, xbs2, ybs2, xbe2, ybe2):
+def power_cell_node_sb(x0, y0, z0, xc1, yc1, zc1, xbs2, ybs2, xbe2, ybe2):
     rsq = (xc1 - x0) * (xc1 - x0) + (yc1 - y0) * (yc1 - y0)
     d = 0.5 + 0.5 * (zc1 - z0) / (rsq + 1e-14)
 
@@ -54,11 +55,11 @@ def obj_power_cell_node_sb(x0, y0, z0, xc1, yc1, zc1, xbs2, ybs2, xbe2, ybe2):
     return [xn, yn]
 
 
-def obj_power_cell_node_bb(xbs2, ybs2):
+def power_cell_node_bb(xbs2, ybs2):
     return [xbs2, ybs2]
 
 
-def codegen_obj_power_cell(N, opt=3):
+def codegen_energy_power_cell(N, opt=3):
     # Problem dimensions
     # N = 20  # max number of neighbor sites + 2 (?)
 
@@ -103,21 +104,17 @@ def codegen_obj_power_cell(N, opt=3):
     xbe2 = xbe[i2]
     ybe2 = ybe[i2]
 
-    nss = obj_power_cell_node_ss(x0, y0, z0, xc1, yc1, zc1, xc2, yc2, zc2)
-    nsb = obj_power_cell_node_sb(x0, y0, z0, xc1, yc1, zc1, xbs2, ybs2, xbe2, ybe2)
-    nbs = obj_power_cell_node_sb(x0, y0, z0, xc2, yc2, zc2, xbs1, ybs1, xbe1, ybe1)
-    nbb = obj_power_cell_node_bb(xbs2, ybs2)
+    nss = power_cell_node_ss(x0, y0, z0, xc1, yc1, zc1, xc2, yc2, zc2)
+    nsb = power_cell_node_sb(x0, y0, z0, xc1, yc1, zc1, xbs2, ybs2, xbe2, ybe2)
+    nbs = power_cell_node_sb(x0, y0, z0, xc2, yc2, zc2, xbs1, ybs1, xbe1, ybe1)
+    nbb = power_cell_node_bb(xbs2, ybs2)
 
     type = t1 * 2 + t2
     xn = ca.vertcat(nss[0], nsb[0], nbs[0], nbb[0])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
     yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
 
-    Obj = obj_base(N, x0, y0, xn, yn, p)
+    Obj = energy(N, x0, y0, xn, yn, p)
 
     # Generate and compile C code
-    ident = 'power_cell_' + str(N)
-    gen_code(ident, p, n, c, b, Obj, opt)
-
-
-if __name__ == "__main__":
-    codegen_obj_power_cell(20)
+    ident = 'energy_power_cell_' + str(N)
+    gen_code(ident, [p, n, c, b], c, Obj, opt)

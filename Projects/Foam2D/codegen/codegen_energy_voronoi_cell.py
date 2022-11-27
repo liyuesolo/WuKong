@@ -1,9 +1,10 @@
 import casadi as ca
 import os
-from codegen_obj_base import obj_base, gen_code
+from codegen_energy import energy
+from codegen_base import gen_code
 
 
-def codegen_obj_voronoi_cell(N, opt=3):
+def codegen_energy_voronoi_cell(N, opt=3):
     # Problem dimensions
     # N = 20  # max number of neighbor sites + 2 (?)
 
@@ -28,12 +29,8 @@ def codegen_obj_voronoi_cell(N, opt=3):
     xn = 0.5 * (x1 + x3) - m * (y3 - y1)
     yn = 0.5 * (y1 + y3) + m * (x3 - x1)
 
-    Obj = obj_base(N, x1, y1, xn, yn, p)
+    Obj = energy(N, x1, y1, xn, yn, p)
 
     # Generate and compile C code
-    ident = 'voronoi_cell_' + str(N)
-    gen_code(ident, c, p, Obj, opt)
-
-
-if __name__ == "__main__":
-    codegen_obj_voronoi_cell(20)
+    ident = 'energy_voronoi_cell_' + str(N)
+    gen_code(ident, [c, p], c, Obj, opt)

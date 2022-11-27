@@ -25,7 +25,7 @@
 
 #include "TrajectoryOptNLP.h"
 
-class IpoptSolver : public Ipopt::TNLP {
+class TrajectoryOptSolver : public Ipopt::TNLP {
 public:
     TrajectoryOptNLP *trajectoryOptNlp;
 
@@ -36,7 +36,7 @@ public:
     double *primal;
 
     /** default constructor */
-    IpoptSolver(TrajectoryOptNLP *_trajectoryOptNlp)
+    TrajectoryOptSolver(TrajectoryOptNLP *_trajectoryOptNlp)
             : trajectoryOptNlp(_trajectoryOptNlp) {
         N = trajectoryOptNlp->N;
         nc = trajectoryOptNlp->c0.rows();
@@ -48,7 +48,7 @@ public:
 
 
     /** default destructor */
-    virtual ~IpoptSolver() {
+    virtual ~TrajectoryOptSolver() {
         delete[] primal;
     }
 
@@ -484,8 +484,8 @@ private:
    */
     //@{
     //  IpoptSolver();
-    IpoptSolver(const IpoptSolver &);
+    TrajectoryOptSolver(const TrajectoryOptSolver &);
 
-    IpoptSolver &operator=(const IpoptSolver &);
+    TrajectoryOptSolver &operator=(const TrajectoryOptSolver &);
     //@}
 };

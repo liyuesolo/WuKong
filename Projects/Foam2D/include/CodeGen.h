@@ -13,16 +13,16 @@ struct CasadiFunctions;
 
 CasadiFunctions getCasadiFunctions(Tessellation *tessellation, int num_neighbors);
 
-void add_O_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+void add_E_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
                 double &out);
 
 void
-add_dOdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+add_dEdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
               const VectorXi &map,
               VectorXT &out);
 
 void
-add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+add_d2Edc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
                 const VectorXi &map,
                 MatrixXT &out);
 

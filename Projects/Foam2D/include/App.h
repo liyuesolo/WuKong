@@ -7,6 +7,7 @@
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
+#include <opencv4/opencv2/opencv.hpp>
 
 #include "Foam2D.h"
 
@@ -51,6 +52,9 @@ public:
     float matchImageW = 0.5;
     int matchSource = 0;
     std::string matchSourcePath;
+    cv::Mat matchImage;
+    cv::Mat matchSegmented;
+    cv::Mat matchMarkers;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,

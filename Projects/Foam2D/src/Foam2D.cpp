@@ -5,7 +5,7 @@
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../include/Constants.h"
 #include <random>
-#include "../include/TrajectoryOpt/IpoptSolver.h"
+#include "../include/TrajectoryOpt/TrajectoryOptSolver.h"
 #include <thread>
 
 Foam2D::Foam2D() {
@@ -59,34 +59,66 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     n_free = n_free_in;
     n_fixed = 8;
 
-    double hw = 0.75;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> dis(-hw, hw);
-
     VectorXT inf_points(n_fixed * 2);
     double inf = 100;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double dx = 0.75;
+    double dy = 0.75;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-dx, dx);
 
     vertices = VectorXT::Zero((n_free + n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment(n_free * 2, n_fixed * 2) = inf_points;
 
     boundary.resize(4 * 2);
-    boundary << -hw, -hw, hw, -hw, hw, hw, -hw, hw;
+    boundary << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
 
     resetVertexParams();
 }
 
-void Foam2D::initImageMatch() { //TODO: Implement
-    n_free = 1;
-    n_fixed = 4;
+void Foam2D::initImageMatch(MatrixXi markers) {
+    n_free = markers.maxCoeff();
+    n_fixed = 8;
 
-    vertices.resize((n_free + n_fixed) * 2);
+    VectorXT inf_points(n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
-    vertices << 3, 3, 2, 2, 4, 2, 4, 4, 2, 4;
+    vertices = VectorXT::Zero((n_free + n_fixed) * 2);
+    vertices.segment(n_free * 2, n_fixed * 2) = inf_points;
 
-    boundary.resize(0);
+    double dx = markers.cols() * 0.8 / std::max(markers.rows(), markers.cols());
+    double dy = markers.rows() * 0.8 / std::max(markers.rows(), markers.cols());
+
+    boundary.resize(4 * 2);
+    boundary << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+
+    VectorXi count = VectorXi::Zero(n_free);
+    VectorXT sumX = VectorXT::Zero(n_free);
+    VectorXT sumY = VectorXT::Zero(n_free);
+
+    for (int i = 0; i < markers.rows(); i++) {
+        for (int j = 0; j < markers.cols(); j++) {
+            int mark = markers(i, j) - 1;
+            if (mark >= 0) {
+                count(mark) += 1;
+                sumX(mark) += (j * 2.0 / markers.cols() - 1.0) * dx;
+                sumY(mark) -= (i * 2.0 / markers.rows() - 1.0) * dy;
+            }
+        }
+    }
+
+    std::cout << "Printing " << n_free << " vertices." << std::endl;
+    for (int i = 0; i < n_free; i++) {
+        double x = sumX(i) / count(i);
+        double y = sumY(i) / count(i);
+        vertices.segment<2>(i * 2) = TV(x, y);
+        std::cout << x << " " << y << " " << count(i) << std::endl;
+    }
+
     resetVertexParams();
 }
 
@@ -208,7 +240,7 @@ static void threadIPOPT(TrajectoryOptNLP *nlp) {
     // objective.bound[0] = 1e-5;
     // objective.bound[1] = 12.0 * simulation.cells.unit;
 
-    Ipopt::SmartPtr<IpoptSolver> mynlp = new IpoptSolver(nlp);
+    Ipopt::SmartPtr<TrajectoryOptSolver> mynlp = new TrajectoryOptSolver(nlp);
 
     status = app->OptimizeTNLP(mynlp);
     if (status == Ipopt::Solve_Succeeded) {

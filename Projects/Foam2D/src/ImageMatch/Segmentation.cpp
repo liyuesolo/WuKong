@@ -6,110 +6,7 @@
 
 #include "../../include/ImageMatch/Segmentation.h"
 
-//cv::Mat imageMatchSegmentation(cv::Mat src) {
-//    // Show the source image
-//    imshow("Source Image", src);
-//
-//    cv::Mat src_grayscale;
-//    cv::cvtColor(src, src_grayscale, cv::COLOR_BGR2GRAY);
-//
-//    cv::Mat img_blur;
-//    cv::blur(src_grayscale, img_blur, cv::Size_<int>(5, 5));
-//    imshow("Blurred Image", img_blur);
-//
-//    cv::Mat canny;
-//    cv::Canny(img_blur, canny, 100, 100);
-//    imshow("Canny", canny);
-//
-//    cv::Mat ridges;
-//    cv::ximgproc::RidgeDetectionFilter::create()->getRidgeFilteredImage(img_blur, ridges);
-//    imshow("Ridges", ridges);
-//
-//    cv::Mat skel;
-//    cv::ximgproc::thinning(ridges, skel);
-//    cv::bitwise_not(skel, skel); // TODO: INVERT
-//    imshow("Skel", skel);
-//    cv::Mat skelImg;
-//    cv::cvtColor(skel, skelImg, cv::COLOR_GRAY2BGR);
-//
-//    cv::Mat bw;
-//    threshold(skel, bw, 40, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-//    imshow("Binary Image", bw);
-//    // Perform the distance transform algorithm
-//    cv::Mat dist;
-//    distanceTransform(bw, dist, cv::DIST_L2, 3);
-//    // Normalize the distance image for range = {0.0, 1.0}
-//    // so we can visualize and threshold it
-//    normalize(dist, dist, 0, 1.0, cv::NORM_MINMAX);
-//    imshow("Distance Transform Image", dist);
-//    // Threshold to obtain the peaks
-//    // This will be the markers for the foreground objects
-//    threshold(dist, dist, 0.1, 1.0, cv::THRESH_BINARY);
-//    // Dilate a bit the dist image
-//    cv::Mat kernel1 = cv::Mat::ones(3, 3, CV_8U);
-//    cv::dilate(dist, dist, kernel1);
-////    imshow("Peaks", dist);
-//    // Create the CV_8U version of the distance image
-//    // It is needed for findContours()
-//    cv::Mat dist_8u;
-//    dist.convertTo(dist_8u, CV_8U);
-//    // Find total markers
-//    std::vector<std::vector<cv::Point> > contours;
-//
-//    cv::bitwise_not(ridges, ridges);
-////    cv::dilate(ridges, ridges, kernel1);
-//    imshow("Peaks", ridges);
-//    cv::findContours(ridges, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-//    // Create the marker image for the watershed algorithm
-//    cv::Mat markers = cv::Mat::zeros(dist.size(), CV_32S);
-//    // Draw the foreground markers
-//    for (size_t i = 0; i < contours.size(); i++) {
-//        drawContours(markers, contours, static_cast<int>(i), cv::Scalar(static_cast<int>(i) + 1), -1);
-//    }
-//    // Draw the background marker
-//    circle(markers, cv::Point(5, 5), 3, cv::Scalar(255), -1);
-//    cv::Mat markers8u;
-//    markers.convertTo(markers8u, CV_8U, 10);
-//    imshow("Markers", markers8u);
-//    // Perform the watershed algorithm
-//    cv::watershed(skelImg, markers);
-//    cv::Mat mark;
-//    markers.convertTo(mark, CV_8U);
-//    bitwise_not(mark, mark);
-//    //    imshow("Markers_v2", mark); // uncomment this if you want to see how the mark
-//    // image looks like at that point
-//    // Generate random colors
-//    std::vector<cv::Vec3b> colors;
-//    for (size_t i = 0; i < contours.size(); i++) {
-//        int b = cv::theRNG().uniform(0, 256);
-//        int g = cv::theRNG().uniform(0, 256);
-//        int r = cv::theRNG().uniform(0, 256);
-//        colors.push_back(cv::Vec3b((uchar) b, (uchar) g, (uchar) r));
-//    }
-//    // Create the result image
-//    cv::Mat dst = cv::Mat::zeros(markers.size(), CV_8UC3);
-//    // Fill labeled objects with random colors
-//    for (int i = 0; i < markers.rows; i++) {
-//        for (int j = 0; j < markers.cols; j++) {
-//            int index = markers.at<int>(i, j);
-//            if (index > 0 && index <= static_cast<int>(contours.size())) {
-//                dst.at<cv::Vec3b>(i, j) = colors[index - 1];
-//            }
-//        }
-//    }
-//    // Visualize the final image
-//    imshow("Final Result", dst);
-//
-////    cv::Mat dst = skel;
-////    cv::bitwise_not(dst, dst);
-////    cv::cvtColor(dst, dst, cv::COLOR_GRAY2BGR);
-////    dst.convertTo(dst, CV_8U);
-//
-//    cv::waitKey();
-//    return dst;
-//}
-
-cv::Mat imageMatchSegmentation(cv::Mat src) {
+cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &markers) {
 //    imshow("Source Image", src);
 
     cv::Mat image;
@@ -139,7 +36,7 @@ cv::Mat imageMatchSegmentation(cv::Mat src) {
     cv::findContours(image, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
     // Create the marker image for the watershed algorithm
-    cv::Mat markers = cv::Mat::zeros(image.size(), CV_32S);
+    markers = cv::Mat::zeros(image.size(), CV_32S);
     // Draw the foreground markers
     for (size_t i = 0; i < contours.size(); i++) {
         drawContours(markers, contours, static_cast<int>(i), cv::Scalar(static_cast<int>(i) + 1), -1);
@@ -158,7 +55,7 @@ cv::Mat imageMatchSegmentation(cv::Mat src) {
     }
 
     // Create the result image
-    cv::Mat dst = cv::Mat::zeros(markers.size(), CV_8UC3);
+    dst = cv::Mat::zeros(markers.size(), CV_8UC3);
     // Fill labeled objects with random colors
     for (int i = 0; i < markers.rows; i++) {
         for (int j = 0; j < markers.cols; j++) {

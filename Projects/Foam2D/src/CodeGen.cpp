@@ -1,17 +1,17 @@
 #include "../include/CodeGen.h"
 
-#include "../codegen/ca_O_voronoi_cell_10.h"
-#include "../codegen/ca_dOdc_voronoi_cell_10.h"
-#include "../codegen/ca_d2Odc2_voronoi_cell_10.h"
-#include "../codegen/ca_O_power_cell_10.h"
-#include "../codegen/ca_dOdc_power_cell_10.h"
-#include "../codegen/ca_d2Odc2_power_cell_10.h"
-#include "../codegen/ca_O_voronoi_cell_20.h"
-#include "../codegen/ca_dOdc_voronoi_cell_20.h"
-#include "../codegen/ca_d2Odc2_voronoi_cell_20.h"
-#include "../codegen/ca_O_power_cell_20.h"
-#include "../codegen/ca_dOdc_power_cell_20.h"
-#include "../codegen/ca_d2Odc2_power_cell_20.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10_gradient.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10_hessian.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_10.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_10_gradient.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_10_hessian.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20_gradient.h"
+#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20_hessian.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_20.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_20_gradient.h"
+#include "../codegen/codegen_energy/ca_energy_power_cell_20_hessian.h"
 
 #include <iostream>
 
@@ -29,14 +29,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         if (num_neighbors < 9) {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_O_voronoi_cell_10_work;
-                    casadiFunctions.sparsity = &ca_O_voronoi_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_voronoi_cell_10;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_10_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_10_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_10;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_O_power_cell_10_work;
-                    casadiFunctions.sparsity = &ca_O_power_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_power_cell_10;
+                    casadiFunctions.work = &ca_energy_power_cell_10_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_10_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_10;
                     break;
                 default:
                     break;
@@ -44,14 +44,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         } else {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_O_voronoi_cell_20_work;
-                    casadiFunctions.sparsity = &ca_O_voronoi_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_voronoi_cell_20;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_20_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_20_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_20;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_O_power_cell_20_work;
-                    casadiFunctions.sparsity = &ca_O_power_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_O_power_cell_20;
+                    casadiFunctions.work = &ca_energy_power_cell_20_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_20_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_20;
                     break;
                 default:
                     break;
@@ -61,14 +61,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         if (num_neighbors < 9) {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_dOdc_voronoi_cell_10_work;
-                    casadiFunctions.sparsity = &ca_dOdc_voronoi_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_voronoi_cell_10;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_10_gradient_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_10_gradient_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_10_gradient;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_dOdc_power_cell_10_work;
-                    casadiFunctions.sparsity = &ca_dOdc_power_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_power_cell_10;
+                    casadiFunctions.work = &ca_energy_power_cell_10_gradient_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_10_gradient_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_10_gradient;
                     break;
                 default:
                     break;
@@ -76,14 +76,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         } else {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_dOdc_voronoi_cell_20_work;
-                    casadiFunctions.sparsity = &ca_dOdc_voronoi_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_voronoi_cell_20;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_20_gradient_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_20_gradient_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_20_gradient;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_dOdc_power_cell_20_work;
-                    casadiFunctions.sparsity = &ca_dOdc_power_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_dOdc_power_cell_20;
+                    casadiFunctions.work = &ca_energy_power_cell_20_gradient_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_20_gradient_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_20_gradient;
                     break;
                 default:
                     break;
@@ -93,14 +93,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         if (num_neighbors < 9) {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_d2Odc2_voronoi_cell_10_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_voronoi_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_voronoi_cell_10;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_10_hessian_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_10_hessian_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_10_hessian;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_d2Odc2_power_cell_10_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_power_cell_10_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_power_cell_10;
+                    casadiFunctions.work = &ca_energy_power_cell_10_hessian_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_10_hessian_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_10_hessian;
                     break;
                 default:
                     break;
@@ -108,14 +108,14 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
         } else {
             switch (tessellation->getTessellationType()) {
                 case VORONOI:
-                    casadiFunctions.work = &ca_d2Odc2_voronoi_cell_20_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_voronoi_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_voronoi_cell_20;
+                    casadiFunctions.work = &ca_energy_voronoi_cell_20_hessian_work;
+                    casadiFunctions.sparsity = &ca_energy_voronoi_cell_20_hessian_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_voronoi_cell_20_hessian;
                     break;
                 case POWER:
-                    casadiFunctions.work = &ca_d2Odc2_power_cell_20_work;
-                    casadiFunctions.sparsity = &ca_d2Odc2_power_cell_20_sparsity_out;
-                    casadiFunctions.evaluate = &ca_d2Odc2_power_cell_20;
+                    casadiFunctions.work = &ca_energy_power_cell_20_hessian_work;
+                    casadiFunctions.sparsity = &ca_energy_power_cell_20_hessian_sparsity_out;
+                    casadiFunctions.evaluate = &ca_energy_power_cell_20_hessian;
                     break;
                 default:
                     break;
@@ -126,7 +126,7 @@ CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int
     return casadiFunctions;
 }
 
-void add_O_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+void add_E_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
                 double &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 0, p(4));
 
@@ -151,7 +151,7 @@ void add_O_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n
 }
 
 void
-add_dOdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+add_dEdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
               const VectorXi &map,
               VectorXT &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 1, p(4));
@@ -190,7 +190,7 @@ add_dOdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, 
 }
 
 void
-add_d2Odc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+add_d2Edc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
                 const VectorXi &map,
                 MatrixXT &out) {
     CasadiFunctions casadiFunctions = getCasadiFunctions(tessellation, 2, p(4));

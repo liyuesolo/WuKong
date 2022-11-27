@@ -43,30 +43,34 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
-            if (numAreaTargets < 1) numAreaTargets = 1;
-            if (foam.energyObjective.area_targets.rows() >= numAreaTargets) {
-                VectorXd areaTargets = foam.energyObjective.area_targets.segment(0, numAreaTargets);
-                foam.energyObjective.area_targets = areaTargets;
-            } else {
-                VectorXd areaTargets(numAreaTargets);
-                areaTargets << foam.energyObjective.area_targets, foam.energyObjective.area_targets(0) * VectorXd::Ones(
-                        numAreaTargets - foam.energyObjective.area_targets.rows());
-                foam.energyObjective.area_targets = areaTargets;
-            }
-            updateViewerData(viewer);
-        }
-        {
-            ImGui::Indent(10.0f);
-            for (int i = 0; i < numAreaTargets; i++) {
-                ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-                if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
-                                       &foam.energyObjective.area_targets(i),
-                                       0.005f, 0.005f, "%.3f")) {
-                    updateViewerData(viewer);
+        if (scenario != 3) {
+            if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
+                if (numAreaTargets < 1) numAreaTargets = 1;
+                if (foam.energyObjective.area_targets.rows() >= numAreaTargets) {
+                    VectorXd areaTargets = foam.energyObjective.area_targets.segment(0, numAreaTargets);
+                    foam.energyObjective.area_targets = areaTargets;
+                } else {
+                    VectorXd areaTargets(numAreaTargets);
+                    areaTargets << foam.energyObjective.area_targets, foam.energyObjective.area_targets(0) *
+                                                                      VectorXd::Ones(
+                                                                              numAreaTargets -
+                                                                              foam.energyObjective.area_targets.rows());
+                    foam.energyObjective.area_targets = areaTargets;
                 }
+                updateViewerData(viewer);
             }
-            ImGui::Indent(-10.0f);
+            {
+                ImGui::Indent(10.0f);
+                for (int i = 0; i < numAreaTargets; i++) {
+                    ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+                    if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
+                                           &foam.energyObjective.area_targets(i),
+                                           0.005f, 0.005f, "%.3f")) {
+                        updateViewerData(viewer);
+                    }
+                }
+                ImGui::Indent(-10.0f);
+            }
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Weight", &foam.energyObjective.area_weight, 0.01f, 0.01f, "%.4f");
@@ -123,8 +127,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         }
 
         if (ImGui::Button("Generate")) {
-            generateScenario();
             matchSourcePath = "../../../Projects/Foam2D/images/" + sourceImages[matchSource];
+            generateScenario();
             updateViewerData(viewer);
         }
 
@@ -279,6 +283,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 }
 
 void Foam2DApp::generateScenario() {
+    MatrixXi markersEigen;
     switch (scenario) {
         case 0:
             foam.initRandomSitesInCircle(free_sites, fixed_sites);
@@ -290,7 +295,10 @@ void Foam2DApp::generateScenario() {
             foam.initRandomCellsInBox(free_sites);
             break;
         case 3:
-            foam.initImageMatch();
+            matchImage = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
+            imageMatchSegmentation(matchImage, matchSegmented, matchMarkers);
+            cv::cv2eigen(matchMarkers, markersEigen);
+            foam.initImageMatch(markersEigen);
             break;
         default:
             std::cout << "Error: scenario not implemented!";
@@ -361,10 +369,8 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
         viewer.append_mesh(true);
     }
 
-    cv::Mat image = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
-    cv::Mat segmentation = imageMatchSegmentation(image);
     cv::Mat combined;
-    cv::addWeighted(image, 1 - matchImageW, segmentation, matchImageW, 0, combined);
+    cv::addWeighted(matchImage, 1 - matchImageW, matchSegmented, matchImageW, 0, combined);
 
     cv::Mat bgr[3];
     cv::split(combined, bgr);
@@ -375,13 +381,14 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
 
     double dx = b.cols() * 0.8 / std::max(b.rows(), b.cols());
     double dy = b.rows() * 0.8 / std::max(b.rows(), b.cols());
+    double eps = 1e-3;
 
     Eigen::Matrix<double, -1, -1> V;
     Eigen::Matrix<double, -1, -1> UV;
     Eigen::Matrix<int, -1, -1> F;
 
     V.resize(4, 3);
-    V << -dx, -dy, 0, dx, -dy, 0, dx, dy, 0, -dx, dy, 0;
+    V << -dx, -dy, eps, dx, -dy, eps, dx, dy, eps, -dx, dy, eps;
 
     UV.resize(4, 2);
     UV << 1, 0, 1, 1, 0, 1, 0, 0;

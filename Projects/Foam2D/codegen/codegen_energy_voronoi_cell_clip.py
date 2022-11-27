@@ -1,9 +1,10 @@
 import casadi as ca
 import os
-from codegen_obj_base_clip import obj_base, gen_code
+from codegen_energy_clip import energy
+from codegen_base import gen_code
 
 
-def obj_voronoi_cell_node_ss(x0, y0, xc1, yc1, xc2, yc2):
+def voronoi_cell_node_ss(x0, y0, xc1, yc1, xc2, yc2):
     x1 = x0
     y1 = y0
     x2 = xc1
@@ -18,7 +19,7 @@ def obj_voronoi_cell_node_ss(x0, y0, xc1, yc1, xc2, yc2):
     return [xn, yn]
 
 
-def obj_voronoi_cell_node_sb(x0, y0, xc1, yc1, xbs2, ybs2, xbe2, ybe2):
+def voronoi_cell_node_sb(x0, y0, xc1, yc1, xbs2, ybs2, xbe2, ybe2):
     x1 = (x0 + xc1) / 2
     y1 = (y0 + yc1) / 2
     x2 = x1 + (yc1 - y0)
@@ -35,11 +36,11 @@ def obj_voronoi_cell_node_sb(x0, y0, xc1, yc1, xbs2, ybs2, xbe2, ybe2):
     return [xn, yn]
 
 
-def obj_voronoi_cell_node_bb(xbs2, ybs2):
+def voronoi_cell_node_bb(xbs2, ybs2):
     return [xbs2, ybs2]
 
 
-def codegen_obj_voronoi_cell(N, opt=3):
+def codegen_energy_voronoi_cell(N, opt=3):
     # Problem dimensions
     # N = 20  # max number of neighbor sites + 2 (?)
 
@@ -81,21 +82,17 @@ def codegen_obj_voronoi_cell(N, opt=3):
     xbe2 = xbe[i2]
     ybe2 = ybe[i2]
 
-    nss = obj_voronoi_cell_node_ss(x0, y0, xc1, yc1, xc2, yc2)
-    nsb = obj_voronoi_cell_node_sb(x0, y0, xc1, yc1, xbs2, ybs2, xbe2, ybe2)
-    nbs = obj_voronoi_cell_node_sb(x0, y0, xc2, yc2, xbs1, ybs1, xbe1, ybe1)
-    nbb = obj_voronoi_cell_node_bb(xbs2, ybs2)
+    nss = voronoi_cell_node_ss(x0, y0, xc1, yc1, xc2, yc2)
+    nsb = voronoi_cell_node_sb(x0, y0, xc1, yc1, xbs2, ybs2, xbe2, ybe2)
+    nbs = voronoi_cell_node_sb(x0, y0, xc2, yc2, xbs1, ybs1, xbe1, ybe1)
+    nbb = voronoi_cell_node_bb(xbs2, ybs2)
 
     type = t1 * 2 + t2
     xn = ca.vertcat(nss[0], nsb[0], nbs[0], nbb[0])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
     yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
 
-    Obj = obj_base(N, x0, y0, xn, yn, p)
+    Obj = energy(N, x0, y0, xn, yn, p)
 
     # Generate and compile C code
-    ident = 'voronoi_cell_' + str(N)
-    gen_code(ident, p, n, c, b, Obj, opt)
-
-
-if __name__ == "__main__":
-    codegen_obj_voronoi_cell(20)
+    ident = 'energy_voronoi_cell_' + str(N)
+    gen_code(ident, [p, n, c, b], c, Obj, opt)

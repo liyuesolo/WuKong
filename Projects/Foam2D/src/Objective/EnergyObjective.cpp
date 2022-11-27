@@ -84,7 +84,7 @@ double EnergyObjective::evaluate(const VectorXd &c_free) const {
         VectorXi map;
         getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_O_cell(tessellation, p_in, n_in, c_in, b_in, O);
+        add_E_cell(tessellation, p_in, n_in, c_in, b_in, O);
     }
 
     return O;
@@ -119,7 +119,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &c_free) const {
         VectorXi map;
         getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_dOdc_cell(tessellation, p_in, n_in, c_in, b_in, map, dOdc);
+        add_dEdc_cell(tessellation, p_in, n_in, c_in, b_in, map, dOdc);
     }
 
     return dOdc;
@@ -154,7 +154,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
         VectorXi map;
         getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_d2Odc2_cell(tessellation, p_in, n_in, c_in, b_in, map, d2Odc2);
+        add_d2Edc2_cell(tessellation, p_in, n_in, c_in, b_in, map, d2Odc2);
     }
 
     return d2Odc2.sparseView();

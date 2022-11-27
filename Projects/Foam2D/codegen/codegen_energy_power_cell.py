@@ -1,9 +1,10 @@
 import casadi as ca
 import os
-from codegen_obj_base import obj_base, gen_code
+from codegen_energy import energy
+from codegen_base import gen_code
 
 
-def codegen_obj_power_cell(N, opt=3):
+def codegen_energy_power_cell(N, opt=3):
     # Problem dimensions
     # N = 20  # max number of neighbor sites + 2 (?)
 
@@ -52,12 +53,8 @@ def codegen_obj_power_cell(N, opt=3):
     # yn = (c3 - c2) / (m2 - m3)
     # xn = m2 * yn + c2
 
-    Obj = obj_base(N, x1, y1, xn, yn, p)
+    Obj = energy(N, x1, y1, xn, yn, p)
 
     # Generate and compile C code
-    ident = 'power_cell_' + str(N)
-    gen_code(ident, c, p, Obj, opt)
-
-
-if __name__ == "__main__":
-    codegen_obj_power_cell(20)
+    ident = 'energy_power_cell_' + str(N)
+    gen_code(ident, [c, p], c, Obj, opt)

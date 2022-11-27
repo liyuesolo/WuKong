@@ -55,7 +55,7 @@ public:
 
     void initRandomCellsInBox(int n_free_in);
 
-    void initImageMatch();
+    void initImageMatch(MatrixXi markers);
 
     void dynamicsInit(double dt, double m, double mu);
 
