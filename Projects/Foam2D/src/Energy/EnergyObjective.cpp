@@ -1,5 +1,5 @@
-#include "../../include/Objective/EnergyObjective.h"
-#include "../../include/CodeGen.h"
+#include "../../include/Energy/EnergyObjective.h"
+#include "Projects/Foam2D/include/Energy/CodeGen.h"
 #include "../../include/Constants.h"
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {

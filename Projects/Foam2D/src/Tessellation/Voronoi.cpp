@@ -1,7 +1,7 @@
 #include <igl/triangle/triangulate.h>
 // libigl libirary must be included first
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
-#include "Projects/Foam2D/include/CodeGen.h"
+#include "Projects/Foam2D/include/Energy/CodeGen.h"
 #include <iostream>
 
 TV Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3) {

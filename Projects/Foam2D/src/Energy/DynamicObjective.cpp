@@ -1,4 +1,4 @@
-#include "../../include/Objective/DynamicObjective.h"
+#include "../../include/Energy/DynamicObjective.h"
 
 void DynamicObjective::init(const Eigen::VectorXd &c_free, double dt, double m, double mu, EnergyObjective *energy) {
     energyObjective = energy;

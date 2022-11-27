@@ -1,5 +1,4 @@
 import casadi as ca
-import os
 
 
 def energy(N, x1, y1, xn, yn, p):

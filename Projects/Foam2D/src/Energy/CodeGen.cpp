@@ -1,17 +1,17 @@
-#include "../include/CodeGen.h"
+#include "Projects/Foam2D/include/Energy/CodeGen.h"
 
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10.h"
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10_gradient.h"
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_10_hessian.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_10.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_10_gradient.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_10_hessian.h"
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20.h"
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20_gradient.h"
-#include "../codegen/codegen_energy/ca_energy_voronoi_cell_20_hessian.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_20.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_20_gradient.h"
-#include "../codegen/codegen_energy/ca_energy_power_cell_20_hessian.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_10.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_10_gradient.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_10_hessian.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_10.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_10_gradient.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_10_hessian.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_20.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_20_gradient.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_voronoi_cell_20_hessian.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_20.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_20_gradient.h"
+#include "Projects/Foam2D/codegen/codegen_energy/ca_energy_power_cell_20_hessian.h"
 
 #include <iostream>
 
@@ -23,7 +23,7 @@ struct CasadiFunctions {
     int (*evaluate)(const casadi_real **, casadi_real **, casadi_int *, casadi_real *, int);
 };
 
-CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int num_neighbors) {
+static CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int num_neighbors) {
     CasadiFunctions casadiFunctions;
     if (order == 0) {
         if (num_neighbors < 9) {

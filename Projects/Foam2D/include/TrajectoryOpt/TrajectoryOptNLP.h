@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Objective/DynamicObjective.h"
+#include "../Energy/DynamicObjective.h"
 
 class TrajectoryOptNLP {
 

@@ -1,7 +1,7 @@
 #include <igl/triangle/triangulate.h>
 // libigl libirary must be included first
 #include "Projects/Foam2D/include/Tessellation/Power.h"
-#include "Projects/Foam2D/include/CodeGen.h"
+#include "Projects/Foam2D/include/Energy/CodeGen.h"
 #include <iostream>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

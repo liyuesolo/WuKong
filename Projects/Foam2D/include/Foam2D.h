@@ -11,8 +11,8 @@
 
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
-#include "../include/Objective/EnergyObjective.h"
-#include "../include/Objective/DynamicObjective.h"
+#include "../include/Energy/EnergyObjective.h"
+#include "../include/Energy/DynamicObjective.h"
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 

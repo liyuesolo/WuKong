@@ -1,5 +1,5 @@
 #include "../include/Foam2D.h"
-#include "../include/CodeGen.h"
+#include "Projects/Foam2D/include/Energy/CodeGen.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
