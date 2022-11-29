@@ -1,5 +1,4 @@
-#ifndef CODEGEN_H
-#define CODEGEN_H
+#pragma once
 
 #include <Eigen/Sparse>
 #include "Projects/Foam2D/include/VecMatDef.h"
@@ -21,5 +20,3 @@ void
 add_d2Edc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
                 const VectorXi &map,
                 MatrixXT &out);
-
-#endif

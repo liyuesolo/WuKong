@@ -119,9 +119,19 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         if (scenario == 3) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
             ImGui::Combo("Source", &matchSource, sourceImages);
-            ImGui::Checkbox("Show Image", &matchShowImage);
+            if (ImGui::Checkbox("Show Image", &matchShowImage)) {
+                updateViewerData(viewer);
+            }
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0);
+            if (ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0)) {
+                updateViewerData(viewer);
+            }
+            if (ImGui::Button("Improve Match")) {
+                MatrixXi markersEigen;
+                cv::cv2eigen(matchMarkers, markersEigen);
+                foam.imageMatchOptimizeIPOPT(markersEigen);
+                updateViewerData(viewer);
+            }
         } else {
             matchShowImage = false;
         }

@@ -5,7 +5,7 @@ file(GLOB SOURCES "src/*.cpp" "src/Tessellation/*.cpp" "src/Energy/*.cpp" "src/I
 
 add_executable(Foam2D ${HEADERS} ${SOURCES})
 
-file(GLOB CODEGENLIBS "codegen/codegen_energy/lib*.so")
+file(GLOB CODEGENLIBS "codegen/codegen_energy/lib*.so" "codegen/codegen_imagematch/lib*.so")
 
 find_package(IPOPT REQUIRED)
 if (IPOPT_FOUND)

@@ -38,8 +38,9 @@ cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &marker
     // Create the marker image for the watershed algorithm
     markers = cv::Mat::zeros(image.size(), CV_32S);
     // Draw the foreground markers
+    int sub = 0;
     for (size_t i = 0; i < contours.size(); i++) {
-        drawContours(markers, contours, static_cast<int>(i), cv::Scalar(static_cast<int>(i) + 1), -1);
+        drawContours(markers, contours, static_cast<int>(i), cv::Scalar(static_cast<int>(i) + 1 - sub), -1);
     }
 
     // Perform the watershed algorithm

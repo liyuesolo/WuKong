@@ -1,0 +1,20 @@
+#pragma once
+
+#include <Eigen/Sparse>
+#include "Projects/Foam2D/include/VecMatDef.h"
+
+#include "Projects/Foam2D/include/Tessellation/Tessellation.h"
+
+using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+using VectorXi = Vector<int, Eigen::Dynamic>;
+
+void
+add_value_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+               const VectorXT &pix,
+               double &out);
+
+void
+add_gradient_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c,
+                  const VectorXT &b, const VectorXT &pix,
+                  const VectorXi &map,
+                  VectorXT &out);

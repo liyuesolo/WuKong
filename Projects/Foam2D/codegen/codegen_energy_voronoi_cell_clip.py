@@ -41,9 +41,6 @@ def voronoi_cell_node_bb(xbs2, ybs2):
 
 
 def codegen_energy_voronoi_cell(N, opt=3):
-    # Problem dimensions
-    # N = 20  # max number of neighbor sites + 2 (?)
-
     # Input: Objective function parameters
     p = ca.MX.sym('p', 1, 8)
     num_neighbors = p[4]

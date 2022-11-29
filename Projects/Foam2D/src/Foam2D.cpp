@@ -8,14 +8,18 @@
 #include "../include/TrajectoryOpt/TrajectoryOptSolver.h"
 #include <thread>
 
+#include "../include/ImageMatch/ImageMatchObjective.h"
+#include "../include/ImageMatch/ImageMatchNLP.h"
+#include "../include/ImageMatch/ImageMatchSolver.h"
+
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
     tessellations.push_back(new Power());
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
 
-    nlp.energy = &energyObjective;
-    nlp.dynamics = &dynamicObjective;
+    trajOptNLP.energy = &energyObjective;
+    trajOptNLP.dynamics = &dynamicObjective;
 }
 
 void Foam2D::resetVertexParams() {
@@ -79,8 +83,16 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     resetVertexParams();
 }
 
-void Foam2D::initImageMatch(MatrixXi markers) {
-    n_free = markers.maxCoeff();
+void Foam2D::initImageMatch(MatrixXi &markers) {
+    for (int i = 1; i < markers.maxCoeff(); i++) {
+        if ((markers.array() == i).count() == 0) {
+            markers = markers.unaryExpr([i](int x) { return x > i ? x - 1 : x; });
+            i--;
+        }
+    }
+    markers = markers.unaryExpr([](int x) { return x - 1; });
+
+    n_free = markers.maxCoeff() + 1;
     n_fixed = 8;
 
     VectorXT inf_points(n_fixed * 2);
@@ -102,7 +114,7 @@ void Foam2D::initImageMatch(MatrixXi markers) {
 
     for (int i = 0; i < markers.rows(); i++) {
         for (int j = 0; j < markers.cols(); j++) {
-            int mark = markers(i, j) - 1;
+            int mark = markers(i, j);
             if (mark >= 0) {
                 count(mark) += 1;
                 sumX(mark) += (j * 2.0 / markers.cols() - 1.0) * dx;
@@ -111,15 +123,166 @@ void Foam2D::initImageMatch(MatrixXi markers) {
         }
     }
 
-    std::cout << "Printing " << n_free << " vertices." << std::endl;
+    VectorXT areas(n_free);
+    double totalArea = 4 * dx * dy;
+    int totalPixels = markers.cols() * markers.rows();
+    for (int i = 0; i < n_free; i++) {
+        areas(i) = count(i) * totalArea / totalPixels;
+    }
+    energyObjective.area_targets = areas;
+
     for (int i = 0; i < n_free; i++) {
         double x = sumX(i) / count(i);
         double y = sumY(i) / count(i);
         vertices.segment<2>(i * 2) = TV(x, y);
-        std::cout << x << " " << y << " " << count(i) << std::endl;
     }
 
     resetVertexParams();
+}
+
+void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
+    for (int i = 1; i < markers.maxCoeff(); i++) {
+        if ((markers.array() == i).count() == 0) {
+            markers = markers.unaryExpr([i](int x) { return x > i ? x - 1 : x; });
+            i--;
+        }
+    }
+    markers = markers.unaryExpr([](int x) { return x - 1; });
+
+    double dx = markers.cols() * 0.8 / std::max(markers.rows(), markers.cols());
+    double dy = markers.rows() * 0.8 / std::max(markers.rows(), markers.cols());
+
+    ImageMatchObjective objective;
+    objective.n_free = n_free;
+    objective.n_fixed = n_fixed;
+    objective.boundary = boundary;
+    objective.tessellation = tessellations[tessellation];
+    objective.dx = dx;
+    objective.dy = dy;
+
+    VectorXd c = tessellations[tessellation]->combineVerticesParams(vertices, params);
+    objective.c_fixed = c.segment(n_free * (2 + tessellations[tessellation]->getNumVertexParams()),
+                                  n_fixed * (2 + tessellations[tessellation]->getNumVertexParams()));
+
+    VectorXi count = VectorXi::Zero(n_free);
+
+    for (int i = 0; i < markers.rows(); i++) {
+        for (int j = 0; j < markers.cols(); j++) {
+            int mark = markers(i, j);
+            bool outer = false;
+            if (i == 0 || markers(i - 1, j) != mark) outer = true;
+            if (i == markers.rows() - 1 || markers(i + 1, j) != mark) outer = true;
+            if (j == 0 || markers(i, j - 1) != mark) outer = true;
+            if (j == markers.cols() - 1 || markers(i, j + 1) != mark) outer = true;
+            if (mark >= 0 && outer) {
+                count(mark) += 1;
+            }
+        }
+    }
+
+    std::vector<VectorXd> pix(n_free);
+    for (int i = 0; i < n_free; i++) {
+//        std::cout << count(i) << std::endl;
+        if (count(i) > 300) {
+            std::cout << "oh no" << std::endl;
+        }
+        pix[i].resize(count(i) * 2);
+    }
+
+    VectorXi idx = VectorXi::Zero(n_free);
+    for (int i = 0; i < markers.rows(); i++) {
+        for (int j = 0; j < markers.cols(); j++) {
+            int mark = markers(i, j);
+            bool outer = false;
+            if (i == 0 || markers(i - 1, j) != mark) outer = true;
+            if (i == markers.rows() - 1 || markers(i + 1, j) != mark) outer = true;
+            if (j == 0 || markers(i, j - 1) != mark) outer = true;
+            if (j == markers.cols() - 1 || markers(i, j + 1) != mark) outer = true;
+            if (mark >= 0 && outer) {
+                pix[mark].segment<2>(idx(mark) * 2) = TV((j * 2.0 / markers.cols() - 1.0) * dx,
+                                                         -(i * 2.0 / markers.rows() - 1.0) * dy);
+                idx(mark)++;
+            }
+        }
+    }
+    objective.pix = pix;
+
+    energyObjective.tessellation = tessellations[tessellation];
+    energyObjective.n_free = n_free;
+    energyObjective.n_fixed = n_fixed;
+    energyObjective.boundary = boundary;
+
+    energyObjective.c_fixed = objective.c_fixed;
+
+    ImageMatchNLP nlp;
+    nlp.energy = &energyObjective;
+    nlp.objective = &objective;
+
+    VectorXT c_free = c.segment(0,
+                                n_free * (2 + tessellations[tessellation]->getNumVertexParams()));
+    nlp.x_guess = c_free;
+    nlp.x_sol = c_free;
+
+    /** IPOPT SOLVE **/
+    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+
+    app->RethrowNonIpoptException(true);
+
+    app->Options()->SetNumericValue("tol", 1e-5);
+//    app->Options()->SetStringValue("mu_strategy", "monotone");
+//    app->Options()->SetStringValue("mu_strategy", "adaptive");
+
+//    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
+    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+    app->Options()->SetStringValue("linear_solver", "ma57");
+//    app->Options()->SetStringValue("linear_solver", "pardisomkl");
+    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
+//    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
+    //        app->Options()->SetNumericValue("mu_max", 0.0001);
+    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
+    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
+    //        bound_relax_factor
+    //        app->Options()->SetStringValue("derivative_test", "first-order");
+    // The following overwrites the default name (ipopt.opt) of the
+    // options file
+    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
+
+    // Initialize the IpoptApplication and process the options
+    Ipopt::ApplicationReturnStatus status;
+    status = app->Initialize();
+    if (status != Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** Error during initialization!" << std::endl;
+        return;
+    }
+
+    // Ask Ipopt to solve the problem
+    std::cout << "Solving problem using IPOPT" << std::endl;
+
+    // objective.bound[0] = 1e-5;
+    // objective.bound[1] = 12.0 * simulation.cells.unit;
+
+    Ipopt::SmartPtr<ImageMatchSolver> mynlp = new ImageMatchSolver(&nlp);
+
+    status = app->OptimizeTNLP(mynlp);
+    if (status == Ipopt::Solve_Succeeded) {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** The problem solved!" << std::endl;
+    } else {
+        std::cout << std::endl
+                  << std::endl
+                  << "*** The problem FAILED!" << std::endl;
+    }
+
+    c_free = nlp.x_sol;
+//    for (int i = 0; i < c_free.rows(); i++) {
+//        std::cout << i % 3 << " " << c_free(i) << std::endl;
+//    }
+    c.segment(0, n_free * (2 + tessellations[tessellation]->getNumVertexParams())) = c_free;
+
+    tessellations[tessellation]->separateVerticesParams(c, vertices, params);
 }
 
 void Foam2D::dynamicsInit(double dt, double m, double mu) {
@@ -183,8 +346,8 @@ void Foam2D::moveVertex(int idx, const TV &pos) {
 
 void Foam2D::trajectoryOptSetInit() {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
-    nlp.c0 = energyObjective.tessellation->combineVerticesParams(vertices, params).segment(0, n_free * dims);
-    nlp.v0 = VectorXd::Zero(n_free * dims);
+    trajOptNLP.c0 = energyObjective.tessellation->combineVerticesParams(vertices, params).segment(0, n_free * dims);
+    trajOptNLP.v0 = VectorXd::Zero(n_free * dims);
 
 //    std::cout << "c_fixed" << std::endl;
 //    for (int i = 0; i < nlp.energy->c_fixed.rows(); i++) {
@@ -256,27 +419,28 @@ static void threadIPOPT(TrajectoryOptNLP *nlp) {
 
 void Foam2D::trajectoryOptOptimizeIPOPT(int N) {
     /** NLP INITIALIZATION **/
-    nlp.N = N;
-    nlp.agent = energyObjective.drag_idx;
-    nlp.target_pos = energyObjective.drag_target_pos;
+    trajOptNLP.N = N;
+    trajOptNLP.agent = energyObjective.drag_idx;
+    trajOptNLP.target_pos = energyObjective.drag_target_pos;
 
-    nlp.x_guess.resize(N * (nlp.c0.rows() + 2));
+    trajOptNLP.x_guess.resize(N * (trajOptNLP.c0.rows() + 2));
     VectorXd u_guess = VectorXT::Zero(2 * N);
 
     // x format is [c1 ... cN u1 ... uN]
-    nlp.x_guess << nlp.c0.replicate(N, 1), u_guess;
-    nlp.x_sol = nlp.x_guess;
+    trajOptNLP.x_guess << trajOptNLP.c0.replicate(N, 1), u_guess;
+    trajOptNLP.x_sol = trajOptNLP.x_guess;
 
-    nlp.early_stop = false;
+    trajOptNLP.early_stop = false;
 
     /** IPOPT SOLVE **/
-    std::thread t1(threadIPOPT, &nlp);
+    std::thread t1(threadIPOPT, &trajOptNLP);
     t1.detach();
 }
 
 void Foam2D::trajectoryOptGetFrame(int frame) {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
-    VectorXT c_frame = frame == 0 ? nlp.c0 : nlp.x_sol.segment((frame - 1) * n_free * dims, n_free * dims);
+    VectorXT c_frame =
+            frame == 0 ? trajOptNLP.c0 : trajOptNLP.x_sol.segment((frame - 1) * n_free * dims, n_free * dims);
 
     VectorXT verts_free;
     VectorXT params_free;
@@ -287,7 +451,7 @@ void Foam2D::trajectoryOptGetFrame(int frame) {
 
 void Foam2D::trajectoryOptGetForces(VectorXd &forceX, VectorXd &forceY) {
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
-    VectorXT u = nlp.x_sol.segment(nlp.N * n_free * dims, nlp.N * 2);
+    VectorXT u = trajOptNLP.x_sol.segment(trajOptNLP.N * n_free * dims, trajOptNLP.N * 2);
     forceX.resize(u.rows() / 2);
     forceY.resize(u.rows() / 2);
 
@@ -298,7 +462,7 @@ void Foam2D::trajectoryOptGetForces(VectorXd &forceX, VectorXd &forceY) {
 }
 
 void Foam2D::trajectoryOptStop() {
-    nlp.early_stop = true;
+    trajOptNLP.early_stop = true;
 }
 
 static TV3 getColor(double area, double target) {
@@ -569,15 +733,15 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
 void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                         MatrixXi &F, MatrixXT &Fc) {
-    MatrixXT S_traj(nlp.N + 1, 3);
+    MatrixXT S_traj(trajOptNLP.N + 1, 3);
     S_traj.setZero();
 
     int dims = energyObjective.tessellation->getNumVertexParams() + 2;
-    S_traj(0, 0) = nlp.c0(nlp.agent * dims + 0);
-    S_traj(0, 1) = nlp.c0(nlp.agent * dims + 1);
-    for (int k = 0; k < nlp.N; k++) {
-        S_traj(k + 1, 0) = nlp.x_sol(k * nlp.c0.rows() + nlp.agent * dims + 0);
-        S_traj(k + 1, 1) = nlp.x_sol(k * nlp.c0.rows() + nlp.agent * dims + 1);
+    S_traj(0, 0) = trajOptNLP.c0(trajOptNLP.agent * dims + 0);
+    S_traj(0, 1) = trajOptNLP.c0(trajOptNLP.agent * dims + 1);
+    for (int k = 0; k < trajOptNLP.N; k++) {
+        S_traj(k + 1, 0) = trajOptNLP.x_sol(k * trajOptNLP.c0.rows() + trajOptNLP.agent * dims + 0);
+        S_traj(k + 1, 1) = trajOptNLP.x_sol(k * trajOptNLP.c0.rows() + trajOptNLP.agent * dims + 1);
     }
 
     MatrixXT S_temp = S;
@@ -588,13 +752,13 @@ void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
     X.resize(X_temp.rows() + S_traj.rows(), 3);
     X << X_temp, S_traj;
 
-    MatrixXT Sc_traj = TV3(1, 0, 0).transpose().replicate(nlp.N + 1, 1);
+    MatrixXT Sc_traj = TV3(1, 0, 0).transpose().replicate(trajOptNLP.N + 1, 1);
     MatrixXT Sc_temp = Sc;
     Sc.resize(Sc_temp.rows() + Sc_traj.rows(), 3);
     Sc << Sc_temp, Sc_traj;
 
-    MatrixXi E_traj(nlp.N, 2);
-    for (int k = 0; k < nlp.N; k++) {
+    MatrixXi E_traj(trajOptNLP.N, 2);
+    for (int k = 0; k < trajOptNLP.N; k++) {
         E_traj(k, 0) = X_temp.rows() + k + 0;
         E_traj(k, 1) = X_temp.rows() + k + 1;
     }
@@ -603,7 +767,7 @@ void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
     E.resize(E_temp.rows() + E_traj.rows(), 2);
     E << E_temp, E_traj;
 
-    MatrixXT Ec_traj = TV3(1, 0, 0).transpose().replicate(nlp.N, 1);
+    MatrixXT Ec_traj = TV3(1, 0, 0).transpose().replicate(trajOptNLP.N, 1);
     MatrixXT Ec_temp = Ec;
     Ec.resize(Ec_temp.rows() + Ec_traj.rows(), 3);
     Ec << Ec_temp, Ec_traj;

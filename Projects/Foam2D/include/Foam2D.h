@@ -38,7 +38,7 @@ public:
     EnergyObjective energyObjective;
     DynamicObjective dynamicObjective;
 
-    TrajectoryOptNLP nlp;
+    TrajectoryOptNLP trajOptNLP;
 
     VectorXT vertices;
     VectorXT params;
@@ -47,6 +47,7 @@ public:
     int n_fixed;
 
     VectorXT boundary;
+
 public:
 
     void initRandomSitesInCircle(int n_free_in, int n_fixed_in);
@@ -55,7 +56,7 @@ public:
 
     void initRandomCellsInBox(int n_free_in);
 
-    void initImageMatch(MatrixXi markers);
+    void initImageMatch(MatrixXi &markers);
 
     void dynamicsInit(double dt, double m, double mu);
 
@@ -96,6 +97,8 @@ public:
     void trajectoryOptGetForces(VectorXd &forceX, VectorXd &forceY);
 
     void trajectoryOptStop();
+
+    void imageMatchOptimizeIPOPT(MatrixXi &markers);
 
 public:
 
