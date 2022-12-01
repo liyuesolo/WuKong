@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include "../include/Objective/EnergyObjective.h"
-#include "../include/Objective/DynamicObjective.h"
+#include "../include/Energy/EnergyObjective.h"
+#include "../include/Energy/DynamicObjective.h"
 #include "../include/Tessellation/Power.h"
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 

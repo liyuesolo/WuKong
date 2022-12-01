@@ -1,0 +1,24 @@
+#pragma once
+
+#include <Eigen/Sparse>
+#include "Projects/Foam2D/include/VecMatDef.h"
+
+#include "Projects/Foam2D/include/Tessellation/Tessellation.h"
+
+using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+using VectorXi = Vector<int, Eigen::Dynamic>;
+
+void
+add_E_cell_AT(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+              double &out);
+
+void
+add_dEdc_cell_AT(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c, const VectorXT &b,
+                 const VectorXi &map,
+                 VectorXT &out);
+
+void
+add_d2Edc2_cell_AT(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, const VectorXT &c,
+                   const VectorXT &b,
+                   const VectorXi &map,
+                   MatrixXT &out);

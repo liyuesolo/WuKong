@@ -409,11 +409,8 @@ public:
             if (tnlp_adapter != NULL) {
                 tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
 
-                double *intermediate = new double[nx];
-                tnlp_adapter->ResortX(*ip_data->curr()->x(), intermediate);
-
                 for (int i = 0; i < nx; i++) {
-                    trajectoryOptNlp->x_sol[i] = intermediate[i];
+                    trajectoryOptNlp->x_sol[i] = primal[i];
                 }
             }
         }

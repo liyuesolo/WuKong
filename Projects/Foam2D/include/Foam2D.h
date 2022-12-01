@@ -31,7 +31,7 @@ using VectorXf = Vector<float, Eigen::Dynamic>;
 class Foam2D {
 public:
     std::vector<Tessellation *> tessellations;
-    int tessellation = 1;
+    int tessellation = 0;
     std::vector<GradientDescentLineSearch *> minimizers;
     int opttype = 1;
 

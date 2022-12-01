@@ -18,7 +18,7 @@ public:
     double drag_target_weight = 0.00;
 
     int drag_idx = -1;
-    TV drag_target_pos;
+    TV drag_target_pos = {0, 0};
 
     int n_free; // Number of movable sites
     int n_fixed; // Number of fixed sites

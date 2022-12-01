@@ -28,10 +28,11 @@ VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
     TV final_pos2 = x.segment<2>(IDX_C(N - 2, agent));
 
     grad_f.segment<2>(IDX_C(N - 1, agent)) =
-            target_weight * (final_pos - target_pos) +
-            velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
-    grad_f.segment<2>(IDX_C(N - 2, agent)) = -velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
-    grad_f.segment(IDX_U(0), NX_U) = input_weight * x.segment(IDX_U(0), NX_U);
+            2 * target_weight * (final_pos - target_pos) +
+            2 * velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
+    grad_f.segment<2>(IDX_C(N - 2, agent)) =
+            -2 * velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
+    grad_f.segment(IDX_U(0), NX_U) = input_weight * 2 * x.segment(IDX_U(0), NX_U);
 
     return grad_f;
 }
@@ -51,11 +52,10 @@ VectorXd TrajectoryOptNLP::eval_g(const Eigen::VectorXd &x) const {
     VectorXd force_int = VectorXd::Zero(NX_C);
     VectorXd force_ext = VectorXd::Zero(NX_C);
     for (int k = 0; k < N; k++) {
-        force_int.segment(IDX_C(k, 0), NC) = -1.0 * energy->get_dOdc(c_curr.segment(IDX_C(k, 0), NC))
-                                             -
-                                             dynamics->H.replicate(N, 1).asDiagonal() * (c_curr - c_prev) / dynamics->h;
+        force_int.segment(IDX_C(k, 0), NC) = -1.0 * energy->get_dOdc(c_curr.segment(IDX_C(k, 0), NC));
         force_ext.segment<2>(IDX_C(k, agent)) = x.segment<2>(IDX_U(k));
     }
+    force_int -= dynamics->H.replicate(N, 1).asDiagonal() * (c_curr - c_prev) / dynamics->h;
 
     VectorXd Ma =
             dynamics->M.replicate(N, 1).asDiagonal()

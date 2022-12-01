@@ -32,7 +32,7 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     int dims = 2 + tessellation->getNumVertexParams();
 
     int maxN = 20;
-    int maxP = 300;
+    int maxP = 1000;
 
     n_in.resize((maxN + 1) * 1);
     n_in.setZero();
@@ -48,7 +48,10 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     pix_in.segment(0, 2 * n_points) = pix[cellIndex];
 
     cell.insert(cell.begin(), cellIndex);
-    map = VectorXi::Map(cell.data(), cell.size());
+    map.resize(cell.size());
+    for (int i = 0; i < cell.size(); i++) {
+        map(i) = cell[i];
+    }
 
     for (int i = 0; i < cell.size(); i++) {
         n_in(i) = map(i) >= n_vtx;
@@ -79,7 +82,7 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
     double O = 0;
     for (int i = 0; i < cells.size(); i++) {
         if (cells[i].size() > 18 || cells[i].size() < 3) {
-            O += 1e5;
+//            O += 1e20;
             continue;
         }
 

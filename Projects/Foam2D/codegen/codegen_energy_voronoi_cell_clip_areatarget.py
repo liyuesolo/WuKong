@@ -1,6 +1,6 @@
 import casadi as ca
 import os
-from codegen_energy_clip import *
+from codegen_energy_clip import energy
 from codegen_base import gen_code
 
 
@@ -42,15 +42,17 @@ def voronoi_cell_node_bb(xbs2, ybs2):
 
 def codegen_energy_voronoi_cell(N, opt=3):
     # Input: Objective function parameters
-    p = ca.MX.sym('p', 1, 8)
-    num_neighbors = p[4]
+    p = ca.MX.sym('p', 1, 7)
+    num_neighbors = p[3]
 
     # Input: Neighbor indices and type (cell or boundary edge)
     n = ca.MX.sym('n', 1, N + 1)
 
-    # Input: Voronoi sites
-    c = ca.MX.sym('c', 2, N + 1)
-    xc, yc = ca.vertsplit(c)
+    # Input: Voronoi sites (area target appended)
+    c = ca.MX.sym('c', 1, 2 * (N + 1) + 1)
+    at = c[0]
+    xc = c[1::2]
+    yc = c[2::2]
 
     # Input: Boundary edges
     b = ca.MX.sym('b', 4, N + 1)
@@ -88,8 +90,10 @@ def codegen_energy_voronoi_cell(N, opt=3):
     xn = ca.vertcat(nss[0], nsb[0], nbs[0], nbb[0])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
     yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
 
-    Obj = energy(N, x0, y0, xn, yn, p)
+    p_nrg = ca.horzcat(p[0:3], at, p[3:])
+    Obj = energy(N, x0, y0, xn, yn, p_nrg)
+    Obj = x0 * x0 + y0 * y0 + at * at
 
     # Generate and compile C code
-    ident = 'energy_voronoi_cell_' + str(N)
+    ident = 'energy_voronoi_cell_areatarget_' + str(N)
     gen_code(ident, [p, n, c, b], c, Obj, opt)

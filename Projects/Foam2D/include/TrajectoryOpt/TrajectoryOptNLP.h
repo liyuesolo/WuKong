@@ -12,9 +12,9 @@ public:
 
     int agent; // Index of site whose trajectory is being optimized
     TV target_pos; // Target position for agent
-    double target_weight = 0;
-    double velocity_weight = 0;
-    double input_weight = 1e-2;
+    double target_weight = 1e-1;
+    double velocity_weight = 0 * 1e-3;
+    double input_weight = 0 * 1e-2;
 
     VectorXd c0; // Initial positions of free sites (+ additional tessellation degrees of freedom)
     VectorXd v0; // Initial velocities of free sites

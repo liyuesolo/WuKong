@@ -23,7 +23,7 @@ struct CasadiFunctions {
     int (*evaluate)(const casadi_real **, casadi_real **, casadi_int *, casadi_real *, int);
 };
 
-static CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order, int num_neighbors) {
+static CasadiFunctions getCasadiFunctions(Tessellation *tessellation, int order, int num_neighbors) {
     CasadiFunctions casadiFunctions;
     if (order == 0) {
         if (num_neighbors < 9) {
@@ -181,9 +181,11 @@ add_dEdc_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n, 
     casadiFunctions.evaluate(arg, res, iw, w, 0);
 
     int dims = 2 + tessellation->getNumVertexParams();
+    int n_cells = out.rows() / dims;
+
     for (int rr = 0; rr < map.rows() * dims; rr++) {
         int ir = map(rr / dims) * dims + (rr % dims);
-        if (ir < out.rows()) {
+        if (map(rr / dims) < n_cells) {
             out(ir) += dOdc[rr];
         }
     }
@@ -220,6 +222,8 @@ add_d2Edc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n
     casadiFunctions.evaluate(arg, res, iw, w, 0);
 
     int dims = 2 + tessellation->getNumVertexParams();
+    int n_cells = out.rows() / dims;
+
     casadi_int rr, cc, el;
     int nzidx = 0;
     for (cc = 0; cc < map.rows() * dims; ++cc) {                    /* loop over columns */
@@ -228,7 +232,7 @@ add_d2Edc2_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n
             rr = row[el];
             if (rr < map.rows() * dims) {
                 int ir = map(rr / dims) * dims + (rr % dims);
-                if (ir < out.rows() && ic < out.cols()) {
+                if (map(rr / dims) < n_cells && map(cc / dims) < n_cells) {
                     out(ir, ic) += d2Odc2[nzidx];
                 }
             }

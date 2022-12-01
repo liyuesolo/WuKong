@@ -1,18 +1,20 @@
 #pragma once
 
-#include "../Energy/EnergyObjective.h"
+#include "../ImageMatch/EnergyObjectiveAT.h"
 #include "../ImageMatch/ImageMatchObjective.h"
 
 class ImageMatchNLP {
 
 public:
     ImageMatchObjective *objective;
-    EnergyObjective *energy; // Energy function (+ gradient / hessian). Includes fixed sites and tessellation info.
+    EnergyObjectiveAT *energy; // Energy function (+ gradient / hessian). Includes fixed sites and tessellation info.
 
     VectorXd x_guess; // Initial guess for solution.
     VectorXd x_sol; // Solution.
 
 public:
+    void check_gradients(const VectorXd &x) const;
+
     double eval_f(const VectorXd &x) const;
 
     VectorXd eval_grad_f(const VectorXd &x) const;

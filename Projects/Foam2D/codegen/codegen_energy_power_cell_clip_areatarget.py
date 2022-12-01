@@ -1,6 +1,6 @@
 import casadi as ca
 import os
-from codegen_imagematch import *
+from codegen_energy_clip import energy
 from codegen_base import gen_code
 
 
@@ -59,28 +59,26 @@ def power_cell_node_bb(xbs2, ybs2):
     return [xbs2, ybs2]
 
 
-def codegen_imagematch_power_cell(MAX_N, MAX_P, opt=3):
+def codegen_energy_power_cell(N, opt=3):
     # Input: Objective function parameters
-    p = ca.MX.sym('p', 1, 2)
-    num_neighbors = p[0]
-    num_points = p[1]
+    p = ca.MX.sym('p', 1, 7)
+    num_neighbors = p[3]
 
     # Input: Neighbor indices and type (cell or boundary edge)
-    n = ca.MX.sym('n', 1, MAX_N + 1)
+    n = ca.MX.sym('n', 1, N + 1)
 
-    # Input: Voronoi sites
-    c = ca.MX.sym('c', 3, MAX_N + 1)
-    xc, yc, zc = ca.vertsplit(c)
-
-    # Input: Pixel coordinates
-    pix = ca.MX.sym('pix', 2, MAX_P)
-    xp, yp = ca.vertsplit(pix)
+    # Input: Voronoi sites (area target appended)
+    c = ca.MX.sym('c', 1, 3 * (N + 1) + 1)
+    at = c[0]
+    xc = c[1::3]
+    yc = c[2::3]
+    zc = c[3::3]
 
     # Input: Boundary edges
-    b = ca.MX.sym('b', 4, MAX_N + 1)
+    b = ca.MX.sym('b', 4, N + 1)
     xbs, ybs, xbe, ybe = ca.vertsplit(b)
 
-    i1 = 1 + ca.mod(ca.transpose(ca.linspace(0, MAX_N, MAX_N + 1)), num_neighbors)
+    i1 = 1 + ca.mod(ca.transpose(ca.linspace(0, N, N + 1)), num_neighbors)
     i2 = ca.horzcat(i1[1:], i1[0])
     t1 = n[i1]
     t2 = n[i2]
@@ -112,11 +110,13 @@ def codegen_imagematch_power_cell(MAX_N, MAX_P, opt=3):
     nbb = power_cell_node_bb(xbs2, ybs2)
 
     type = t1 * 2 + t2
-    xn = ca.vertcat(nss[0], nsb[0], nbs[0], nbb[0])[4 * ca.transpose(ca.linspace(0, MAX_N, MAX_N + 1)) + type]
-    yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, MAX_N, MAX_N + 1)) + type]
+    xn = ca.vertcat(nss[0], nsb[0], nbs[0], nbb[0])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
+    yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, N, N + 1)) + type]
 
-    Obj = imagematch(MAX_N, MAX_P, num_neighbors, num_points, xn, yn, xp, yp)
+    p_nrg = ca.horzcat(p[0:3], at, p[3:])
+    Obj = energy(N, x0, y0, xn, yn, p_nrg)
+    # Obj = x0 * x0 + y0 * y0 + at * at
 
     # Generate and compile C code
-    ident = 'imagematch_power_cell_' + str(MAX_N)
-    gen_code(ident, [p, n, c, b, pix], c, Obj, opt, 1)
+    ident = 'energy_power_cell_areatarget_' + str(N)
+    gen_code(ident, [p, n, c, b], c, Obj, opt)

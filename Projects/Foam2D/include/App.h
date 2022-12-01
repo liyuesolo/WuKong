@@ -22,7 +22,7 @@ public:
     bool optimize = false;
     bool show_dual = false;
 
-    int scenario = 2;
+    int scenario = 3;
     int free_sites = 40;
     int fixed_sites = 40;
 
@@ -50,7 +50,8 @@ public:
 
     bool matchShowImage = false;
     float matchImageW = 0.5;
-    int matchSource = 0;
+    int matchSource = 9;
+    std::vector<std::string> sourcePaths;
     std::string matchSourcePath;
     cv::Mat matchImage;
     cv::Mat matchSegmented;

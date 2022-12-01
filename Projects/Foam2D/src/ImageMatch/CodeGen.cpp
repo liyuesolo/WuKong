@@ -2,6 +2,9 @@
 
 #include "Projects/Foam2D/codegen/codegen_imagematch/ca_imagematch_power_cell_20.h"
 #include "Projects/Foam2D/codegen/codegen_imagematch/ca_imagematch_power_cell_20_gradient.h"
+#include "Projects/Foam2D/codegen/codegen_imagematch/ca_imagematch_voronoi_cell_20.h"
+#include "Projects/Foam2D/codegen/codegen_imagematch/ca_imagematch_voronoi_cell_20_gradient.h"
+
 
 #include <iostream>
 
@@ -13,16 +16,38 @@ struct CasadiFunctions {
     int (*evaluate)(const casadi_real **, casadi_real **, casadi_int *, casadi_real *, int);
 };
 
-static CasadiFunctions getCasadiFunctions(Tessellation *tessellation, double order) {
+static CasadiFunctions getCasadiFunctions(Tessellation *tessellation, int order) {
     CasadiFunctions casadiFunctions;
     if (order == 0) {
-        casadiFunctions.work = &ca_imagematch_power_cell_20_work;
-        casadiFunctions.sparsity = &ca_imagematch_power_cell_20_sparsity_out;
-        casadiFunctions.evaluate = &ca_imagematch_power_cell_20;
+        switch (tessellation->getTessellationType()) {
+            case VORONOI:
+                casadiFunctions.work = &ca_imagematch_voronoi_cell_20_work;
+                casadiFunctions.sparsity = &ca_imagematch_voronoi_cell_20_sparsity_out;
+                casadiFunctions.evaluate = &ca_imagematch_voronoi_cell_20;
+                break;
+            case POWER:
+                casadiFunctions.work = &ca_imagematch_power_cell_20_work;
+                casadiFunctions.sparsity = &ca_imagematch_power_cell_20_sparsity_out;
+                casadiFunctions.evaluate = &ca_imagematch_power_cell_20;
+                break;
+            default:
+                break;
+        }
     } else if (order == 1) {
-        casadiFunctions.work = &ca_imagematch_power_cell_20_gradient_work;
-        casadiFunctions.sparsity = &ca_imagematch_power_cell_20_gradient_sparsity_out;
-        casadiFunctions.evaluate = &ca_imagematch_power_cell_20_gradient;
+        switch (tessellation->getTessellationType()) {
+            case VORONOI:
+                casadiFunctions.work = &ca_imagematch_voronoi_cell_20_gradient_work;
+                casadiFunctions.sparsity = &ca_imagematch_voronoi_cell_20_gradient_sparsity_out;
+                casadiFunctions.evaluate = &ca_imagematch_voronoi_cell_20_gradient;
+                break;
+            case POWER:
+                casadiFunctions.work = &ca_imagematch_power_cell_20_gradient_work;
+                casadiFunctions.sparsity = &ca_imagematch_power_cell_20_gradient_sparsity_out;
+                casadiFunctions.evaluate = &ca_imagematch_power_cell_20_gradient;
+                break;
+            default:
+                break;
+        }
     }
 
     return casadiFunctions;
@@ -51,6 +76,8 @@ add_value_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT &n,
     casadi_real Obj[1];
     res[0] = Obj;
     casadiFunctions.evaluate(arg, res, iw, w, 0);
+
+//    std::cout << "cell vcalue " << out << " " << Obj[0] << std::endl;
 
     out += Obj[0];
 }
@@ -88,10 +115,21 @@ add_gradient_cell(Tessellation *tessellation, const VectorXT &p, const VectorXT 
     casadiFunctions.evaluate(arg, res, iw, w, 0);
 
     int dims = 2 + tessellation->getNumVertexParams();
-    for (int rr = 0; rr < map.rows() * dims; rr++) {
+    for (int rr = 0; rr < map.rows() * dims && rr < nnz; rr++) {
         int ir = map(rr / dims) * dims + (rr % dims);
         if (ir < out.rows()) {
             out(ir) += dOdc[rr];
+
+//            double eps = 1e-6;
+//            VectorXT dc = VectorXT::Zero(c.rows());
+//            dc(rr) += eps;
+//            double f = 0, fp = 0;
+//            add_value_cell(tessellation, p, n, c, b, pix, f);
+//            add_value_cell(tessellation, p, n, c + dc, b, pix, fp);
+//            std::cout << "im code gen " << nnz << " " << p(0) << " " << p(1) << " " << rr << " wow " << fp << " " << f
+//                      << " " << (fp - f) / eps
+//                      << " " << dOdc[rr]
+//                      << std::endl;
         }
     }
 }

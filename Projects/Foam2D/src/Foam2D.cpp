@@ -11,6 +11,7 @@
 #include "../include/ImageMatch/ImageMatchObjective.h"
 #include "../include/ImageMatch/ImageMatchNLP.h"
 #include "../include/ImageMatch/ImageMatchSolver.h"
+#include "../include/ImageMatch/EnergyObjectiveAT.h"
 
 Foam2D::Foam2D() {
     tessellations.push_back(new Voronoi());
@@ -84,13 +85,13 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
 }
 
 void Foam2D::initImageMatch(MatrixXi &markers) {
-    for (int i = 1; i < markers.maxCoeff(); i++) {
+    markers = markers.unaryExpr([](int x) { return x - 1; });
+    for (int i = 0; i < markers.maxCoeff(); i++) {
         if ((markers.array() == i).count() == 0) {
             markers = markers.unaryExpr([i](int x) { return x > i ? x - 1 : x; });
             i--;
         }
     }
-    markers = markers.unaryExpr([](int x) { return x - 1; });
 
     n_free = markers.maxCoeff() + 1;
     n_fixed = 8;
@@ -152,6 +153,8 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     double dx = markers.cols() * 0.8 / std::max(markers.rows(), markers.cols());
     double dy = markers.rows() * 0.8 / std::max(markers.rows(), markers.cols());
 
+    int dims = 2 + tessellations[tessellation]->getNumVertexParams();
+
     ImageMatchObjective objective;
     objective.n_free = n_free;
     objective.n_fixed = n_fixed;
@@ -161,8 +164,7 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     objective.dy = dy;
 
     VectorXd c = tessellations[tessellation]->combineVerticesParams(vertices, params);
-    objective.c_fixed = c.segment(n_free * (2 + tessellations[tessellation]->getNumVertexParams()),
-                                  n_fixed * (2 + tessellations[tessellation]->getNumVertexParams()));
+    objective.c_fixed = c.segment(n_free * dims, n_fixed * dims);
 
     VectorXi count = VectorXi::Zero(n_free);
 
@@ -183,10 +185,11 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     std::vector<VectorXd> pix(n_free);
     for (int i = 0; i < n_free; i++) {
 //        std::cout << count(i) << std::endl;
-        if (count(i) > 300) {
+        if (count(i) > 1000) {
             std::cout << "oh no" << std::endl;
         }
         pix[i].resize(count(i) * 2);
+        pix[i].setZero();
     }
 
     VectorXi idx = VectorXi::Zero(n_free);
@@ -207,21 +210,36 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     }
     objective.pix = pix;
 
-    energyObjective.tessellation = tessellations[tessellation];
-    energyObjective.n_free = n_free;
-    energyObjective.n_fixed = n_fixed;
-    energyObjective.boundary = boundary;
+    EnergyObjectiveAT energy;
+    energy.tessellation = tessellations[tessellation];
+    energy.n_free = n_free;
+    energy.n_fixed = n_fixed;
+    energy.boundary = boundary;
 
-    energyObjective.c_fixed = objective.c_fixed;
+    energy.area_weight = energyObjective.area_weight;
+    energy.length_weight = energyObjective.length_weight;
+    energy.centroid_weight = energyObjective.centroid_weight;
+
+    energy.c_fixed = objective.c_fixed;
 
     ImageMatchNLP nlp;
-    nlp.energy = &energyObjective;
+    nlp.energy = &energy;
     nlp.objective = &objective;
 
-    VectorXT c_free = c.segment(0,
-                                n_free * (2 + tessellations[tessellation]->getNumVertexParams()));
-    nlp.x_guess = c_free;
-    nlp.x_sol = c_free;
+    VectorXT c_free = c.segment(0, n_free * dims);
+    VectorXT x_guess(n_free * (dims + 1));
+    x_guess << c_free, energyObjective.area_targets;
+    nlp.x_guess = x_guess;
+    nlp.x_sol = x_guess;
+
+//    nlp.check_gradients(x_guess);
+
+//    double f = nlp.eval_f(x_guess);
+//    std::cout << "f: " << f << std::endl;
+//    VectorXT g = nlp.eval_g(x_guess);
+//    for (int i = 0; i < g.rows(); i++) {
+//        std::cout << "g[" << i << "] = " << g(i) << std::endl;
+//    }
 
     /** IPOPT SOLVE **/
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
@@ -242,7 +260,9 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
     //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
     //        bound_relax_factor
-    //        app->Options()->SetStringValue("derivative_test", "first-order");
+    app->Options()->SetStringValue("derivative_test", "first-order");
+    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
+    app->Options()->SetStringValue("derivative_test_print_all", "yes");
     // The following overwrites the default name (ipopt.opt) of the
     // options file
     // app->Options()->SetStringValue("option_file_name", "hs071.opt");
@@ -276,13 +296,14 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
                   << "*** The problem FAILED!" << std::endl;
     }
 
-    c_free = nlp.x_sol;
+    c_free = nlp.x_sol.segment(0, n_free * dims);
 //    for (int i = 0; i < c_free.rows(); i++) {
 //        std::cout << i % 3 << " " << c_free(i) << std::endl;
 //    }
-    c.segment(0, n_free * (2 + tessellations[tessellation]->getNumVertexParams())) = c_free;
-
+    c.segment(0, n_free * dims) = c_free;
     tessellations[tessellation]->separateVerticesParams(c, vertices, params);
+
+    energyObjective.area_targets = nlp.x_sol.segment(n_free * dims, n_free);
 }
 
 void Foam2D::dynamicsInit(double dt, double m, double mu) {
@@ -382,7 +403,7 @@ static void threadIPOPT(TrajectoryOptNLP *nlp) {
     //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
     //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
     //        bound_relax_factor
-    //        app->Options()->SetStringValue("derivative_test", "first-order");
+//    app->Options()->SetStringValue("derivative_test", "first-order");
     // The following overwrites the default name (ipopt.opt) of the
     // options file
     // app->Options()->SetStringValue("option_file_name", "hs071.opt");

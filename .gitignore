@@ -11,6 +11,7 @@ Libs/lbfgs
 *.txt
 Projects/Foam2D/codegen/codegen_energy/*
 Projects/Foam2D/codegen/codegen_imagematch/*
+Projects/Foam2D/codegen/codegen_energy_areatarget/*
 Projects/Foam2D/codegen/__pycache__/*
 .idea/*
 cmake-build-debug/*

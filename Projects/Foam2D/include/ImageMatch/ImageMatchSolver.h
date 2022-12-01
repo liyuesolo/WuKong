@@ -36,9 +36,12 @@ public:
     /** default constructor */
     ImageMatchSolver(ImageMatchNLP *_imageMatchNlp)
             : imageMatchNLP(_imageMatchNlp) {
-        nx = imageMatchNLP->x_guess.rows();
+        int dims = imageMatchNLP->energy->tessellation->getNumVertexParams() + 2;
+        int n_free = imageMatchNLP->energy->n_free;
+
+        nx = n_free * (dims + 1);
         primal = new double[nx];
-        ng = nx;
+        ng = n_free * dims;
         std::cout << "[ipopt]: #variable: " << nx << std::endl;
     }
 
@@ -60,21 +63,13 @@ public:
 
         n = nx;
         m = ng;
-        nnz_jac_g = nx * nx;
+        nnz_jac_g = ng * nx;
 
-        int cnt = 0;
-        for (int row = 0; row < n; row++) {
-            for (int col = 0; col <= row; col++) {
-                cnt++;
-            }
-        }
-        nnz_h_lag = cnt;
+        nnz_h_lag = nx * nx;
         index_style = TNLP::C_STYLE;
 
         return true;
     }
-
-#define IDX_C(k, i) (((k) * n_free + (i)) * dims)
 
     /** Method to return the bounds for my problem */
     virtual bool get_bounds_info(Ipopt::Index n,
@@ -99,9 +94,12 @@ public:
                 x_l[i] = -imageMatchNLP->objective->dy;
                 x_u[i] = imageMatchNLP->objective->dy;
             }
-            if (i % dims == 2 && i < n_free * dims) {
-                x_l[i] = -10;
-                x_u[i] = 10;
+//            if (i % dims == 2 && i < n_free * dims) {
+//                x_l[i] = 0;
+//                x_u[i] = 0;
+//            }
+            if (i >= n_free * dims) {
+                x_l[i] = 0;
             }
         });
 
@@ -128,8 +126,11 @@ public:
         assert(init_z == false);
         assert(init_lambda == false);
 
-        for (int i = 0; i < n; ++i)
-            x[i] = imageMatchNLP->x_guess[i];
+        std::cout << "Starting point" << std::endl;
+        for (int i = 0; i < n; ++i) {
+            x[i] = imageMatchNLP->x_guess(i);
+            std::cout << i << " " << x[i] << std::endl;
+        }
 
         return true;
     }
@@ -192,7 +193,7 @@ public:
                             Ipopt::Index *jCol,
                             Ipopt::Number *values) {
 //        std::cout << "[ipopt] eval_jac_g" << std::endl;
-        // Reminder: nnz_jac_g = (N * nc * nc) + ((2 * N - 3) * nc) + (N * 2);
+
 
         if (iRow != NULL) {
             assert(jCol != NULL);
@@ -211,11 +212,15 @@ public:
             assert(jCol == NULL);
             assert(values != NULL);
 
+            std::cout << "Solver jac g " << std::endl;
+            for (int i = 0; i < n; ++i) {
+                std::cout << i << " " << x[i] << " " << imageMatchNLP->x_guess(i) << std::endl;
+            }
+
             // Subsequent calls. Provide constraint Jacobian values.
             Eigen::Map<const VectorXd> x_eigen(x, n);
             Eigen::SparseMatrix<double> jac_g_eigen = imageMatchNLP->eval_jac_g_sparsematrix(x_eigen);
 
-            // First call. Only provide sparsity structure.
             int idx;
             for (int i = 0; i < ng; i++) {
                 for (int j = 0; j < nx; j++) {
@@ -316,11 +321,8 @@ public:
             if (tnlp_adapter != NULL) {
                 tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
 
-                double *intermediate = new double[nx];
-                tnlp_adapter->ResortX(*ip_data->curr()->x(), intermediate);
-
                 for (int i = 0; i < nx; i++) {
-                    imageMatchNLP->x_sol[i] = intermediate[i];
+                    imageMatchNLP->x_sol[i] = primal[i];
                 }
             }
         }

@@ -98,11 +98,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Gradient Test");
         scenarios.push_back("Bounding Box");
         scenarios.push_back("Image Match");
-        std::vector<std::string> sourceImages;
-        std::string path = std::filesystem::current_path().append("../../../Projects/Foam2D/images");
-        for (const auto &entry: std::filesystem::directory_iterator(path)) {
-            sourceImages.push_back(proximate(entry.path(), path));
-        }
+
         if (ImGui::Combo("Scenario", &scenario, scenarios)) {
             matchShowImage = true;
         }
@@ -118,7 +114,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         }
         if (scenario == 3) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-            ImGui::Combo("Source", &matchSource, sourceImages);
+            ImGui::Combo("Source", &matchSource, sourcePaths);
             if (ImGui::Checkbox("Show Image", &matchShowImage)) {
                 updateViewerData(viewer);
             }
@@ -137,7 +133,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         }
 
         if (ImGui::Button("Generate")) {
-            matchSourcePath = "../../../Projects/Foam2D/images/" + sourceImages[matchSource];
+            matchSourcePath = "../../../Projects/Foam2D/images/" + sourcePaths[matchSource];
             generateScenario();
             updateViewerData(viewer);
         }
@@ -277,7 +273,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 return false;
             };
 
+    std::string path = std::filesystem::current_path().append("../../../Projects/Foam2D/images");
+    for (const auto &entry: std::filesystem::directory_iterator(path)) {
+        sourcePaths.push_back(proximate(entry.path(), path));
+    }
 
+    matchSourcePath = "../../../Projects/Foam2D/images/" + sourcePaths[matchSource];
     generateScenario();
 
     viewer.core().viewport = Eigen::Vector4f(0, 0, 1500, 1000);
@@ -460,7 +461,7 @@ void Foam2DApp::updatePlotData() {
         }
     }
 
-    if (ImGui::CollapsingHeader("Current Objective Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Current Objective Status", ImGuiTreeNodeFlags_None)) {
         double obj_val, gradient_norm;
         bool hessian_pd;
         foam.getPlotObjectiveStats(dynamics, obj_val, gradient_norm, hessian_pd);
