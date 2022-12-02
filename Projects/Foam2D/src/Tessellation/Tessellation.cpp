@@ -1,5 +1,4 @@
 #include "../../include/Tessellation/Tessellation.h"
-#include "../../include/Constants.h"
 #include <set>
 #include <iostream>
 

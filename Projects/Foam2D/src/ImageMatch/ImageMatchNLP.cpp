@@ -3,9 +3,9 @@
 void ImageMatchNLP::check_gradients(const Eigen::VectorXd &x) const {
     double eps = 1e-6;
 
-    int dims = 2 + energy->tessellation->getNumVertexParams();
-    double nx = energy->n_free * (dims + 1);
-    double ng = energy->n_free * dims;
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    double nx = info->n_free * (dims + 1);
+    double ng = info->n_free * dims;
 
     VectorXT g = eval_g(x);
     Eigen::SparseMatrix<double> jac = eval_jac_g_sparsematrix(x);
@@ -40,48 +40,48 @@ void ImageMatchNLP::check_gradients(const Eigen::VectorXd &x) const {
 }
 
 double ImageMatchNLP::eval_f(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
     VectorXd c_free = x.segment(0, n_free * dims);
 
-    std::cout << "Eval f" << std::endl;
-    for (int i = 0; i < x.rows(); i++) {
-        std::cout << x(i) << std::endl;
-    }
+//    std::cout << "Eval f" << std::endl;
+//    for (int i = 0; i < x.rows(); i++) {
+//        std::cout << x(i) << std::endl;
+//    }
 
 //    std::cout << "internal f: " << 0.0001 * objective->evaluate(c_free) << std::endl;
 
-    return objective->evaluate(c_free);
+    return 1e-4 * objective->evaluate(c_free);
 
     return 0;
 }
 
 VectorXd ImageMatchNLP::eval_grad_f(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
     VectorXd c_free = x.segment(0, n_free * dims);
 
-    std::cout << "Eval gradf" << std::endl;
-    for (int i = 0; i < x.rows(); i++) {
-        std::cout << x(i) << std::endl;
-    }
+//    std::cout << "Eval gradf" << std::endl;
+//    for (int i = 0; i < x.rows(); i++) {
+//        std::cout << x(i) << std::endl;
+//    }
 
     VectorXd grad_f(n_free * (dims + 1));
     grad_f.setZero();
     grad_f.segment(0, n_free * dims) = objective->get_dOdc(c_free);
-    return grad_f;
+    return 1e-4 * grad_f;
 
     return VectorXd::Zero(n_free * (dims + 1));
 }
 
 VectorXd ImageMatchNLP::eval_g(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
 
-    std::cout << "Eval g" << std::endl;
-    for (int i = 0; i < x.rows(); i++) {
-        std::cout << x(i) << std::endl;
-    }
+//    std::cout << "Eval g" << std::endl;
+//    for (int i = 0; i < x.rows(); i++) {
+//        std::cout << x(i) << std::endl;
+//    }
 
     VectorXd g = energy->get_dOdx(x).segment(0, n_free * dims);
 
@@ -98,18 +98,16 @@ VectorXd ImageMatchNLP::eval_g(const Eigen::VectorXd &x) const {
 }
 
 Eigen::SparseMatrix<double> ImageMatchNLP::eval_jac_g_sparsematrix(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
 
-    std::cout << "Eval jac g" << std::endl;
-    for (int i = 0; i < x.rows(); i++) {
-        std::cout << x(i) << std::endl;
-    }
+//    std::cout << "Eval jac g" << std::endl;
+//    for (int i = 0; i < x.rows(); i++) {
+//        std::cout << x(i) << std::endl;
+//    }
 
     Eigen::SparseMatrix<double> jac;
     energy->getHessian(x, jac);
-
-    std::cout << std::endl;
 
     return jac.block(0, 0, n_free * dims, n_free * (dims + 1));
 }

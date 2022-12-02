@@ -1,6 +1,5 @@
 #include "../../include/ImageMatch/EnergyObjectiveAT.h"
 #include "Projects/Foam2D/include/ImageMatch/EnergyCodeGen.h"
-#include "../../include/Constants.h"
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";
@@ -26,12 +25,14 @@ EnergyObjectiveAT::getInputs(const VectorXT &c, const VectorXT &area_targets, co
     int n_neighbors = cell.size();
 
     p_in.resize(7);
-    p_in << area_weight, length_weight, ((cellIndex == drag_idx) ? 1 : centroid_weight), n_neighbors,
-            ((cellIndex == drag_idx) ? drag_target_weight : 0), drag_target_pos(0), drag_target_pos(1);
+    p_in << info->energy_area_weight, info->energy_length_weight, ((cellIndex == info->selected) ? 1
+                                                                                                 : info->energy_centroid_weight), n_neighbors,
+            ((cellIndex == info->selected) ? info->energy_drag_target_weight : 0), info->selected_target_pos(
+            0), info->selected_target_pos(1);
 
-    int n_vtx = n_free + n_fixed;
-    int n_bdy = boundary.rows() / 2;
-    int dims = 2 + tessellation->getNumVertexParams();
+    int n_vtx = info->n_free + info->n_fixed;
+    int n_bdy = info->boundary.rows() / 2;
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     int maxN = 20;
 
@@ -57,8 +58,8 @@ EnergyObjectiveAT::getInputs(const VectorXT &c, const VectorXT &area_targets, co
         if (cell[i] < n_vtx) {
             c_in.segment(i * dims + 1, dims) = c.segment(map(i) * dims, dims);
         } else {
-            b_in.segment<2>(i * 4 + 0) = boundary.segment<2>((map(i) - n_vtx) * 2);
-            b_in.segment<2>(i * 4 + 2) = boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
+            b_in.segment<2>(i * 4 + 0) = info->boundary.segment<2>((map(i) - n_vtx) * 2);
+            b_in.segment<2>(i * 4 + 2) = info->boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
         }
     }
 }
@@ -67,19 +68,20 @@ double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
     VectorXi tri;
     VectorXi e;
 
-    int dims = 2 + tessellation->getNumVertexParams();
-    VectorXd c_free = x.segment(0, n_free * dims);
-    VectorXd area_targets = x.segment(n_free * dims, n_free);
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXd c_free = x.segment(0, info->n_free * dims);
+    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
 
-    VectorXd c(c_free.size() + c_fixed.size());
-    c << c_free, c_fixed;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
 
     VectorXT vertices;
     VectorXT params;
-    tessellation->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighborsClipped(vertices, params, tri, boundary, n_free);
+    tri = info->getTessellation()->getDualGraph(vertices, params);
+    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
+                                                                                       info->boundary, info->n_free);
 
     double O = 0;
     for (int i = 0; i < cells.size(); i++) {
@@ -92,7 +94,7 @@ double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
         VectorXi map;
         getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_E_cell_AT(tessellation, p_in, n_in, c_in, b_in, O);
+        add_E_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, O);
     }
 
     return O;
@@ -106,21 +108,22 @@ VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
     VectorXi tri;
     VectorXi e;
 
-    int dims = 2 + tessellation->getNumVertexParams();
-    VectorXd c_free = x.segment(0, n_free * dims);
-    VectorXd area_targets = x.segment(n_free * dims, n_free);
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXd c_free = x.segment(0, info->n_free * dims);
+    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
 
-    VectorXd c(c_free.size() + c_fixed.size());
-    c << c_free, c_fixed;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
 
     VectorXT vertices;
     VectorXT params;
-    tessellation->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighborsClipped(vertices, params, tri, boundary, n_free);
+    tri = info->getTessellation()->getDualGraph(vertices, params);
+    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
+                                                                                       info->boundary, info->n_free);
 
-    VectorXT dOdc = VectorXT::Zero(n_free * (dims + 1));
+    VectorXT dOdc = VectorXT::Zero(info->n_free * (dims + 1));
     for (int i = 0; i < cells.size(); i++) {
         if (cells[i].size() > 18 || cells[i].size() < 3) {
             continue;
@@ -130,7 +133,7 @@ VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
         VectorXi map;
         getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_dEdc_cell_AT(tessellation, p_in, n_in, c_in, b_in, map, dOdc);
+        add_dEdc_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, map, dOdc);
     }
 
     return dOdc;
@@ -144,21 +147,22 @@ Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) con
     VectorXi tri;
     VectorXi e;
 
-    int dims = 2 + tessellation->getNumVertexParams();
-    VectorXd c_free = x.segment(0, n_free * dims);
-    VectorXd area_targets = x.segment(n_free * dims, n_free);
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXd c_free = x.segment(0, info->n_free * dims);
+    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
 
-    VectorXd c(c_free.size() + c_fixed.size());
-    c << c_free, c_fixed;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
 
     VectorXT vertices;
     VectorXT params;
-    tessellation->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighborsClipped(vertices, params, tri, boundary, n_free);
+    tri = info->getTessellation()->getDualGraph(vertices, params);
+    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
+                                                                                       info->boundary, info->n_free);
 
-    MatrixXT d2Odc2 = MatrixXT::Zero(n_free * (dims + 1), n_free * (dims + 1));
+    MatrixXT d2Odc2 = MatrixXT::Zero(info->n_free * (dims + 1), info->n_free * (dims + 1));
     for (int i = 0; i < cells.size(); i++) {
         if (cells[i].size() > 18 || cells[i].size() < 3) {
             continue;
@@ -168,16 +172,9 @@ Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) con
         VectorXi map;
         getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
 
-        add_d2Edc2_cell_AT(tessellation, p_in, n_in, c_in, b_in, map, d2Odc2);
+        add_d2Edc2_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, map, d2Odc2);
     }
 
-    Eigen::SparseMatrix<double> d2Odc2_sparse(n_free * (dims + 1), n_free * (dims + 1));
-    for (int i = 0; i < d2Odc2.rows(); i++) {
-        for (int j = 0; j < d2Odc2.cols(); j++) {
-            d2Odc2_sparse.coeffRef(i, j) = d2Odc2(i, j);
-        }
-    }
-//    return d2Odc2_sparse;
     return d2Odc2.sparseView();
 }
 

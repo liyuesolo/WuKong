@@ -36,8 +36,8 @@ public:
     /** default constructor */
     ImageMatchSolver(ImageMatchNLP *_imageMatchNlp)
             : imageMatchNLP(_imageMatchNlp) {
-        int dims = imageMatchNLP->energy->tessellation->getNumVertexParams() + 2;
-        int n_free = imageMatchNLP->energy->n_free;
+        int dims = imageMatchNLP->info->getTessellation()->getNumVertexParams() + 2;
+        int n_free = imageMatchNLP->info->n_free;
 
         nx = n_free * (dims + 1);
         primal = new double[nx];
@@ -80,8 +80,8 @@ public:
                                  Ipopt::Number *g_u) {
         std::cout << "[ipopt] get bounds" << std::endl;
 
-        int dims = imageMatchNLP->energy->tessellation->getNumVertexParams() + 2;
-        int n_free = imageMatchNLP->energy->n_free;
+        int dims = imageMatchNLP->info->getTessellation()->getNumVertexParams() + 2;
+        int n_free = imageMatchNLP->info->n_free;
 
         tbb::parallel_for(0, n, [&](int i) {
             x_l[i] = -1e19;
@@ -100,6 +100,7 @@ public:
 //            }
             if (i >= n_free * dims) {
                 x_l[i] = 0;
+                x_u[i] = 1;
             }
         });
 
@@ -126,10 +127,8 @@ public:
         assert(init_z == false);
         assert(init_lambda == false);
 
-        std::cout << "Starting point" << std::endl;
         for (int i = 0; i < n; ++i) {
             x[i] = imageMatchNLP->x_guess(i);
-            std::cout << i << " " << x[i] << std::endl;
         }
 
         return true;
@@ -211,11 +210,6 @@ public:
         } else {
             assert(jCol == NULL);
             assert(values != NULL);
-
-            std::cout << "Solver jac g " << std::endl;
-            for (int i = 0; i < n; ++i) {
-                std::cout << i << " " << x[i] << " " << imageMatchNLP->x_guess(i) << std::endl;
-            }
 
             // Subsequent calls. Provide constraint Jacobian values.
             Eigen::Map<const VectorXd> x_eigen(x, n);

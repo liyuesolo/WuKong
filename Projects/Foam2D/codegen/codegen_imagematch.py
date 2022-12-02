@@ -25,26 +25,47 @@ def imagematch(MAX_N, MAX_P, num_neighbors, num_points, xn, yn, xp, yp):
     x1p = xp - x1
     y1p = yp - y1
 
-    # Target position objective
-    cross = ca.if_else(
-        ca.logic_and(n_idx < num_neighbors, p_idx < 1),
-        (x12 * y1p - x1p * y12) / ca.sqrt(x12 * x12 + y12 * y12 + 1e-14),
-        0
-    )
-    # obj = ca.constpow(ca.log(ca.exp(cross * -1.0) + 1), 2)
-    obj = ca.log(ca.exp(cross * -1.0) + 1)
+    cross = (x12 * y1p - x1p * y12) / ca.sqrt(x12 * x12 + y12 * y12 + 1e-14)
+    obj = ca.logic_and(n_idx < num_neighbors, p_idx < num_points) * ca.constpow(ca.log(ca.exp(cross * -1.0) + 1), 2)
     #
-    obj = ca.if_else(
-        ca.logic_and(n_idx < num_neighbors, p_idx < 1),
-        (x12 * y1p - x1p * y12) / ca.sqrt(x12 * x12 + y12 * y12 + 1e-14),
-        0
-    )
+    # # Target position objective
+    # cross = ca.if_else(
+    #     ca.logic_and(n_idx < num_neighbors, p_idx < 1),
+    #     (x12 * y1p - x1p * y12) / ca.sqrt(x12 * x12 + y12 * y12 + 1e-14),
+    #     0
+    # )
+    # # obj = ca.constpow(ca.log(ca.exp(cross * -1.0) + 1), 2)
+    # obj = ca.log(ca.exp(cross * -1.0) + 1)
+    # #
+    # obj = ca.if_else(
+    #     ca.logic_and(n_idx < num_neighbors, p_idx < 1),
+    #     (x12 * y1p - x1p * y12) / ca.sqrt(x12 * x12 + y12 * y12 + 1e-14),
+    #     0
+    # )
+    #
+    # obj = ca.logic_and(n_idx < num_neighbors, p_idx < num_points) * (x1p * x1p + y1p * y1p)
+    # # obj = ca.if_else(
+    # #     n_idx < 2,
+    # #     1 + 0.00000001 * x12,
+    # #     0
+    # # )
 
-    obj = ca.if_else(
-        ca.logic_and(n_idx < num_neighbors, p_idx < 1),
-        (x1p * x1p + y1p * y1p),
-        0
-    )
+    Obj += ca.sum2(obj)
+    # Obj -= x12[0, 0] * x12[0, 0]
+    # Obj -= x12[0, 1] * x12[0, 1]
+    # Obj -= x12[1, 0] * x12[1, 0]
+    # Obj -= x12[1, 1] * x12[1, 1]
+
+    return Obj
+
+
+def fake_imagematch(MAX_N, MAX_P, num_neighbors, num_points, x0, y0, xp, yp):
+    p_idx = ca.transpose(ca.linspace(0, MAX_P - 1, MAX_P))
+
+    Obj = ca.MX.zeros(1, 1)
+
+    obj = ca.logic_or(p_idx == 0, p_idx == 2) * (x0 * xp)
+
     # obj = ca.if_else(
     #     n_idx < 2,
     #     1 + 0.00000001 * x12,
@@ -72,7 +93,7 @@ if __name__ == "__main__":
     print(p_idx)
 
     A = ca.if_else(
-        ca.logic_and(n_idx == 1, p_idx == 1),
+        ca.logic_and(n_idx < 2, p_idx < 2),
         1,
         0
     )

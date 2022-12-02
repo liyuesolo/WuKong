@@ -1,23 +1,16 @@
 #pragma once
 
 #include "../../src/optLib/ObjectiveFunction.h"
-#include "../../include/Tessellation/Tessellation.h"
+#include "../../include/Foam2DInfo.h"
 
 class ImageMatchObjective : public ObjectiveFunction {
 
 public:
-    Tessellation *tessellation;
-
     std::vector<VectorXd> pix;
-
-    VectorXd c_fixed;
-    VectorXd boundary;
-
-    int n_free; // Number of movable sites
-    int n_fixed; // Number of fixed sites
-
     double dx;
     double dy;
+
+    Foam2DInfo *info;
 
 public:
     void

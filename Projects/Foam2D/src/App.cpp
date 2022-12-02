@@ -23,7 +23,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
         tesselationTypes.push_back("Power");
-        if (ImGui::Combo("Tessellation Type", &foam.tessellation, tesselationTypes)) {
+        if (ImGui::Combo("Tessellation Type", &foam.info->tessellation, tesselationTypes)) {
             foam.resetVertexParams();
             updateViewerData(viewer);
         }
@@ -35,7 +35,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         dragModes.push_back("Set Target");
         dragModes.push_back("Set Position");
         if (ImGui::Combo("Drag Mode", &drag_mode, dragModes)) {
-            foam.energyObjective.drag_idx = -1;
+            foam.info->selected = -1;
         }
 
         ImGui::Spacing();
@@ -43,20 +43,24 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        if (scenario != 3) {
+        if (generate_scenario_type != 3) {
             if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
                 if (numAreaTargets < 1) numAreaTargets = 1;
-                if (foam.energyObjective.area_targets.rows() >= numAreaTargets) {
-                    VectorXd areaTargets = foam.energyObjective.area_targets.segment(0, numAreaTargets);
-                    foam.energyObjective.area_targets = areaTargets;
+
+                VectorXd temp = areaTargets;
+                areaTargets.resize(numAreaTargets);
+                if (numAreaTargets < temp.rows()) {
+                    areaTargets = temp.segment(0, numAreaTargets);
                 } else {
-                    VectorXd areaTargets(numAreaTargets);
-                    areaTargets << foam.energyObjective.area_targets, foam.energyObjective.area_targets(0) *
-                                                                      VectorXd::Ones(
-                                                                              numAreaTargets -
-                                                                              foam.energyObjective.area_targets.rows());
-                    foam.energyObjective.area_targets = areaTargets;
+                    areaTargets.segment(0, temp.rows()) = temp;
+                    areaTargets.segment(temp.rows(), numAreaTargets - temp.rows()) =
+                            areaTargets(0) * VectorXd::Ones(numAreaTargets - temp.rows());
                 }
+
+                for (int i = 0; i < foam.info->n_free; i++) {
+                    foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
+                }
+
                 updateViewerData(viewer);
             }
             {
@@ -64,8 +68,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 for (int i = 0; i < numAreaTargets; i++) {
                     ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
                     if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
-                                           &foam.energyObjective.area_targets(i),
+                                           &areaTargets(i),
                                            0.005f, 0.005f, "%.3f")) {
+                        for (int i = 0; i < foam.info->n_free; i++) {
+                            foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
+                        }
+
                         updateViewerData(viewer);
                     }
                 }
@@ -73,13 +81,13 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             }
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Weight", &foam.energyObjective.area_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Area Weight", &foam.info->energy_area_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Length Weight", &foam.energyObjective.length_weight, 0.0005f, 0.0005f, "%.4f");
+        ImGui::InputDouble("Length Weight", &foam.info->energy_length_weight, 0.0005f, 0.0005f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Centroid Weight", &foam.energyObjective.centroid_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Centroid Weight", &foam.info->energy_centroid_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Drag Target Weight", &foam.energyObjective.drag_target_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Drag Target Weight", &foam.info->energy_drag_target_weight, 0.01f, 0.01f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -99,20 +107,20 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Bounding Box");
         scenarios.push_back("Image Match");
 
-        if (ImGui::Combo("Scenario", &scenario, scenarios)) {
+        if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = true;
         }
-        if (scenario == 0) {
+        if (generate_scenario_type == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::InputInt("Cells", &free_sites, 10, 100);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::InputInt("Boundary Sites", &fixed_sites, 10, 100);
+            ImGui::InputInt("Boundary Sites", &generate_scenario_fixed_sites, 10, 100);
         }
-        if (scenario == 2) {
+        if (generate_scenario_type == 2) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-            ImGui::InputInt("Cells", &free_sites, 10, 100);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
-        if (scenario == 3) {
+        if (generate_scenario_type == 3) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
             ImGui::Combo("Source", &matchSource, sourcePaths);
             if (ImGui::Checkbox("Show Image", &matchShowImage)) {
@@ -144,16 +152,16 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Text("Dynamics");
 
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-        ImGui::InputDouble("Timestep", &dynamics_dt, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Timestep", &foam.info->dynamics_dt, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-        ImGui::InputDouble("Inertia", &dynamics_m, 0.001f, 0.001f, "%.4f");
+        ImGui::InputDouble("Inertia", &foam.info->dynamics_m, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-        ImGui::InputDouble("Viscosity", &dynamics_eta, 0.001f, 0.001f, "%.4f");
+        ImGui::InputDouble("Viscosity", &foam.info->dynamics_eta, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
         ImGui::InputDouble("Tolerance", &dynamics_tol, 0.000001, 0.00001f, "%.6f");
         if (ImGui::Button("Start Dynamics")) {
             dynamics = true;
-            foam.dynamicsInit(dynamics_dt, dynamics_m, dynamics_eta);
+            foam.dynamicsInit();
         }
         if (ImGui::Button("Stop Dynamics")) {
             dynamics = false;
@@ -168,24 +176,24 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             dynamics = false;
             trajOptMode = true;
             trajOpt_frame = 0;
-            foam.trajectoryOptSetInit();
+            foam.dynamicsInit();
         }
         if (ImGui::Button("Optimize IPOPT")) {
             trajOptOptimized = true;
-            foam.dynamicsInit(dynamics_dt, dynamics_m, dynamics_eta);
-            foam.trajectoryOptOptimizeIPOPT(trajOpt_N);
+            foam.trajectoryOptOptimizeIPOPT();
         }
         if (ImGui::Button("Stop Optimization")) {
             foam.trajectoryOptStop();
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.6);
-        ImGui::InputInt("Steps", &trajOpt_N, 1, 10);
+        ImGui::InputInt("Steps", &foam.info->trajOpt_N, 1, 10);
         if (trajOptOptimized) {
-            ImGui::SliderInt("Frame", &trajOpt_frame, 0, trajOpt_N);
+            ImGui::SliderInt("Frame", &trajOpt_frame, 0, foam.info->trajOpt_N);
         }
         if (ImGui::Button("Clear")) {
             trajOptMode = false;
             trajOptOptimized = false;
+            updateViewerData(viewer);
         }
 
     };
@@ -218,32 +226,34 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.callback_mouse_down =
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
-                if (drag_idx == -1 && !trajOptOptimized) {
+                if (!trajOptOptimized) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
-                    drag_idx = foam.getClosestMovablePointThreshold(p, 0.02);
-                    selected_vertex = drag_idx;
-                    if (drag_mode == 0) {
-                        foam.energyObjective.drag_idx = drag_idx;
-                        foam.energyObjective.drag_target_pos = p;
+                    foam.info->selected = foam.getClosestMovablePointThreshold(p, 0.02);
+                    if (foam.info->selected >= 0) {
+                        dragging = true;
+                        if (drag_mode == 0) {
+                            foam.info->selected_target_pos = p;
+                        }
                     }
+                    updateViewerData(viewer);
                 }
                 return true;
             };
 
     viewer.callback_mouse_up =
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
-                drag_idx = -1;
+                dragging = false;
                 return true;
             };
 
     viewer.callback_mouse_move =
             [&](igl::opengl::glfw::Viewer &viewer, int a, int b) -> bool {
-                if (drag_idx != -1 && !trajOptOptimized) {
+                if (dragging) {
                     Eigen::Vector2d p((viewer.current_mouse_x - 500) / 500.0, -(viewer.current_mouse_y - 500) / 500.0);
                     if (drag_mode == 0) {
-                        foam.energyObjective.drag_target_pos = p;
+                        foam.info->selected_target_pos = p;
                     } else {
-                        foam.moveVertex(drag_idx, p);
+                        foam.moveSelectedVertex(p);
                     }
                     updateViewerData(viewer);
                 }
@@ -295,15 +305,15 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
 void Foam2DApp::generateScenario() {
     MatrixXi markersEigen;
-    switch (scenario) {
+    switch (generate_scenario_type) {
         case 0:
-            foam.initRandomSitesInCircle(free_sites, fixed_sites);
+            foam.initRandomSitesInCircle(generate_scenario_free_sites, generate_scenario_fixed_sites);
             break;
         case 1:
             foam.initBasicTestCase();
             break;
         case 2:
-            foam.initRandomCellsInBox(free_sites);
+            foam.initRandomCellsInBox(generate_scenario_free_sites);
             break;
         case 3:
             matchImage = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
@@ -313,6 +323,12 @@ void Foam2DApp::generateScenario() {
             break;
         default:
             std::cout << "Error: scenario not implemented!";
+    }
+    if (generate_scenario_type != 3) {
+        for (int i = 0; i < foam.info->n_free; i++) {
+            foam.info->energy_area_targets.resize(foam.info->n_free);
+            foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
+        }
     }
 }
 
@@ -350,14 +366,14 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
 //    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
 //    viewer.data(0).add_edges(bb, bb_p2, bb_c);
 
-    int nb = foam.boundary.rows() / 2;
+    int nb = foam.info->boundary.rows() / 2;
     MatrixXd b1, b2, bc;
     b1.resize(nb, 3);
     b2.resize(nb, 3);
     bc.resize(nb, 3);
     for (int i = 0; i < nb; i++) {
-        b1.row(i) = TV3(foam.boundary(2 * i + 0), foam.boundary(2 * i + 1), 0);
-        b2.row(i) = TV3(foam.boundary(2 * ((i + 1) % nb) + 0), foam.boundary(2 * ((i + 1) % nb) + 1), 0);
+        b1.row(i) = TV3(foam.info->boundary(2 * i + 0), foam.info->boundary(2 * i + 1), 0);
+        b2.row(i) = TV3(foam.info->boundary(2 * ((i + 1) % nb) + 0), foam.info->boundary(2 * ((i + 1) % nb) + 1), 0);
         bc.row(i) = TV3(1, 0, 0);
     }
     viewer.data(0).add_edges(b1, b2, bc);
@@ -392,7 +408,7 @@ void Foam2DApp::displaySourceImage(igl::opengl::glfw::Viewer &viewer) {
 
     double dx = b.cols() * 0.8 / std::max(b.rows(), b.cols());
     double dy = b.rows() * 0.8 / std::max(b.rows(), b.cols());
-    double eps = 1e-3;
+    double eps = 1e-6;
 
     Eigen::Matrix<double, -1, -1> V;
     Eigen::Matrix<double, -1, -1> UV;

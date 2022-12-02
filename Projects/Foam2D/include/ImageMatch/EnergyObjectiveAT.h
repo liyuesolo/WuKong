@@ -1,26 +1,12 @@
 #pragma once
 
 #include "../../src/optLib/ObjectiveFunction.h"
-#include "../../include/Tessellation/Tessellation.h"
+#include "../../include/Foam2DInfo.h"
 
 class EnergyObjectiveAT : public ObjectiveFunction {
 
 public:
-    Tessellation *tessellation;
-
-    VectorXd c_fixed;
-    VectorXd boundary;
-
-    double area_weight = 0.1;
-    double length_weight = 0.003;
-    double centroid_weight = 0.05;
-    double drag_target_weight = 0.00;
-
-    int drag_idx = -1;
-    TV drag_target_pos = {0, 0};
-
-    int n_free; // Number of movable sites
-    int n_fixed; // Number of fixed sites
+    Foam2DInfo *info;
 
 public:
     void

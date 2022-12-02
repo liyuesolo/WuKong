@@ -1,20 +1,14 @@
 #pragma once
 
 #include "../Energy/DynamicObjective.h"
+#include "../Foam2DInfo.h"
 
 class TrajectoryOptNLP {
 
 public:
-    EnergyObjective *energy; // Energy function (+ gradient / hessian). Includes fixed sites and tessellation info.
-    DynamicObjective *dynamics; // Dynamics. Used for time step and mass matrix.
+    EnergyObjective *energy; // Energy function (+ gradient / hessian).
 
-    int N; // Number of time steps (states from 0 to N, inclusive)
-
-    int agent; // Index of site whose trajectory is being optimized
-    TV target_pos; // Target position for agent
-    double target_weight = 1e-1;
-    double velocity_weight = 0 * 1e-3;
-    double input_weight = 0 * 1e-2;
+    Foam2DInfo *info;
 
     VectorXd c0; // Initial positions of free sites (+ additional tessellation degrees of freedom)
     VectorXd v0; // Initial velocities of free sites
@@ -32,6 +26,4 @@ public:
     VectorXd eval_g(const VectorXd &x) const;
 
     Eigen::SparseMatrix<double> eval_jac_g_sparsematrix(const VectorXd &x) const;
-
-    std::vector<Eigen::Triplet<double>> eval_jac_g_triplets(const VectorXd &x) const;
 };

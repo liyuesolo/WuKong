@@ -10,11 +10,14 @@
 #include <Eigen/Dense>
 
 #include "VecMatDef.h"
-#include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 #include "../include/Energy/EnergyObjective.h"
 #include "../include/Energy/DynamicObjective.h"
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
+#include "../include/ImageMatch/EnergyObjectiveAT.h"
+#include "../include/ImageMatch/ImageMatchObjective.h"
+#include "../include/ImageMatch/ImageMatchNLP.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
+#include "../include/Foam2DInfo.h"
 
 using TV = Vector<double, 2>;
 using TV3 = Vector<double, 3>;
@@ -30,23 +33,20 @@ using VectorXf = Vector<float, Eigen::Dynamic>;
 
 class Foam2D {
 public:
-    std::vector<Tessellation *> tessellations;
-    int tessellation = 0;
     std::vector<GradientDescentLineSearch *> minimizers;
     int opttype = 1;
 
     EnergyObjective energyObjective;
     DynamicObjective dynamicObjective;
-
     TrajectoryOptNLP trajOptNLP;
+    EnergyObjectiveAT energyObjectiveAT;
+    ImageMatchObjective imageMatchObjective;
+    ImageMatchNLP imageMatchNLP;
 
     VectorXT vertices;
     VectorXT params;
 
-    int n_free;
-    int n_fixed;
-
-    VectorXT boundary;
+    Foam2DInfo *info;
 
 public:
 
@@ -58,13 +58,13 @@ public:
 
     void initImageMatch(MatrixXi &markers);
 
-    void dynamicsInit(double dt, double m, double mu);
+    void dynamicsInit();
 
     void dynamicsNewStep();
 
     void optimize(bool dynamic);
 
-    void moveVertex(int idx, const TV &pos);
+    void moveSelectedVertex(const TV &pos);
 
     int getClosestMovablePointThreshold(const TV &p, double threshold);
 
@@ -88,9 +88,7 @@ public:
 
     bool isConvergedDynamic(double tol);
 
-    void trajectoryOptSetInit();
-
-    void trajectoryOptOptimizeIPOPT(int N);
+    void trajectoryOptOptimizeIPOPT();
 
     void trajectoryOptGetFrame(int frame);
 

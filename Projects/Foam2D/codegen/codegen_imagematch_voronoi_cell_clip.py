@@ -94,6 +94,7 @@ def codegen_imagematch_voronoi_cell(MAX_N, MAX_P, opt=3):
     yn = ca.vertcat(nss[1], nsb[1], nbs[1], nbb[1])[4 * ca.transpose(ca.linspace(0, MAX_N, MAX_N + 1)) + type]
 
     Obj = imagematch(MAX_N, MAX_P, num_neighbors, num_points, xn, yn, xp, yp)
+    # Obj = fake_imagematch(MAX_N, MAX_P, num_neighbors, num_points, x0, y0, xp, yp)
 
     # Generate and compile C code
     ident = 'imagematch_voronoi_cell_' + str(MAX_N)

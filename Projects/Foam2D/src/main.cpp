@@ -1,4 +1,5 @@
 #include "../include/App.h"
+#include "../include/Foam2DInfo.h"
 
 int main() {
     igl::opengl::glfw::Viewer viewer;

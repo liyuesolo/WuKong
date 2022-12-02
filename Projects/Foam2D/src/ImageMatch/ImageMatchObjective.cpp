@@ -27,9 +27,9 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     p_in.resize(2);
     p_in << n_neighbors, n_points;
 
-    int n_vtx = n_free + n_fixed;
-    int n_bdy = boundary.rows() / 2;
-    int dims = 2 + tessellation->getNumVertexParams();
+    int n_vtx = info->n_free + info->n_fixed;
+    int n_bdy = info->boundary.rows() / 2;
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     int maxN = 20;
     int maxP = 1000;
@@ -47,6 +47,14 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
     pix_in.setZero();
     pix_in.segment(0, 2 * n_points) = pix[cellIndex];
 
+//    pix_in.segment(0, 2) = pix[cellIndex].segment(2, 2);
+//    pix_in.segment(2, 2) = pix[cellIndex].segment(0, 2);
+//    std::cout << "PIX debugging" << std::endl;
+//    std::cout << pix_in(0) << " " << pix_in(2) << " " << pix_in(4) << std::endl;
+//    for (int i = 0; i < 4; i++) {
+//        std::cout << i << " " << pix[cellIndex](i) << " " << pix_in(i) << std::endl;
+//    }
+
     cell.insert(cell.begin(), cellIndex);
     map.resize(cell.size());
     for (int i = 0; i < cell.size(); i++) {
@@ -59,8 +67,8 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
         if (cell[i] < n_vtx) {
             c_in.segment(i * dims, dims) = c.segment(map(i) * dims, dims);
         } else {
-            b_in.segment<2>(i * 4 + 0) = boundary.segment<2>((map(i) - n_vtx) * 2);
-            b_in.segment<2>(i * 4 + 2) = boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
+            b_in.segment<2>(i * 4 + 0) = info->boundary.segment<2>((map(i) - n_vtx) * 2);
+            b_in.segment<2>(i * 4 + 2) = info->boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
         }
     }
 }
@@ -69,15 +77,16 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
-    VectorXd c(c_free.size() + c_fixed.size());
-    c << c_free, c_fixed;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
 
     VectorXT vertices;
     VectorXT params;
-    tessellation->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighborsClipped(vertices, params, tri, boundary, n_free);
+    tri = info->getTessellation()->getDualGraph(vertices, params);
+    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
+                                                                                       info->boundary, info->n_free);
 
     double O = 0;
     for (int i = 0; i < cells.size(); i++) {
@@ -90,7 +99,7 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
         VectorXi map;
         getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, pix_in, map);
 
-        add_value_cell(tessellation, p_in, n_in, c_in, b_in, pix_in, O);
+        add_value_cell(info->getTessellation(), p_in, n_in, c_in, b_in, pix_in, O);
     }
 
     return O;
@@ -104,18 +113,19 @@ VectorXd ImageMatchObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXi tri;
     VectorXi e;
 
-    VectorXd c(c_free.size() + c_fixed.size());
-    c << c_free, c_fixed;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
 
     VectorXT vertices;
     VectorXT params;
-    tessellation->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    tri = tessellation->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = tessellation->getNeighborsClipped(vertices, params, tri, boundary, n_free);
+    tri = info->getTessellation()->getDualGraph(vertices, params);
+    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
+                                                                                       info->boundary, info->n_free);
 
-    int dims = 2 + tessellation->getNumVertexParams();
-    VectorXT dOdc = VectorXT::Zero(n_free * dims);
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXT dOdc = VectorXT::Zero(info->n_free * dims);
     for (int i = 0; i < cells.size(); i++) {
         if (cells[i].size() > 18 || cells[i].size() < 3) {
             continue;
@@ -125,7 +135,7 @@ VectorXd ImageMatchObjective::get_dOdc(const VectorXd &c_free) const {
         VectorXi map;
         getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, pix_in, map);
 
-        add_gradient_cell(tessellation, p_in, n_in, c_in, b_in, pix_in, map, dOdc);
+        add_gradient_cell(info->getTessellation(), p_in, n_in, c_in, b_in, pix_in, map, dOdc);
     }
 
     return dOdc;

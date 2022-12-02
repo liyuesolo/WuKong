@@ -92,7 +92,7 @@ def codegen_energy_voronoi_cell(N, opt=3):
 
     p_nrg = ca.horzcat(p[0:3], at, p[3:])
     Obj = energy(N, x0, y0, xn, yn, p_nrg)
-    Obj = x0 * x0 + y0 * y0 + at * at
+    # Obj = x0 * x0 + y0 * y0 + at * at
 
     # Generate and compile C code
     ident = 'energy_voronoi_cell_areatarget_' + str(N)

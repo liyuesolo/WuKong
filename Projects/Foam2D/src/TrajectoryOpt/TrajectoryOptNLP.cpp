@@ -8,73 +8,78 @@
 #define NC (n_free * dims)
 
 double TrajectoryOptNLP::eval_f(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
-    TV final_pos = x.segment<2>(IDX_C(N - 1, agent));
-    TV final_pos2 = x.segment<2>(IDX_C(N - 2, agent));
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
+    int N = info->trajOpt_N;
 
-    double target_f = (final_pos - target_pos).squaredNorm();
-    double velocity_f = (final_pos - final_pos2).squaredNorm() / (dynamics->h * dynamics->h);
+    TV final_pos = x.segment<2>(IDX_C(N - 1, info->selected));
+    TV final_pos2 = x.segment<2>(IDX_C(N - 2, info->selected));
+
+    double target_f = (final_pos - info->selected_target_pos).squaredNorm();
+    double velocity_f = (final_pos - final_pos2).squaredNorm() / (info->dynamics_dt * info->dynamics_dt);
     double input_f = x.segment(IDX_U(0), NX_U).squaredNorm();
-    return target_weight * target_f + velocity_weight * velocity_f + input_weight * input_f;
+    return info->trajOpt_target_weight * target_f + info->trajOpt_velocity_weight * velocity_f +
+           info->trajOpt_input_weight * input_f;
 }
 
 VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
     VectorXd grad_f = VectorXd::Zero(x.rows());
 
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
-    TV final_pos = x.segment<2>(IDX_C(N - 1, agent));
-    TV final_pos2 = x.segment<2>(IDX_C(N - 2, agent));
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
+    int N = info->trajOpt_N;
 
-    grad_f.segment<2>(IDX_C(N - 1, agent)) =
-            2 * target_weight * (final_pos - target_pos) +
-            2 * velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
-    grad_f.segment<2>(IDX_C(N - 2, agent)) =
-            -2 * velocity_weight * (final_pos - final_pos2) / (dynamics->h * dynamics->h);
-    grad_f.segment(IDX_U(0), NX_U) = input_weight * 2 * x.segment(IDX_U(0), NX_U);
+    TV final_pos = x.segment<2>(IDX_C(N - 1, info->selected));
+    TV final_pos2 = x.segment<2>(IDX_C(N - 2, info->selected));
+
+    grad_f.segment<2>(IDX_C(N - 1, info->selected)) =
+            2 * info->trajOpt_target_weight * (final_pos - info->selected_target_pos) +
+            2 * info->trajOpt_velocity_weight * (final_pos - final_pos2) / (info->dynamics_dt * info->dynamics_dt);
+    grad_f.segment<2>(IDX_C(N - 2, info->selected)) =
+            -2 * info->trajOpt_velocity_weight * (final_pos - final_pos2) / (info->dynamics_dt * info->dynamics_dt);
+    grad_f.segment(IDX_U(0), NX_U) = info->trajOpt_input_weight * 2 * x.segment(IDX_U(0), NX_U);
 
     return grad_f;
 }
 
 VectorXd TrajectoryOptNLP::eval_g(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
+    int N = info->trajOpt_N;
 
     VectorXd c_curr = x.segment(0, NX_C);
     VectorXd c_prev = VectorXd::Zero(NX_C);
     c_prev.segment(0, NC) = c0;
     c_prev.segment(NC, (N - 1) * NC) = c_curr.segment(0, (N - 1) * NC);
     VectorXd c_2prev = VectorXd::Zero(NX_C);
-    c_2prev.segment(0, NC) = c0 - v0 * dynamics->h;
+    c_2prev.segment(0, NC) = c0 - v0 * info->dynamics_dt;
     c_2prev.segment(NC, (N - 1) * NC) = c_prev.segment(0, (N - 1) * NC);
 
     VectorXd force_int = VectorXd::Zero(NX_C);
     VectorXd force_ext = VectorXd::Zero(NX_C);
     for (int k = 0; k < N; k++) {
         force_int.segment(IDX_C(k, 0), NC) = -1.0 * energy->get_dOdc(c_curr.segment(IDX_C(k, 0), NC));
-        force_ext.segment<2>(IDX_C(k, agent)) = x.segment<2>(IDX_U(k));
+        force_ext.segment<2>(IDX_C(k, info->selected)) = x.segment<2>(IDX_U(k));
     }
-    force_int -= dynamics->H.replicate(N, 1).asDiagonal() * (c_curr - c_prev) / dynamics->h;
+    force_int -= info->dynamics_eta * (c_curr - c_prev) / info->dynamics_dt;
 
-    VectorXd Ma =
-            dynamics->M.replicate(N, 1).asDiagonal()
-            * (c_curr - 2 * c_prev + c_2prev) / (dynamics->h * dynamics->h);
+    VectorXd Ma = info->dynamics_m * (c_curr - 2 * c_prev + c_2prev) / (info->dynamics_dt * info->dynamics_dt);
     VectorXd G = Ma - (force_int + force_ext);
 
     return G;
 }
 
 Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g_sparsematrix(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
+    int dims = info->getTessellation()->getNumVertexParams() + 2;
+    int n_free = info->n_free;
+    int N = info->trajOpt_N;
 
     VectorXd c_curr = x.segment(0, NX_C);
     VectorXd c_prev = VectorXd::Zero(NX_C);
     c_prev.segment(0, NC) = c0;
     c_prev.segment(NC, (N - 1) * NC) = c_curr.segment(0, (N - 1) * NC);
     VectorXd c_2prev = VectorXd::Zero(NX_C);
-    c_2prev.segment(0, NC) = c0 - v0 * dynamics->h;
+    c_2prev.segment(0, NC) = c0 - v0 * info->dynamics_dt;
     c_2prev.segment(NC, (N - 1) * NC) = c_prev.segment(0, (N - 1) * NC);
 
     Eigen::SparseMatrix<double> jac(NX_C, NX);
@@ -89,67 +94,20 @@ Eigen::SparseMatrix<double> TrajectoryOptNLP::eval_jac_g_sparsematrix(const Eige
         }
     }
     // Diagonals
-    Eigen::VectorXd Mhh = dynamics->M / (dynamics->h * dynamics->h);
-    Eigen::VectorXd Hh = dynamics->H / dynamics->h;
+    double m_hh = info->dynamics_m / (info->dynamics_dt * info->dynamics_dt);
+    double eta_h = info->dynamics_eta / info->dynamics_dt;
     for (int k = 0; k < N; k++) {
         for (int i = 0; i < NC; i++) {
             int idx = k * NC + i;
-            jac.coeffRef(idx, idx) += Mhh(i) + Hh[i]; //dG{k}/dc{k}
-            if (k > 0) jac.coeffRef(idx, idx - NC) += -2 * Mhh(i) - Hh[i]; //dG{k}/dc{k-1}
-            if (k > 1) jac.coeffRef(idx, idx - 2 * NC) += Mhh(i); //dG{k}/dc{k-2}
+            jac.coeffRef(idx, idx) += m_hh + eta_h; //dG{k}/dc{k}
+            if (k > 0) jac.coeffRef(idx, idx - NC) += -2 * m_hh - eta_h; //dG{k}/dc{k-1}
+            if (k > 1) jac.coeffRef(idx, idx - 2 * NC) += m_hh; //dG{k}/dc{k-2}
         }
     }
     // Control input terms
     for (int k = 0; k < N; k++) {
-        jac.coeffRef(IDX_C(k, agent), IDX_U(k)) += -1;
-        jac.coeffRef(IDX_C(k, agent) + 1, IDX_U(k) + 1) += -1;
-    }
-
-    return jac;
-}
-
-std::vector<Eigen::Triplet<double>> TrajectoryOptNLP::eval_jac_g_triplets(const Eigen::VectorXd &x) const {
-    int dims = energy->tessellation->getNumVertexParams() + 2;
-    int n_free = energy->n_free;
-
-    std::vector<Eigen::Triplet<double>> jac((N * NC * NC) + ((2 * N - 3) * NC) + (N * 2));
-    std::fill(jac.begin(), jac.end(), Eigen::Triplet<double>(0, 0, 0));
-
-    Eigen::VectorXd Mhh = dynamics->M / (dynamics->h * dynamics->h);
-    for (int k = 0; k < N; k++) {
-        Eigen::SparseMatrix<double> d2Edc2 = energy->get_d2Odc2(x.segment(IDX_C(k, 0), NC));
-
-        int idx, rr, cc;
-        for (int i = 0; i < NC; i++) {
-            for (int j = 0; j < NC; j++) {
-                idx = k * NC * NC + i * NC + j;
-                rr = i + k * NC;
-                cc = j + k * NC;
-                jac[idx] = Eigen::Triplet<double>(rr, cc, d2Edc2.coeff(i, j) + ((i == j) ? Mhh(i) : 0));
-            }
-
-            if (k > 0) {
-                idx = N * NC * NC + (k - 1) * NC + i;
-                rr = k * NC + i;
-                cc = (k - 1) * NC + i;
-                jac[idx] = Eigen::Triplet<double>(rr, cc, -2 * Mhh(i));
-            }
-            if (k > 1) {
-                idx = N * NC * NC + (N - 1 + k - 2) * NC + i;
-                rr = k * NC + i;
-                cc = (k - 2) * NC + i;
-                jac[idx] = Eigen::Triplet<double>(rr, cc, Mhh(i));
-            }
-        }
-
-        idx = N * NC * NC + (2 * N - 3) * NC + 2 * k;
-        rr = k * NC + dims * agent;
-        cc = N * NC + 2 * k;
-        jac[idx] = Eigen::Triplet<double>(rr, cc, -1);
-        idx = N * NC * NC + (2 * N - 3) * NC + 2 * k + 1;
-        rr = k * NC + dims * agent + 1;
-        cc = N * NC + 2 * k + 1;
-        jac[idx] = Eigen::Triplet<double>(rr, cc, -1);
+        jac.coeffRef(IDX_C(k, info->selected), IDX_U(k)) += -1;
+        jac.coeffRef(IDX_C(k, info->selected) + 1, IDX_U(k) + 1) += -1;
     }
 
     return jac;

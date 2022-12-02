@@ -213,7 +213,6 @@ add_d2Edc2_cell_AT(Tessellation *tessellation, const VectorXT &p, const VectorXT
 
     casadi_int rr, cc, el;
     int nzidx = 0;
-    std::cout << std::endl << "New EVAL " << map(0) << " " << out(0, 0) << " " << c(1) << " " << c(2) << std::endl;
     for (cc = 0; cc < ncol; cc++) {                    /* loop over columns */
         bool c_in_range = true;
 

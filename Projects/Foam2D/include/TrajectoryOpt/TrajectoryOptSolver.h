@@ -38,7 +38,7 @@ public:
     /** default constructor */
     TrajectoryOptSolver(TrajectoryOptNLP *_trajectoryOptNlp)
             : trajectoryOptNlp(_trajectoryOptNlp) {
-        N = trajectoryOptNlp->N;
+        N = trajectoryOptNlp->info->trajOpt_N;
         nc = trajectoryOptNlp->c0.rows();
         nx = N * (nc + 2);
         primal = new double[nx];
@@ -89,22 +89,22 @@ public:
                                  Ipopt::Number *g_u) {
         std::cout << "[ipopt] get bounds" << std::endl;
 
-        int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
-        int n_free = trajectoryOptNlp->energy->n_free;
+        int dims = trajectoryOptNlp->info->getTessellation()->getNumVertexParams() + 2;
+        int n_free = trajectoryOptNlp->info->n_free;
         tbb::parallel_for(0, n, [&](int i) {
             x_l[i] = -1e19;
             x_u[i] = 1e19;
         });
         // Final state
-        x_l[IDX_C(N - 1, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
-        x_u[IDX_C(N - 1, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
-        x_l[IDX_C(N - 1, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
-        x_u[IDX_C(N - 1, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
+        x_l[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+        x_u[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+        x_l[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
+        x_u[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
         // Second-to-last state
-        x_l[IDX_C(N - 2, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->agent) + 0] = trajectoryOptNlp->target_pos(0);
-        x_l[IDX_C(N - 2, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->agent) + 1] = trajectoryOptNlp->target_pos(1);
+        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
+        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
 
         tbb::parallel_for(0, m, [&](int i) {
             g_l[i] = 0;
@@ -195,7 +195,7 @@ public:
 //        std::cout << "[ipopt] eval_jac_g" << std::endl;
         // Reminder: nnz_jac_g = (N * nc * nc) + ((2 * N - 3) * nc) + (N * 2);
 
-        int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
+        int dims = trajectoryOptNlp->info->getTessellation()->getNumVertexParams() + 2;
         if (iRow != NULL) {
             assert(jCol != NULL);
             assert(values == NULL);
@@ -223,10 +223,10 @@ public:
                 }
 
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent;
+                iRow[idx] = k * nc + dims * trajectoryOptNlp->info->selected;
                 jCol[idx] = N * nc + 2 * k;
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent + 1;
+                iRow[idx] = k * nc + dims * trajectoryOptNlp->info->selected + 1;
                 jCol[idx] = N * nc + 2 * k + 1;
             });
         } else {
@@ -262,11 +262,11 @@ public:
                 }
 
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                rr = k * nc + dims * trajectoryOptNlp->agent;
+                rr = k * nc + dims * trajectoryOptNlp->info->selected;
                 cc = N * nc + 2 * k;
                 values[idx] = jac_g_eigen.coeff(rr, cc);
                 idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                rr = k * nc + dims * trajectoryOptNlp->agent + 1;
+                rr = k * nc + dims * trajectoryOptNlp->info->selected + 1;
                 cc = N * nc + 2 * k + 1;
                 values[idx] = jac_g_eigen.coeff(rr, cc);
             });

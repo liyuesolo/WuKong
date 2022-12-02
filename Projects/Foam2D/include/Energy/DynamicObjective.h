@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EnergyObjective.h"
+#include "../Foam2DInfo.h"
 
 class DynamicObjective : public ObjectiveFunction {
 
@@ -9,15 +10,12 @@ public:
 
     VectorXd c_prev;
     VectorXd v_prev;
-    VectorXd M;
-    VectorXd H;
-    double h;
+
+    Foam2DInfo *info;
 
 public:
 
     VectorXd get_a(const VectorXd &c_free) const;
-
-    void init(const VectorXd &c_init, double dt, double m, double mu, EnergyObjective *energy);
 
     void newStep(const Eigen::VectorXd &c_free);
 

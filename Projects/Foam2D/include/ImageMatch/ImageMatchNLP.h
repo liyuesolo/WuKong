@@ -7,7 +7,9 @@ class ImageMatchNLP {
 
 public:
     ImageMatchObjective *objective;
-    EnergyObjectiveAT *energy; // Energy function (+ gradient / hessian). Includes fixed sites and tessellation info.
+    EnergyObjectiveAT *energy;
+
+    Foam2DInfo *info;
 
     VectorXd x_guess; // Initial guess for solution.
     VectorXd x_sol; // Solution.

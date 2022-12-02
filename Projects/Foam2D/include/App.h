@@ -17,16 +17,17 @@ class Foam2DApp {
 public:
     Foam2D &foam;
 
-    int drag_idx = -1;
     int drag_mode = 0;
+    bool dragging = false;
     bool optimize = false;
     bool show_dual = false;
 
-    int scenario = 3;
-    int free_sites = 40;
-    int fixed_sites = 40;
+    int generate_scenario_type = 3;
+    int generate_scenario_free_sites = 40;
+    int generate_scenario_fixed_sites = 40;
 
     int numAreaTargets = 1;
+    VectorXd areaTargets = 0.05 * VectorXd::Ones(1);
 
     VectorXf objImage;
     double obj_min;
@@ -38,14 +39,10 @@ public:
     int objImageType = 0;
 
     bool dynamics = false;
-    double dynamics_dt = 0.01;
-    double dynamics_m = 0.002;
-    double dynamics_eta = 0.01;
     double dynamics_tol = 1e-4;
 
     bool trajOptMode = false;
     bool trajOptOptimized = false;
-    int trajOpt_N = 50;
     int trajOpt_frame = 0;
 
     bool matchShowImage = false;
