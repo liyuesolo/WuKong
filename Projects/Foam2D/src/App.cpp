@@ -109,6 +109,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = true;
+            matchShowPixels = false;
         }
         if (generate_scenario_type == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -126,18 +127,20 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             if (ImGui::Checkbox("Show Image", &matchShowImage)) {
                 updateViewerData(viewer);
             }
+            if (ImGui::Checkbox("Show Pixels", &matchShowPixels)) {
+                updateViewerData(viewer);
+            }
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             if (ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0)) {
                 updateViewerData(viewer);
             }
             if (ImGui::Button("Improve Match")) {
-                MatrixXi markersEigen;
-                cv::cv2eigen(matchMarkers, markersEigen);
-                foam.imageMatchOptimizeIPOPT(markersEigen);
+                foam.imageMatchOptimizeIPOPT();
                 updateViewerData(viewer);
             }
         } else {
             matchShowImage = false;
+            matchShowPixels = false;
         }
 
         if (ImGui::Button("Generate")) {
@@ -317,7 +320,7 @@ void Foam2DApp::generateScenario() {
             break;
         case 3:
             matchImage = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
-            imageMatchSegmentation(matchImage, matchSegmented, matchMarkers);
+            imageMatchSegmentation(matchImage, matchSegmented, matchMarkers, matchColors);
             cv::cv2eigen(matchMarkers, markersEigen);
             foam.initImageMatch(markersEigen);
             break;
@@ -388,6 +391,29 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         for (int i = 1; i < viewer.data_list.size(); i++) {
             viewer.data(i).clear();
         }
+    }
+    if (matchShowPixels) {
+        double obj;
+        std::vector<VectorXd> pix;
+        foam.imageMatchGetInfo(obj, pix);
+
+        int numpix = 0;
+        for (VectorXd pixvec: pix) {
+            numpix += pixvec.rows() / 2;
+        }
+
+        MatrixXd P(numpix, 3);
+        MatrixXd C(numpix, 3);
+        int idx = 0;
+        for (int i = 0; i < pix.size(); i++) {
+            for (int j = 0; j < pix[i].rows() / 2; j++) {
+                P.row(idx) = TV3(pix[i](j * 2), pix[i](j * 2 + 1), 2e-6);
+                C.row(idx) = TV3(matchColors[i][0] / 255.0, matchColors[i][1] / 255.0, matchColors[i][2] / 255.0);
+                idx++;
+            }
+        }
+
+        viewer.data(0).add_points(P, C);
     }
 }
 
@@ -482,23 +508,34 @@ void Foam2DApp::updatePlotData() {
         bool hessian_pd;
         foam.getPlotObjectiveStats(dynamics, obj_val, gradient_norm, hessian_pd);
 
-        ImGui::Text(("Objective Value: " + std::to_string(obj_val)).c_str());
+        ImGui::Text(("Energy: " + std::to_string(obj_val)).c_str());
         ImGui::Text(("Gradient Norm: " + std::to_string(gradient_norm)).c_str());
         ImGui::Text((std::string("Hessian PD: ") + (hessian_pd ? "True" : "False")).c_str());
+
+        double obj;
+        std::vector<VectorXd> pix;
+        foam.imageMatchGetInfo(obj, pix);
+        if (matchShowImage) {
+            ImGui::Text(("Image Match Objective Value: " + std::to_string(obj)).c_str());
+        }
     }
 
     if (ImGui::CollapsingHeader("Objective Function Landscape", ImGuiTreeNodeFlags_None)) {
         std::vector<std::string> objTypes;
-        objTypes.push_back("Objective Value");
+        objTypes.push_back("Energy");
+        objTypes.push_back("dEdx");
+        objTypes.push_back("dEdy");
+        objTypes.push_back("ImageMatch");
         objTypes.push_back("dOdx");
         objTypes.push_back("dOdy");
         ImGui::Combo("Function", &objImageType, objTypes);
-        ImGui::Text(("Selected Site: " + (selected_vertex != -1 ? std::to_string(selected_vertex) : "None")).c_str());
+        ImGui::Text(("Selected Site: " +
+                     (foam.info->selected != -1 ? std::to_string(foam.info->selected) : "None")).c_str());
         ImGui::DragInt("Resolution ", &objImageResolution, 1, 0, 512);
         ImGui::DragFloat("Range ", &objImageRange, 0.001, 0.001, 1);
         ImGui::Checkbox("Compute Continuously", &objImageContinuous);
-        if ((ImGui::Button("Compute") || objImageContinuous) && selected_vertex != -1) {
-            foam.getPlotObjectiveFunctionLandscape(selected_vertex, objImageType, objImageResolution, objImageRange,
+        if ((ImGui::Button("Compute") || objImageContinuous) && foam.info->selected != -1) {
+            foam.getPlotObjectiveFunctionLandscape(foam.info->selected, objImageType, objImageResolution, objImageRange,
                                                    objImage, obj_min, obj_max);
         }
         std::string legendLabel;

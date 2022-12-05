@@ -99,3 +99,25 @@ if __name__ == "__main__":
     )
 
     print(A)
+
+#
+# if __name__ == "__main__":
+#     MAX_N = 12
+#     MAX_P = 20
+#
+#     n_idx = ca.transpose(ca.linspace(0, MAX_N - 1, MAX_N))
+#     p_idx = ca.linspace(0, MAX_P - 1, MAX_P)
+#     b = ca.transpose(ca.reshape(ca.linspace(0, MAX_P * MAX_N - 1, MAX_P * MAX_N), (MAX_N, MAX_P)))
+#
+#     n_idx = ca.repmat(n_idx, MAX_P, 1)
+#     p_idx = ca.repmat(p_idx, 1, MAX_N)
+#
+#     B = ca.logic_and(n_idx < 5, p_idx < 3) * b + ca.logic_and(n_idx >= 5, p_idx < 3) * 100
+#     print(B)
+#
+#     C = 0
+#     for i in range(MAX_P):
+#         C += ca.mmin(B[i, :])
+#
+#     print(C)
+

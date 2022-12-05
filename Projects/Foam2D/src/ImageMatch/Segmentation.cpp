@@ -6,7 +6,7 @@
 
 #include "../../include/ImageMatch/Segmentation.h"
 
-cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &markers) {
+cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &markers, std::vector<cv::Vec3b> &colors) {
 //    imshow("Source Image", src);
 
     cv::Mat image;
@@ -47,7 +47,7 @@ cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &marker
     cv::watershed(skel, markers);
 
     // Generate random colors
-    std::vector<cv::Vec3b> colors;
+    colors.clear();
     for (size_t i = 0; i < contours.size(); i++) {
         int b = cv::theRNG().uniform(0, 256);
         int g = cv::theRNG().uniform(0, 256);

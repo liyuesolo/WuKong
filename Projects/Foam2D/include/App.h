@@ -22,7 +22,7 @@ public:
     bool optimize = false;
     bool show_dual = false;
 
-    int generate_scenario_type = 3;
+    int generate_scenario_type = 2;
     int generate_scenario_free_sites = 40;
     int generate_scenario_fixed_sites = 40;
 
@@ -32,7 +32,6 @@ public:
     VectorXf objImage;
     double obj_min;
     double obj_max;
-    int selected_vertex = -1;
     int objImageResolution = 64;
     float objImageRange = 0.1;
     bool objImageContinuous = false;
@@ -46,6 +45,7 @@ public:
     int trajOpt_frame = 0;
 
     bool matchShowImage = false;
+    bool matchShowPixels = false;
     float matchImageW = 0.5;
     int matchSource = 9;
     std::vector<std::string> sourcePaths;
@@ -53,6 +53,7 @@ public:
     cv::Mat matchImage;
     cv::Mat matchSegmented;
     cv::Mat matchMarkers;
+    std::vector<cv::Vec3b> matchColors;
 
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,

@@ -25,8 +25,7 @@ EnergyObjectiveAT::getInputs(const VectorXT &c, const VectorXT &area_targets, co
     int n_neighbors = cell.size();
 
     p_in.resize(7);
-    p_in << info->energy_area_weight, info->energy_length_weight, ((cellIndex == info->selected) ? 1
-                                                                                                 : info->energy_centroid_weight), n_neighbors,
+    p_in << info->energy_area_weight, info->energy_length_weight, info->energy_centroid_weight, n_neighbors,
             ((cellIndex == info->selected) ? info->energy_drag_target_weight : 0), info->selected_target_pos(
             0), info->selected_target_pos(1);
 

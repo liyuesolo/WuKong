@@ -96,7 +96,9 @@ public:
 
     void trajectoryOptStop();
 
-    void imageMatchOptimizeIPOPT(MatrixXi &markers);
+    void imageMatchOptimizeIPOPT();
+
+    void imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix);
 
 public:
 

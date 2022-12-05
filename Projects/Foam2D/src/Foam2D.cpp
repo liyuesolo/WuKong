@@ -204,7 +204,7 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
     resetVertexParams();
 }
 
-void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
+void Foam2D::imageMatchOptimizeIPOPT() {
     double dx = imageMatchObjective.dx;
     double dy = imageMatchObjective.dy;
 
@@ -288,6 +288,15 @@ void Foam2D::imageMatchOptimizeIPOPT(MatrixXi &markers) {
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
     info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free);
+}
+
+void Foam2D::imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix) {
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
+    VectorXT c_free = c.segment(0, info->n_free * dims);
+
+    obj_value = imageMatchObjective.evaluate(c_free);
+    pix = imageMatchObjective.pix;
 }
 
 void Foam2D::dynamicsInit() {
@@ -889,13 +898,26 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
             double dx = (double) (j - image_size / 2) / image_size * range;
             double dy = (double) -(i - image_size / 2) / image_size * range;
             double o;
-            if (type == 0) {
-                o = energyObjective.evaluate(c_free + dx * DX + dy * DY);
-            } else if (type == 1) {
-                o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
-            } else {
-                // type == 2
-                o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+
+            switch (type) {
+                case 0:
+                    o = energyObjective.evaluate(c_free + dx * DX + dy * DY);
+                    break;
+                case 1:
+                    o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+                    break;
+                case 2:
+                    o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+                    break;
+                case 3:
+                    o = imageMatchObjective.evaluate(c_free + dx * DX + dy * DY);
+                    break;
+                case 4:
+                    o = imageMatchObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+                    break;
+                case 5:
+                    o = imageMatchObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+                    break;
             }
 
             if (o > obj_max) obj_max = o;
