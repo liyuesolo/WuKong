@@ -68,7 +68,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             int n1 = neighbors[j];
             int n2 = neighbors[(j + 1) % degree];
 
-            TV v = getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims));
+            TV v;
+            getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v);
             nodes[j] = v;
             inPoly[j] = pointInPolygon(v, boundary);
         }

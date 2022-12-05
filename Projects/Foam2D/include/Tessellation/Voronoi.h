@@ -12,11 +12,23 @@ public:
 
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 
-    virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual);
+    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, TV &node);
 
-    virtual TV getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2);
+    virtual void
+    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &gradX, VectorXT &gradY);
 
-    virtual TV getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1);
+    virtual void
+    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &hessX, MatrixXT &hessY);
+
+    virtual void getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, TV &node);
+
+    virtual void
+    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &gradX,
+                            VectorXT &gradY);
+
+    virtual void
+    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &hessX,
+                           MatrixXT &hessY);
 
     virtual int getNumVertexParams() { return 0; }
 

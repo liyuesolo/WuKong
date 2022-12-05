@@ -30,17 +30,25 @@ public:
     // Returns the dual graph of the tesselation. For standard Voronoi tessellation, this is the Delaunay triangulation.
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params) = 0;
 
-    // Returns the tesselation nodes corresponding to faces in the dual graph. For standard Voronoi tessellation, these are the circumcentres of Delaunay triangles.
-    virtual VectorXT getNodes(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual) = 0;
-
     // Get the tessellation node at the intersection of three cells.
-    virtual TV getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2) = 0;
+    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, TV &node) = 0;
+
+    virtual void
+    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &gradX, VectorXT &gradY) = 0;
+
+    virtual void
+    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &hessX, MatrixXT &hessY) = 0;
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
-    virtual TV getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1) = 0;
+    virtual void getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, TV &node) = 0;
 
-    // Computes list of indices of nodes bounding each cell, ordered counterclockwise.
-    std::vector<std::vector<int>> getCells(const VectorXT &vertices, const VectorXi &dual, const VectorXT &nodes);
+    virtual void
+    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &gradX,
+                            VectorXT &gradY) = 0;
+
+    virtual void
+    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &hessX,
+                           MatrixXT &hessY) = 0;
 
     // Computes list of indices of neighboring sites, ordered counterclockwise.
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
