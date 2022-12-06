@@ -4,13 +4,6 @@
 #include "Projects/Foam2D/include/Energy/CodeGen.h"
 #include <iostream>
 
-namespace VoronoiTVars {
-    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
-            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
-            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60;
-}
-using namespace VoronoiTVars;
-
 void Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, TV &node) {
     assert(v1.rows() == 2 && v2.rows() == 2 && v3.rows() == 2);
 
@@ -46,6 +39,10 @@ Voronoi::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT 
     double y3 = v3(1);
 
     // @formatter:off
+    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
+            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60;
+
     t1 = x2 - x3;
     t2 = y3 - y1;
     t3 = x2 - x1;
@@ -103,6 +100,10 @@ Voronoi::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &
     Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n) = hessY;
 
     // @formatter:off
+    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
+            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60;
+
     t1 = x2 - x3;
     t2 = y3 - y1;
     t3 = x2 - x1;
@@ -339,6 +340,10 @@ Voronoi::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const T
     double y4 = b1(1);
 
     // @formatter:off
+    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
+            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60;
+
     t1 = y4 - y3;
     t2 = x4 - x3;
     t3 = v2y - v1y;
@@ -399,6 +404,10 @@ Voronoi::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV
     Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n) = hessY;
 
     // @formatter:off
+    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
+            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60;
+
     t1 = y4 - y3;
     t2 = x4 - x3;
     t3 = v2y - v1y;
