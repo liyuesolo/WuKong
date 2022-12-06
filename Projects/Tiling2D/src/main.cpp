@@ -59,13 +59,13 @@ int main(int argc, char** argv)
             SimulationApp app(tiling);
                 
             app.setViewer(viewer, menu);
+            
             viewer.launch();
         };
         
         auto run3DSim = [&]()
         {
             
-
             HexFEMSolver hex_fem_solver;
             igl::opengl::glfw::Viewer viewer;
             igl::opengl::glfw::imgui::ImGuiMenu menu;
@@ -161,10 +161,78 @@ int main(int argc, char** argv)
             // std::cout << ti_obj.generateSingleTarget(ti) << std::endl;
             // sa.optimizeMMA();
             // sa.optimizeLBFGSB();
+            sa.optimizeGradientDescent();
             //-0.00700946   0.0239969   0.0720543
-            sa.sampleGradientDirection();
+            // sa.sampleGradientDirection();
 
         };
+
+        auto generatePoisonDiskSample = [&]()
+        {
+            PoissonDisk pd;
+            // Vector<T, 4> min_corner; min_corner << 0.05, 0.25, 0.05, 0.4;
+            // Vector<T, 4> max_corner; max_corner << 0.3, 0.75, 0.15, 0.8;
+            Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.08, 0.4;
+            Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
+            VectorXT samples;
+            pd.sampleNDBox<4>(min_corner, max_corner, 2000, samples);
+            std::ofstream out("PD_IH03.txt");
+            out << "[ ";
+            for (int i = 0; i < 2000; i++)
+            {
+                out << "[";
+                for (int j = 0; j < 3; j++)
+                    out << std::setprecision(12) << samples[i * 4  + j] << ", ";
+                out << samples[i * 4  + 3] << "], " << std::endl;
+            }
+            out << "]";
+            out.close();
+        };
+
+        auto renderMeshSequence = [&](int IH)
+        {
+            igl::opengl::glfw::Viewer viewer;
+            igl::opengl::glfw::imgui::ImGuiMenu menu;
+
+            viewer.plugins.push_back(&menu);
+            SimulationApp app(tiling);
+            
+            app.setViewer(viewer, menu);
+            std::string folder = "/home/yueli/Documents/ETH/NCM/PaperData/StrainStress/IH"+std::to_string(IH) + "/";
+            int width = 2000, height = 2000;
+            CMat R(width,height), G(width,height), B(width,height), A(width,height);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 10.0;
+            viewer.core().camera_zoom *= 1.4;
+            viewer.launch_init();
+            igl::readOBJ(folder + "0.obj", app.V, app.F);
+            viewer.core().align_camera_center(app.V);
+            for (int i = 0; i < 15; i++)
+            {
+                igl::readOBJ(folder + std::to_string(i) + ".obj", app.V, app.F);
+                    
+                viewer.data().clear();
+                viewer.data().set_mesh(app.V, app.F);
+                app.C.resize(app.F.rows(), 3);
+                app.C.col(0).setConstant(0.0); app.C.col(1).setConstant(0.3); app.C.col(2).setConstant(1.0);
+                viewer.data().set_colors(app.C);
+                // viewer.core().align_camera_center(app.V);
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
+            }
+        };
+
+        auto save3DMesh = [&]()
+        {
+            // tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".txt", 
+            //     "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk");
+            // Eigen::MatrixXi tets, faces; Eigen::MatrixXd vertices;
+            // loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk", vertices, faces, tets);
+        };
+        // save3DMesh();
         // testNeuralConstitutiveModel();
         // inverseDesign();
         // renderScene();
@@ -176,26 +244,12 @@ int main(int argc, char** argv)
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
-        // runSimApp();
+        runSimApp();
         // tiling.sampleSingleStructurePoissonDisk("/home/yueli/Documents/ETH/SandwichStructure/IH21_PoissonDisk/", TV(0.7, 1.5), TV(0.9, 1.2), TV(0, M_PI), 100, 19);
-        PoissonDisk pd;
-        // Vector<T, 4> min_corner; min_corner << 0.05, 0.25, 0.05, 0.4;
-        // Vector<T, 4> max_corner; max_corner << 0.3, 0.75, 0.15, 0.8;
-        Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.05, 0.2;
-        Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
-        VectorXT samples;
-        pd.sampleNDBox<4>(min_corner, max_corner, 2000, samples);
-        std::ofstream out("PD_IH23.txt");
-        out << "[ ";
-        for (int i = 0; i < 2000; i++)
-        {
-            out << "[";
-            for (int j = 0; j < 3; j++)
-                out << std::setprecision(12) << samples[i * 4  + j] << ", ";
-            out << samples[i * 4  + 3] << "], " << std::endl;
-        }
-        out << "]";
-        out.close();
+        // generatePoisonDiskSample();
+        // tiling.generateTenPointUniaxialStrainData("/home/yueli/Documents/ETH/NCM/PaperData/StrainStress/IH21/",
+        //     19, 0.0, TV(0.95, 1.1), 0.01, {0.115, 0.765});
+        // renderMeshSequence(21);
     }
     return 0;
 }

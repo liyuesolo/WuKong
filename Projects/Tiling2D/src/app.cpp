@@ -94,6 +94,23 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         for (int i = 0; i < end_points.size(); i++)
             colors.push_back(TV3(1.0, 0.3, 0.0));
         appendCylindersToEdges(end_points, colors, 0.001 * ref_dis, V, F, C);
+    }
+
+    if (thicken_edges)
+    {
+        std::vector<std::pair<TV3, TV3>> end_points;
+        MatrixXi edges;
+        igl::edges(F, edges);
+        // std::cout << edges.rows() << std::endl;
+        T ref_dis = (V.row(edges(0, 1)) - V.row(edges(0, 0))).norm();
+        end_points.resize(edges.rows());
+        tbb::parallel_for(0, (int)edges.rows(), [&](int i){
+           end_points[i] = std::make_pair(V.row(edges(i, 1)),  V.row(edges(i, 0)));
+        });
+        std::vector<TV3> colors;
+        for (int i = 0; i < end_points.size(); i++)
+            colors.push_back(TV3(0.0, 0.0, 0.0));
+        appendCylindersToEdges(end_points, colors, 0.04 * ref_dis, V, F, C);
     }    
     
     viewer.data().clear();
@@ -111,7 +128,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             if (ImGui::Checkbox("ShowStrain", &show_PKstress))
             {
                 updateScreen(viewer);
-            } 
+            }
+            if (ImGui::Checkbox("ThickenEdges", &thicken_edges))
+            {
+                updateScreen(viewer);
+            }
         }
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -148,6 +169,15 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             tiling.generateOnePerodicUnit();
             updateScreen(viewer);
             viewer.core().align_camera_center(V);
+        }
+        if (ImGui::Button("GenerateNonPeriodicPatch", ImVec2(-1,0)))
+        {
+            // tiling.generateOneStructureSquarePatch(46, {0.2308, 0.5});
+            tiling.generateOneStructureSquarePatch(19, {0.15, 0.5});
+            updateScreen(viewer);
+            viewer.core().align_camera_center(V);
+            viewer.core().camera_zoom *= 5.0;
+            
         }
         if (ImGui::Button("GenerateWithRotation", ImVec2(-1,0)))
         {
@@ -196,18 +226,95 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 updateScreen(viewer);
             }
         }
-        if (ImGui::Button("LoadUndeformedMesh", ImVec2(-1,0)))
+        if (ImGui::Button("ExtrudeTo3D", ImVec2(-1,0)))
         {
-            std::string fname = igl::file_dialog_open();
-            if (fname.length() != 0)
-            {
-                tiling.solver.loadOBJ(fname, true);
-                updateScreen(viewer);
-            }
+            std::vector<std::vector<TV>> polygons;
+            std::vector<TV> pbc_corners; 
+            // int tiling_idx = 21;
+            // int tiling_idx = 19;
+            int tiling_idx = 46;
+            std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
+            csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
+            int num_params = a_tiling.numParameters();
+            T new_params[ num_params ];
+            a_tiling.getParameters( new_params );
+            std::vector<T> params(num_params);
+            for (int j = 0; j < num_params;j ++)
+                params[j] = new_params[j];
+            // params[0] = 0.3; params[1] = 0.25226267;
+            Vector<T, 4> cubic_weights;
+            cubic_weights << 0.25, 0., 0.75, 0.;
+            tiling.fetchUnitCellFromOneFamily(tiling_idx, 6, polygons, pbc_corners, params, 
+                cubic_weights, data_folder + "a_structure.txt");
+            
+            // tiling.generatePeriodicMesh(polygons, pbc_corners, true, data_folder + "a_structure");
+            tiling.extrudeToMesh(data_folder + "a_structure.txt", 
+                data_folder + "a_structure_3d.vtk", 6);
+            Eigen::MatrixXi tets;
+            loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/a_structure_3d.vtk", V, F, tets);
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);
+            C.resize(F.rows(), F.cols());
+            C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
+            viewer.data().set_colors(C);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 25.0;
+            viewer.core().align_camera_center(V);
         }
-        if (ImGui::Button("SaveForces", ImVec2(-1,0)))
+
+        if (ImGui::Button("Render", ImVec2(-1,0)))
         {
-            tiling.solver.savePenaltyForces("force.txt");
+            int w = viewer.core().viewport(2), h = viewer.core().viewport(3);
+            CMat R(w,h), G(w,h), B(w,h), A(w,h);
+            viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+            A.setConstant(255);
+            igl::png::writePNG(R,G,B,A, "./current_window.png");
+        }
+        if (ImGui::Button("LoadRemeshingData", ImVec2(-1,0)))
+        {
+            std::string base_folder = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/";
+            std::string mesh0_file = base_folder + "tmp/0.148000_0.550000_0_rest.obj";
+            std::string mesh1_file = base_folder + "tmp/0.148001_0.550000_0_rest.obj";
+            std::string mesh2_file = base_folder + "tmp/0.148002_0.550000_0_rest.obj";
+            igl::readOBJ(mesh0_file, V, F);
+            MatrixXT step1_V, step2_V;
+            MatrixXi step1_F, step2_F;
+            igl::readOBJ(mesh1_file, step1_V, step1_F);
+            igl::readOBJ(mesh2_file, step2_V, step2_F);
+            
+            C.resize(F.rows(), F.cols());
+            C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
+
+            MatrixXi edges0, edges1, edges2;
+            std::vector<std::pair<TV3, TV3>> end_points;
+            igl::edges(F, edges0); igl::edges(step1_F, edges1); igl::edges(step2_F, edges2);
+            // std::cout << edges.rows() << std::endl;
+            T ref_dis = (V.row(edges0(0, 1)) - V.row(edges0(0, 0))).norm();
+            end_points.resize(edges0.rows() * 3);
+            tbb::parallel_for(0, (int)edges0.rows(), [&](int i){
+                end_points[i] = std::make_pair(V.row(edges0(i, 1)),  V.row(edges0(i, 0)));
+                end_points[i + edges0.rows()] = std::make_pair(step1_V.row(edges1(i, 1)),  step1_V.row(edges1(i, 0)));
+                end_points[i + edges0.rows() * 2] = std::make_pair(step2_V.row(edges2(i, 1)),  step2_V.row(edges2(i, 0)));
+            });
+            std::vector<TV3> colors(end_points.size());
+            for (int i = 0; i < edges0.rows(); i++)
+            {
+                colors[i] = TV3(0.0, 0.0, 0.0);
+                colors[i + edges0.rows()] = TV3(1.0, 0.0, 0.0);
+                colors[i + edges0.rows() * 2] = TV3(255.0, 204.0, 1.0) / 255.0;
+                // colors[i + edges0.rows() * 2] = TV3(1.0, 1.0, 1.0);
+            }
+            appendCylindersToEdges(end_points, colors, 0.04 * ref_dis, V, F, C);
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);        
+            viewer.data().set_colors(C);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 25.0;
+            viewer.core().align_camera_center(V);
         }
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
@@ -437,7 +544,6 @@ void Simulation3DApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;
     viewer.data().point_size = 25.0;
-
     viewer.core().align_camera_center(V);
     // viewer.core().toggle(viewer.data().show_lines);
     viewer.core().animation_max_fps = 24.;

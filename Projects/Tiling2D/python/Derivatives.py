@@ -31,6 +31,8 @@ def computeStiffnessTensor(n_tiling_params, inputs, model):
             dedlambda = tape.gradient(psi, inputs)
             stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
     C = tape_outer.batch_jacobian(stress, inputs)[:, :, n_tiling_params:]
+    del tape_outer
+    del tape
     return tf.squeeze(C)
 
 

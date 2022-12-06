@@ -85,6 +85,10 @@ public:
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
 
+    // ################ Generate Result ###############
+    void generateTenPointUniaxialStrainData(const std::string& result_folder,
+        int IH, T theta, const TV& strain_range, T strain_delta, const std::vector<T>& params);
+
     // ################ Generate Training Data ###############
     void generateNHHomogenousData(const std::string& result_folder);
     void sampleUniaxialStrain(const std::string& result_folder, T strain);
@@ -119,6 +123,10 @@ public:
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, 
         std::string prefix = "");
+    
+    void generateNonPeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix);
+
     void generateHomogenousMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file, std::string prefix);
     
@@ -136,12 +144,14 @@ public:
     void generateOneNonperiodicStructure();
     void generateOnePerodicUnit();
 
+    void generateOneStructureSquarePatch(int IH, const std::vector<T>& params);
+
     void extrudeToMesh(const std::string& tiling_param,
-        const std::string& mesh3d);
+        const std::string& mesh3d, int n_unit);
 
     void loadTilingStructureFromTxt(const std::string& filename,
         std::vector<std::vector<TV2>>& eigen_polygons,
-        std::vector<TV2>& eigen_base);
+        std::vector<TV2>& eigen_base, int n_unit);
 
     void fetchUnitCellFromOneFamily(int IH, int n_unit,
         std::vector<std::vector<TV2>>& eigen_polygons,

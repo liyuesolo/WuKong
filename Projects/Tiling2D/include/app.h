@@ -3,11 +3,13 @@
 
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/project.h>
+#include <igl/edges.h>
 #include <igl/unproject_on_plane.h>
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 
+#include <igl/png/writePNG.h>
 #include "Tiling2D.h"
 class Tiling2D;
 
@@ -25,6 +27,7 @@ public:
     using IV3 = Vector<int, 3>;
     using MatrixXT = Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
+    using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
@@ -67,6 +70,7 @@ public:
     bool connect_pbc_pairs = false;
     bool tile_in_x_only = false;
     bool tile_XY = false;
+    bool thicken_edges = false;
     
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
     void setViewer(igl::opengl::glfw::Viewer& viewer,

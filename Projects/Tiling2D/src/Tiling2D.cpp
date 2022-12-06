@@ -126,7 +126,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             if (!valid_structure)
                 return false;
             solver.add_pbc_strain = true;
-            solver.strain_theta = 0.0;
+            solver.strain_theta = 1.0/4.0 * M_PI;
             solver.uniaxial_strain = 1.1;
             solver.uniaxial_strain_ortho = 0.9;
             solver.biaxial = false;
@@ -164,11 +164,14 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             TV(min_corner[0] + 1e-6, max_corner[1] + 1e-6), 
             TV(0, -percent * dy));
     }
-    int n_pbc_pairs = solver.pbc_pairs[0].size() + solver.pbc_pairs[1].size();
-    if (solver.verbose)
-        std::cout << "pbc_pairs size " << n_pbc_pairs << std::endl;
-    if (n_pbc_pairs < 4)
-        return false;
+    if (pbc_type == PBC_XY)
+    {
+        int n_pbc_pairs = solver.pbc_pairs[0].size() + solver.pbc_pairs[1].size();
+        if (solver.verbose)
+            std::cout << "pbc_pairs size " << n_pbc_pairs << std::endl;
+        if (n_pbc_pairs < 4)
+            return false;
+    }
     // solver.unilateral_qubic = true;
     solver.penalty_weight = 1e6;
     // solver.y_bar = max_corner[1] - 0.2 * dy;
@@ -684,6 +687,75 @@ void Tiling2D::sampleDirectionWithUniaxialStrain(const std::string& result_folde
         runSim(theta, strain, 0.0);
     }
     
+    out.close();
+}
+
+void Tiling2D::generateTenPointUniaxialStrainData(const std::string& result_folder,
+        int IH, T theta, const TV& strain_range, T strain_delta, const std::vector<T>& params)
+{
+    std::ofstream out(result_folder + "strain_stress.txt");
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+
+    int zero_strain_idx = 0;
+    std::vector<T> strain_samples;
+    for (T strain = strain_range[0]; strain < strain_range[1]; strain += strain_delta)
+    {
+        strain_samples.push_back(strain);
+        if (std::abs(strain) < 1e-6)
+            continue;
+        zero_strain_idx++;       
+    }
+            
+    auto runSim = [&](T theta, T strain, T strain_ortho, int idx)
+    {
+        bool solve_succeed = solver.staticSolve();
+
+        VectorXT residual(solver.num_nodes * 2); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        for (int m = 0; m < params.size(); m++)
+        {
+            out << params[m] << " ";
+        }
+        out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << " " << strain_ortho << " "
+            << residual.norm() << std::endl;
+        if (!solve_succeed)
+        {
+            solver.reset();
+        }
+        solver.saveToOBJ(result_folder + std::to_string(idx)+".obj");
+    };
+
+    solver.verbose = false;
+    solver.prescribe_strain_tensor = false;
+    solver.biaxial = false;
+    for (int i = zero_strain_idx; i < strain_samples.size(); i++)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        runSim(theta, strain_samples[i], 0.0, i);
+    }
+    solver.reset();
+    for (int i = zero_strain_idx; i > -1; i--)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        runSim(theta, strain_samples[i], 0.0, i);
+    }
     out.close();
 }
 

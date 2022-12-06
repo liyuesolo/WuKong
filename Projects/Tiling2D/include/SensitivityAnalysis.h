@@ -41,7 +41,7 @@ public:
     void optimizeLBFGSB();
     void optimizeGaussNewton();
 
-    int max_iter = 100;
+    int max_iter = 500;
     void sampleGradientDirection();
     
 private:

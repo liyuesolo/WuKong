@@ -86,7 +86,7 @@ void UniaxialStressObjective::computeStressForDifferentStrain(const VectorXT& ti
     {
         solver.uniaxial_strain = strain_samples[i];
         bool solve_succeed = solver.staticSolve();
-        solver.saveToOBJ("./tmp/" + std::to_string(ti[0]) +"_"+ std::to_string(ti[1]) + "_" + std::to_string(i) + ".obj");
+        solver.saveToOBJ("./tmp/" + std::to_string(ti[0]) +"_"+ std::to_string(ti[1]) + "_" + std::to_string(i) + "_rest.obj", true);
         TM secondPK_stress, Green_strain;
         T psi;
         solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
