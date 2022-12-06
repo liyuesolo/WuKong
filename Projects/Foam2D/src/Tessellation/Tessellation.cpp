@@ -1,4 +1,5 @@
 #include "../../include/Tessellation/Tessellation.h"
+#include "../../include/Tessellation/CellFunction.h"
 #include <set>
 #include <iostream>
 
@@ -217,3 +218,208 @@ Tessellation::getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n
     return neighborLists;
 }
 
+void
+Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node) {
+    int dims = 2 + getNumVertexParams();
+    int n_vtx = c.rows() / dims;
+    int n_bdy = boundary.rows() / 2;
+
+    VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
+    VectorXT v1, v2;
+    TV b0, b1;
+    if (i1 < n_vtx && i2 < n_vtx) {
+        // Normal node.
+        v1 = c.segment(i1 * dims, dims);
+        v2 = c.segment(i2 * dims, dims);
+        getNode(v0, v1, v2, node);
+    } else if (i1 < n_vtx && i2 >= n_vtx) {
+        // Boundary node with n2 a boundary edge.
+        v1 = c.segment(i1 * dims, dims);
+        b0 = boundary.segment<2>((i2 - n_vtx) * 2);
+        b1 = boundary.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
+        getBoundaryNode(v0, v1, b0, b1, node);
+    } else if (i1 >= n_vtx && i2 < n_vtx) {
+        // Boundary node with n1 a boundary edge.
+        v1 = c.segment(i2 * dims, dims);
+        b0 = boundary.segment<2>((i1 - n_vtx) * 2);
+        b1 = boundary.segment<2>(((i1 - n_vtx + 1) % n_bdy) * 2);
+        getBoundaryNode(v0, v1, b0, b1, node);
+    } else {
+        // Boundary vertex.
+        assert(i1 >= n_vtx && i2 >= n_vtx);
+        node = boundary.segment<2>((i2 - n_vtx) * 2);
+    }
+}
+
+void
+Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
+                             MatrixXT &hessY) {
+    int dims = 2 + getNumVertexParams();
+    int n_vtx = c.rows() / dims;
+    int n_bdy = boundary.rows() / 2;
+
+    VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
+    VectorXT v1, v2;
+    TV b0, b1;
+    if (i1 < n_vtx && i2 < n_vtx) {
+        // Normal node.
+        v1 = c.segment(i1 * dims, dims);
+        v2 = c.segment(i2 * dims, dims);
+        getNode(v0, v1, v2, node);
+
+        gradX.resize(dims * 3);
+        gradY.resize(dims * 3);
+        getNodeGradient(v0, v1, v2, gradX, gradY);
+
+        hessX.resize(dims * 3, dims * 3);
+        hessY.resize(dims * 3, dims * 3);
+        getNodeHessian(v0, v1, v2, hessX, hessY);
+    } else if (i1 < n_vtx && i2 >= n_vtx) {
+        // Boundary node with n2 a boundary edge.
+        v1 = c.segment(i1 * dims, dims);
+        b0 = boundary.segment<2>((i2 - n_vtx) * 2);
+        b1 = boundary.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
+        getBoundaryNode(v0, v1, b0, b1, node);
+
+        gradX.resize(dims * 2);
+        gradY.resize(dims * 2);
+        getBoundaryNodeGradient(v0, v1, b0, b1, gradX, gradY);
+
+        hessX.resize(dims * 2, dims * 2);
+        hessY.resize(dims * 2, dims * 2);
+        getBoundaryNodeHessian(v0, v1, b0, b1, hessX, hessY);
+    } else if (i1 >= n_vtx && i2 < n_vtx) {
+        // Boundary node with n1 a boundary edge.
+        v1 = c.segment(i2 * dims, dims);
+        b0 = boundary.segment<2>((i1 - n_vtx) * 2);
+        b1 = boundary.segment<2>(((i1 - n_vtx + 1) % n_bdy) * 2);
+        getBoundaryNode(v0, v1, b0, b1, node);
+
+        gradX.resize(dims * 2);
+        gradY.resize(dims * 2);
+        getBoundaryNodeGradient(v0, v1, b0, b1, gradX, gradY);
+
+        hessX.resize(dims * 2, dims * 2);
+        hessY.resize(dims * 2, dims * 2);
+        getBoundaryNodeHessian(v0, v1, b0, b1, hessX, hessY);
+    } else {
+        // Boundary vertex.
+        assert(i1 >= n_vtx && i2 >= n_vtx);
+        node = boundary.segment<2>((i2 - n_vtx) * 2);
+        gradX.resize(0);
+        gradY.resize(0);
+        hessX.resize(0, 0);
+        hessY.resize(0, 0);
+    }
+}
+
+void
+Tessellation::addFunctionValue(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
+                               const CellFunction &function, double &value) {
+
+}
+
+void Tessellation::addFunctionGradient(const VectorXT &vertices, const VectorXT &boundary, int cell,
+                                       const VectorXi &neighbors, const CellFunction &function, VectorXT &gradient) {
+
+}
+
+void Tessellation::addFunctionHessian(const VectorXT &vertices, const VectorXT &boundary, int cell,
+                                      const VectorXi &neighbors, const CellFunction &function, MatrixXT &hessian) {
+
+}
+
+void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_,
+                              const int n_free) {
+    VectorXT c_new = combineVerticesParams(vertices, params);
+
+    // Check if inputs are the same as previous tessellation, do nothing if so.
+    bool same = true;
+    same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
+    same = same && (boundary_.rows() == boundary.rows() && boundary_ == boundary);
+    same = same && (n_free == cells.size());
+    if (same) return;
+
+    c = c_new;
+    boundary = boundary_;
+
+    VectorXi dualRaw = getDualGraph(vertices, params);
+    std::vector<std::vector<int>> neighborhoods = getNeighborsClipped(vertices, params, dualRaw, boundary, n_free);
+
+    auto cmp = [](IV3 a, IV3 b) {
+        for (int i = 0; i < 3; i++) {
+            if (a(i) < b(i)) return true;
+            if (a(i) > b(i)) return false;
+        }
+        return false;
+    };
+    std::set<IV3, decltype(cmp)> triplets(cmp);
+
+    for (int i = 0; i < n_free; i++) {
+        std::vector<int> cell = neighborhoods[i];
+        for (int j = 0; j < cell.size(); j++) {
+            int n1 = cell[j];
+            int n2 = cell[(j + 1) % cell.size()];
+
+            IV3 triplet(i, n1, n2);
+            std::sort(triplet.data(), triplet.data() + 3);
+
+            triplets.insert(triplet);
+        }
+    }
+    std::vector<IV3> faces(triplets.begin(), triplets.end());
+
+    cells.resize(n_free);
+    for (int i = 0; i < n_free; i++) {
+        std::vector<int> neighborhood = neighborhoods[i];
+        VectorXi cell(neighborhood.size());
+
+        for (int j = 0; j < neighborhood.size(); j++) {
+            int n1 = neighborhood[j];
+            int n2 = neighborhood[(j + 1) % neighborhood.size()];
+
+            IV3 triplet(i, n1, n2);
+            std::sort(triplet.data(), triplet.data() + 3);
+
+            auto lower = std::lower_bound(faces.begin(), faces.end(), triplet, cmp);
+            assert (lower != faces.end() && *lower == triplet);
+
+            cell(j) = std::distance(faces.begin(), lower);
+        }
+
+        cells[i] = cell;
+    }
+
+    dual.resize(faces.size() * 3);
+    for (int i = 0; i < faces.size(); i++) {
+        dual.segment<3>(i * 3) = faces[i];
+    }
+
+    int dims = 2 + getNumVertexParams();
+
+    x.resize(faces.size() * 2);
+    dxdc.resize(faces.size() * 2, n_free * dims);
+    d2xdc2.resize(faces.size() * 2);
+    for (int i = 0; i < faces.size(); i++) {
+        IV3 face = faces[i];
+
+        TV node;
+        VectorXT gradX, gradY;
+        MatrixXT hessX, hessY;
+        getNodeWrapper(face[0], face[1], face[2], node, gradX, gradY, hessX, hessY);
+
+        x.segment<2>(i * 2) = node;
+
+        // Assemble global Jacobian matrix dxdc.
+        for (int j = 0; j < gradX.size() / dims; j++) {
+            for (int k = 0; k < dims; k++) {
+                dxdc(i * 2 + 0, face[j] * dims + k) = gradX(j * dims + k);
+                dxdc(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
+            }
+        }
+
+        // Keep local Hessians.
+        d2xdc2[i * 2 + 0] = hessX;
+        d2xdc2[i * 2 + 1] = hessY;
+    }
+}

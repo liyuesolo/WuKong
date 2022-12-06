@@ -493,6 +493,7 @@ static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, in
 
 void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                         MatrixXi &F, MatrixXT &Fc) {
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     VectorXi tri = info->getTessellation()->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3;
 
@@ -566,6 +567,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                        MatrixXi &F, MatrixXT &Fc) {
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     VectorXi tri = info->getTessellation()->getDualGraph(vertices, params);
     long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3, n_bdy = info->boundary.rows() / 2;
 
@@ -604,47 +606,8 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             int n2 = neighbors[(j + 1) % degree];
             int n3 = neighbors[(j + 2) % degree];
 
-            if (n1 < n_vtx && n2 < n_vtx) {
-                // Normal node.
-                info->getTessellation()->getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v1);
-            } else if (n1 < n_vtx && n2 >= n_vtx) {
-                // Boundary node with n2 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n1 * dims, dims),
-                                                         info->boundary.segment<2>((n2 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n2 - n_vtx + 1) % n_bdy) * 2), v1);
-            } else if (n1 >= n_vtx && n2 < n_vtx) {
-                // Boundary node with n1 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n2 * dims, dims),
-                                                         info->boundary.segment<2>((n1 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n1 - n_vtx + 1) % n_bdy) * 2), v1);
-            } else {
-                // Boundary vertex.
-                assert(n1 >= n_vtx && n2 >= n_vtx);
-                v1 = info->boundary.segment<2>((n2 - n_vtx) * 2);
-            }
-
-            if (n2 < n_vtx && n3 < n_vtx) {
-                // Normal node.
-                info->getTessellation()->getNode(c0, c.segment(n2 * dims, dims), c.segment(n3 * dims, dims), v2);
-            } else if (n2 < n_vtx && n3 >= n_vtx) {
-                // Boundary node with n3 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n2 * dims, dims),
-                                                         info->boundary.segment<2>((n3 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n3 - n_vtx + 1) % n_bdy) * 2), v2);
-            } else if (n2 >= n_vtx && n3 < n_vtx) {
-                // Boundary node with n2 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n3 * dims, dims),
-                                                         info->boundary.segment<2>((n2 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n2 - n_vtx + 1) % n_bdy) * 2), v2);
-            } else {
-                // Boundary vertex.
-                assert(n2 >= n_vtx && n3 >= n_vtx);
-                v2 = info->boundary.segment<2>((n3 - n_vtx) * 2);
-            }
+            info->getTessellation()->getNodeWrapper(i, n1, n2, v1);
+            info->getTessellation()->getNodeWrapper(i, n2, n3, v2);
 
             face0.push_back(v0);
             face1.push_back(v1);
@@ -768,6 +731,7 @@ void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 }
 
 void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     VectorXi tri = info->getTessellation()->getDualGraph(vertices, params);
 
     int n_cells = info->n_free;
@@ -797,47 +761,8 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
             int n2 = neighbors[(j + 1) % degree];
             int n3 = neighbors[(j + 2) % degree];
 
-            if (n1 < n_vtx && n2 < n_vtx) {
-                // Normal node.
-                info->getTessellation()->getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v1);
-            } else if (n1 < n_vtx && n2 >= n_vtx) {
-                // Boundary node with n2 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n1 * dims, dims),
-                                                         info->boundary.segment<2>((n2 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n2 - n_vtx + 1) % n_bdy) * 2), v1);
-            } else if (n1 >= n_vtx && n2 < n_vtx) {
-                // Boundary node with n1 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n2 * dims, dims),
-                                                         info->boundary.segment<2>((n1 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n1 - n_vtx + 1) % n_bdy) * 2), v1);
-            } else {
-                // Boundary vertex.
-                assert(n1 >= n_vtx && n2 >= n_vtx);
-                v1 = info->boundary.segment<2>((n2 - n_vtx) * 2);
-            }
-
-            if (n2 < n_vtx && n3 < n_vtx) {
-                // Normal node.
-                info->getTessellation()->getNode(c0, c.segment(n2 * dims, dims), c.segment(n3 * dims, dims), v2);
-            } else if (n2 < n_vtx && n3 >= n_vtx) {
-                // Boundary node with n3 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n2 * dims, dims),
-                                                         info->boundary.segment<2>((n3 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n3 - n_vtx + 1) % n_bdy) * 2), v2);
-            } else if (n2 >= n_vtx && n3 < n_vtx) {
-                // Boundary node with n2 a boundary edge.
-                info->getTessellation()->getBoundaryNode(c0, c.segment(n3 * dims, dims),
-                                                         info->boundary.segment<2>((n2 - n_vtx) * 2),
-                                                         info->boundary.segment<2>(
-                                                                 ((n2 - n_vtx + 1) % n_bdy) * 2), v2);
-            } else {
-                // Boundary vertex.
-                assert(n2 >= n_vtx && n3 >= n_vtx);
-                v2 = info->boundary.segment<2>((n3 - n_vtx) * 2);
-            }
+            info->getTessellation()->getNodeWrapper(i, n1, n2, v1);
+            info->getTessellation()->getNodeWrapper(i, n2, n3, v2);
 
             areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
         }

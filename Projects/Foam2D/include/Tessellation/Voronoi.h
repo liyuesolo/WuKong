@@ -8,7 +8,7 @@ public:
 
     VectorXi delaunayJRS(const VectorXT &vertices);
 
-    VectorXi delaunayNaive(const VectorXT &vertices);
+//    VectorXi delaunayNaive(const VectorXT &vertices);
 
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 

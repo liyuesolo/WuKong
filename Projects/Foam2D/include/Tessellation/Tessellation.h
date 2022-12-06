@@ -23,12 +23,22 @@ using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
 using VectorXi = Vector<int, Eigen::Dynamic>;
 
-class Tessellation {
-public:
-    Tessellation() {}
+class CellFunction;
 
-    // Returns the dual graph of the tesselation. For standard Voronoi tessellation, this is the Delaunay triangulation.
-    virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params) = 0;
+class Tessellation {
+private:
+    VectorXT c;
+    VectorXT boundary;
+
+    VectorXi dual;
+    std::vector<VectorXi> cells;
+
+    VectorXT x;
+    MatrixXT dxdc;
+    std::vector<MatrixXT> d2xdc2;
+
+    // Computes list of indices of neighboring sites, ordered counterclockwise.
+    std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
 
     // Get the tessellation node at the intersection of three cells.
     virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, TV &node) = 0;
@@ -50,13 +60,32 @@ public:
     getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &hessX,
                            MatrixXT &hessY) = 0;
 
-    // Computes list of indices of neighboring sites, ordered counterclockwise.
-    std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
+public:
+    Tessellation() {}
+
+    // Returns the dual graph of the tesselation. For standard Voronoi tessellation, this is the Delaunay triangulation.
+    virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params) = 0;
+
+    void getNodeWrapper(int i0, int i1, int i2, TV &node);
+
+    void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
+                        MatrixXT &hessY);
+
+    void addFunctionValue(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
+                          const CellFunction &function, double &value);
+
+    void addFunctionGradient(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
+                             const CellFunction &function, VectorXT &gradient);
+
+    void addFunctionHessian(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
+                            const CellFunction &function, MatrixXT &hessian);
 
     // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
     std::vector<std::vector<int>>
     getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual,
                         const VectorXT &boundary, int n_cells);
+
+    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_, const int n_free);
 
     virtual int getNumVertexParams() = 0;
 

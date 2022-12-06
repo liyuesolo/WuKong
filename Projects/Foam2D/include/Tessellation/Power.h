@@ -6,7 +6,7 @@ class Power : public Tessellation {
 public:
     Power() {}
 
-    VectorXi powerDualNaive(const VectorXT &vertices3d);
+//    VectorXi powerDualNaive(const VectorXT &vertices3d);
 
     VectorXi powerDualCGAL(const VectorXT &vertices3d);
 

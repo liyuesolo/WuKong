@@ -84,6 +84,7 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     tri = info->getTessellation()->getDualGraph(vertices, params);
     std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
                                                                                        info->boundary, info->n_free);
@@ -120,6 +121,7 @@ VectorXd ImageMatchObjective::get_dOdc(const VectorXd &c_free) const {
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     tri = info->getTessellation()->getDualGraph(vertices, params);
     std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
                                                                                        info->boundary, info->n_free);

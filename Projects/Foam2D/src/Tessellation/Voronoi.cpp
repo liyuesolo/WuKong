@@ -328,7 +328,7 @@ void Voronoi::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &
 void
 Voronoi::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, VectorXT &gradX,
                                  VectorXT &gradY) {
-    assert(v1.rows() == 2 && v2.rows() == 2 && v3.rows() == 2 && gradX.rows() == 4 && gradY.rows() == 4);
+    assert(v1.rows() == 2 && v2.rows() == 2 && gradX.rows() == 4 && gradY.rows() == 4);
 
     double v1x = v1(0);
     double v1y = v1(1);
@@ -385,7 +385,7 @@ Voronoi::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const T
 void
 Voronoi::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, MatrixXT &hessX,
                                 MatrixXT &hessY) {
-    assert(v1.rows() == 2 && v2.rows() == 2 && v3.rows() == 2 && hessX.rows() == 4 && hessX.cols() == 4 &&
+    assert(v1.rows() == 2 && v2.rows() == 2 && hessX.rows() == 4 && hessX.cols() == 4 &&
            hessY.rows() == 4 && hessY.cols() == 4);
 
     double v1x = v1(0);
@@ -498,95 +498,95 @@ Voronoi::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV
     // @formatter:on
 }
 
-VectorXi Voronoi::delaunayNaive(const VectorXT &vertices) {
-    int n_vtx = vertices.rows() / 2;
-    std::vector<int> tri1;
-    std::vector<int> tri2;
-    std::vector<int> tri3;
-
-    for (int i = 0; i < n_vtx; i++) {
-        TV vi = vertices.segment<2>(i * 2);
-        std::vector<int> neighbors;
-
-        for (int j = 0; j < n_vtx; j++) {
-            if (j == i) continue;
-
-            TV vj = vertices.segment<2>(j * 2);
-            TV line = {-(vj(1) - vi(1)), vj(0) - vi(0)};
-
-            double dmin = INFINITY;
-            double dmax = -INFINITY;
-
-            for (int k = 0; k < n_vtx; k++) {
-                if (k == i || k == j) continue;
-
-                TV vk = vertices.segment<2>(k * 2);
-                TV vc;
-                getNode(vi, vj, vk, vc);
-                double d = vc.dot(line);
-
-                if ((vk - vi).dot(line) > 0) {
-                    dmin = fmin(dmin, d);
-                } else {
-                    dmax = fmax(dmax, d);
-                }
-                if (dmax > dmin) break;
-            }
-
-            if (dmax < dmin || (dmax == dmin)) {
-                neighbors.push_back(j);
-            }
-        }
-
-        double xc = vertices(i * 2 + 0);
-        double yc = vertices(i * 2 + 1);
-
-        std::sort(neighbors.begin(), neighbors.end(), [vertices, xc, yc](int a, int b) {
-            double xa = vertices(a * 2 + 0);
-            double ya = vertices(a * 2 + 1);
-            double angle_a = atan2(ya - yc, xa - xc);
-
-            double xb = vertices(b * 2 + 0);
-            double yb = vertices(b * 2 + 1);
-            double angle_b = atan2(yb - yc, xb - xc);
-
-            return angle_a < angle_b;
-        });
-
-        if (neighbors.size() > 0) {
-            assert(neighbors.size() > 1);
-            for (int j = 0; j < neighbors.size(); j++) {
-                int v1 = i;
-                int v2 = neighbors[j];
-                int v3 = neighbors[(j + 1) % neighbors.size()];
-
-                if (v1 < v2 && v1 < v3) {
-                    double x1 = vertices(v1 * 2 + 0);
-                    double y1 = vertices(v1 * 2 + 1);
-                    double x2 = vertices(v2 * 2 + 0);
-                    double y2 = vertices(v2 * 2 + 1);
-                    double x3 = vertices(v3 * 2 + 0);
-                    double y3 = vertices(v3 * 2 + 1);
-
-                    if (x1 * y2 + x2 * y3 + x3 * y1 - x1 * y3 - x2 * y1 - x3 * y2 > 0) {
-                        tri1.push_back(v1);
-                        tri2.push_back(v2);
-                        tri3.push_back(v3);
-                    }
-                }
-            }
-        }
-    }
-
-    VectorXi tri(tri1.size() * 3);
-    for (int i = 0; i < tri1.size(); i++) {
-        tri(i * 3 + 0) = tri1[i];
-        tri(i * 3 + 1) = tri2[i];
-        tri(i * 3 + 2) = tri3[i];
-    }
-
-    return tri;
-}
+//VectorXi Voronoi::delaunayNaive(const VectorXT &vertices) {
+//    int n_vtx = vertices.rows() / 2;
+//    std::vector<int> tri1;
+//    std::vector<int> tri2;
+//    std::vector<int> tri3;
+//
+//    for (int i = 0; i < n_vtx; i++) {
+//        TV vi = vertices.segment<2>(i * 2);
+//        std::vector<int> neighbors;
+//
+//        for (int j = 0; j < n_vtx; j++) {
+//            if (j == i) continue;
+//
+//            TV vj = vertices.segment<2>(j * 2);
+//            TV line = {-(vj(1) - vi(1)), vj(0) - vi(0)};
+//
+//            double dmin = INFINITY;
+//            double dmax = -INFINITY;
+//
+//            for (int k = 0; k < n_vtx; k++) {
+//                if (k == i || k == j) continue;
+//
+//                TV vk = vertices.segment<2>(k * 2);
+//                TV vc;
+//                getNode(vi, vj, vk, vc);
+//                double d = vc.dot(line);
+//
+//                if ((vk - vi).dot(line) > 0) {
+//                    dmin = fmin(dmin, d);
+//                } else {
+//                    dmax = fmax(dmax, d);
+//                }
+//                if (dmax > dmin) break;
+//            }
+//
+//            if (dmax < dmin || (dmax == dmin)) {
+//                neighbors.push_back(j);
+//            }
+//        }
+//
+//        double xc = vertices(i * 2 + 0);
+//        double yc = vertices(i * 2 + 1);
+//
+//        std::sort(neighbors.begin(), neighbors.end(), [vertices, xc, yc](int a, int b) {
+//            double xa = vertices(a * 2 + 0);
+//            double ya = vertices(a * 2 + 1);
+//            double angle_a = atan2(ya - yc, xa - xc);
+//
+//            double xb = vertices(b * 2 + 0);
+//            double yb = vertices(b * 2 + 1);
+//            double angle_b = atan2(yb - yc, xb - xc);
+//
+//            return angle_a < angle_b;
+//        });
+//
+//        if (neighbors.size() > 0) {
+//            assert(neighbors.size() > 1);
+//            for (int j = 0; j < neighbors.size(); j++) {
+//                int v1 = i;
+//                int v2 = neighbors[j];
+//                int v3 = neighbors[(j + 1) % neighbors.size()];
+//
+//                if (v1 < v2 && v1 < v3) {
+//                    double x1 = vertices(v1 * 2 + 0);
+//                    double y1 = vertices(v1 * 2 + 1);
+//                    double x2 = vertices(v2 * 2 + 0);
+//                    double y2 = vertices(v2 * 2 + 1);
+//                    double x3 = vertices(v3 * 2 + 0);
+//                    double y3 = vertices(v3 * 2 + 1);
+//
+//                    if (x1 * y2 + x2 * y3 + x3 * y1 - x1 * y3 - x2 * y1 - x3 * y2 > 0) {
+//                        tri1.push_back(v1);
+//                        tri2.push_back(v2);
+//                        tri3.push_back(v3);
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    VectorXi tri(tri1.size() * 3);
+//    for (int i = 0; i < tri1.size(); i++) {
+//        tri(i * 3 + 0) = tri1[i];
+//        tri(i * 3 + 1) = tri2[i];
+//        tri(i * 3 + 2) = tri3[i];
+//    }
+//
+//    return tri;
+//}
 
 VectorXi Voronoi::delaunayJRS(const VectorXT &vertices) {
     int n_vtx = vertices.rows() / 2;

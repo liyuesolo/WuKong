@@ -78,6 +78,7 @@ double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     tri = info->getTessellation()->getDualGraph(vertices, params);
     std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
                                                                                        info->boundary, info->n_free);
@@ -118,6 +119,7 @@ VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     tri = info->getTessellation()->getDualGraph(vertices, params);
     std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
                                                                                        info->boundary, info->n_free);
@@ -157,6 +159,7 @@ Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) con
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     tri = info->getTessellation()->getDualGraph(vertices, params);
     std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
                                                                                        info->boundary, info->n_free);
