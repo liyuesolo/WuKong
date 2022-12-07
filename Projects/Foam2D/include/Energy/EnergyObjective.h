@@ -10,7 +10,7 @@ public:
 
 public:
     void
-    getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &p_in,
+    getInputs(const int cellIndex, VectorXT &p_in,
               VectorXT &n_in, VectorXT &c_in, VectorXT &b_in,
               VectorXi &map) const;
 

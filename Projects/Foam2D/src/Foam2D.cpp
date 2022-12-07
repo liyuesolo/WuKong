@@ -419,6 +419,23 @@ void Foam2D::trajectoryOptOptimizeIPOPT() {
     trajOptNLP.x_sol = trajOptNLP.x_guess;
     trajOptNLP.early_stop = false;
 
+    // TODO: This is kind of a hack, to separate the tessellation used in the IPOPT thread from the one used in the visualization.
+    Foam2DInfo *info_ = new Foam2DInfo(*info);
+    switch (info->getTessellation()->getTessellationType()) {
+        case VORONOI:
+            info_->tessellations[0] = new Voronoi();
+            break;
+        case POWER:
+            info_->tessellations[1] = new Power();
+            break;
+        default:
+            assert(0);
+            break;
+    }
+    trajOptNLP.info = info_;
+    trajOptNLP.energy = new EnergyObjective(*trajOptNLP.energy);
+    trajOptNLP.energy->info = info_;
+
     /** IPOPT SOLVE **/
     std::thread t1(threadIPOPT, &trajOptNLP);
     t1.detach();
@@ -568,8 +585,8 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                        MatrixXi &F, MatrixXT &Fc) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    VectorXi tri = info->getTessellation()->getDualGraph(vertices, params);
-    long n_vtx = vertices.rows() / 2, n_faces = tri.rows() / 3, n_bdy = info->boundary.rows() / 2;
+    long n_vtx = vertices.rows() / 2, n_faces = info->getTessellation()->dual.rows() / 3, n_bdy =
+            info->boundary.rows() / 2;
 
     // Overlay points and edges
     S.resize(n_vtx, 3);
@@ -588,12 +605,8 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
-//    std::vector<std::vector<int>> neighborLists = info->getTessellation()->getNeighbors(vertices, tri, n_free);
-    std::vector<std::vector<int>> neighborLists = info->getTessellation()->getNeighborsClipped(vertices, params,
-                                                                                               tri, info->boundary,
-                                                                                               n_cells);
     for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &neighbors = neighborLists[i];
+        std::vector<int> &neighbors = info->getTessellation()->todo_neighborhoods[i];
         size_t degree = neighbors.size();
 
         TV v0 = vertices.segment<2>(i * 2);
@@ -645,7 +658,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
                                                                                            currentCell)));
 
         currentIdxInCell++;
-        if (currentIdxInCell == neighborLists[currentCell].size()) {
+        if (currentIdxInCell == info->getTessellation()->todo_neighborhoods[currentCell].size()) {
             currentIdxInCell = 0;
             currentCell++;
         }
@@ -732,7 +745,6 @@ void Foam2D::addTrajectoryOptViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 
 void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    VectorXi tri = info->getTessellation()->getDualGraph(vertices, params);
 
     int n_cells = info->n_free;
     areas.resize(n_cells);
@@ -743,12 +755,8 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
-//    std::vector<std::vector<int>> neighborLists = tessellations[tessellation]->getNeighbors(vertices, tri, n_free);
-    std::vector<std::vector<int>> neighborLists = info->getTessellation()->getNeighborsClipped(vertices, params,
-                                                                                               tri, info->boundary,
-                                                                                               n_cells);
     for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &neighbors = neighborLists[i];
+        std::vector<int> &neighbors = info->getTessellation()->todo_neighborhoods[i];
         size_t degree = neighbors.size();
 
         TV v0 = vertices.segment<2>(i * 2);

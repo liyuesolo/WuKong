@@ -18,10 +18,11 @@ static void printVectorXi(std::string name, const VectorXi &x, int start = 0, in
 }
 
 void
-EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<int> cell, VectorXT &p_in,
+EnergyObjective::getInputs(const int cellIndex, VectorXT &p_in,
                            VectorXT &n_in, VectorXT &c_in, VectorXT &b_in,
                            VectorXi &map) const {
-    int n_neighbors = cell.size();
+    std::vector<int> neighborhood = info->getTessellation()->todo_neighborhoods[cellIndex];
+    int n_neighbors = neighborhood.size();
 
     p_in.resize(8);
     p_in << info->energy_area_weight, info->energy_length_weight, ((cellIndex == info->selected) ? 1
@@ -45,17 +46,17 @@ EnergyObjective::getInputs(const VectorXT &c, const int cellIndex, std::vector<i
     b_in.resize((maxN + 1) * 4);
     b_in.setZero();
 
-    cell.insert(cell.begin(), cellIndex);
-    map.resize(cell.size());
-    for (int i = 0; i < cell.size(); i++) {
-        map(i) = cell[i];
+    neighborhood.insert(neighborhood.begin(), cellIndex);
+    map.resize(neighborhood.size());
+    for (int i = 0; i < neighborhood.size(); i++) {
+        map(i) = neighborhood[i];
     }
 
-    for (int i = 0; i < cell.size(); i++) {
+    for (int i = 0; i < neighborhood.size(); i++) {
         n_in(i) = map(i) >= n_vtx;
 
-        if (cell[i] < n_vtx) {
-            c_in.segment(i * dims, dims) = c.segment(map(i) * dims, dims);
+        if (neighborhood[i] < n_vtx) {
+            c_in.segment(i * dims, dims) = info->getTessellation()->c.segment(map(i) * dims, dims);
         } else {
             b_in.segment<2>(i * 4 + 0) = info->boundary.segment<2>((map(i) - n_vtx) * 2);
             b_in.segment<2>(i * 4 + 2) = info->boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
@@ -75,20 +76,18 @@ double EnergyObjective::evaluate(const VectorXd &c_free) const {
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
 
     double O = 0;
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
+    for (int i = 0; i < info->n_free; i++) {
+        if (info->getTessellation()->todo_neighborhoods[i].size() > 18 ||
+            info->getTessellation()->todo_neighborhoods[i].size() < 3) {
             O += 1e5;
             continue;
         }
 
         VectorXT p_in, n_in, c_in, b_in;
         VectorXi map;
-        getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
+        getInputs(i, p_in, n_in, c_in, b_in, map);
 
         add_E_cell(info->getTessellation(), p_in, n_in, c_in, b_in, O);
     }
@@ -112,20 +111,18 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &c_free) const {
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
 
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXT dOdc = VectorXT::Zero(info->n_free * dims);
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
+    for (int i = 0; i < info->n_free; i++) {
+        if (info->getTessellation()->todo_neighborhoods[i].size() > 18 ||
+            info->getTessellation()->todo_neighborhoods[i].size() < 3) {
             continue;
         }
 
         VectorXT p_in, n_in, c_in, b_in;
         VectorXi map;
-        getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
+        getInputs(i, p_in, n_in, c_in, b_in, map);
 
         add_dEdc_cell(info->getTessellation(), p_in, n_in, c_in, b_in, map, dOdc);
     }
@@ -149,20 +146,18 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
 
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     MatrixXT d2Odc2 = MatrixXT::Zero(info->n_free * dims, info->n_free * dims);
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
+    for (int i = 0; i < info->n_free; i++) {
+        if (info->getTessellation()->todo_neighborhoods[i].size() > 18 ||
+            info->getTessellation()->todo_neighborhoods[i].size() < 3) {
             continue;
         }
 
         VectorXT p_in, n_in, c_in, b_in;
         VectorXi map;
-        getInputs(c, i, cells[i], p_in, n_in, c_in, b_in, map);
+        getInputs(i, p_in, n_in, c_in, b_in, map);
 
         add_d2Edc2_cell(info->getTessellation(), p_in, n_in, c_in, b_in, map, d2Odc2);
     }

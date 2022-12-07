@@ -21,9 +21,11 @@ using VectorXi = Vector<int, Eigen::Dynamic>;
 
 class CellFunction {
 public:
-    virtual void addValue(const VectorXT &points, double &value) const = 0;
+    virtual void addValue(const VectorXT &site, const VectorXT &nodes, double &value) const = 0;
 
-    virtual void addGradient(const VectorXT &points, VectorXT &gradient) const = 0;
+    virtual void
+    addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c, VectorXT &gradient_x) const = 0;
 
-    virtual void addHessian(const VectorXT &points, MatrixXT &hessian) const = 0;
+    virtual void
+    addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const = 0;
 };

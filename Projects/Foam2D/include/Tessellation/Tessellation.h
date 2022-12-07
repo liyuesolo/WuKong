@@ -26,12 +26,14 @@ using VectorXi = Vector<int, Eigen::Dynamic>;
 class CellFunction;
 
 class Tessellation {
-private:
-    VectorXT c;
-    VectorXT boundary;
 
+public:
     VectorXi dual;
     std::vector<VectorXi> cells;
+    std::vector<std::vector<int>> todo_neighborhoods;
+    VectorXT c;
+private:
+    VectorXT boundary;
 
     VectorXT x;
     MatrixXT dxdc;
@@ -71,14 +73,11 @@ public:
     void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
                         MatrixXT &hessY);
 
-    void addFunctionValue(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
-                          const CellFunction &function, double &value);
+    void addFunctionValue(const CellFunction &function, double &value);
 
-    void addFunctionGradient(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
-                             const CellFunction &function, VectorXT &gradient);
+    void addFunctionGradient(const CellFunction &function, VectorXT &gradient);
 
-    void addFunctionHessian(const VectorXT &vertices, const VectorXT &boundary, int cell, const VectorXi &neighbors,
-                            const CellFunction &function, MatrixXT &hessian);
+    void addFunctionHessian(const CellFunction &function, MatrixXT &hessian);
 
     // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
     std::vector<std::vector<int>>
