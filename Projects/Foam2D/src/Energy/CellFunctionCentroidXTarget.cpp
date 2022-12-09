@@ -1,0 +1,109 @@
+#include "../../include/Energy/CellFunctionCentroidXTarget.h"
+#include <iostream>
+
+void CellFunctionCentroidXTarget::addValue(const VectorXT &site, const VectorXT &nodes, double &value) const {
+    double area = 0;
+    area_function.addValue(site, nodes, area);
+    double centroid = 0;
+    centroid_function.addValue(site, nodes, centroid);
+
+    value += pow(site(0) - centroid / area, 2.0);
+}
+
+void CellFunctionCentroidXTarget::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+                                              VectorXT &gradient_x) const {
+    double area = 0;
+    area_function.addValue(site, nodes, area);
+    double centroid = 0;
+    centroid_function.addValue(site, nodes, centroid);
+
+    VectorXT temp;
+    VectorXT area_gradient_x = VectorXT::Zero(gradient_x.rows());
+    area_function.addGradient(site, nodes, temp, area_gradient_x);
+    VectorXT centroid_gradient_x = VectorXT::Zero(nodes.rows());
+    centroid_function.addGradient(site, nodes, temp, centroid_gradient_x);
+
+    gradient_c(0) += 2 * (site(0) - centroid / area);
+    gradient_x += 2 * (site(0) - centroid / area) *
+                  (centroid * area_gradient_x / pow(area, 2.0) - centroid_gradient_x / area);
+
+//    VectorXT this_grad_c = VectorXT::Zero(site.rows());
+//    this_grad_c(0) = 2 * (site(0) - centroid / area);
+//    VectorXT this_grad_x = 2 * (site(0) - centroid / area) *
+//                           (centroid * area_gradient_x / pow(area, 2.0) - centroid_gradient_x / area);
+//    double f = 0;
+//    addValue(site, nodes, f);
+//    double eps = 1e-6;
+//    for (int i = 0; i < site.rows(); i++) {
+//        VectorXT xp = site;
+//        xp(i) += eps;
+//        double fp = 0;
+//        addValue(xp, nodes, fp);
+//        std::cout << "centroidxtarget  grad c[" << i << "] " << (fp - f) / eps << " "
+//                  << this_grad_c(i) << std::endl;
+//    }
+//    for (int i = 0; i < nodes.rows(); i++) {
+//        VectorXT xp = nodes;
+//        xp(i) += eps;
+//        double fp = 0;
+//        addValue(site, xp, fp);
+//        std::cout << "centroidxtarget  grad[" << i << "] " << (fp - f) / eps << " "
+//                  << this_grad_x(i) << std::endl;
+//    }
+}
+
+void CellFunctionCentroidXTarget::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const {
+    double area = 0;
+    area_function.addValue(site, nodes, area);
+    double centroid = 0;
+    centroid_function.addValue(site, nodes, centroid);
+
+    VectorXT temp;
+    VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
+    area_function.addGradient(site, nodes, temp, area_gradient_x);
+    VectorXT centroid_gradient_x = VectorXT::Zero(nodes.rows());
+    centroid_function.addGradient(site, nodes, temp, centroid_gradient_x);
+
+    VectorXT area_gradient = VectorXT::Zero(site.rows() + nodes.rows());
+    area_gradient.segment(site.rows(), nodes.rows()) = area_gradient_x;
+    VectorXT centroid_gradient = VectorXT::Zero(site.rows() + nodes.rows());
+    centroid_gradient.segment(site.rows(), nodes.rows()) = centroid_gradient_x;
+    VectorXT siteX_gradient = VectorXT::Zero(site.rows() + nodes.rows());
+    siteX_gradient(0) = 1.0;
+
+    MatrixXT area_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
+    area_function.addHessian(site, nodes, area_hessian);
+    MatrixXT centroid_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
+    centroid_function.addHessian(site, nodes, centroid_hessian);
+
+    VectorXT aaa = siteX_gradient - centroid_gradient / area + centroid * area_gradient / pow(area, 2.0);
+    hessian += 2 * aaa * aaa.transpose();
+    hessian += 2 * (site(0) - centroid / area) * (
+            2 * centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
+            - centroid_hessian / area
+            + centroid * area_hessian / pow(area, 2.0)
+            - 2 * centroid * area_gradient * area_gradient.transpose() / pow(area, 3.0));
+
+//    MatrixXT this_hess = 0 * hessian;
+//    this_hess += 2 * aaa * aaa.transpose();
+//    this_hess += 2 * (site(0) - centroid / area) * (
+//            area_gradient * centroid_gradient.transpose() / pow(area, 2.0)
+//            + centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
+//            - centroid_hessian / area
+//            + centroid * area_hessian / pow(area, 2.0)
+//            - 2 * centroid * area_gradient * area_gradient.transpose() / pow(area, 3.0));
+//    VectorXT grad = VectorXT::Zero(nodes.rows());
+//    VectorXT gradc = VectorXT::Zero(site.rows());
+//    addGradient(site, nodes, gradc, grad);
+//    double eps = 1e-6;
+//    for (int i = 0; i < nodes.rows(); i++) {
+//        VectorXT xp = nodes;
+//        xp(i) += eps;
+//        VectorXT gradp = VectorXT::Zero(nodes.rows());
+//        addGradient(site, xp, gradc, gradp);
+//        for (int j = 0; j < nodes.rows(); j++) {
+//            std::cout << "centroidxtarget  hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " "
+//                      << this_hess(site.rows() + j, site.rows() + i) << std::endl;
+//        }
+//    }
+}

@@ -49,7 +49,7 @@ void CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, 
 void CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const {
     int n_nodes = nodes.rows() / 2;
 
-    Eigen::Ref<MatrixXT> hess = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
+    Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
 
     int x0i = 0, y0i = 1;
     int x1i, y1i, x2i, y2i;
@@ -59,17 +59,17 @@ void CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, M
         x2i = (i + 1) * 2 + 0;
         y2i = (i + 1) * 2 + 1;
 
-        hess(x0i, y1i) += 0.5;
-        hess(x0i, y2i) += -0.5;
-        hess(y0i, x1i) += -0.5;
-        hess(y0i, x2i) += 0.5;
-        hess(x1i, y2i) += 0.5;
-        hess(x1i, y0i) += -0.5;
-        hess(y1i, x2i) += -0.5;
-        hess(y1i, x0i) += 0.5;
-        hess(x2i, y0i) += 0.5;
-        hess(x2i, y1i) += -0.5;
-        hess(y2i, x0i) += -0.5;
-        hess(y2i, x1i) += 0.5;
+        hess_xx(x0i, y1i) += 0.5;
+        hess_xx(x0i, y2i) += -0.5;
+        hess_xx(y0i, x1i) += -0.5;
+        hess_xx(y0i, x2i) += 0.5;
+        hess_xx(x1i, y2i) += 0.5;
+        hess_xx(x1i, y0i) += -0.5;
+        hess_xx(y1i, x2i) += -0.5;
+        hess_xx(y1i, x0i) += 0.5;
+        hess_xx(x2i, y0i) += 0.5;
+        hess_xx(x2i, y1i) += -0.5;
+        hess_xx(y2i, x0i) += -0.5;
+        hess_xx(y2i, x1i) += 0.5;
     }
 }
