@@ -1,12 +1,8 @@
 #pragma once
 
-#include "CellFunction.h"
+#include "../../include/Tessellation/CellFunction.h"
 
-class CellFunctionWeightedSum : public CellFunction {
-protected:
-    std::vector<double> weights;
-    std::vector<CellFunction *> functions;
-
+class CellFunctionArea : public CellFunction {
 public:
     virtual void addValue(const VectorXT &site, const VectorXT &nodes, double &value) const;
 

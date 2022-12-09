@@ -79,6 +79,44 @@ Voronoi::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT 
     gradY[4] = t6 * (t3 * t5 + t8 * (t10 * t4 + 0.1e1)) / 0.2e1;
     gradY[5] = 0.1e1 / 0.2e1 + t10 * (-t9 * t3 + t4) / 0.2e1;
     // @formatter:on
+
+//    TV node;
+//    getNode(v1, v2, v3, node);
+//    double eps = 1e-6;
+//
+//    TV v1px = v1;
+//    v1px(0) += eps;
+//    TV v1py = v1;
+//    v1py(1) += eps;
+//    TV v2px = v2;
+//    v2px(0) += eps;
+//    TV v2py = v2;
+//    v2py(1) += eps;
+//    TV v3px = v3;
+//    v3px(0) += eps;
+//    TV v3py = v3;
+//    v3py(1) += eps;
+//
+//    TV node1px; getNode(v1px, v2,v3, node1px);
+//    TV node1py; getNode(v1py, v2,v3, node1py);
+//    TV node2px; getNode(v1, v2px,v3, node2px);
+//    TV node2py; getNode(v1, v2py,v3, node2py);
+//    TV node3px; getNode(v1, v2,v3px, node3px);
+//    TV node3py; getNode(v1, v2,v3py, node3py);
+//
+//    std::cout << "grad compare" << std::endl;
+//    std::cout << gradX[0] << " " << (node1px[0] - node[0]) / eps << std::endl;
+//    std::cout << gradX[1] << " " << (node1py[0] - node[0]) / eps << std::endl;
+//    std::cout << gradX[2] << " " << (node2px[0] - node[0]) / eps << std::endl;
+//    std::cout << gradX[3] << " " << (node2py[0] - node[0]) / eps << std::endl;
+//    std::cout << gradX[4] << " " << (node3px[0] - node[0]) / eps << std::endl;
+//    std::cout << gradX[5] << " " << (node3py[0] - node[0]) / eps << std::endl;
+//    std::cout << gradY[0] << " " << (node1px[1] - node[1]) / eps << std::endl;
+//    std::cout << gradY[1] << " " << (node1py[1] - node[1]) / eps << std::endl;
+//    std::cout << gradY[2] << " " << (node2px[1] - node[1]) / eps << std::endl;
+//    std::cout << gradY[3] << " " << (node2py[1] - node[1]) / eps << std::endl;
+//    std::cout << gradY[4] << " " << (node3px[1] - node[1]) / eps << std::endl;
+//    std::cout << gradY[5] << " " << (node3py[1] - node[1]) / eps << std::endl;
 }
 
 void
@@ -95,9 +133,7 @@ Voronoi::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &
 
     int n = 6;
     double hessX_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n) = hessX;
     double hessY_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n) = hessY;
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -290,6 +326,11 @@ Voronoi::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &
     hessY_c[5][4] = t18;
     hessY_c[5][5] = t24 * t3 * (-t4 + t29);
     // @formatter:on
+
+    hessX = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
+    hessY = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
+
+//    std::cout << "check write hess " << hessX_c[0][0] << " " << hessX(0, 0) << " " << hessY_c[5][1] << " " << hessY(5, 1) << std::endl;
 }
 
 void Voronoi::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, TV &node) {
@@ -399,9 +440,7 @@ Voronoi::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV
 
     int n = 4;
     double hessX_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n) = hessX;
     double hessY_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n) = hessY;
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -496,6 +535,9 @@ Voronoi::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV
     hessY_c[3][2] = t4;
     hessY_c[3][3] = t1 * (-t9 + t2);
     // @formatter:on
+
+    hessX = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
+    hessY = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
 }
 
 //VectorXi Voronoi::delaunayNaive(const VectorXT &vertices) {

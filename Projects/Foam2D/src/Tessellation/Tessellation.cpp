@@ -156,7 +156,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 } else {
                     neighborsClipped[i].insert(neighborsClipped[i].begin() + j + 1, (n1 - n_vtx + 1) % n_bdy + n_vtx);
                     clippedDegree++;
-                    j++;
+//                    j++;
                 }
             }
         }
@@ -305,12 +305,40 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
     } else {
         // Boundary vertex.
         assert(i1 >= n_vtx && i2 >= n_vtx);
-        node = boundary.segment<2>((i2 - n_vtx) * 2);
+
+        TV b1s = boundary.segment<2>((i1 - n_vtx) * 2);
+        TV b1e = boundary.segment<2>(((i1 + 1 - n_vtx) % n_bdy) * 2);
+        TV b2s = boundary.segment<2>((i2 - n_vtx) * 2);
+        TV b2e = boundary.segment<2>(((i2 + 1 - n_vtx) % n_bdy) * 2);
+
+        assert(b1e == b2s || b2e == b1s);
+        if (b1e == b2s) {
+            node = b1e;
+        } else {
+            node = b1s;
+        }
+
         gradX.resize(0);
         gradY.resize(0);
         hessX.resize(0, 0);
         hessY.resize(0, 0);
     }
+}
+
+void
+Tessellation::addSingleCellFunctionValue(int cell, const CellFunction &function, double &value) {
+    VectorXi nodeIndices = cells[cell];
+
+    VectorXT site(2);
+    VectorXT nodes(nodeIndices.rows() * 2);
+
+    int dims = 2 + getNumVertexParams();
+    site = c.segment<2>(cell * dims);
+    for (int i = 0; i < nodeIndices.rows(); i++) {
+        nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+    }
+
+    function.addValue(site, nodes, value);
 }
 
 void
@@ -332,10 +360,13 @@ Tessellation::addFunctionValue(const CellFunction &function, double &value) {
 }
 
 void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &gradient) {
-    VectorXT dOdc = VectorXT::Zero(c.rows());
+    int dims = 2 + getNumVertexParams();
+    int n_cells = cells.size();
+
+    VectorXT dOdc = VectorXT::Zero(dims * n_cells);
     VectorXT dOdx = VectorXT::Zero(x.rows());
 
-    for (int cell = 0; cell < cells.size(); cell++) {
+    for (int cell = 0; cell < n_cells; cell++) {
         VectorXi nodeIndices = cells[cell];
 
         VectorXT site(2);
@@ -361,15 +392,16 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
 }
 
 void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &hessian) {
-    MatrixXT hessian_cc = MatrixXT::Zero(c.rows(), c.rows());
-    MatrixXT hessian_cx = MatrixXT::Zero(c.rows(), x.rows());
-    MatrixXT hessian_xc = MatrixXT::Zero(x.rows(), c.rows()); // TODO: Probably redundant?
+    int dims = 2 + getNumVertexParams();
+    int n_cells = cells.size();
+
+    MatrixXT hessian_cc = MatrixXT::Zero(dims * n_cells, dims * n_cells);
+    MatrixXT hessian_cx = MatrixXT::Zero(dims * n_cells, x.rows());
+    MatrixXT hessian_xc = MatrixXT::Zero(x.rows(), dims * n_cells); // TODO: Probably redundant?
     MatrixXT hessian_xx = MatrixXT::Zero(x.rows(), x.rows());
     VectorXT dOdx = VectorXT::Zero(x.rows());
 
-    int dims = 2 + getNumVertexParams();
-
-    for (int cell = 0; cell < cells.size(); cell++) {
+    for (int cell = 0; cell < n_cells; cell++) {
         VectorXi nodeIndices = cells[cell];
 
         VectorXT site(2);
@@ -388,7 +420,7 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
             dOdx.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
         }
 
-        MatrixXT hessian_local = MatrixXT::Zero(site.rows(), site.rows());
+        MatrixXT hessian_local = MatrixXT::Zero(site.rows() + nodes.rows(), site.rows() + nodes.rows());
         function.addHessian(site, nodes, hessian_local);
 
         MatrixXT hessian_local_cc = hessian_local.block(0, 0, site.rows(), site.rows());
@@ -400,9 +432,8 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         for (int i = 0; i < nodeIndices.rows(); i++) {
             hessian_cx.block<2, 2>(cell * dims, nodeIndices(i) * 2) += hessian_local_cx.block<2, 2>(0, i * 2);
             hessian_xc.block<2, 2>(nodeIndices(i) * 2, cell * dims) += hessian_local_xc.block<2, 2>(i * 2, 0);
-            for (int j = 0; j < nodeIndices.rows(); i++) {
-                hessian_local_xx.block<2, 2>(nodeIndices(i) * 2, nodeIndices(j) * 2) += hessian_local_xx.block<2, 2>(
-                        i * 2, j * 2);
+            for (int j = 0; j < nodeIndices.rows(); j++) {
+                hessian_xx.block<2, 2>(nodeIndices(i) * 2, nodeIndices(j) * 2) += hessian_local_xx.block<2, 2>(i * 2, j * 2);
             }
         }
     }
@@ -419,6 +450,9 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         int degree = hess.rows() / dims;
         for (int i = 0; i < degree; i++) {
             for (int j = 0; j < degree; j++) {
+                if (face(i) >= n_cells || face(j) >= n_cells) {
+                    continue;
+                }
                 hessian.block(face(i) * dims, face(j) * dims, dims, dims) +=
                         dOdx(ii) * hess.block(i * dims, j * dims, dims, dims);
             }
@@ -496,7 +530,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     int dims = 2 + getNumVertexParams();
 
     x.resize(faces.size() * 2);
+    x.setZero();
     dxdc.resize(faces.size() * 2, n_free * dims);
+    dxdc.setZero();
     d2xdc2.resize(faces.size() * 2);
     for (int i = 0; i < faces.size(); i++) {
         IV3 face = faces[i];
@@ -510,6 +546,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
         // Assemble global Jacobian matrix dxdc.
         for (int j = 0; j < gradX.size() / dims; j++) {
+            if (face[j] >= n_free) {
+                continue;
+            }
             for (int k = 0; k < dims; k++) {
                 dxdc(i * 2 + 0, face[j] * dims + k) = gradX(j * dims + k);
                 dxdc(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
@@ -519,5 +558,12 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
         // Keep local Hessians.
         d2xdc2[i * 2 + 0] = hessX;
         d2xdc2[i * 2 + 1] = hessY;
+    }
+
+    isValid = true;
+    for (int i = 0; i < n_free; i++) {
+        if (cells[i].rows() < 3) {
+            isValid = false;
+        }
     }
 }

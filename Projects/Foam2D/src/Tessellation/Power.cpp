@@ -174,8 +174,6 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
             t227, t228, t229, t230, t231, t232, t233, t234, t235, t236, t237, t238, t239, t240, t241, t242, t243, t244,
             t245, t246, t247, t248, t249, t250;
 
-    Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n) = hessX;
-
     t1 = -y3 + y2;
     t2 = 0.2e1 * x2;
     t3 = 0.2e1 * x3;
@@ -341,7 +339,7 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
     unknown[8][7] = -t230;
     unknown[8][8] = 0.0e0;
 
-    Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n) = hessY;
+    hessX = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
 
     t1 = -x2 + x3;
     t2 = 0.2e1 * y2;
@@ -507,6 +505,8 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
     unknown[8][6] = -t223;
     unknown[8][7] = -t230;
     unknown[8][8] = 0.0e0;
+
+    hessY = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
     // @formatter:on
 }
 
@@ -637,9 +637,7 @@ void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
 
     int n = 6;
     double hessX_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n) = hessX;
     double hessY_c[n][n];
-    Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n) = hessY;
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -798,6 +796,9 @@ void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
     hessY_c[5][4] = -t1;
     hessY_c[5][5] = 0;
     // @formatter:on
+
+    hessX = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
+    hessY = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
 }
 
 int idxClosest(const TV &p, const VectorXT &vertices3d) {

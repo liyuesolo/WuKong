@@ -1,4 +1,5 @@
 #include "../../include/Tessellation/CellFunctionWeightedSum.h"
+#include <iostream>
 
 void CellFunctionWeightedSum::addValue(const VectorXT &site, const VectorXT &nodes, double &value) const {
     for (size_t i = 0; i < functions.size(); i++) {

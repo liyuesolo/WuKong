@@ -32,6 +32,8 @@ public:
     std::vector<VectorXi> cells;
     std::vector<std::vector<int>> todo_neighborhoods;
     VectorXT c;
+
+    bool isValid = false;
 private:
     VectorXT boundary;
 
@@ -72,6 +74,8 @@ public:
 
     void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
                         MatrixXT &hessY);
+
+    void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value);
 
     void addFunctionValue(const CellFunction &function, double &value);
 

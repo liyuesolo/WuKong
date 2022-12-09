@@ -1,11 +1,11 @@
 #pragma once
 
-#include "CellFunction.h"
+#include "../../include/Energy/CellFunctionArea.h"
 
-class CellFunctionWeightedSum : public CellFunction {
-protected:
-    std::vector<double> weights;
-    std::vector<CellFunction *> functions;
+class CellFunctionAreaTarget : public CellFunction {
+public:
+    CellFunctionArea area_function;
+    double target_reciprocal;
 
 public:
     virtual void addValue(const VectorXT &site, const VectorXT &nodes, double &value) const;

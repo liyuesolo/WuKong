@@ -514,8 +514,8 @@ void Foam2DApp::updatePlotData() {
 
         double obj;
         std::vector<VectorXd> pix;
-        foam.imageMatchGetInfo(obj, pix);
         if (matchShowImage) {
+            foam.imageMatchGetInfo(obj, pix);
             ImGui::Text(("Image Match Objective Value: " + std::to_string(obj)).c_str());
         }
     }

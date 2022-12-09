@@ -18,10 +18,10 @@ public:
 
     int n_free;
     int n_fixed;
-    VectorXd boundary;
-    VectorXd c_fixed;
+    VectorXT boundary;
+    VectorXT c_fixed;
 
-    VectorXd energy_area_targets;
+    VectorXT energy_area_targets;
     double energy_area_weight = 0.1;
     double energy_length_weight = 0.003;
     double energy_centroid_weight = 0.05;

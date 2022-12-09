@@ -57,11 +57,11 @@ ImageMatchObjective::getInputs(const VectorXT &c, const int cellIndex, std::vect
 
     cell.insert(cell.begin(), cellIndex);
     map.resize(cell.size());
-    for (int i = 0; i < cell.size(); i++) {
+    for (size_t i = 0; i < cell.size(); i++) {
         map(i) = cell[i];
     }
 
-    for (int i = 0; i < cell.size(); i++) {
+    for (size_t i = 0; i < cell.size(); i++) {
         n_in(i) = map(i) >= n_vtx;
 
         if (cell[i] < n_vtx) {
