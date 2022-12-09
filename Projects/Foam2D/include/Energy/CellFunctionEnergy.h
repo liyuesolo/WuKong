@@ -8,6 +8,7 @@
 #include "../../include/Energy/CellFunctionPerimeter.h"
 #include "../../include/Energy/CellFunctionCentroidXTarget.h"
 #include "../../include/Energy/CellFunctionCentroidYTarget.h"
+#include "../../include/Energy/CellFunctionPositionTarget.h"
 
 class CellFunctionEnergy : public CellFunctionWeightedSum {
 public:
@@ -16,6 +17,7 @@ public:
     CellFunctionAreaBarrier area_barrier_function;
     CellFunctionCentroidXTarget centroid_x_function;
     CellFunctionCentroidYTarget centroid_y_function;
+    CellFunctionPositionTarget position_target_function;
 public:
     CellFunctionEnergy(Foam2DInfo *info) : CellFunctionWeightedSum() {
         area_target_function.target_reciprocal = 1.0 / 0.05;
@@ -30,6 +32,10 @@ public:
 
         functions.push_back(&centroid_y_function);
         weights.push_back(info->energy_centroid_weight);
+
+        position_target_function.target_position = info->selected_target_pos;
+        functions.push_back(&position_target_function);
+        weights.push_back(info->energy_drag_target_weight);
 
         functions.push_back(&area_barrier_function);
         weights.push_back(1.0);

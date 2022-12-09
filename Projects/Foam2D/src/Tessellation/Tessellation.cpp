@@ -391,6 +391,7 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
     gradient += (dOdx.transpose() * dxdc).transpose() + dOdc;
 }
 
+
 void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &hessian) {
     int dims = 2 + getNumVertexParams();
     int n_cells = cells.size();
@@ -433,7 +434,8 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
             hessian_cx.block<2, 2>(cell * dims, nodeIndices(i) * 2) += hessian_local_cx.block<2, 2>(0, i * 2);
             hessian_xc.block<2, 2>(nodeIndices(i) * 2, cell * dims) += hessian_local_xc.block<2, 2>(i * 2, 0);
             for (int j = 0; j < nodeIndices.rows(); j++) {
-                hessian_xx.block<2, 2>(nodeIndices(i) * 2, nodeIndices(j) * 2) += hessian_local_xx.block<2, 2>(i * 2, j * 2);
+                hessian_xx.block<2, 2>(nodeIndices(i) * 2, nodeIndices(j) * 2) += hessian_local_xx.block<2, 2>(i * 2,
+                                                                                                               j * 2);
             }
         }
     }
@@ -531,8 +533,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
     x.resize(faces.size() * 2);
     x.setZero();
-    dxdc.resize(faces.size() * 2, n_free * dims);
-    dxdc.setZero();
+    MatrixXT dxdc_dense = MatrixXT::Zero(faces.size() * 2, n_free * dims);
     d2xdc2.resize(faces.size() * 2);
     for (int i = 0; i < faces.size(); i++) {
         IV3 face = faces[i];
@@ -550,8 +551,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                 continue;
             }
             for (int k = 0; k < dims; k++) {
-                dxdc(i * 2 + 0, face[j] * dims + k) = gradX(j * dims + k);
-                dxdc(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
+                dxdc_dense(i * 2 + 0, face[j] * dims + k) = gradX(j * dims + k);
+                dxdc_dense(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
             }
         }
 
@@ -559,6 +560,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
         d2xdc2[i * 2 + 0] = hessX;
         d2xdc2[i * 2 + 1] = hessY;
     }
+    dxdc = dxdc_dense.sparseView();
 
     isValid = true;
     for (int i = 0; i < n_free; i++) {

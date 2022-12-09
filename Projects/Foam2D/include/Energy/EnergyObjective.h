@@ -9,10 +9,8 @@ public:
     Foam2DInfo *info;
 
 public:
-    void
-    getInputs(const int cellIndex, VectorXT &p_in,
-              VectorXT &n_in, VectorXT &c_in, VectorXT &b_in,
-              VectorXi &map) const;
+
+    void check_gradients(const VectorXd &c_free) const;
 
     virtual double evaluate(const VectorXd &c_free) const;
 

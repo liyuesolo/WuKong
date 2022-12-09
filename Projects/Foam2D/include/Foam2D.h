@@ -10,8 +10,8 @@
 #include <Eigen/Dense>
 
 #include "VecMatDef.h"
+#include "../include/Energy/EnergyObjectiveCasadi.h"
 #include "../include/Energy/EnergyObjective.h"
-#include "../include/Energy/EnergyObjective2.h"
 #include "../include/Energy/DynamicObjective.h"
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 #include "../include/ImageMatch/EnergyObjectiveAT.h"
@@ -38,7 +38,6 @@ public:
     int opttype = 1;
 
     EnergyObjective energyObjective;
-    EnergyObjective2 energyObjective2;
     DynamicObjective dynamicObjective;
     TrajectoryOptNLP trajOptNLP;
     EnergyObjectiveAT energyObjectiveAT;

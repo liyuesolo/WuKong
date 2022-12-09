@@ -79,7 +79,8 @@ void CellFunctionCentroidYTarget::addHessian(const VectorXT &site, const VectorX
     VectorXT aaa = siteY_gradient - centroid_gradient / area + centroid * area_gradient / pow(area, 2.0);
     hessian += 2 * aaa * aaa.transpose();
     hessian += 2 * (site(1) - centroid / area) * (
-            2 * centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
+            area_gradient * centroid_gradient.transpose() / pow(area, 2.0)
+            + centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
             - centroid_hessian / area
             + centroid * area_hessian / pow(area, 2.0)
             - 2 * centroid * area_gradient * area_gradient.transpose() / pow(area, 3.0));

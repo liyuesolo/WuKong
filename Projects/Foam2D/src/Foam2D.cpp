@@ -1,5 +1,5 @@
 #include "../include/Foam2D.h"
-#include "Projects/Foam2D/include/Energy/CodeGen.h"
+#include "Projects/Foam2D/include/Energy/EnergyCodeGenCasadi.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
@@ -23,7 +23,6 @@ Foam2D::Foam2D() {
     info->tessellations.push_back(new Power());
 
     energyObjective.info = info;
-    energyObjective2.info = info;
     dynamicObjective.info = info;
     trajOptNLP.info = info;
     energyObjectiveAT.info = info;
@@ -328,8 +327,8 @@ void Foam2D::optimize(bool dynamic) {
     if (dynamic) {
         minimizers[opttype]->minimize(&dynamicObjective, c_free);
     } else {
-//        energyObjective2.check_gradients(c_free);
-        minimizers[opttype]->minimize(&energyObjective2, c_free);
+//        energyObjective.check_gradients(c_free);
+        minimizers[opttype]->minimize(&energyObjective, c_free);
     }
 
     c.segment(0, info->n_free * (2 + info->getTessellation()->getNumVertexParams())) = c_free;

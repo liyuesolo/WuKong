@@ -79,7 +79,8 @@ void CellFunctionCentroidXTarget::addHessian(const VectorXT &site, const VectorX
     VectorXT aaa = siteX_gradient - centroid_gradient / area + centroid * area_gradient / pow(area, 2.0);
     hessian += 2 * aaa * aaa.transpose();
     hessian += 2 * (site(0) - centroid / area) * (
-            2 * centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
+            area_gradient * centroid_gradient.transpose() / pow(area, 2.0)
+            + centroid_gradient * area_gradient.transpose() / pow(area, 2.0)
             - centroid_hessian / area
             + centroid * area_hessian / pow(area, 2.0)
             - 2 * centroid * area_gradient * area_gradient.transpose() / pow(area, 3.0));
@@ -92,18 +93,28 @@ void CellFunctionCentroidXTarget::addHessian(const VectorXT &site, const VectorX
 //            - centroid_hessian / area
 //            + centroid * area_hessian / pow(area, 2.0)
 //            - 2 * centroid * area_gradient * area_gradient.transpose() / pow(area, 3.0));
-//    VectorXT grad = VectorXT::Zero(nodes.rows());
+//    VectorXT gradx = VectorXT::Zero(nodes.rows());
 //    VectorXT gradc = VectorXT::Zero(site.rows());
-//    addGradient(site, nodes, gradc, grad);
+//    addGradient(site, nodes, gradc, gradx);
+//    VectorXT grad(site.rows() + nodes.rows());
+//    grad << gradc, gradx;
 //    double eps = 1e-6;
-//    for (int i = 0; i < nodes.rows(); i++) {
-//        VectorXT xp = nodes;
-//        xp(i) += eps;
-//        VectorXT gradp = VectorXT::Zero(nodes.rows());
-//        addGradient(site, xp, gradc, gradp);
-//        for (int j = 0; j < nodes.rows(); j++) {
+//    for (int i = 0; i < hessian.rows(); i++) {
+//        VectorXT sitep = site;
+//        VectorXT nodesp = nodes;
+//        if (i < site.rows()) {
+//            sitep(i) += eps;
+//        } else {
+//            nodesp(i - site.rows()) += eps;
+//        }
+//        VectorXT gradxp = VectorXT::Zero(nodes.rows());
+//        VectorXT gradcp = VectorXT::Zero(site.rows());
+//        addGradient(sitep, nodesp, gradcp, gradxp);
+//        VectorXT gradp(site.rows() + nodes.rows());
+//        gradp << gradcp, gradxp;
+//        for (int j = 0; j < hessian.rows(); j++) {
 //            std::cout << "centroidxtarget  hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " "
-//                      << this_hess(site.rows() + j, site.rows() + i) << std::endl;
+//                      << this_hess(j, i) << std::endl;
 //        }
 //    }
 }
