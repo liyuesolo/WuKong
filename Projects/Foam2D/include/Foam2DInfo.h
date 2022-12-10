@@ -32,9 +32,9 @@ public:
     double dynamics_dt = 0.01;
 
     int trajOpt_N = 50; // Number of time steps (states from 0 to N, inclusive)
-    double trajOpt_target_weight = 1e-1;
+    double trajOpt_target_weight = 0 * 1e-1;
     double trajOpt_velocity_weight = 0 * 1e-3;
-    double trajOpt_input_weight = 0 * 1e-2;
+    double trajOpt_input_weight = 1e-2;
 
     int selected = -1;
     TV selected_target_pos = {0, 0};

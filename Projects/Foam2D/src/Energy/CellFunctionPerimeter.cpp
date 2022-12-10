@@ -1,7 +1,8 @@
 #include "../../include/Energy/CellFunctionPerimeter.h"
 #include <iostream>
 
-void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes, double &value) const {
+void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+                                     const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     double x0, y0, x1, y1;
@@ -22,7 +23,7 @@ void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes
 }
 
 void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                        VectorXT &gradient_x) const {
+                                        VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     double x0, y0, x1, y1;
@@ -54,7 +55,8 @@ void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &no
     }
 }
 
-void CellFunctionPerimeter::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const {
+void CellFunctionPerimeter::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+                                       const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());

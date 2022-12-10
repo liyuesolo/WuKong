@@ -19,6 +19,8 @@ public:
     bool early_stop;
 
 public:
+    void check_gradients(const VectorXd &x) const;
+
     double eval_f(const VectorXd &x) const;
 
     VectorXd eval_grad_f(const VectorXd &x) const;

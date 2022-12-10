@@ -327,9 +327,10 @@ void Foam2DApp::generateScenario() {
         default:
             std::cout << "Error: scenario not implemented!";
     }
+    
     if (generate_scenario_type != 3) {
+        foam.info->energy_area_targets.resize(foam.info->n_free);
         for (int i = 0; i < foam.info->n_free; i++) {
-            foam.info->energy_area_targets.resize(foam.info->n_free);
             foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
         }
     }

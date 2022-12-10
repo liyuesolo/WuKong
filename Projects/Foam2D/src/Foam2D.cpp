@@ -378,6 +378,7 @@ static void threadIPOPT(TrajectoryOptNLP *nlp) {
     //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
     //        bound_relax_factor
 //    app->Options()->SetStringValue("derivative_test", "first-order");
+//    app->Options()->SetStringValue("derivative_test_print_all", "yes");
     // The following overwrites the default name (ipopt.opt) of the
     // options file
     // app->Options()->SetStringValue("option_file_name", "hs071.opt");
@@ -439,6 +440,15 @@ void Foam2D::trajectoryOptOptimizeIPOPT() {
     trajOptNLP.energy = new EnergyObjective(*trajOptNLP.energy);
     trajOptNLP.energy->info = info_;
 
+//    VectorXT gradientTest_x = trajOptNLP.x_guess;
+//    gradientTest_x.unaryExpr([](double x) {
+//        std::random_device rd;
+//        std::mt19937 gen(rd());
+//        std::uniform_real_distribution<double> dis(-1e-3, 1e-3);
+//        return x + dis(gen);
+//    });
+//    trajOptNLP.check_gradients(gradientTest_x);
+
     /** IPOPT SOLVE **/
     std::thread t1(threadIPOPT, &trajOptNLP);
     t1.detach();
@@ -498,7 +508,7 @@ static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, in
             double y1 = x(cell[0] * 2 + 1);
 
             double area = 0;
-            for (int j = 1; j < cell.size() - 1; j++) {
+            for (size_t j = 1; j < cell.size() - 1; j++) {
                 double x2 = x(cell[j] * 2 + 0);
                 double y2 = x(cell[j] * 2 + 1);
                 double x3 = x(cell[j + 1] * 2 + 0);

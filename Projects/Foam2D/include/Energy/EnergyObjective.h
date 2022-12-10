@@ -12,6 +12,8 @@ public:
 
     void check_gradients(const VectorXd &c_free) const;
 
+    void preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const;
+
     virtual double evaluate(const VectorXd &c_free) const;
 
     virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const;

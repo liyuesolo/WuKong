@@ -1,7 +1,9 @@
 #include "../../include/Energy/CellFunctionCentroidX.h"
 #include <iostream>
 
-void CellFunctionCentroidX::addValue(const VectorXT &site, const VectorXT &nodes, double &value) const {
+void
+CellFunctionCentroidX::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+                                const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     double x0 = nodes(0);
@@ -18,7 +20,7 @@ void CellFunctionCentroidX::addValue(const VectorXT &site, const VectorXT &nodes
 }
 
 void CellFunctionCentroidX::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                        VectorXT &gradient_x) const {
+                                        VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     int x0i = 0, y0i = 1;
@@ -55,7 +57,8 @@ void CellFunctionCentroidX::addGradient(const VectorXT &site, const VectorXT &no
     }
 }
 
-void CellFunctionCentroidX::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const {
+void CellFunctionCentroidX::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+                                       const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());

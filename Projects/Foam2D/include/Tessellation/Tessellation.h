@@ -25,6 +25,8 @@ using VectorXi = Vector<int, Eigen::Dynamic>;
 
 class CellFunction;
 
+class CellInfo;
+
 class Tessellation {
 
 public:
@@ -76,20 +78,22 @@ public:
     void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
                         MatrixXT &hessY);
 
-    void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value);
+    void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
 
-    void addFunctionValue(const CellFunction &function, double &value);
+    void addFunctionValue(const CellFunction &function, double &value, std::vector<CellInfo> cellInfos);
 
-    void addFunctionGradient(const CellFunction &function, VectorXT &gradient);
+    void addFunctionGradient(const CellFunction &function, VectorXT &gradient,
+                             std::vector<CellInfo> cellInfos);
 
-    void addFunctionHessian(const CellFunction &function, MatrixXT &hessian);
+    void
+    addFunctionHessian(const CellFunction &function, MatrixXT &hessian, std::vector<CellInfo> cellInfos);
 
     // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
     std::vector<std::vector<int>>
     getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual,
                         const VectorXT &boundary, int n_cells);
 
-    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_, const int n_free);
+    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_, int n_free);
 
     virtual int getNumVertexParams() = 0;
 

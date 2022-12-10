@@ -20,7 +20,6 @@ public:
     CellFunctionPositionTarget position_target_function;
 public:
     CellFunctionEnergy(Foam2DInfo *info) : CellFunctionWeightedSum() {
-        area_target_function.target_reciprocal = 1.0 / 0.05;
         functions.push_back(&area_target_function);
         weights.push_back(info->energy_area_weight);
 
@@ -33,7 +32,6 @@ public:
         functions.push_back(&centroid_y_function);
         weights.push_back(info->energy_centroid_weight);
 
-        position_target_function.target_position = info->selected_target_pos;
         functions.push_back(&position_target_function);
         weights.push_back(info->energy_drag_target_weight);
 

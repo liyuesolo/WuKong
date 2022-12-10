@@ -1,7 +1,8 @@
 #include "../../include/Energy/CellFunctionArea.h"
 #include <iostream>
 
-void CellFunctionArea::addValue(const VectorXT &site, const VectorXT &nodes, double &value) const {
+void
+CellFunctionArea::addValue(const VectorXT &site, const VectorXT &nodes, double &value, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     double x0 = nodes(0);
@@ -18,7 +19,7 @@ void CellFunctionArea::addValue(const VectorXT &site, const VectorXT &nodes, dou
 }
 
 void CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                   VectorXT &gradient_x) const {
+                                   VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     int x0i = 0, y0i = 1;
@@ -46,7 +47,9 @@ void CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, 
     }
 }
 
-void CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian) const {
+void
+CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+                             const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());

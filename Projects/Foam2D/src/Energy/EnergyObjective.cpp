@@ -59,13 +59,28 @@ void EnergyObjective::check_gradients(const VectorXd &c_free) const {
     }
 }
 
-double EnergyObjective::evaluate(const VectorXd &c_free) const {
+void EnergyObjective::preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const {
     VectorXd c(c_free.size() + info->c_fixed.size());
     c << c_free, info->c_fixed;
     VectorXT vertices;
     VectorXT params;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
+
+    cellInfos.resize(info->n_free);
+    for (int i = 0; i < info->n_free; i++) {
+        cellInfos[i].target_area = info->energy_area_targets(i);
+        cellInfos[i].agent = false;
+    }
+    if (info->selected >= 0) {
+        cellInfos[info->selected].agent = true;
+        cellInfos[info->selected].target_position = info->selected_target_pos;
+    }
+}
+
+double EnergyObjective::evaluate(const VectorXd &c_free) const {
+    std::vector<CellInfo> cellInfos;
+    preProcess(c_free, cellInfos);
 
     if (!info->getTessellation()->isValid) {
         return 1e10;
@@ -74,7 +89,7 @@ double EnergyObjective::evaluate(const VectorXd &c_free) const {
     CellFunctionEnergy energy(info);
 
     double O = 0;
-    info->getTessellation()->addFunctionValue(energy, O);
+    info->getTessellation()->addFunctionValue(energy, O, cellInfos);
 
     return O;
 }
@@ -84,12 +99,8 @@ void EnergyObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) cons
 }
 
 VectorXd EnergyObjective::get_dOdc(const VectorXd &c_free) const {
-    VectorXd c(c_free.size() + info->c_fixed.size());
-    c << c_free, info->c_fixed;
-    VectorXT vertices;
-    VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
+    std::vector<CellInfo> cellInfos;
+    preProcess(c_free, cellInfos);
 
     VectorXT gradient = VectorXT::Zero(c_free.rows());
     if (!info->getTessellation()->isValid) {
@@ -97,7 +108,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &c_free) const {
     }
 
     CellFunctionEnergy energy(info);
-    info->getTessellation()->addFunctionGradient(energy, gradient);
+    info->getTessellation()->addFunctionGradient(energy, gradient, cellInfos);
 
     return gradient;
 }
@@ -107,12 +118,8 @@ void EnergyObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian)
 }
 
 Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) const {
-    VectorXd c(c_free.size() + info->c_fixed.size());
-    c << c_free, info->c_fixed;
-    VectorXT vertices;
-    VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
+    std::vector<CellInfo> cellInfos;
+    preProcess(c_free, cellInfos);
 
     MatrixXT hessian = MatrixXT::Zero(c_free.rows(), c_free.rows());
     if (!info->getTessellation()->isValid) {
@@ -120,7 +127,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
     }
 
     CellFunctionEnergy energy(info);
-    info->getTessellation()->addFunctionHessian(energy, hessian);
+    info->getTessellation()->addFunctionHessian(energy, hessian, cellInfos);
 
     return hessian.sparseView();
 }
