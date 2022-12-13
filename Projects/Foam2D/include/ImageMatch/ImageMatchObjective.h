@@ -13,10 +13,7 @@ public:
     Foam2DInfo *info;
 
 public:
-    void
-    getInputs(const VectorXT &vertices, const int cellIndex, std::vector<int> cell, VectorXT &p_in,
-              VectorXT &n_in, VectorXT &c_in, VectorXT &b_in, VectorXT &pix_in,
-              VectorXi &map) const;
+    void preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const;
 
     virtual double evaluate(const VectorXd &c_free) const;
 

@@ -99,8 +99,7 @@ public:
 //                x_u[i] = 0;
 //            }
             if (i >= n_free * dims) {
-                x_l[i] = 0;
-                x_u[i] = 1;
+                x_l[i] = 1.0;
             }
         });
 

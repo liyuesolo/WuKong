@@ -131,4 +131,3 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
 
     return hessian.sparseView();
 }
-

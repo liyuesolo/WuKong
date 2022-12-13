@@ -1,5 +1,4 @@
 #include "../include/Foam2D.h"
-#include "Projects/Foam2D/include/Energy/EnergyCodeGenCasadi.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
@@ -214,7 +213,9 @@ void Foam2D::imageMatchOptimizeIPOPT() {
     VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0, info->n_free * dims);
     VectorXT x_guess(info->n_free * (dims + 1));
-    x_guess << c_free, info->energy_area_targets;
+
+    VectorXT tau = info->energy_area_targets.unaryExpr([](double x) { return 1.0 / x; });
+    x_guess << c_free, tau;
     imageMatchNLP.x_guess = x_guess;
     imageMatchNLP.x_sol = x_guess;
 
@@ -289,7 +290,7 @@ void Foam2D::imageMatchOptimizeIPOPT() {
     c.segment(0, info->n_free * dims) = c_free;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
 
-    info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free);
+    info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free).unaryExpr([](double x) { return 1.0 / x; });
 }
 
 void Foam2D::imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix) {

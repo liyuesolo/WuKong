@@ -342,6 +342,37 @@ Tessellation::addSingleCellFunctionValue(int cell, const CellFunction &function,
 }
 
 void
+Tessellation::addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient,
+                                         const CellInfo *cellInfo) {
+    int dims = 2 + getNumVertexParams();
+    int n_cells = cells.size();
+
+    VectorXT dOdc = VectorXT::Zero(dims * n_cells);
+    VectorXT dOdx = VectorXT::Zero(x.rows());
+
+    VectorXi nodeIndices = cells[cell];
+
+    VectorXT site(2);
+    VectorXT nodes(nodeIndices.rows() * 2);
+
+    site = c.segment<2>(cell * dims);
+    for (int i = 0; i < nodeIndices.rows(); i++) {
+        nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+    }
+
+    VectorXT gradient_c = VectorXT::Zero(site.rows());
+    VectorXT gradient_x = VectorXT::Zero(nodes.rows());
+    function.addGradient(site, nodes, gradient_c, gradient_x, cellInfo);
+
+    dOdc.segment<2>(cell * dims) += gradient_c;
+    for (int i = 0; i < nodeIndices.rows(); i++) {
+        dOdx.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
+    }
+
+    gradient += dxdc.transpose() * dOdx + dOdc;
+}
+
+void
 Tessellation::addFunctionValue(const CellFunction &function, double &value,
                                const std::vector<CellInfo> cellInfos) {
     for (int cell = 0; cell < cells.size(); cell++) {

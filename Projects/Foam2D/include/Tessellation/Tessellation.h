@@ -34,12 +34,12 @@ public:
     std::vector<VectorXi> cells;
     std::vector<std::vector<int>> todo_neighborhoods;
     VectorXT c;
+    VectorXT x;
 
     bool isValid = false;
 private:
     VectorXT boundary;
 
-    VectorXT x;
 //    MatrixXT dxdc;
     Eigen::SparseMatrix<double> dxdc;
     std::vector<MatrixXT> d2xdc2;
@@ -79,6 +79,8 @@ public:
                         MatrixXT &hessY);
 
     void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
+
+    void addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient, const CellInfo *cellInfo);
 
     void addFunctionValue(const CellFunction &function, double &value, std::vector<CellInfo> cellInfos);
 

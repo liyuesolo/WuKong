@@ -1,5 +1,6 @@
 #include "../../include/ImageMatch/EnergyObjectiveAT.h"
-#include "Projects/Foam2D/include/ImageMatch/EnergyCodeGen.h"
+#include "../../include/Energy/CellFunctionEnergy.h"
+#include "../../include/Energy/CellFunctionArea.h"
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";
@@ -17,85 +18,39 @@ static void printVectorXi(std::string name, const VectorXi &x, int start = 0, in
     std::cout << "]" << std::endl;
 }
 
-void
-EnergyObjectiveAT::getInputs(const VectorXT &c, const VectorXT &area_targets, const int cellIndex,
-                             std::vector<int> cell, VectorXT &p_in,
-                             VectorXT &n_in, VectorXT &c_in, VectorXT &b_in,
-                             VectorXi &map) const {
-    int n_neighbors = cell.size();
-
-    p_in.resize(7);
-    p_in << info->energy_area_weight, info->energy_length_weight, info->energy_centroid_weight, n_neighbors,
-            ((cellIndex == info->selected) ? info->energy_drag_target_weight : 0), info->selected_target_pos(
-            0), info->selected_target_pos(1);
-
-    int n_vtx = info->n_free + info->n_fixed;
-    int n_bdy = info->boundary.rows() / 2;
+void EnergyObjectiveAT::preProcess(const VectorXd &x, std::vector<CellInfo> &cellInfos) const {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXT c_free = x.segment(0, dims * info->n_free);
 
-    int maxN = 20;
+    VectorXd c(c_free.size() + info->c_fixed.size());
+    c << c_free, info->c_fixed;
+    VectorXT vertices;
+    VectorXT params;
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
+    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
 
-    n_in.resize((maxN + 1) * 1);
-    n_in.setZero();
-
-    c_in.resize((maxN + 1) * dims + 1);
-    c_in.setZero();
-    c_in(0) = area_targets(cellIndex);
-
-    b_in.resize((maxN + 1) * 4);
-    b_in.setZero();
-
-    cell.insert(cell.begin(), cellIndex);
-    map.resize(cell.size());
-    for (int i = 0; i < cell.size(); i++) {
-        map(i) = cell[i];
-    }
-
-    for (int i = 0; i < cell.size(); i++) {
-        n_in(i) = map(i) >= n_vtx;
-
-        if (cell[i] < n_vtx) {
-            c_in.segment(i * dims + 1, dims) = c.segment(map(i) * dims, dims);
-        } else {
-            b_in.segment<2>(i * 4 + 0) = info->boundary.segment<2>((map(i) - n_vtx) * 2);
-            b_in.segment<2>(i * 4 + 2) = info->boundary.segment<2>(((map(i) - n_vtx + 1) % n_bdy) * 2);
-        }
+    cellInfos.resize(info->n_free);
+    for (int i = 0; i < info->n_free; i++) {
+        cellInfos[i].target_area = 1.0 / x(c_free.rows() + i);
+        cellInfos[i].agent = false;
     }
 }
 
 double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
-    VectorXi tri;
-    VectorXi e;
+    std::vector<CellInfo> cellInfos;
+    preProcess(x, cellInfos);
+
+    if (!info->getTessellation()->isValid) {
+        return 1e10;
+    }
 
     int dims = 2 + info->getTessellation()->getNumVertexParams();
-    VectorXd c_free = x.segment(0, info->n_free * dims);
-    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
+    VectorXT c_free = x.segment(0, dims * info->n_free);
 
-    VectorXd c(c_free.size() + info->c_fixed.size());
-    c << c_free, info->c_fixed;
-
-    VectorXT vertices;
-    VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
+    CellFunctionEnergy energy(info);
 
     double O = 0;
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
-            O += 1e5;
-            continue;
-        }
-
-        VectorXT p_in, n_in, c_in, b_in;
-        VectorXi map;
-        getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
-
-        add_E_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, O);
-    }
+    info->getTessellation()->addFunctionValue(energy, O, cellInfos);
 
     return O;
 }
@@ -105,39 +60,34 @@ void EnergyObjectiveAT::addGradientTo(const VectorXd &x, VectorXd &grad) const {
 }
 
 VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
-    VectorXi tri;
-    VectorXi e;
+    std::vector<CellInfo> cellInfos;
+    preProcess(x, cellInfos);
 
-    int dims = 2 + info->getTessellation()->getNumVertexParams();
-    VectorXd c_free = x.segment(0, info->n_free * dims);
-    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
-
-    VectorXd c(c_free.size() + info->c_fixed.size());
-    c << c_free, info->c_fixed;
-
-    VectorXT vertices;
-    VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
-
-    VectorXT dOdc = VectorXT::Zero(info->n_free * (dims + 1));
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
-            continue;
-        }
-
-        VectorXT p_in, n_in, c_in, b_in;
-        VectorXi map;
-        getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
-
-        add_dEdc_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, map, dOdc);
+    VectorXT gradient = VectorXT::Zero(x.rows());
+    if (!info->getTessellation()->isValid) {
+        return gradient;
     }
 
-    return dOdc;
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXT c_free = x.segment(0, dims * info->n_free);
+
+    VectorXT gradient_c = VectorXT::Zero(c_free.rows());
+    CellFunctionEnergy energy(info);
+    info->getTessellation()->addFunctionGradient(energy, gradient_c, cellInfos);
+
+    VectorXT gradient_tau = VectorXT::Zero(info->n_free);
+    CellFunctionArea areaFunction;
+    for (int cell = 0; cell < info->n_free; cell++) {
+        double area = 0;
+        info->getTessellation()->addSingleCellFunctionValue(cell, areaFunction, area, &cellInfos[cell]);
+
+        double tau = x(c_free.rows() + cell);
+        gradient_tau(cell) += info->energy_area_weight * 2 * area * (area * tau - 1);
+    }
+
+    gradient << gradient_c, gradient_tau;
+
+    return gradient;
 }
 
 void EnergyObjectiveAT::getHessian(const VectorXd &x, SparseMatrixd &hessian) const {
@@ -145,38 +95,42 @@ void EnergyObjectiveAT::getHessian(const VectorXd &x, SparseMatrixd &hessian) co
 }
 
 Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) const {
-    VectorXi tri;
-    VectorXi e;
+    std::vector<CellInfo> cellInfos;
+    preProcess(x, cellInfos);
 
-    int dims = 2 + info->getTessellation()->getNumVertexParams();
-    VectorXd c_free = x.segment(0, info->n_free * dims);
-    VectorXd area_targets = x.segment(info->n_free * dims, info->n_free);
-
-    VectorXd c(c_free.size() + info->c_fixed.size());
-    c << c_free, info->c_fixed;
-
-    VectorXT vertices;
-    VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    tri = info->getTessellation()->getDualGraph(vertices, params);
-    std::vector<std::vector<int>> cells = info->getTessellation()->getNeighborsClipped(vertices, params, tri,
-                                                                                       info->boundary, info->n_free);
-
-    MatrixXT d2Odc2 = MatrixXT::Zero(info->n_free * (dims + 1), info->n_free * (dims + 1));
-    for (int i = 0; i < cells.size(); i++) {
-        if (cells[i].size() > 18 || cells[i].size() < 3) {
-            continue;
-        }
-
-        VectorXT p_in, n_in, c_in, b_in;
-        VectorXi map;
-        getInputs(c, area_targets, i, cells[i], p_in, n_in, c_in, b_in, map);
-
-        add_d2Edc2_cell_AT(info->getTessellation(), p_in, n_in, c_in, b_in, map, d2Odc2);
+    MatrixXT hessian = MatrixXT::Zero(x.rows(), x.rows());
+    if (!info->getTessellation()->isValid) {
+        return hessian.sparseView();
     }
 
-    return d2Odc2.sparseView();
+    int dims = 2 + info->getTessellation()->getNumVertexParams();
+    VectorXT c_free = x.segment(0, dims * info->n_free);
+
+    MatrixXT hessian_c = MatrixXT::Zero(c_free.rows(), c_free.rows());
+    CellFunctionEnergy energy(info);
+    info->getTessellation()->addFunctionHessian(energy, hessian_c, cellInfos);
+
+    VectorXT hessian_tau_tau_diag = VectorXT::Zero(info->n_free);
+    MatrixXT hessian_tau_x = MatrixXT::Zero(info->n_free, c_free.rows());
+    CellFunctionArea areaFunction;
+    for (int cell = 0; cell < info->n_free; cell++) {
+        double area = 0;
+        info->getTessellation()->addSingleCellFunctionValue(cell, areaFunction, area, &cellInfos[cell]);
+
+        VectorXT area_gradient = VectorXT::Zero(c_free.rows());
+        info->getTessellation()->addSingleCellFunctionGradient(cell, areaFunction, area_gradient, &cellInfos[cell]);
+
+        double tau = x(c_free.rows() + cell);
+        hessian_tau_tau_diag(cell) += info->energy_area_weight * 2 * area * area;
+        hessian_tau_x.row(cell) += info->energy_area_weight * (4 * area * tau - 2) * area_gradient;
+    }
+
+    hessian.block(0, 0, c_free.rows(), c_free.rows()) = hessian_c;
+    hessian.block(c_free.rows(), c_free.rows(), info->n_free, info->n_free) = hessian_tau_tau_diag.asDiagonal();
+    hessian.block(c_free.rows(), 0, info->n_free, c_free.rows()) = hessian_tau_x;
+    hessian.block(0, c_free.rows(), c_free.rows(), info->n_free) = hessian_tau_x.transpose();
+
+    return hessian.sparseView();
 }
+
 

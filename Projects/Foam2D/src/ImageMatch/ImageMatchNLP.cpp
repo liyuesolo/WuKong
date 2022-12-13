@@ -51,7 +51,7 @@ double ImageMatchNLP::eval_f(const Eigen::VectorXd &x) const {
 
 //    std::cout << "internal f: " << 0.0001 * objective->evaluate(c_free) << std::endl;
 
-    return 1e-4 * objective->evaluate(c_free);
+    return objective->evaluate(c_free);
 
     return 0;
 }
@@ -69,7 +69,7 @@ VectorXd ImageMatchNLP::eval_grad_f(const Eigen::VectorXd &x) const {
     VectorXd grad_f(n_free * (dims + 1));
     grad_f.setZero();
     grad_f.segment(0, n_free * dims) = objective->get_dOdc(c_free);
-    return 1e-4 * grad_f;
+    return grad_f;
 
     return VectorXd::Zero(n_free * (dims + 1));
 }
