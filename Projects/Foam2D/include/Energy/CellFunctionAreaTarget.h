@@ -15,4 +15,10 @@ public:
 
     virtual void
     addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian, const CellInfo *cellInfo) const;
+
+    void addGradient_tau(const VectorXT &site, const VectorXT &nodes, double &gradient_tau,
+                         const CellInfo *cellInfo) const;
+
+    void addHessian_tau(const VectorXT &site, const VectorXT &nodes, double &hessian_tau_tau, VectorXT &hessian_tau_x,
+                         const CellInfo *cellInfo) const;
 };

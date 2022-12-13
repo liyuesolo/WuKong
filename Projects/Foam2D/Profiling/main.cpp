@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include "../include/Energy/EnergyObjectiveCasadi.h"
 #include "../include/Energy/EnergyObjective.h"
 #include "../include/Energy/DynamicObjective.h"
 #include "../include/Tessellation/Power.h"
@@ -53,7 +52,7 @@
 void EnergyObjectiveProfile() {
     Foam2DInfo info;
 
-    Voronoi tessellation;
+    Power tessellation;
     info.tessellations.push_back(&tessellation);
 
     info.n_free = 40;
@@ -64,8 +63,10 @@ void EnergyObjectiveProfile() {
     info.boundary.resize(4 * 2);
     info.boundary << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
 
-    int dims = 2;
-    VectorXT c = energy_profiling_c();
+    int dims = 2 + tessellation.getNumVertexParams();
+    VectorXT vertices = energy_profiling_c();
+    VectorXT params = VectorXT::Zero(info.n_free + info.n_fixed);
+    VectorXT c = tessellation.combineVerticesParams(vertices, params);
     info.c_fixed = c.segment(info.n_free * dims, info.n_fixed * dims);
     VectorXT c_free = c.segment(0, info.n_free * dims);
 
@@ -77,9 +78,10 @@ void EnergyObjectiveProfile() {
 
     EnergyObjective energy2;
     energy2.info = &info;
-    energy2.evaluate(c_free);
-    energy2.get_dOdc(c_free);
-    std::cout << "Start hess2" << std::endl;
+//    energy2.evaluate(c_free);
+//    energy2.get_dOdc(c_free);
+    Eigen::setNbThreads(1);
+    std::cout << "Start thing" << std::endl;
     auto start = Time::now();
     for (int i = 0; i < 500; i++) {
         energy2.get_d2Odc2(c_free);
@@ -89,18 +91,18 @@ void EnergyObjectiveProfile() {
     ms d = std::chrono::duration_cast<ms>(end - start);
     std::cout << d.count() << " ms\n";
 
-    EnergyObjectiveCasadi energy1;
-    energy1.info = &info;
-    energy1.evaluate(c_free);
-    energy1.get_dOdc(c_free);
-    std::cout << "Start hess1" << std::endl;
-    start = Time::now();
-    for (int i = 0; i < 500; i++) {
-        energy1.get_d2Odc2(c_free);
-    }
-    end = Time::now();
-    d = std::chrono::duration_cast<ms>(end - start);
-    std::cout << d.count() << " ms\n";
+//    EnergyObjectiveCasadi energy1;
+//    energy1.info = &info;
+//    energy1.evaluate(c_free);
+//    energy1.get_dOdc(c_free);
+//    std::cout << "Start hess1" << std::endl;
+//    start = Time::now();
+//    for (int i = 0; i < 500; i++) {
+//        energy1.get_d2Odc2(c_free);
+//    }
+//    end = Time::now();
+//    d = std::chrono::duration_cast<ms>(end - start);
+//    std::cout << d.count() << " ms\n";
 }
 
 int main() {

@@ -420,6 +420,12 @@ void Foam2D::trajectoryOptOptimizeIPOPT() {
 
     // x format is [c1 ... cN u1 ... uN]
     trajOptNLP.x_guess << trajOptNLP.c0.replicate(info->trajOpt_N, 1), u_guess;
+//    for (int i = 0; i < info->trajOpt_N; i++) {
+//        trajOptNLP.x_guess.segment<2>((i + 1) * trajOptNLP.c0.rows() + 2 * info->selected) =
+//                trajOptNLP.c0.segment<2>(2 * info->selected) + (i + 1) * 1.0 / info->trajOpt_N *
+//                                                               (info->selected_target_pos -
+//                                                                trajOptNLP.c0.segment<2>(2 * info->selected));
+//    }
     trajOptNLP.x_sol = trajOptNLP.x_guess;
     trajOptNLP.early_stop = false;
 

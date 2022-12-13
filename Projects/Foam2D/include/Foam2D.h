@@ -10,7 +10,6 @@
 #include <Eigen/Dense>
 
 #include "VecMatDef.h"
-#include "../include/Energy/EnergyObjectiveCasadi.h"
 #include "../include/Energy/EnergyObjective.h"
 #include "../include/Energy/DynamicObjective.h"
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"

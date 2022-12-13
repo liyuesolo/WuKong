@@ -40,8 +40,8 @@ private:
     VectorXT boundary;
 
     VectorXT x;
-    MatrixXT dxdc;
-//    Eigen::SparseMatrix<double> dxdc;
+//    MatrixXT dxdc;
+    Eigen::SparseMatrix<double> dxdc;
     std::vector<MatrixXT> d2xdc2;
 
     // Computes list of indices of neighboring sites, ordered counterclockwise.

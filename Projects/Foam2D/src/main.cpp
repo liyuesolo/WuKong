@@ -7,6 +7,8 @@ int main() {
 
     viewer.plugins.push_back(&menu);
 
+    Eigen::setNbThreads(1);
+
     Foam2D foam;
     Foam2DApp foam2d_app(foam);
     foam2d_app.setViewer(viewer, menu);

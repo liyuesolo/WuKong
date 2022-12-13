@@ -81,7 +81,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             }
         }
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Area Weight", &foam.info->energy_area_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::InputDouble("Area Weight", &foam.info->energy_area_weight, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Length Weight", &foam.info->energy_length_weight, 0.0005f, 0.0005f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);

@@ -156,7 +156,6 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 } else {
                     neighborsClipped[i].insert(neighborsClipped[i].begin() + j + 1, (n1 - n_vtx + 1) % n_bdy + n_vtx);
                     clippedDegree++;
-//                    j++;
                 }
             }
         }
@@ -391,9 +390,8 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
         }
     }
 
-    gradient += (dOdx.transpose() * dxdc).transpose() + dOdc;
+    gradient += dxdc.transpose() * dOdx + dOdc;
 }
-
 
 void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &hessian,
                                       const std::vector<CellInfo> cellInfos) {
@@ -428,12 +426,13 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         MatrixXT hessian_local = MatrixXT::Zero(site.rows() + nodes.rows(), site.rows() + nodes.rows());
         function.addHessian(site, nodes, hessian_local, &cellInfos[cell]);
 
-        MatrixXT hessian_local_cc = hessian_local.block(0, 0, site.rows(), site.rows());
-        MatrixXT hessian_local_cx = hessian_local.block(0, site.rows(), site.rows(), nodes.rows());
-        MatrixXT hessian_local_xc = hessian_local.block(site.rows(), 0, nodes.rows(), site.rows());
-        MatrixXT hessian_local_xx = hessian_local.block(site.rows(), site.rows(), nodes.rows(), nodes.rows());
+        Eigen::Ref<MatrixXT> hessian_local_cc = hessian_local.block(0, 0, site.rows(), site.rows());
+        Eigen::Ref<MatrixXT> hessian_local_cx = hessian_local.block(0, site.rows(), site.rows(), nodes.rows());
+        Eigen::Ref<MatrixXT> hessian_local_xc = hessian_local.block(site.rows(), 0, nodes.rows(), site.rows());
+        Eigen::Ref<MatrixXT> hessian_local_xx = hessian_local.block(site.rows(), site.rows(), nodes.rows(),
+                                                                    nodes.rows());
 
-        hessian_cc.block(cell * dims, cell * dims, 2, 2) += hessian_local_cc;
+        hessian_cc.block<2, 2>(cell * dims, cell * dims) += hessian_local_cc;
         for (int i = 0; i < nodeIndices.rows(); i++) {
             hessian_cx.block<2, 2>(cell * dims, nodeIndices(i) * 2) += hessian_local_cx.block<2, 2>(0, i * 2);
             hessian_xc.block<2, 2>(nodeIndices(i) * 2, cell * dims) += hessian_local_xc.block<2, 2>(i * 2, 0);
@@ -444,10 +443,12 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         }
     }
 
-    hessian += hessian_cc;
-    hessian += hessian_cx * dxdc;
-    hessian += dxdc.transpose() * hessian_xc;
-    hessian += dxdc.transpose() * hessian_xx * dxdc;
+//    hessian += hessian_cc;
+//    hessian += hessian_cx * dxdc;
+//    hessian += dxdc.transpose() * hessian_xc;
+//    hessian += dxdc.transpose() * hessian_xx * dxdc;
+
+    hessian += hessian_cc + hessian_cx * dxdc + dxdc.transpose() * (hessian_xc + hessian_xx * dxdc);
 
     for (int ii = 0; ii < x.rows(); ii++) {
         IV3 face = dual.segment<3>(3 * ((int) (ii / 2)));
@@ -544,8 +545,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
         TV node;
         VectorXT gradX, gradY;
-        MatrixXT hessX, hessY;
-        getNodeWrapper(face[0], face[1], face[2], node, gradX, gradY, hessX, hessY);
+        getNodeWrapper(face[0], face[1], face[2], node, gradX, gradY, d2xdc2[i * 2 + 0], d2xdc2[i * 2 + 1]);
 
         x.segment<2>(i * 2) = node;
 
@@ -559,10 +559,6 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                 dxdc_dense(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
             }
         }
-
-        // Keep local Hessians.
-        d2xdc2[i * 2 + 0] = hessX;
-        d2xdc2[i * 2 + 1] = hessY;
     }
     dxdc = dxdc_dense.sparseView();
 

@@ -22,7 +22,7 @@ public:
     VectorXT c_fixed;
 
     VectorXT energy_area_targets;
-    double energy_area_weight = 0.1;
+    double energy_area_weight = 0.005;
     double energy_length_weight = 0.003;
     double energy_centroid_weight = 0.05;
     double energy_drag_target_weight = 0.00;

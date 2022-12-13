@@ -22,6 +22,7 @@ struct CellInfo {
     double target_area;
     bool agent = false;
     TV target_position;
+    VectorXT border_pix;
 };
 
 class CellFunction {
