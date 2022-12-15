@@ -6,16 +6,12 @@
 #include "../include/TrajectoryOpt/TrajectoryOptSolver.h"
 #include <thread>
 
-#include "../include/ImageMatch/ImageMatchObjective.h"
-#include "../include/ImageMatch/ImageMatchNLP.h"
 #include "../include/ImageMatch/ImageMatchSolver.h"
-#include "../include/ImageMatch/EnergyObjectiveAT.h"
-
 #include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
 
 Foam2D::Foam2D() {
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
-    minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-6, 15));
+    minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-10, 15));
 
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
@@ -40,6 +36,8 @@ void Foam2D::resetVertexParams() {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
     info->c_fixed = c.segment(info->n_free * dims, info->n_fixed * dims);
+
+    dynamicsInit();
 }
 
 void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
@@ -206,9 +204,6 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
 }
 
 void Foam2D::imageMatchOptimizeIPOPT() {
-    double dx = imageMatchObjective.dx;
-    double dy = imageMatchObjective.dy;
-
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0, info->n_free * dims);
@@ -326,6 +321,7 @@ void Foam2D::optimize(bool dynamic) {
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
 
     if (dynamic) {
+//        dynamicObjective.check_gradients(c_free);
         minimizers[opttype]->minimize(&dynamicObjective, c_free);
     } else {
 //        energyObjective.check_gradients(c_free);
@@ -502,30 +498,6 @@ static TV3 getColor(double area, double target) {
     g = fmin(fmax(g, 0), 1);
     b = fmin(fmax(b, 0), 1);
     return {r, g, b};
-}
-
-static VectorXT getCellAreas(VectorXT x, std::vector<std::vector<int>> cells, int n_cells) {
-    VectorXT A(n_cells);
-    for (int i = 0; i < n_cells; i++) {
-        if (cells[i].size() < 3) {
-            A(i) = 0;
-        } else {
-            vector<int> cell = cells[i];
-            double x1 = x(cell[0] * 2 + 0);
-            double y1 = x(cell[0] * 2 + 1);
-
-            double area = 0;
-            for (size_t j = 1; j < cell.size() - 1; j++) {
-                double x2 = x(cell[j] * 2 + 0);
-                double y2 = x(cell[j] * 2 + 1);
-                double x3 = x(cell[j + 1] * 2 + 0);
-                double y3 = x(cell[j + 1] * 2 + 1);
-                area += 0.5 * ((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1));
-            }
-            A(i) = area;
-        }
-    }
-    return A;
 }
 
 void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,

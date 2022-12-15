@@ -3,6 +3,9 @@
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
 
 class Power : public Tessellation {
+private:
+    double zmul = 0.5;
+
 public:
     Power() {}
 

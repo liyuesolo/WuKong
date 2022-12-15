@@ -15,6 +15,8 @@ public:
 
 public:
 
+    void check_gradients(const VectorXd &c_free) const;
+
     VectorXd get_a(const VectorXd &c_free) const;
 
     void newStep(const Eigen::VectorXd &c_free);
@@ -22,6 +24,8 @@ public:
     virtual double evaluate(const VectorXd &c_free) const;
 
     virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const;
+
+    VectorXd getGradient(const VectorXd &c_free) const;
 
     virtual void getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const;
 };

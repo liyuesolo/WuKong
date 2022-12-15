@@ -14,7 +14,7 @@
 class Foam2DInfo {
 public:
     std::vector<Tessellation *> tessellations;
-    int tessellation = 0;
+    int tessellation = 1;
 
     int n_free;
     int n_fixed;
@@ -27,9 +27,12 @@ public:
     double energy_centroid_weight = 0.05;
     double energy_drag_target_weight = 0.00;
 
-    double dynamics_m = 0.002;
-    double dynamics_eta = 0.01;
-    double dynamics_dt = 0.01;
+//    double dynamics_m = 0.002;
+//    double dynamics_eta = 0.01;
+//    double dynamics_dt = 0.01;
+    double dynamics_m = 0.001;
+    double dynamics_eta = 0.1;
+    double dynamics_dt = 0.003;
 
     int trajOpt_N = 50; // Number of time steps (states from 0 to N, inclusive)
     double trajOpt_target_weight = 0 * 1e-1;

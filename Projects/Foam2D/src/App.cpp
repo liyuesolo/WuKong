@@ -43,43 +43,45 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         ImGui::Text("Objective Function Parameters");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        if (generate_scenario_type != 3) {
-            if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
-                if (numAreaTargets < 1) numAreaTargets = 1;
 
-                VectorXd temp = areaTargets;
-                areaTargets.resize(numAreaTargets);
-                if (numAreaTargets < temp.rows()) {
-                    areaTargets = temp.segment(0, numAreaTargets);
-                } else {
-                    areaTargets.segment(0, temp.rows()) = temp;
-                    areaTargets.segment(temp.rows(), numAreaTargets - temp.rows()) =
-                            areaTargets(0) * VectorXd::Ones(numAreaTargets - temp.rows());
-                }
+        if (ImGui::InputInt("Area Targets", &numAreaTargets, 1, 1)) {
+            if (numAreaTargets < 1) numAreaTargets = 1;
 
-                for (int i = 0; i < foam.info->n_free; i++) {
-                    foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
-                }
-
-                updateViewerData(viewer);
+            VectorXd temp = areaTargets;
+            areaTargets.resize(numAreaTargets);
+            if (numAreaTargets < temp.rows()) {
+                areaTargets = temp.segment(0, numAreaTargets);
+            } else {
+                areaTargets.segment(0, temp.rows()) = temp;
+                areaTargets.segment(temp.rows(), numAreaTargets - temp.rows()) =
+                        areaTargets(0) * VectorXd::Ones(numAreaTargets - temp.rows());
             }
-            {
-                ImGui::Indent(10.0f);
-                for (int i = 0; i < numAreaTargets; i++) {
-                    ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-                    if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
-                                           &areaTargets(i),
-                                           0.005f, 0.005f, "%.3f")) {
-                        for (int i = 0; i < foam.info->n_free; i++) {
-                            foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
-                        }
 
-                        updateViewerData(viewer);
-                    }
-                }
-                ImGui::Indent(-10.0f);
+            for (int i = 0; i < foam.info->n_free; i++) {
+                foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
             }
+
+            updateViewerData(viewer);
         }
+        {
+            ImGui::Indent(10.0f);
+            for (int i = 0; i < numAreaTargets; i++) {
+                ImGui::Text(std::to_string(i).c_str());
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+                if (ImGui::InputDouble((std::string("##AreaTarget") + std::to_string(i)).c_str(),
+                                       &areaTargets(i),
+                                       0.005f, 0.005f, "%.3f")) {
+                    for (int j = 0; j < foam.info->n_free; j++) {
+                        foam.info->energy_area_targets(j) = areaTargets(j % numAreaTargets);
+                    }
+
+                    updateViewerData(viewer);
+                }
+            }
+            ImGui::Indent(-10.0f);
+        }
+
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Area Weight", &foam.info->energy_area_weight, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -327,8 +329,11 @@ void Foam2DApp::generateScenario() {
         default:
             std::cout << "Error: scenario not implemented!";
     }
-    
-    if (generate_scenario_type != 3) {
+
+    if (generate_scenario_type == 3){
+        numAreaTargets = foam.info->n_free;
+        areaTargets = foam.info->energy_area_targets;
+    } else {
         foam.info->energy_area_targets.resize(foam.info->n_free);
         for (int i = 0; i < foam.info->n_free; i++) {
             foam.info->energy_area_targets(i) = areaTargets(i % numAreaTargets);
