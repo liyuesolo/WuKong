@@ -39,6 +39,10 @@ public:
     double trajOpt_velocity_weight = 0 * 1e-3;
     double trajOpt_input_weight = 1e-2;
 
+    int imageMatch_N = 30;
+    double imageMatch_h0 = 0.003;
+    double imageMatch_hgrowth = 1.3;
+
     int selected = -1;
     TV selected_target_pos = {0, 0};
 

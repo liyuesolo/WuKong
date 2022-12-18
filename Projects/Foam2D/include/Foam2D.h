@@ -16,6 +16,7 @@
 #include "../include/ImageMatch/EnergyObjectiveAT.h"
 #include "../include/ImageMatch/ImageMatchObjective.h"
 #include "../include/ImageMatch/ImageMatchNLP.h"
+#include "../include/ImageMatch/ImageMatchNLP2.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 #include "../include/Foam2DInfo.h"
 
@@ -42,6 +43,7 @@ public:
     EnergyObjectiveAT energyObjectiveAT;
     ImageMatchObjective imageMatchObjective;
     ImageMatchNLP imageMatchNLP;
+    ImageMatchNLP2 imageMatchNLP2;
 
     VectorXT vertices;
     VectorXT params;
@@ -97,6 +99,8 @@ public:
     void trajectoryOptStop();
 
     void imageMatchOptimizeIPOPT();
+
+    void imageMatchOptimizeIPOPT2();
 
     void imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix);
 

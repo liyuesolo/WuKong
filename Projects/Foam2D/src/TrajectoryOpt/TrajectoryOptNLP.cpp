@@ -11,8 +11,8 @@ void TrajectoryOptNLP::check_gradients(const Eigen::VectorXd &x) const {
     double eps = 1e-4;
 
     int dims = 2 + info->getTessellation()->getNumVertexParams();
-    double nx = info->trajOpt_N * (info->n_free * dims + 2);
-    double ng = info->trajOpt_N * info->n_free * dims;
+    int nx = info->trajOpt_N * (info->n_free * dims + 2);
+    int ng = info->trajOpt_N * info->n_free * dims;
 
     VectorXT g = eval_g(x);
     Eigen::SparseMatrix<double> jac = eval_jac_g_sparsematrix(x);

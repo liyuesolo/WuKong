@@ -137,7 +137,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 updateViewerData(viewer);
             }
             if (ImGui::Button("Improve Match")) {
-                foam.imageMatchOptimizeIPOPT();
+                foam.imageMatchOptimizeIPOPT2();
+                numAreaTargets = foam.info->n_free;
+                areaTargets = foam.info->energy_area_targets;
                 updateViewerData(viewer);
             }
         } else {

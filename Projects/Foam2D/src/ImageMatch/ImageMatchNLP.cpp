@@ -4,8 +4,8 @@ void ImageMatchNLP::check_gradients(const Eigen::VectorXd &x) const {
     double eps = 1e-6;
 
     int dims = 2 + info->getTessellation()->getNumVertexParams();
-    double nx = info->n_free * (dims + 1);
-    double ng = info->n_free * dims;
+    int nx = info->n_free * (dims + 1);
+    int ng = info->n_free * dims;
 
     VectorXT g = eval_g(x);
     Eigen::SparseMatrix<double> jac = eval_jac_g_sparsematrix(x);

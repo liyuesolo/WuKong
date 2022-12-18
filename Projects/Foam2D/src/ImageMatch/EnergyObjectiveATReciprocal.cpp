@@ -1,4 +1,4 @@
-#include "../../include/ImageMatch/EnergyObjectiveAT.h"
+#include "../../include/ImageMatch/EnergyObjectiveATReciprocal.h"
 #include "../../include/Energy/CellFunctionEnergy.h"
 #include "../../include/Energy/CellFunctionArea.h"
 
@@ -18,7 +18,7 @@ static void printVectorXi(std::string name, const VectorXi &x, int start = 0, in
     std::cout << "]" << std::endl;
 }
 
-void EnergyObjectiveAT::preProcess(const VectorXd &x, std::vector<CellInfo> &cellInfos) const {
+void EnergyObjectiveATReciprocal::preProcess(const VectorXd &x, std::vector<CellInfo> &cellInfos) const {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXT c_free = x.segment(0, dims * info->n_free);
 
@@ -31,12 +31,12 @@ void EnergyObjectiveAT::preProcess(const VectorXd &x, std::vector<CellInfo> &cel
 
     cellInfos.resize(info->n_free);
     for (int i = 0; i < info->n_free; i++) {
-        cellInfos[i].target_area = x(c_free.rows() + i);
+        cellInfos[i].target_area = 1.0 / x(c_free.rows() + i);
         cellInfos[i].agent = false;
     }
 }
 
-double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
+double EnergyObjectiveATReciprocal::evaluate(const VectorXd &x) const {
     std::vector<CellInfo> cellInfos;
     preProcess(x, cellInfos);
 
@@ -55,11 +55,11 @@ double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
     return O;
 }
 
-void EnergyObjectiveAT::addGradientTo(const VectorXd &x, VectorXd &grad) const {
+void EnergyObjectiveATReciprocal::addGradientTo(const VectorXd &x, VectorXd &grad) const {
     grad += get_dOdx(x);
 }
 
-VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
+VectorXd EnergyObjectiveATReciprocal::get_dOdx(const VectorXd &x) const {
     std::vector<CellInfo> cellInfos;
     preProcess(x, cellInfos);
 
@@ -82,20 +82,19 @@ VectorXd EnergyObjectiveAT::get_dOdx(const VectorXd &x) const {
         info->getTessellation()->addSingleCellFunctionValue(cell, areaFunction, area, &cellInfos[cell]);
 
         double tau = x(c_free.rows() + cell);
-        gradient_tau(cell) += -2 * area * (area / tau - 1) / (tau * tau);
+        gradient_tau(cell) += info->energy_area_weight * 2 * area * (area * tau - 1);
     }
-    gradient_tau *= info->energy_area_weight;
 
     gradient << gradient_c, gradient_tau;
 
     return gradient;
 }
 
-void EnergyObjectiveAT::getHessian(const VectorXd &x, SparseMatrixd &hessian) const {
+void EnergyObjectiveATReciprocal::getHessian(const VectorXd &x, SparseMatrixd &hessian) const {
     hessian = get_d2Odx2(x);
 }
 
-Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) const {
+Eigen::SparseMatrix<double> EnergyObjectiveATReciprocal::get_d2Odx2(const VectorXd &x) const {
     std::vector<CellInfo> cellInfos;
     preProcess(x, cellInfos);
 
@@ -122,11 +121,9 @@ Eigen::SparseMatrix<double> EnergyObjectiveAT::get_d2Odx2(const VectorXd &x) con
         info->getTessellation()->addSingleCellFunctionGradient(cell, areaFunction, area_gradient, &cellInfos[cell]);
 
         double tau = x(c_free.rows() + cell);
-        hessian_tau_tau_diag(cell) += 2 * pow(area, 2) / pow(tau, 4) + 4 * area * (area / tau - 1) / pow(tau, 3);
-        hessian_tau_x.row(cell) += (-2 * area / pow(tau, 3) - 2 * (area / tau - 1) / pow(tau, 2)) * area_gradient;
+        hessian_tau_tau_diag(cell) += info->energy_area_weight * 2 * area * area;
+        hessian_tau_x.row(cell) += info->energy_area_weight * (4 * area * tau - 2) * area_gradient;
     }
-    hessian_tau_tau_diag *= info->energy_area_weight;
-    hessian_tau_x *= info->energy_area_weight;
 
     hessian.block(0, 0, c_free.rows(), c_free.rows()) = hessian_c;
     hessian.block(c_free.rows(), c_free.rows(), info->n_free, info->n_free) = hessian_tau_tau_diag.asDiagonal();

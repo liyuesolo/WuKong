@@ -23,11 +23,11 @@
 #include <iostream>
 #include <iomanip>
 
-#include "TrajectoryOptNLP.h"
+#include "ImageMatchNLP2.h"
 
-class TrajectoryOptSolver : public Ipopt::TNLP {
+class ImageMatchSolver2 : public Ipopt::TNLP {
 public:
-    TrajectoryOptNLP *trajectoryOptNlp;
+    ImageMatchNLP2 *imageMatchNLP;
 
     int nx = 0;
     int ng = 0;
@@ -36,11 +36,11 @@ public:
     double *primal;
 
     /** default constructor */
-    TrajectoryOptSolver(TrajectoryOptNLP *_trajectoryOptNlp)
-            : trajectoryOptNlp(_trajectoryOptNlp) {
-        N = trajectoryOptNlp->info->trajOpt_N;
-        nc = trajectoryOptNlp->c0.rows();
-        nx = N * (nc + 2);
+    ImageMatchSolver2(ImageMatchNLP2 *_imageMatchNlp)
+            : imageMatchNLP(_imageMatchNlp) {
+        N = imageMatchNLP->info->imageMatch_N;
+        nc = imageMatchNLP->c0.rows();
+        nx = N * nc + imageMatchNLP->info->n_free;
         primal = new double[nx];
         ng = N * nc;
         std::cout << "[ipopt]: #variable: " << nx << std::endl;
@@ -48,7 +48,7 @@ public:
 
 
     /** default destructor */
-    virtual ~TrajectoryOptSolver() {
+    virtual ~ImageMatchSolver2() {
         delete[] primal;
     }
 
@@ -64,7 +64,7 @@ public:
 
         n = nx;
         m = ng;
-        nnz_jac_g = (N * nc * nc) + (((N - 1) + (N - 2)) * nc) + (N * 2);
+        nnz_jac_g = (N * nc * nc) + (((N - 1) + (N - 2)) * nc) + (N * nc * imageMatchNLP->info->n_free);
 
         int cnt = 0;
         for (int row = 0; row < n; row++) {
@@ -78,8 +78,6 @@ public:
         return true;
     }
 
-#define IDX_C(k, i) (((k) * n_free + (i)) * dims)
-
     /** Method to return the bounds for my problem */
     virtual bool get_bounds_info(Ipopt::Index n,
                                  Ipopt::Number *x_l,
@@ -89,22 +87,29 @@ public:
                                  Ipopt::Number *g_u) {
         std::cout << "[ipopt] get bounds" << std::endl;
 
-        int dims = trajectoryOptNlp->info->getTessellation()->getNumVertexParams() + 2;
-        int n_free = trajectoryOptNlp->info->n_free;
+        int dims = imageMatchNLP->info->getTessellation()->getNumVertexParams() + 2;
+        int n_free = imageMatchNLP->info->n_free;
+
         tbb::parallel_for(0, n, [&](int i) {
             x_l[i] = -1e19;
             x_u[i] = 1e19;
+//            if (i % dims == 0 && i < N * nc) {
+//                x_l[i] = -imageMatchNLP->objective->dx;
+//                x_u[i] = imageMatchNLP->objective->dx;
+//            }
+//            if (i % dims == 1 && i < N * nc) {
+//                x_l[i] = -imageMatchNLP->objective->dy;
+//                x_u[i] = imageMatchNLP->objective->dy;
+//            }
+//            if (i % dims == 2 && i < n_free * dims) {
+//                x_l[i] = 0;
+//                x_u[i] = 0;
+//            }
+            if (i >= N * nc) {
+                x_l[i] = 0.9 * imageMatchNLP->info->energy_area_targets[i - N * nc];
+                x_u[i] = 1.1 * imageMatchNLP->info->energy_area_targets[i - N * nc];
+            }
         });
-        // Final state
-        x_l[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_u[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_l[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
-        x_u[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
-        // Second-to-last state
-        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
 
         tbb::parallel_for(0, m, [&](int i) {
             g_l[i] = 0;
@@ -130,7 +135,7 @@ public:
         assert(init_lambda == false);
 
         for (int i = 0; i < n; ++i) {
-            x[i] = trajectoryOptNlp->x_guess(i);
+            x[i] = imageMatchNLP->x_guess(i);
         }
 
         return true;
@@ -142,7 +147,7 @@ public:
                         bool new_x,
                         Ipopt::Number &obj_value) {
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        obj_value = trajectoryOptNlp->eval_f(x_eigen);
+        obj_value = imageMatchNLP->eval_f(x_eigen);
 
 //        std::cout << "[ipopt] eval_f: " << obj_value << std::endl;
         return true;
@@ -156,7 +161,7 @@ public:
 //        std::cout << "[ipopt] eval_grad" << std::endl;
 
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        Eigen::VectorXd grad_f_eigen = trajectoryOptNlp->eval_grad_f(x_eigen);
+        Eigen::VectorXd grad_f_eigen = imageMatchNLP->eval_grad_f(x_eigen);
 
         tbb::parallel_for(0, n, [&](int i) {
             grad_f[i] = grad_f_eigen(i);
@@ -173,7 +178,7 @@ public:
 //        std::cout << "[ipopt] eval_g" << std::endl;
 
         Eigen::Map<const VectorXd> x_eigen(x, n);
-        Eigen::VectorXd g_eigen = trajectoryOptNlp->eval_g(x_eigen);
+        Eigen::VectorXd g_eigen = imageMatchNLP->eval_g(x_eigen);
 
         tbb::parallel_for(0, m, [&](int i) {
             g[i] = g_eigen(i);
@@ -194,9 +199,10 @@ public:
                             Ipopt::Index *jCol,
                             Ipopt::Number *values) {
 //        std::cout << "[ipopt] eval_jac_g" << std::endl;
-        // Reminder: nnz_jac_g = (N * nc * nc) + ((2 * N - 3) * nc) + (N * 2);
+        // Reminder: nnz_jac_g = (N * nc * nc) + (((N - 1) + (N - 2)) * nc) + (N * nc * imageMatchNLP->info->n_free);
 
-        int dims = trajectoryOptNlp->info->getTessellation()->getNumVertexParams() + 2;
+        int dims = imageMatchNLP->info->getTessellation()->getNumVertexParams() + 2;
+        int n_free = imageMatchNLP->info->n_free;
         if (iRow != NULL) {
             assert(jCol != NULL);
             assert(values == NULL);
@@ -221,14 +227,13 @@ public:
                         iRow[idx] = k * nc + i;
                         jCol[idx] = (k - 2) * nc + i;
                     }
-                }
 
-                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp->info->selected;
-                jCol[idx] = N * nc + 2 * k;
-                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                iRow[idx] = k * nc + dims * trajectoryOptNlp->info->selected + 1;
-                jCol[idx] = N * nc + 2 * k + 1;
+                    for (int j = 0; j < n_free; j++) {
+                        idx = (N * nc * nc + (N - 1 + N - 2) * nc) + k * nc * n_free + i * n_free + j;
+                        iRow[idx] = i + k * nc;
+                        jCol[idx] = j + N * nc;
+                    }
+                }
             });
         } else {
             assert(jCol == NULL);
@@ -236,7 +241,7 @@ public:
 
             // Subsequent calls. Provide constraint Jacobian values.
             Eigen::Map<const VectorXd> x_eigen(x, n);
-            Eigen::SparseMatrix<double> jac_g_eigen = trajectoryOptNlp->eval_jac_g_sparsematrix(x_eigen);
+            Eigen::SparseMatrix<double> jac_g_eigen = imageMatchNLP->eval_jac_g_sparsematrix(x_eigen);
 
             tbb::parallel_for(0, N, [&](int k) {
                 int idx, rr, cc;
@@ -260,66 +265,18 @@ public:
                         cc = (k - 2) * nc + i;
                         values[idx] = jac_g_eigen.coeff(rr, cc);
                     }
-                }
 
-                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-                rr = k * nc + dims * trajectoryOptNlp->info->selected;
-                cc = N * nc + 2 * k;
-                values[idx] = jac_g_eigen.coeff(rr, cc);
-                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-                rr = k * nc + dims * trajectoryOptNlp->info->selected + 1;
-                cc = N * nc + 2 * k + 1;
-                values[idx] = jac_g_eigen.coeff(rr, cc);
+                    for (int j = 0; j < n_free; j++) {
+                        idx = (N * nc * nc + (N - 1 + N - 2) * nc) + k * nc * n_free + i * n_free + j;
+                        rr = i + k * nc;
+                        cc = j + N * nc;
+                        values[idx] = jac_g_eigen.coeff(rr, cc);
+                    }
+                }
             });
         }
 
         return true;
-
-//        assert(jac_g_eigen.size() == nele_jac);
-//        if (iRow != NULL) {
-//            assert(jCol != NULL);
-//            assert(values == NULL);
-//
-//            int dims = trajectoryOptNlp->energy->tessellation->getNumVertexParams() + 2;
-//            tbb::parallel_for(0, N, [&](int k) {
-//                int idx;
-//                for (int i = 0; i < nc; i++) {
-//                    for (int j = 0; j < nc; j++) {
-//                        idx = k * nc * nc + i * nc + j;
-//                        iRow[idx] = i + k * nc;
-//                        jCol[idx] = j + k * nc;
-//                    }
-//
-//                    if (k > 0) {
-//                        idx = N * nc * nc + (k - 1) * nc + i;
-//                        iRow[idx] = k * nc + i;
-//                        jCol[idx] = (k - 1) * nc + i;
-//                    }
-//                    if (k > 1) {
-//                        idx = N * nc * nc + (N - 1 + k - 2) * nc + i;
-//                        iRow[idx] = k * nc + i;
-//                        jCol[idx] = (k - 2) * nc + i;
-//                    }
-//                }
-//
-//                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k;
-//                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent;
-//                jCol[idx] = N * nc + 2 * k;
-//                idx = N * nc * nc + (2 * N - 3) * nc + 2 * k + 1;
-//                iRow[idx] = k * nc + dims * trajectoryOptNlp->agent + 1;
-//                jCol[idx] = N * nc + 2 * k + 1;
-//            });
-//        } else {
-//            assert(jCol == NULL);
-//            assert(values != NULL);
-//
-//            Eigen::Map<const VectorXd> x_eigen(x, n);
-//            std::vector<Eigen::Triplet<double>> jac_g_eigen = trajectoryOptNlp->eval_jac_g(x_eigen);
-//
-//            for (int i = 0; i < jac_g_eigen.size(); i++) {
-//                values[i] = jac_g_eigen[i].value();
-//            }
-//        }
     }
 
 //    /** Method to return:
@@ -382,7 +339,7 @@ public:
                                    const Ipopt::IpoptData *ip_data,
                                    Ipopt::IpoptCalculatedQuantities *ip_cq) {
         for (int i = 0; i < n; i++) {
-            trajectoryOptNlp->x_sol[i] = x[i];
+            imageMatchNLP->x_sol[i] = x[i];
         }
     }
     //@}
@@ -411,12 +368,14 @@ public:
                 tnlp_adapter->ResortX(*ip_data->curr()->x(), primal);
 
                 for (int i = 0; i < nx; i++) {
-                    trajectoryOptNlp->x_sol[i] = primal[i];
+                    imageMatchNLP->x_sol[i] = primal[i];
                 }
             }
         }
 
-        return !trajectoryOptNlp->early_stop;
+//        imageMatchNLP->check_gradients(imageMatchNLP->x_sol);
+
+        return true;
     }
 
 //    virtual bool intermediate_callback(Ipopt::AlgorithmMode mode,
@@ -482,8 +441,8 @@ private:
    */
     //@{
     //  IpoptSolver();
-    TrajectoryOptSolver(const TrajectoryOptSolver &);
+    ImageMatchSolver2(const ImageMatchSolver &);
 
-    TrajectoryOptSolver &operator=(const TrajectoryOptSolver &);
+    ImageMatchSolver2 &operator=(const ImageMatchSolver &);
     //@}
 };
