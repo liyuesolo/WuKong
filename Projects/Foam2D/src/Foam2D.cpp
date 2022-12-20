@@ -23,6 +23,7 @@ Foam2D::Foam2D() {
     trajOptNLP.info = info;
     energyObjectiveAT.info = info;
     imageMatchObjective.info = info;
+    imageMatchSAObjective.info = info;
     imageMatchNLP.info = info;
     imageMatchNLP2.info = info;
 
@@ -32,6 +33,7 @@ Foam2D::Foam2D() {
     imageMatchNLP.energy = &energyObjectiveAT;
     imageMatchNLP2.objective = &imageMatchObjective;
     imageMatchNLP2.energy = &energyObjectiveAT;
+    imageMatchSAObjective.energyObjectiveAT = &energyObjectiveAT;
 }
 
 void Foam2D::resetVertexParams() {
@@ -172,6 +174,7 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
         }
     }
     imageMatchObjective.pix = pix;
+    imageMatchSAObjective.pix = pix;
 
     // Get info for all pixels in order to set site positions and area targets.
     VectorXi count = VectorXi::Zero(info->n_free);
@@ -403,17 +406,30 @@ void Foam2D::dynamicsNewStep() {
     dynamicObjective.newStep(c_free);
 }
 
-void Foam2D::optimize(bool dynamic) {
+void Foam2D::optimize(int mode) {
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
 
-    if (dynamic) {
-//        dynamicObjective.check_gradients(c_free);
-        minimizers[opttype]->minimize(&dynamicObjective, c_free);
-    } else {
-//        energyObjective.check_gradients(c_free);
-        minimizers[opttype]->minimize(&energyObjective, c_free);
+    switch (mode) {
+        case 0:
+//            energyObjective.check_gradients(c_free);
+            minimizers[opttype]->minimize(&energyObjective, c_free);
+            break;
+        case 1:
+//            dynamicObjective.check_gradients(c_free);
+            minimizers[opttype]->minimize(&dynamicObjective, c_free);
+            break;
+        case 2:
+            imageMatchSAObjective.c0 = c_free;
+            // Only gradient descent available here.
+            minimizers[0]->minimize(&imageMatchSAObjective, info->energy_area_targets);
+            if(!imageMatchSAObjective.getC(info->energy_area_targets, c_free)){
+                std::cout << "Output invalid wowzers!!!" << std::endl << std::endl;
+            }
+            break;
+        default:
+            std::cout << "Invalid optimization mode?" << std::endl;
     }
 
     c.segment(0, info->n_free * (2 + info->getTessellation()->getNumVertexParams())) = c_free;
@@ -532,7 +548,7 @@ void Foam2D::trajectoryOptOptimizeIPOPT() {
     trajOptNLP.energy->info = info_;
 
 //    VectorXT gradientTest_x = trajOptNLP.x_guess;
-//    gradientTest_x.unaryExpr([](double x) {
+//    gradientTest_x = gradientTest_x.unaryExpr([](double x) {
 //        std::random_device rd;
 //        std::mt19937 gen(rd());
 //        std::uniform_real_distribution<double> dis(-1e-3, 1e-3);

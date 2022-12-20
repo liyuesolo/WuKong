@@ -38,6 +38,7 @@ public:
     double trajOpt_target_weight = 0 * 1e-1;
     double trajOpt_velocity_weight = 0 * 1e-3;
     double trajOpt_input_weight = 1e-2;
+    double trajOpt_stepsize_weight = 1e-2;
 
     int imageMatch_N = 30;
     double imageMatch_h0 = 0.003;

@@ -129,5 +129,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &c_free) 
     CellFunctionEnergy energy(info);
     info->getTessellation()->addFunctionHessian(energy, hessian, cellInfos);
 
+//    hessian += 1e-6 * VectorXT::Ones(c_free.rows()).asDiagonal();
+
     return hessian.sparseView();
 }

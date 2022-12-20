@@ -27,7 +27,7 @@ cv::Mat imageMatchSegmentation(const cv::Mat &src, cv::Mat &dst, cv::Mat &marker
     cv::ximgproc::thinning(image, skel);
     cv::bitwise_not(skel, skel);
     cv::cvtColor(skel, skel, cv::COLOR_GRAY2BGR);
-//    imshow("Skel", skel);
+//    imshow("Skeleton", skel);
 
     cv::bitwise_not(image, image);
 //    imshow("Peaks", image);
@@ -79,11 +79,12 @@ using namespace cv;
 cv::Mat imageMatchSegmentationTutorial(cv::Mat src) {
     // Show the source image
     imshow("Source Image", src);
+
     // Change the background from white to black, since that will help later to extract
     // better results during the use of Distance Transform
-    Mat mask;
-    inRange(src, Scalar(255, 255, 255), Scalar(255, 255, 255), mask);
-    src.setTo(Scalar(0, 0, 0), mask);
+//    Mat mask;
+//    inRange(src, Scalar(255, 255, 255), Scalar(255, 255, 255), mask);
+//    src.setTo(Scalar(0, 0, 0), mask);
     // Show output image
     imshow("Black Background Image", src);
     // Create a kernel that we will use to sharpen our image

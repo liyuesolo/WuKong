@@ -62,8 +62,15 @@ double TrajectoryOptNLP::eval_f(const Eigen::VectorXd &x) const {
     double target_f = (final_pos - info->selected_target_pos).squaredNorm();
     double velocity_f = (final_pos - final_pos2).squaredNorm() / (info->dynamics_dt * info->dynamics_dt);
     double input_f = x.segment(IDX_U(0), NX_U).squaredNorm();
+
+    double stepsize_f = 0;
+    stepsize_f += (x.segment<2>(IDX_C(0, info->selected)) - c0.segment<2>(IDX_C(0, info->selected))).squaredNorm();
+    for (int i = 0; i < N - 1; i++) {
+        stepsize_f += (x.segment<2>(IDX_C(i + 1, info->selected)) - x.segment<2>(IDX_C(i, info->selected))).squaredNorm();
+    }
+
     return info->trajOpt_target_weight * target_f + info->trajOpt_velocity_weight * velocity_f +
-           info->trajOpt_input_weight * input_f;
+           info->trajOpt_input_weight * input_f + info->trajOpt_stepsize_weight * stepsize_f;
 }
 
 VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
@@ -82,6 +89,16 @@ VectorXd TrajectoryOptNLP::eval_grad_f(const Eigen::VectorXd &x) const {
     grad_f.segment<2>(IDX_C(N - 2, info->selected)) =
             -2 * info->trajOpt_velocity_weight * (final_pos - final_pos2) / (info->dynamics_dt * info->dynamics_dt);
     grad_f.segment(IDX_U(0), NX_U) = info->trajOpt_input_weight * 2 * x.segment(IDX_U(0), NX_U);
+
+    grad_f.segment<2>(IDX_C(0, info->selected)) += 2 * info->trajOpt_stepsize_weight * (x.segment<2>(IDX_C(0, info->selected)) - c0.segment<2>(IDX_C(0, info->selected)));
+    for (int i = 0; i < N; i++) {
+        if (i != 0) {
+            grad_f.segment<2>(IDX_C(i, info->selected)) += 2 * info->trajOpt_stepsize_weight * (x.segment<2>(IDX_C(i, info->selected)) - x.segment<2>(IDX_C(i - 1, info->selected)));
+        }
+        if (i != N-1) {
+            grad_f.segment<2>(IDX_C(i, info->selected)) += -2 * info->trajOpt_stepsize_weight * (x.segment<2>(IDX_C(i+1, info->selected)) - x.segment<2>(IDX_C(i, info->selected)));
+        }
+    }
 
     return grad_f;
 }

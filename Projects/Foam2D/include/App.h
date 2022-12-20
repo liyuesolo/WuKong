@@ -44,6 +44,7 @@ public:
     bool trajOptOptimized = false;
     int trajOpt_frame = 0;
 
+    bool matchSA = false;
     bool matchShowImage = false;
     bool matchShowPixels = false;
     float matchImageW = 0.5;

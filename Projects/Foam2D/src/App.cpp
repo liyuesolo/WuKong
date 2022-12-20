@@ -136,11 +136,18 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             if (ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0)) {
                 updateViewerData(viewer);
             }
-            if (ImGui::Button("Improve Match")) {
+            if (ImGui::Button("Match IPOPT")) {
                 foam.imageMatchOptimizeIPOPT2();
                 numAreaTargets = foam.info->n_free;
                 areaTargets = foam.info->energy_area_targets;
                 updateViewerData(viewer);
+            }
+            if (ImGui::Button("Start SA")) {
+                dynamics = false;
+                matchSA = true;
+            }
+            if (ImGui::Button("Stop SA")) {
+                matchSA = false;
             }
         } else {
             matchShowImage = false;
@@ -168,6 +175,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::InputDouble("Tolerance", &dynamics_tol, 0.000001, 0.00001f, "%.6f");
         if (ImGui::Button("Start Dynamics")) {
             dynamics = true;
+            matchSA = false;
             foam.dynamicsInit();
         }
         if (ImGui::Button("Stop Dynamics")) {
@@ -181,6 +189,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         if (ImGui::Button("Set Initial State")) {
             optimize = false;
             dynamics = false;
+            matchSA = false;
             trajOptMode = true;
             trajOpt_frame = 0;
             foam.dynamicsInit();
@@ -277,9 +286,18 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                     }
                     updateViewerData(viewer);
                 } else if (optimize) {
-                    foam.optimize(dynamics);
-                    if (dynamics && foam.isConvergedDynamic(dynamics_tol)) {
-                        foam.dynamicsNewStep();
+                    if (!dynamics && !matchSA) {
+                        foam.optimize(0);
+                    }
+                    else if (dynamics) {
+                        foam.optimize(1);
+                        if (foam.isConvergedDynamic(dynamics_tol)) {
+                            foam.dynamicsNewStep();
+                        }
+                    }
+                    else if (matchSA) {
+                        foam.optimize(2);
+                        areaTargets = foam.info->energy_area_targets;
                     }
                     updateViewerData(viewer);
                 } else {
@@ -324,6 +342,7 @@ void Foam2DApp::generateScenario() {
             break;
         case 3:
             matchImage = cv::imread(matchSourcePath, cv::IMREAD_COLOR);
+//            imageMatchSegmentationTutorial(matchImage);
             imageMatchSegmentation(matchImage, matchSegmented, matchMarkers, matchColors);
             cv::cv2eigen(matchMarkers, markersEigen);
             foam.initImageMatch(markersEigen);

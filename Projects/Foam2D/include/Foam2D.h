@@ -15,6 +15,7 @@
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 #include "../include/ImageMatch/EnergyObjectiveAT.h"
 #include "../include/ImageMatch/ImageMatchObjective.h"
+#include "../include/ImageMatch/ImageMatchSAObjective.h"
 #include "../include/ImageMatch/ImageMatchNLP.h"
 #include "../include/ImageMatch/ImageMatchNLP2.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
@@ -42,6 +43,7 @@ public:
     TrajectoryOptNLP trajOptNLP;
     EnergyObjectiveAT energyObjectiveAT;
     ImageMatchObjective imageMatchObjective;
+    ImageMatchSAObjective imageMatchSAObjective;
     ImageMatchNLP imageMatchNLP;
     ImageMatchNLP2 imageMatchNLP2;
 
@@ -64,7 +66,7 @@ public:
 
     void dynamicsNewStep();
 
-    void optimize(bool dynamic);
+    void optimize(int mode);
 
     void moveSelectedVertex(const TV &pos);
 
