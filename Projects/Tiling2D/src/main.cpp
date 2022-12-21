@@ -60,7 +60,7 @@ int main(int argc, char** argv)
                 
             app.setViewer(viewer, menu);
             
-            viewer.launch();
+            viewer.launch(true, false, "WuKong viewer", 2000, 1600);
         };
         
         auto run3DSim = [&]()
@@ -170,20 +170,27 @@ int main(int argc, char** argv)
         auto generatePoisonDiskSample = [&]()
         {
             PoissonDisk pd;
+            // IH 01
             // Vector<T, 4> min_corner; min_corner << 0.05, 0.25, 0.05, 0.4;
             // Vector<T, 4> max_corner; max_corner << 0.3, 0.75, 0.15, 0.8;
-            Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.08, 0.4;
-            Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
+            // IH 03
+            // Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.08, 0.4;
+            // Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
+            // IH 21
+            Vector<T, 2> min_corner; min_corner << 0.05, 0.3;
+            Vector<T, 2> max_corner; max_corner << 0.3, 0.9;
+
             VectorXT samples;
-            pd.sampleNDBox<4>(min_corner, max_corner, 2000, samples);
-            std::ofstream out("PD_IH03.txt");
+            pd.sampleNDBox<2>(min_corner, max_corner, 400, samples);
+            std::ofstream out("PD_IH21.txt");
             out << "[ ";
-            for (int i = 0; i < 2000; i++)
+            int n_tiling_paras = 2;
+            for (int i = 0; i < 400; i++)
             {
                 out << "[";
-                for (int j = 0; j < 3; j++)
-                    out << std::setprecision(12) << samples[i * 4  + j] << ", ";
-                out << samples[i * 4  + 3] << "], " << std::endl;
+                for (int j = 0; j < n_tiling_paras - 1; j++)
+                    out << std::setprecision(12) << samples[i * n_tiling_paras  + j] << ", ";
+                out << samples[i * n_tiling_paras  + n_tiling_paras - 1] << "], " << std::endl;
             }
             out << "]";
             out.close();

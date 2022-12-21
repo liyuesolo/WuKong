@@ -173,10 +173,12 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if (ImGui::Button("GenerateNonPeriodicPatch", ImVec2(-1,0)))
         {
             // tiling.generateOneStructureSquarePatch(46, {0.2308, 0.5});
-            tiling.generateOneStructureSquarePatch(19, {0.15, 0.5});
+            // tiling.generateOneStructureSquarePatch(19, {0.15, 0.5});
+            tiling.generateOneStructureSquarePatch(0, {0.25779952, 0.49775489, 0.05995358, 0.74613666});
             updateScreen(viewer);
             viewer.core().align_camera_center(V);
-            viewer.core().camera_zoom *= 5.0;
+            viewer.core().viewport(2) = 2000; viewer.core().viewport(3) = 1600;
+            viewer.core().camera_zoom *= 8.0;
             
         }
         if (ImGui::Button("GenerateWithRotation", ImVec2(-1,0)))

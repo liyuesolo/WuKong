@@ -10,12 +10,12 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import Model
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 import keras.backend as K
 from Summary import *
-import tensorflow_probability as tfp
-import scipy
 
-n_input = 3
+tf.keras.backend.set_floatx('float32')
 
 def relativeL2(y_true, y_pred):
     if (y_true.shape[1] > 1):
@@ -29,38 +29,51 @@ def relativeL2(y_true, y_pred):
         y_pred_normalized = tf.divide(y_pred + K.epsilon(), y_true + K.epsilon())
         return K.mean(K.square(y_true_normalized - y_pred_normalized))
         
+
+def absL2(y_true, y_pred):
+    if (y_true.shape[1] > 1):
+        sigma_xx = K.mean(K.square((y_true[:, 0] - y_pred[:, 0])))
+        sigma_yy = K.mean(K.square((y_true[:, 1] - y_pred[:, 1])))
+        sigma_xy = K.mean(K.square((y_true[:, 2] - y_pred[:, 2])))
+        sigma_yx = K.mean(K.square((y_true[:, 3] - y_pred[:, 3])))
+        return sigma_xx + sigma_yy + sigma_xy + sigma_yx
+    else:
+        return K.mean(K.square((y_true - y_pred)))
+
 def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconverging_result = True):
     all_data = []
     all_label = [] 
     
     for line in open(filename).readlines():
-        item = [float(i) for i in line.strip().split(" ")[:]]
+        if len(line.strip().split(" ")) != 11 + n_tiling_params:
+            continue
+        if "\x00" in line:
+            continue
+        # exit(0)
+        item = [float(i) for i in line.strip().split(" ")]
         if (ignore_unconverging_result):
             if (item[-1] > 1e-6 or math.isnan(item[-1])):
                 continue
-            if (item[-5] < 1e-5 or item[-5] > 10):
+            if (item[-5] < 1e-6 or item[-5] > 10):
                 continue
             # if (np.abs(item[-3] - 1.001) < 1e-6 or np.abs(item[-3] - 0.999) < 1e-6):
-            #     continue
-            # if (np.abs(item[-2] - 1.001) < 1e-6 or np.abs(item[-2] - 0.999) < 1e-6):
             #     continue
         data = item[0:n_tiling_params]
         for i in range(2):
             data.append(item[n_tiling_params+i])
-        data.append(2.0 * item[n_tiling_params+2])
-        
-        label = item[n_tiling_params+3:n_tiling_params+7]
+        data.append(2.0*item[n_tiling_params+2])
+        # data.append(item[n_tiling_params+2])
+        label = item[n_tiling_params+3:n_tiling_params+5]
+        label.append(1.0 * item[n_tiling_params+5])
+        label.append(item[n_tiling_params+6])
         
         all_data.append(data)
         all_label.append(label)
         
     print("#valid data:{}".format(len(all_data)))
-    # exit(0)
-    start = 0
-    end = -1
-    all_data = np.array(all_data[start:]).astype(np.float32)
-    all_label = np.array(all_label[start:]).astype(np.float32) 
     
+    all_data = np.array(all_data[:]).astype(np.float32)
+    all_label = np.array(all_label[:]).astype(np.float32) 
     # all_data = np.array(all_data).astype(np.float32)
     # all_label = np.array(all_label).astype(np.float32)
     
@@ -89,13 +102,10 @@ def generator(train_data, train_label):
 
 @tf.function
 def trainStep(n_tiling_params, opt, lambdas, sigmas, model, train_vars):
-    # aux = tf.tile(tf.constant([[50, 14.2045, 50, 26, 0.48]]), tf.constant((lambdas.shape[0], 1), tf.int32))
     
     with tf.GradientTape(persistent=True) as tape:
         tape.watch(train_vars)
         tape.watch(lambdas)
-        # all_input = tf.concat((lambdas, aux), axis=-1)
-        
         psi = model(lambdas)
         dedlambda = tape.gradient(psi, lambdas)
         batch_dim = psi.shape[0]
@@ -117,32 +127,6 @@ def trainStep(n_tiling_params, opt, lambdas, sigmas, model, train_vars):
     return grad_loss, e_loss, gradNorm
 
 @tf.function
-def trainStepBatch(n_tiling_params, lambdas, sigmas, model, train_vars):
-    # aux = tf.tile(tf.constant([[50, 14.2045, 50, 26, 0.48]]), tf.constant((lambdas.shape[0], 1), tf.int32))
-    
-    with tf.GradientTape(persistent=True) as tape:
-        tape.watch(train_vars)
-        tape.watch(lambdas)
-        # all_input = tf.concat((lambdas, aux), axis=-1)
-        
-        psi = model(lambdas)
-        dedlambda = tape.gradient(psi, lambdas)
-        batch_dim = psi.shape[0]
-        stress_gt = tf.slice(sigmas, [0, 0], [batch_dim, n_input])
-        potential_gt = tf.slice(sigmas, [0, sigmas.shape[1]-1], [batch_dim, 1])
-        stress_pred = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, n_input])
-        
-        grad_loss = w_grad * relativeL2(stress_gt, stress_pred)
-        e_loss = w_e * relativeL2(potential_gt, psi)
-
-        loss = grad_loss + e_loss
-        
-    dLdw = tape.gradient(loss, train_vars)
-    
-    del tape
-    return grad_loss, e_loss, dLdw
-
-@tf.function
 def testStep(n_tiling_params, lambdas, sigmas, model):
     
     with tf.GradientTape() as tape:
@@ -150,9 +134,9 @@ def testStep(n_tiling_params, lambdas, sigmas, model):
         psi = model(lambdas)
         dedlambda = tape.gradient(psi, lambdas)
         batch_dim = psi.shape[0]
-        stress_gt = tf.slice(sigmas, [0, 0], [batch_dim, n_input])
+        stress_gt = tf.slice(sigmas, [0, 0], [batch_dim, 3])
         potential_gt = tf.slice(sigmas, [0, sigmas.shape[1]-1], [batch_dim, 1])
-        stress_pred = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, n_input])
+        stress_pred = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
         
         grad_loss = w_grad * relativeL2(stress_gt, stress_pred)
         e_loss = w_e * relativeL2(potential_gt, psi)
@@ -208,17 +192,17 @@ def plot(prefix, prediction, label, gt_only = False):
     plt.savefig(prefix + "_learned_sigma_xy.png", dpi = 300)
     plt.close()
 
-    indices = sorted(indices, key=cmp_to_key(cmp_sigma_yx))
-    sigma_gt_sorted = label[indices]
-    sigma_sorted = prediction[indices]
-    sigma_xy_gt = [sigma_gt_sorted[i][3] for i in range(len(label))]
-    sigma_xy = [sigma_sorted[i][3] for i in range(len(label))]
-    if not gt_only:
-        plt.plot(data_point, sigma_xy, linewidth=1.0, label = "Sigma_yx")
-    plt.plot(data_point, sigma_xy_gt, linewidth=1.0, label = "GT Sigma_yx")
-    plt.legend(loc="upper left")
-    plt.savefig(prefix + "_learned_sigma_yx.png", dpi = 300)
-    plt.close()
+    # indices = sorted(indices, key=cmp_to_key(cmp_sigma_yx))
+    # sigma_gt_sorted = label[indices]
+    # sigma_sorted = prediction[indices]
+    # sigma_xy_gt = [sigma_gt_sorted[i][3] for i in range(len(label))]
+    # sigma_xy = [sigma_sorted[i][3] for i in range(len(label))]
+    # if not gt_only:
+    #     plt.plot(data_point, sigma_xy, linewidth=1.0, label = "Sigma_yx")
+    # plt.plot(data_point, sigma_xy_gt, linewidth=1.0, label = "GT Sigma_yx")
+    # plt.legend(loc="upper left")
+    # plt.savefig(prefix + "_learned_sigma_yx.png", dpi = 300)
+    # plt.close()
 
 def plotPotentialClean(result_folder, n_tiling_params, tiling_params_and_strain, stress_and_potential, model, prefix = "strain_energy"):
     save_path = result_folder
@@ -236,12 +220,30 @@ def plotPotentialClean(result_folder, n_tiling_params, tiling_params_and_strain,
     def compare_energy(i, j):
         return potential_gt[i] - potential_gt[j]
     indices_sorted = sorted(indices, key=cmp_to_key(compare_energy))
-    print(np.max(potential_gt))
-    plt.plot(indices, potential_pred[indices_sorted], linewidth=0.8, label = "prediction")
-    plt.plot(indices, potential_gt[indices_sorted], linewidth=0.8, label = "GT")
+    
+    # print(potential_pred[indices_sorted][17500:17550])
+    # print(potential_gt[indices_sorted][17500:17550])
+    gt_sorted = potential_gt[indices_sorted]
+    pred_sorted = potential_pred[indices_sorted]
+    
+    plt.plot(indices, pred_sorted, linewidth=0.8, label = "prediction")
+    plt.plot(indices, gt_sorted, linewidth=0.8, label = "GT")
     plt.legend(loc="upper right")
     plt.savefig(save_path + prefix + ".png", dpi = 300)
     plt.close()
+
+    error = []
+    mse = 0.0
+    for i in range(len(potential_gt)):
+        error.append(np.abs(gt_sorted[i] - pred_sorted[i]) / gt_sorted[i])
+        mse += np.power((gt_sorted[i] - pred_sorted[i]) / gt_sorted[i], 2.0)
+    mse /= float(len(potential_gt))
+    print(mse)
+    plt.plot(indices, error, linewidth=0.8, label = "error")
+    
+    plt.savefig(save_path + prefix + "_error.png", dpi = 300)
+    plt.close()
+
 
 
 def plotPotentialPolar(n_tiling_params, result_folder, model_name):
@@ -308,17 +310,11 @@ def testMonotonic(n_tiling_params, count, model_name):
     save_path = os.path.join(current_dir, 'Models/' + str(count) + "/")
     model = buildSingleFamilyModelSeparateTilingParams(n_tiling_params)
     model.load_weights(save_path + model_name + '.tf')
-    test_data, test_label = loadDataSplitTest(n_tiling_params, "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/constant_energy.txt", False, False)
+    test_data, test_label = loadDataSplitTest(n_tiling_params, "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/monotonic_test.txt", True, False)
     # test_data, test_label = loadDataSplitTest(n_tiling_params, "/home/yueli/Documents/ETH/SandwichStructure/Server/strain_stress.txt", True, True)
     grad_loss, e_loss, sigma, energy = testStep(n_tiling_params, test_data, test_label, model)
-    # prefix = "monotonic"
-    # plotPotentialClean(save_path, n_tiling_params, test_data, test_label, model, prefix)
-    energy = energy.numpy()
-    
-    f = open("network.txt", "w+")
-    for i in range(len(energy)):
-        f.write(str(energy[i][0]) + " ")
-    f.close()
+    prefix = "monotonic"
+    plotPotentialClean(save_path, n_tiling_params, test_data, test_label, model, prefix)
 
 def validate(n_tiling_params, count, model_name, validation_data, validation_label):
     current_dir = os.path.dirname(os.path.realpath(__file__))
@@ -326,6 +322,7 @@ def validate(n_tiling_params, count, model_name, validation_data, validation_lab
     # model = loadSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + model_name + '.tf')
+    
     # model.save(save_path + model_name + '.h5')
     grad_loss, e_loss, sigma, energy = testStep(n_tiling_params,validation_data, validation_label, model)
     
@@ -334,28 +331,16 @@ def validate(n_tiling_params, count, model_name, validation_data, validation_lab
 
     print("validation loss grad: {} energy: {}".format(grad_loss, e_loss))
 
-def setVariables(variables, x):
-  shapes = [v.shape.as_list() for v in variables]
-  values = tf.split(x, [np.prod(s) for s in shapes])
-  for var, value in zip(variables, values):
-    var.assign(tf.reshape(tf.cast(value, var.dtype), var.shape))
-
-def getVariables(variables):
-  return np.concatenate([
-      v.numpy().ravel() if not isinstance(v, np.ndarray) else v.ravel()
-      for v in variables])
-
-
-def trainSumGrad(n_tiling_params, model_name, train_data, train_label, validation_data, validation_label):
-    batch_size = 60000
+def train(n_tiling_params, model_name, train_data, train_label, validation_data, validation_label):
+    batch_size = 80000 #float32
+    # batch_size = 40000 
     
     # model = buildSingleFamilyModel(n_tiling_params)
-    model = buildSingleFamilyModelSeparateTilingParams(n_tiling_params)
-    # model = buildSingleFamilyModelSeparateTilingParamsAux(n_tiling_params)
-    
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float32)
+    model.load_weights("/home/yueli/Documents/NeuralThickShell/Models/48/" + model_name + '.tf')
     train_vars = model.trainable_variables
     opt = Adam(learning_rate=1e-4)
-    max_iter = 80000
+    max_iter = 40000
 
     val_lambdasTF = tf.convert_to_tensor(validation_data)
     val_sigmasTF = tf.convert_to_tensor(validation_label)
@@ -375,94 +360,6 @@ def trainSumGrad(n_tiling_params, model_name, train_data, train_label, validatio
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     g_norm0 = 0
-    
-    for iteration in range(max_iter):
-        lambdas, sigmas = next(generator(train_data, train_label))
-        if batch_size == -1:
-            batch = 1
-        else:
-            batch = len(lambdas) // batch_size + 1
-        
-        mini_bacth_lambdas = lambdas[:batch_size]
-        mini_bacth_sigmas = sigmas[:batch_size]
-
-        lambdasTF = tf.convert_to_tensor(mini_bacth_lambdas)
-        sigmasTF = tf.convert_to_tensor(mini_bacth_sigmas)
-        
-        train_loss_grad, train_loss_e, train_grad = trainStepBatch(n_tiling_params, lambdasTF, sigmasTF, model, train_vars)
-
-        for i in range(1, batch):
-            mini_bacth_lambdas = lambdas[i * batch_size:(i+1) * batch_size]
-            mini_bacth_sigmas = sigmas[i * batch_size:(i+1) * batch_size]
-
-            lambdasTF = tf.convert_to_tensor(mini_bacth_lambdas)
-            sigmasTF = tf.convert_to_tensor(mini_bacth_sigmas)
-            
-            grad_loss_batch, e_loss_batch, grad_batch = trainStepBatch(n_tiling_params, lambdasTF, sigmasTF, model, train_vars)
-            
-            train_grad += grad_batch
-
-            train_loss_grad += grad_loss_batch
-            train_loss_e += e_loss_batch
-
-        opt.apply_gradients(zip(train_grad, train_vars))
-        gradNorm = tf.math.sqrt(tf.reduce_sum([tf.reduce_sum(gi*gi) for gi in train_grad]))
-        if (iteration == 0):
-            g_norm0 = gradNorm
-        validation_loss_grad, validation_loss_e, _, _ = testStep(n_tiling_params, val_lambdasTF, val_sigmasTF, model)
-        
-        losses[0].append(train_loss_grad + train_loss_e)
-        losses[1].append(validation_loss_grad + validation_loss_e)
-        print("epoch: {}/{} train_loss_grad: {} train_loss e: {}, validation_loss_grad:{} loss_e:{} |g|: {}, |g_init|: {} ".format(iteration, max_iter, train_loss_grad, train_loss_e, \
-                         validation_loss_grad, validation_loss_e, \
-                        gradNorm, g_norm0))
-        summary.saveToTensorboard(train_loss_grad, train_loss_e, validation_loss_grad, validation_loss_e, iteration)
-        if iteration % 10000 == 0:
-            model.save_weights(save_path + model_name + '.tf')
-    
-    
-    model.save_weights(save_path + model_name + '.tf')
-    # fourier_B = model.get_config()['layers'][-1]['config']['B']
-    # np.reshape(fourier_B,-1).astype(float).tofile(os.path.join(save_path, model_name + "B.dat"))
-    idx = [i for i in range(len(losses[0]))]
-    plt.plot(idx, losses[0], label = "train_loss")
-    plt.plot(idx, losses[1], label = "validation_loss")
-    plt.legend(loc="upper left")
-    plt.savefig(save_path + model_name + "_log.png", dpi = 300)
-    plt.close()
-
-
-def train(n_tiling_params, model_name, train_data, train_label, validation_data, validation_label):
-    batch_size = np.minimum(50000, len(train_data))
-    print("batch size: {}".format(batch_size))
-    # model = buildSingleFamilyModel(n_tiling_params)
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    # model = buildSingleFamilyModelSeparateTilingParamsAux(n_tiling_params)
-    
-    train_vars = model.trainable_variables
-    opt = Adam(learning_rate=1e-4)
-    max_iter = 80000
-
-    val_lambdasTF = tf.convert_to_tensor(validation_data)
-    val_sigmasTF = tf.convert_to_tensor(validation_label)
-
-    losses = [[], []]
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    # model.load_weights("/home/yueli/Documents/ETH/WuKong/Projects/Tilisng2D/python/Models/67/" + model_name + '.tf')
-    count = 0
-    with open('counter.txt', 'r') as f:
-        count = int(f.read().splitlines()[-1])
-    f = open("counter.txt", "w+")
-    f.write(str(count+1))
-    f.close()
-    summary = Summary("./Logs/" + str(count) + "/")
-    
-    save_path = os.path.join(current_dir, 'Models/' + str(count) + "/")
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
-    g_norm0 = 0
-    iter = 0
-    log_txt = open(save_path + "/log.txt", "w+")
     for iteration in range(max_iter):
         lambdas, sigmas = next(generator(train_data, train_label))
         if batch_size == -1:
@@ -488,18 +385,14 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
         if (iteration == 0):
             g_norm0 = g_norm_sum
         validation_loss_grad, validation_loss_e, _, _ = testStep(n_tiling_params, val_lambdasTF, val_sigmasTF, model)
-        
         losses[0].append(train_loss_grad + train_loss_e)
         losses[1].append(validation_loss_grad + validation_loss_e)
-        
-        log_txt.write("iter " + str(iteration) + " " + str(train_loss_grad.numpy()) + " " + str(train_loss_e.numpy()) + " " + str(validation_loss_grad.numpy()) + " " + str(validation_loss_e.numpy()) + " " + str(g_norm_sum.numpy()) + "\n")
         print("epoch: {}/{} train_loss_grad: {} train_loss e: {}, validation_loss_grad:{} loss_e:{} |g|: {}, |g_init|: {} ".format(iteration, max_iter, train_loss_grad, train_loss_e, \
                          validation_loss_grad, validation_loss_e, \
                         g_norm_sum, g_norm0))
         summary.saveToTensorboard(train_loss_grad, train_loss_e, validation_loss_grad, validation_loss_e, iteration)
-        if iteration % 10000 ==0:
+        if iteration % 5000 == 0:
             model.save_weights(save_path + model_name + '.tf')
-
     
     
     model.save_weights(save_path + model_name + '.tf')
@@ -517,7 +410,7 @@ def test(n_tiling_params, model_name, test_data, test_label):
     test_dataTF = tf.convert_to_tensor(test_data)
     test_labelTF = tf.convert_to_tensor(test_label)
     save_path = "./"
-    B = np.fromfile(os.path.join(save_path, model_name+"B.dat"), dtype=float)
+    
     model = loadSingleFamilyModel(n_tiling_params)
     model.load_weights(model_name+'.tf')
     
@@ -528,14 +421,15 @@ def test(n_tiling_params, model_name, test_data, test_label):
     
     
 if __name__ == "__main__":
-    n_tiling_params = 2
     
-    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH21/all_data_IH21_shuffled.txt"  
-    # full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH50_shuffled.txt"
-    # full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH01/all_data_IH01_shuffled.txt"
-    # full_data = "./stvk_gt.txt"  
+    n_tiling_params = 4
+    # full_data = "all_data_IH21_shuffled.txt"
+    # full_data = "all_data_IH50_shuffled.txt"
+    full_data = "all_data_IH01_shuffled.txt"
+    # full_data = "all_data_IH67_shuffled.txt"
+    # full_data = "all_data_IH28_shuffled.txt"
     
-    data_all, label_all = loadDataSplitTest(n_tiling_params, full_data, False, True)
+    data_all, label_all = loadDataSplitTest(n_tiling_params, full_data, False, True)    
     
 
     five_percent = int(len(data_all) * 0.05)
@@ -551,13 +445,16 @@ if __name__ == "__main__":
     # train_label = label_all
     # validation_label = label_all
 
-    model_name = "IH21"
-        
+    test_data = []
+    test_label = [] 
+    model_name = "IH01"
+    
+    
     train(n_tiling_params, model_name, 
         train_data, train_label, validation_data, validation_label)
-    # validate(n_tiling_params, 334, 
-    #     model_name, train_data, train_label)
+    # validate(n_tiling_params, 32, 
+    #     model_name, validation_data, validation_label)
     # testUniAxial(n_tiling_params, 20, "full40k")
-    # testMonotonic(n_tiling_params, 52, "full40k")
+    # testMonotonic(n_tiling_params, 81, "IH50")
     # plotPotentialPolar(n_tiling_params, result_folder, model_name)
     

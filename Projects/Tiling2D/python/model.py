@@ -202,11 +202,11 @@ def buildConstitutiveModel(n_strain_entry):
     num_hidden = 256
     # x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(inputS)
     # x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
-    x = Dense(num_hidden, activation='tanh')(inputS)
+    x = Dense(num_hidden, activation=tf.keras.activations.softplus)(inputS)
     for _ in range(5):
         # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
         # x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
-        x = Dense(num_hidden, activation='tanh')(x)
+        x = Dense(num_hidden, activation=tf.keras.activations.softplus)(x)
     # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(x)
     output = Dense(1, activation=tf.keras.activations.softplus)(x)
     model = Model(inputS, output)
@@ -227,6 +227,27 @@ def buildSingleFamilyModelSeparateTilingParamsSwish(num_params, data_type=tf.flo
     z = Concatenate()([x, y]) 
     for i in range(5):
         z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
+    model = Model(inputS, output)
+    return model
+
+def buildSingleFamilyModelSeparateTilingParamsSoftplus(num_params, data_type=tf.float32):
+    
+    inputS = Input(shape=(3 + num_params,),dtype=data_type, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 3)(inputS)
+    num_hidden = 256
+    x = Dense(num_hidden, activation=tf.keras.activations.softplus)(tiling_params)
+    x = Dense(num_hidden, activation=tf.keras.activations.softplus)(x)
+    x = Dense(num_hidden, activation=tf.keras.activations.softplus)(x)
+    y = Dense(num_hidden, activation=tf.keras.activations.softplus)(strain)
+    y = Dense(num_hidden, activation=tf.keras.activations.softplus)(y)
+    y = Dense(num_hidden, activation=tf.keras.activations.softplus)(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = Dense(num_hidden, activation=tf.keras.activations.softplus)(z)
     output = Dense(1, activation=tf.keras.activations.softplus)(z)
     
 

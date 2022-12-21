@@ -3,6 +3,48 @@ import numpy as np
 
 log_file = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/lbfgsb_log_correct_test3.txt"
 
+def plotTrainingCurve():
+    log = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/Models/350/log.txt"
+    iterations = []
+    e_losses_train = []
+    g_losses_train = []
+    e_losses_val = []
+    g_losses_val = []
+    log_scale = True
+    for line in open(log).readlines():
+        item = [float(i) for i in line.strip().split(" ")[1:]]
+        iterations.append(int(item[0]))
+        if log_scale:
+            g_losses_train.append(np.log(0.0+item[1]))
+            e_losses_train.append(np.log(0.0+item[2]))
+            g_losses_val.append(np.log(0.0+item[3]))
+            e_losses_val.append(np.log(0.0+item[4]))
+        else:
+            g_losses_train.append(item[1])
+            e_losses_train.append(item[2])
+            g_losses_val.append(item[3])
+            e_losses_val.append(item[4])
+
+    plt.plot(iterations, g_losses_train, linewidth=2.0, label = "gradient loss train")
+    plt.plot(iterations, e_losses_train, linewidth=2.0, label = "energy loss train")
+    plt.plot(iterations, g_losses_val, linewidth=2.0, label = "gradient loss validation")
+    plt.plot(iterations, e_losses_val, linewidth=2.0, label = "energy loss validation")
+    plt.legend()
+    plt.savefig("training.png", dpi=300)
+    plt.close()
+    plt.plot(iterations, g_losses_train, linewidth=2.0)
+    plt.savefig("train_g_loss.png", dpi=300)
+    plt.close()
+    plt.plot(iterations, e_losses_train, linewidth=2.0)
+    plt.savefig("train_e_loss.png", dpi=300)
+    plt.close()
+    plt.plot(iterations, g_losses_val, linewidth=2.0)
+    plt.savefig("val_g_loss.png", dpi=300)
+    plt.close()
+    plt.plot(iterations, e_losses_val, linewidth=2.0)
+    plt.savefig("val_e_loss.png", dpi=300)
+    plt.close()
+
 def plotOpt():
     iterations = []
     residual_norms = []
@@ -106,25 +148,11 @@ def plotSmallRangeLarge():
     plt.savefig("energy_small_large_x_both.png", figsize=(8, 6), dpi=300)
     plt.close()
 
-plotLargeRange()
+
+
+plotTrainingCurve()
+# plotLargeRange()
 # plotSmallRange()
 # plotTinyRange()
 # plotSmallRangeLarge()
 # plotLargeRange()
-# def plotStressStrain():
-#     stress_targets = [-0.0062526,  0.0239273,  0.0717616]
-#     strain_points = [-0.025, 0.025, 0.085]
-#     stress_init = [-0.00679526,  -0.00502051,   -0.0030519, -0.000819364,   0.00177995,   0.00489931,    0.0087674,    0.0137137,    0.0201606,    0.0285033]
-#     strain_samples = [-0.05, -0.035, -0.02, -0.005, 0.01, 0.025, 0.04, 0.055, 0.07, 0.085]
-#     stress_opt = [-0.0173978,  -0.0145991, -0.00944198, -0.00263387,  0.00583585,   0.0160394,    0.027973,   0.0415263,   0.0564564,   0.0723998]
-#     stress_opt_LBFGS = [-0.0166228, -0.0135108, -0.00871856, -0.00245242, 0.00551745, 0.0154674, 0.0275296, 0.0415726, 0.0571899, 0.0738213]
-#     plt.plot(strain_samples, stress_init, label="stress initial")
-#     plt.plot(strain_samples, stress_opt_LBFGS, label = "stress optimized")
-#     plt.scatter(strain_points, stress_targets, s=4.0)
-#     plt.legend(loc="upper left")
-#     plt.xlabel("strain")
-#     plt.ylabel("stress")
-#     plt.savefig("uniaxial_stress_FD_LBFGS.png", dpi=300)
-#     plt.close()
-
-# plotStressStrain()

@@ -79,7 +79,7 @@ def valueGradHessian(n_tiling_params, inputs, model):
     return psi, stress, C
 
 @tf.function
-def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
+def computeDirectionalPoissonRatio(n_tiling_params, inputs, thetas, model):
     batch_dim = inputs.shape[0]
     thetas = tf.expand_dims(thetas, axis=1)
     
@@ -87,20 +87,25 @@ def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
                         tf.math.sin(thetas) * tf.math.sin(thetas), 
                         tf.math.sin(thetas) * tf.math.cos(thetas)), 
                         axis = 1)
+    n_voigt = tf.concat((tf.math.sin(thetas) * tf.math.sin(thetas), 
+                        tf.math.cos(thetas) * tf.math.cos(thetas), 
+                        -tf.math.sin(thetas) * tf.math.cos(thetas)), 
+                        axis = 1)
+
     psi, stress, C = valueGradHessian(n_tiling_params, inputs, model)
     
     Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
+    Sn = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), n_voigt[0, :])
     dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
+    dTSn = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sn, 1), axis=0)
+    nu = -tf.divide(dTSn, dTSd)
     
     for i in range(1, C.shape[0]):
-        
         Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
-        dTSd = tf.concat((tf.expand_dims(tf.tensordot(d_voigt[i, :], Sd, 1), axis=0), dTSd), 0)
+        Sn = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), n_voigt[i, :])
         
-    stiffness = tf.squeeze(tf.math.divide(tf.ones((batch_dim), dtype=tf.float64), tf.expand_dims(dTSd, axis=0)))
-    # stiffness2 = tf.constant(2.0) * tf.math.divide(tf.squeeze(psi), tf.constant(0.1) * tf.ones((batch_dim)))
-    
-    return stiffness, stiffness
+        nu = tf.concat((tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0), nu), 0)
+    return tf.squeeze(nu)
 
 def computeUniaxialStrainThetaBatch(n_tiling_params, strain, 
     thetas, model, tiling_params, verbose = True):
@@ -225,119 +230,6 @@ def toPolarData(half):
     return full
 
 
-
-def optimizeStiffnessProfile():
-    filename = "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/sample_theta_1.010000_2.txt"
-    all_data = []
-    all_label = [] 
-    n_tiling_params = 2
-    thetas = []
-    stiffness_gt = []
-    for line in open(filename).readlines():
-        item = [float(i) for i in line.strip().split(" ")]
-    
-        data = item[0:n_tiling_params]
-        for i in range(2):
-            data.append(item[n_tiling_params+i])
-        data.append(2.0 * item[n_tiling_params+2]) 
-        thetas.append(item[-4])
-
-        
-        label = item[n_tiling_params+3:n_tiling_params+6]
-        label.append(item[-5])
-        
-        all_data.append(data)
-        all_label.append(label)
-        stiffness_gt.append(item[-6])
-    
-    thetas = np.array(thetas[0:]).astype(np.float32)
-    all_data = np.array(all_data[0:]).astype(np.float32)
-    all_label = np.array(all_label[0:]).astype(np.float32) 
-    stiffness_gt = np.array(stiffness_gt).astype(np.float32)
-
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
-    
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH21" + '.tf')
-    stiffness, stiffness2 = computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(all_data), 
-        tf.convert_to_tensor(thetas), model)
-    stiffness = stiffness.numpy()
-    stiffness2 = stiffness2.numpy()
-    
-    energy_pred, grad_pred, C = valueGradHessian(n_tiling_params, tf.convert_to_tensor(all_data), model)
-
-    n_sp_theta = len(thetas)
-    # stiffness_gt = all_label[:, -1]
-    # stiffness_gt = []
-    stress_gt = []
-    stress_pred = []
-    
-    for i in range(n_sp_theta):
-        d = np.array([np.cos(thetas[i]), np.sin(thetas[i])])
-        stress_tensor = np.reshape(np.array(
-                        [all_label[i][0], all_label[i][2],
-                        all_label[i][2], all_label[i][1]]), 
-                        (2, 2))
-        stress_tensor_pred = np.reshape(np.array(
-                        [grad_pred[i][0], grad_pred[i][2],
-                        grad_pred[i][2], grad_pred[i][1]]), 
-                        (2, 2))
-        stress_d_pred = np.dot(d, np.matmul(stress_tensor_pred, d))
-        stress_d = np.dot(d, np.matmul(stress_tensor, d))
-        stress_gt.append(stress_d)
-        stress_pred.append(stress_d_pred)
-
-        strain_tensor = np.reshape(np.array(
-                        [all_data[i][0], 0.5 * all_data[i][2],
-                        0.5 * all_data[i][2], all_data[i][1]]), 
-                        (2, 2))
-        strain_d = np.dot(d, np.matmul(strain_tensor, d))
-        # stiffness_gt.append(stress_d/strain_d)
-
-    for i in range(n_sp_theta):
-        thetas= np.append(thetas, thetas[i] - np.pi)
-        stiffness = np.append(stiffness, stiffness[i])
-        stiffness2 = np.append(stiffness2, stiffness2[i])
-        stiffness_gt = np.append(stiffness_gt, stiffness_gt[i])
-
-    thetas = np.append(thetas, thetas[0])
-    stiffness = np.append(stiffness, stiffness[0])
-    stiffness2 = np.append(stiffness2, stiffness2[0])
-    stiffness_gt = np.append(stiffness_gt, stiffness_gt[0])
-    plt.polar(thetas, stiffness, label = "tensor", linewidth=3.0)
-    # plt.polar(thetas, stiffness_gt, label = "stiffness_gt", linewidth=3.0)
-    # plt.polar(thetas, stiffness2, label = "2Psi/strain^2", linewidth=3.0)
-    plt.legend(loc="upper left")
-    # plt.show()
-    plt.savefig(save_path + "stiffness.png", dpi=300)
-    plt.close()
-
-    energy_pred = toPolarData(energy_pred)
-    energy_gt = all_label[:, -1]
-    energy_gt = toPolarData(energy_gt)
-    plt.polar(thetas, energy_pred, label = "energy_pred", linewidth=3.0)
-    plt.polar(thetas, energy_gt, label = "energy_gt", linewidth=3.0)
-    plt.legend(loc="upper left")
-    plt.savefig(save_path + "energy_check.png", dpi=300)
-    plt.close()
-
-    stress_pred = toPolarData(stress_pred)
-    stress_gt = toPolarData(stress_gt)
-    plt.polar(thetas, stress_pred, label = "stress_pred", linewidth=3.0)
-    plt.polar(thetas, stress_gt, label = "stress_gt", linewidth=3.0)
-    plt.legend(loc="upper left")
-    plt.savefig(save_path + "stress_check.png", dpi=300)
-    plt.close()
-
-    plt.polar(thetas, stiffness, label = "stiffness_pred", linewidth=3.0)
-    plt.polar(thetas, stiffness2, label = "2Psi/strain^2", linewidth=3.0)
-    # plt.polar(thetas, stiffness_gt, label = "stiffness_gt", linewidth=3.0)
-    plt.legend(loc="upper left")
-    plt.savefig(save_path + "hessian_check.png", dpi=300)
-    plt.close()
-
-
 def loadModel(IH):
     current_dir = os.path.dirname(os.path.realpath(__file__))
     if IH == 50:
@@ -350,7 +242,7 @@ def loadModel(IH):
     model.load_weights(save_path + "IH" + str(IH) + '.tf')
     return model
 
-def computeStiffness():
+def computePoissonRatio():
     bounds = []
     IH = 1
     n_sp_theta = 50
@@ -406,8 +298,8 @@ def computeStiffness():
         bounds.append([0.25, 0.75])
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
-        # ti = np.array([0.1224, 0.5, 0.1434, 0.625])
-        ti = np.array([0.1224, 0.6, 0.13, 0.625])
+        ti = np.array([0.1224, 0.5, 0.1434, 0.625])
+        # ti = np.array([0.1224, 0.6, 0.13, 0.625])
         # ti_target = np.array([0.6, 0.6])
         idx = np.arange(0, len(thetas), 5)
 
@@ -432,17 +324,17 @@ def computeStiffness():
     ti_batch = np.tile(ti, (batch_dim, 1))
     # uniaxial_strain = np.reshape(uniaxial_strain, (batch_dim, 3))
     nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
-    stiffness, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+    nu = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
                 
     # stiffness = stiffness.numpy()
     for i in range(n_sp_theta):
         thetas= np.append(thetas, thetas[i] - np.pi)
-        stiffness = np.append(stiffness, stiffness[i])
+        nu = np.append(nu, nu[i])
     thetas = np.append(thetas, thetas[0])
-    stiffness = np.append(stiffness, stiffness[0])
-    plt.polar(thetas, stiffness, label = "tensor", linewidth=3.0)
-    plt.savefig("stiffness.png", dpi=300)
+    nu = np.append(nu, nu[0])
+    plt.polar(thetas, nu, label = "tensor", linewidth=3.0)
+    plt.savefig("poisson_ratio.png", dpi=300)
     plt.close()
 
 def computeStiffnessBatch():
@@ -602,8 +494,9 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
     return result.x, dqdp
 
 
+
 @tf.function
-def objGradStiffness(ti, uniaxial_strain, thetas, model):
+def objGradPoissonRatio(ti, uniaxial_strain, thetas, model):
     batch_dim = uniaxial_strain.shape[0]
     
     thetas = tf.expand_dims(thetas, axis=1)
@@ -611,6 +504,10 @@ def objGradStiffness(ti, uniaxial_strain, thetas, model):
     d_voigt = tf.concat((tf.math.cos(thetas) * tf.math.cos(thetas), 
                         tf.math.sin(thetas) * tf.math.sin(thetas), 
                         tf.math.sin(thetas) * tf.math.cos(thetas)), 
+                        axis = 1)
+    n_voigt = tf.concat((tf.math.sin(thetas) * tf.math.sin(thetas), 
+                        tf.math.cos(thetas) * tf.math.cos(thetas), 
+                        -tf.math.sin(thetas) * tf.math.cos(thetas)), 
                         axis = 1)
 
     ti = tf.expand_dims(ti, 0)
@@ -632,22 +529,25 @@ def objGradStiffness(ti, uniaxial_strain, thetas, model):
         
         Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
         dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
-        
+        Sn = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), n_voigt[0, :])
+        dTSn = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sn, 1), axis=0)
+        nu = -tf.divide(dTSn, dTSd)
         for i in range(1, C.shape[0]):
             
             Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
-            dTSd = tf.concat((tf.expand_dims(tf.tensordot(d_voigt[i, :], Sd, 1), axis=0), dTSd), 0)
-            
-        stiffness = tf.squeeze(tf.math.divide(tf.ones((batch_dim), dtype=tf.float64), tf.expand_dims(dTSd, axis=0)))
+            Sn = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), n_voigt[i, :])
+        
+            nu = tf.concat((tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0), nu), 0)
     
-    grad = tape_outer_outer.jacobian(stiffness, ti)
-    dOdE = tape_outer_outer.jacobian(stiffness, uniaxial_strain)
+    
+    grad = tape_outer_outer.jacobian(nu, ti)
+    dOdE = tape_outer_outer.jacobian(nu, uniaxial_strain)
     del tape
     del tape_outer
     del tape_outer_outer
-    return tf.squeeze(stiffness), tf.squeeze(grad), tf.squeeze(dOdE)
+    return tf.squeeze(nu), tf.squeeze(grad), tf.squeeze(dOdE)
 
-def generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model):
+def generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti, model):
     uniaxial_strain = []
     for theta in thetas:
         uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, ti, False)
@@ -658,12 +558,12 @@ def generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model):
     ti_batch = np.tile(ti, (batch_dim, 1))
     uniaxial_strain = np.reshape(uniaxial_strain, (batch_dim, 3))
     nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
-    stiffness, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+    poisson_ratio = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
-    stiffness = stiffness.numpy()
-    return stiffness
+    poisson_ratio = poisson_ratio.numpy()
+    return poisson_ratio
 
-def stiffnessOptimizationSA():
+def poissonRatioSA():
     plot_GT = False
     bounds = []
     IH = 1
@@ -721,8 +621,8 @@ def stiffnessOptimizationSA():
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
         # test 1
-        # ti = np.array([0.1224, 0.5, 0.1434, 0.625])
-        # ti_target = np.array([0.1224, 0.6, 0.13, 0.625])
+        ti = np.array([0.1224, 0.5, 0.12, 0.625])
+        ti_target = np.array([0.1224, 0.5, 0.07, 0.625])
         # test 2
         # ti = np.array([0.1224, 0.6, 0.13, 0.625])
         # ti_target = np.array([0.13, 0.4998, 0.0721, 0.6114])
@@ -742,8 +642,8 @@ def stiffnessOptimizationSA():
         # ti = np.array([0.17, 0.5, 0.12, 0.5])
         # ti_target = np.array([0.22, 0.6, 0.08, 0.52])
         # test 8
-        ti = np.array([0.22, 0.6, 0.08, 0.52])
-        ti_target = np.array([0.1692, 0.4223, 0.0635, 0.6888])
+        # ti = np.array([0.22, 0.6, 0.08, 0.52])
+        # ti_target = np.array([0.1692, 0.4223, 0.0635, 0.6888])
         
         idx = np.arange(0, len(thetas), 5)
 
@@ -759,29 +659,20 @@ def stiffnessOptimizationSA():
 
     # uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
     # print(uniaxial_strain)
-    stiffness = generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model)
+    poisson_ratio = generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti, model)
     # idx = [0, 23, 49]
     # idx = [0, 5, 9]
-
-    
-    
-    # if plot_GT:
-    #     data = ""
-    #     for k in stiffness:
-    #         data += str(k) + ", "
-    #     print(data)
         
-
     # if IH == 50:
-        # stiffness_targets = np.array([0.005357881231762475, 0.0053454764198269345, 0.005323076289713101, 0.005291569037720618, 0.0052522045380705784, 0.005206538985992594, 0.005156317853195587, 0.005103432053036575, 0.005049849140188627, 0.004997588281309535, 0.004948602172962785, 0.004904843012360457, 0.004868177620772044, 0.004840440651345217, 0.004823469064749871, 0.004818991757038235, 0.004828978362628706, 0.004855306346270269, 0.0049001325792824854, 0.004965911886655767, 0.005055390854282705, 0.005171798842058322, 0.005319091992881996, 0.005502027464332436, 0.005726526451276003, 0.005999929516542937, 0.006331583277052967, 0.006733359841493947, 0.00722057834175154, 0.007813154325618703, 0.008537263976337377, 0.009427641766171856, 0.010530831464126878, 0.011909725278378426, 0.013649730833703747, 0.01586677564177888, 0.01871692802717734, 0.022404009565604288, 0.027175282123162885, 0.03327769337046987, 0.04081423136805599, 0.04941796486384382, 0.057890418607245774, 0.06158122654443698, 0.07910000717017367, 0.13009581614825785, 0.25367472705223826, 0.47512731203807107, 1.0204514711708237, 1.545156515315592, 1.0226177560044938, 0.4913970812878216, 0.2565621974977346, 0.12514883705159502, 0.07314831557558382, 0.06008642835986133, 0.058832596963625514, 0.051370760458955285, 0.042733790125287746, 0.034839734366138145, 0.028359992691892176, 0.023279511280816297, 0.019359764740570815, 0.016339754532924845, 0.013999665661286846, 0.012170135164418353, 0.010725453771437422, 0.009573281821056216, 0.008646021656700155, 0.007893658420805588, 0.007279120731033306, 0.006774575043915245, 0.006358884296229148, 0.006015915518370427, 0.005733149845429153, 0.005500786642791992, 0.00531114293624395, 0.005158074949472558, 0.00503659274805049, 0.004942658655271803, 0.004872921834920428, 0.0048245386709542, 0.004795009654030171, 0.004782296786893437, 0.0047844060613056825, 0.00479953607388955, 0.0048257329785549715, 0.004861502134963473, 0.004904820697292641, 0.004954039892769007, 0.005007261039364209, 0.005062564561422771, 0.0051179933806987125, 0.005171611640220892, 0.00522150913946486, 0.005265892870544442, 0.005303134799640369, 0.005331845089384196, 0.005350952647260489, 0.005359393895734639])
-    stiffness_targets = generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti_target, model)
+        # poisson_ratio_targets = np.array([0.005357881231762475, 0.0053454764198269345, 0.005323076289713101, 0.005291569037720618, 0.0052522045380705784, 0.005206538985992594, 0.005156317853195587, 0.005103432053036575, 0.005049849140188627, 0.004997588281309535, 0.004948602172962785, 0.004904843012360457, 0.004868177620772044, 0.004840440651345217, 0.004823469064749871, 0.004818991757038235, 0.004828978362628706, 0.004855306346270269, 0.0049001325792824854, 0.004965911886655767, 0.005055390854282705, 0.005171798842058322, 0.005319091992881996, 0.005502027464332436, 0.005726526451276003, 0.005999929516542937, 0.006331583277052967, 0.006733359841493947, 0.00722057834175154, 0.007813154325618703, 0.008537263976337377, 0.009427641766171856, 0.010530831464126878, 0.011909725278378426, 0.013649730833703747, 0.01586677564177888, 0.01871692802717734, 0.022404009565604288, 0.027175282123162885, 0.03327769337046987, 0.04081423136805599, 0.04941796486384382, 0.057890418607245774, 0.06158122654443698, 0.07910000717017367, 0.13009581614825785, 0.25367472705223826, 0.47512731203807107, 1.0204514711708237, 1.545156515315592, 1.0226177560044938, 0.4913970812878216, 0.2565621974977346, 0.12514883705159502, 0.07314831557558382, 0.06008642835986133, 0.058832596963625514, 0.051370760458955285, 0.042733790125287746, 0.034839734366138145, 0.028359992691892176, 0.023279511280816297, 0.019359764740570815, 0.016339754532924845, 0.013999665661286846, 0.012170135164418353, 0.010725453771437422, 0.009573281821056216, 0.008646021656700155, 0.007893658420805588, 0.007279120731033306, 0.006774575043915245, 0.006358884296229148, 0.006015915518370427, 0.005733149845429153, 0.005500786642791992, 0.00531114293624395, 0.005158074949472558, 0.00503659274805049, 0.004942658655271803, 0.004872921834920428, 0.0048245386709542, 0.004795009654030171, 0.004782296786893437, 0.0047844060613056825, 0.00479953607388955, 0.0048257329785549715, 0.004861502134963473, 0.004904820697292641, 0.004954039892769007, 0.005007261039364209, 0.005062564561422771, 0.0051179933806987125, 0.005171611640220892, 0.00522150913946486, 0.005265892870544442, 0.005303134799640369, 0.005331845089384196, 0.005350952647260489, 0.005359393895734639])
+    poisson_ratio_targets = generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti_target, model)
     if IH == 21:
-        mean = np.mean(stiffness_targets)
-        stiffness_targets = np.full((len(stiffness_targets), ), mean)
+        mean = np.mean(poisson_ratio_targets)
+        poisson_ratio_targets = np.full((len(poisson_ratio_targets), ), mean)
     # exit(0)
     sample_points_theta = thetas[idx]
     batch_dim = len(thetas)
-    stiffness_targets_sub = stiffness_targets[idx]
+    poisson_ratio_targets_sub = poisson_ratio_targets[idx]
 
     def objAndGradient(x):
         _uniaxial_strain = []
@@ -795,22 +686,22 @@ def stiffnessOptimizationSA():
         ti_TF = tf.convert_to_tensor(x)
 
         uniaxial_strain_TF = tf.convert_to_tensor(_uniaxial_strain)
-        stiffness_current, stiffness_grad, dOdE = objGradStiffness( 
+        poisson_ratio_current, poisson_ratio_grad, dOdE = objGradPoissonRatio( 
                                             ti_TF, uniaxial_strain_TF, 
                                             tf.convert_to_tensor(thetas), 
                                             model)
         
-        stiffness_current = stiffness_current.numpy()[idx]
-        stiffness_grad = stiffness_grad.numpy()[idx]
+        poisson_ratio_current = poisson_ratio_current.numpy()[idx]
+        poisson_ratio_grad = poisson_ratio_grad.numpy()[idx]
         dOdE = dOdE.numpy()[idx]
 
-        obj = (np.dot(stiffness_current - stiffness_targets_sub, np.transpose(stiffness_current - stiffness_targets_sub)) * 0.5)
+        obj = (np.dot(poisson_ratio_current - poisson_ratio_targets_sub, np.transpose(poisson_ratio_current - poisson_ratio_targets_sub)) * 0.5)
         
         grad = np.zeros((n_tiling_params))
         
         for i in range(len(idx)):
-            grad += (stiffness_current[i] - stiffness_targets_sub[i]) * stiffness_grad[i].flatten() + \
-                (stiffness_current[i] - stiffness_targets_sub[i]) * np.dot(dOdE[i][i], dqdp[i][:3, :]).flatten()
+            grad += (poisson_ratio_current[i] - poisson_ratio_targets_sub[i]) * poisson_ratio_grad[i].flatten() + \
+                (poisson_ratio_current[i] - poisson_ratio_targets_sub[i]) * np.dot(dOdE[i][i], dqdp[i][:3, :]).flatten()
         print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
         return obj, grad
 
@@ -824,9 +715,9 @@ def stiffnessOptimizationSA():
 
         uniaxial_strain_opt = np.reshape(uniaxial_strain_opt, (batch_dim, 3))
         nn_inputs = tf.convert_to_tensor(np.hstack((np.tile(result.x, (batch_dim, 1)), uniaxial_strain_opt)))
-        stiffness_opt, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+        poisson_ratio_opt = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
                         tf.convert_to_tensor(thetas), model)
-        stiffness_opt = stiffness_opt.numpy()
+        poisson_ratio_opt = poisson_ratio_opt.numpy()
         print(result.x)
     
     def fdGradient(x0):
@@ -848,46 +739,42 @@ def stiffnessOptimizationSA():
 
     for i in range(n_sp_theta):
         thetas= np.append(thetas, thetas[i] - np.pi)
-        stiffness = np.append(stiffness, stiffness[i])
-        stiffness_targets = np.append(stiffness_targets, stiffness_targets[i])
+        poisson_ratio = np.append(poisson_ratio, poisson_ratio[i])
+        poisson_ratio_targets = np.append(poisson_ratio_targets, poisson_ratio_targets[i])
         if not plot_GT:
-            stiffness_opt = np.append(stiffness_opt, stiffness_opt[i])
+            poisson_ratio_opt = np.append(poisson_ratio_opt, poisson_ratio_opt[i])
     thetas = np.append(thetas, thetas[0])
-    stiffness = np.append(stiffness, stiffness[0])
-    stiffness_targets = np.append(stiffness_targets, stiffness_targets[0])
+    poisson_ratio = np.append(poisson_ratio, poisson_ratio[0])
+    poisson_ratio_targets = np.append(poisson_ratio_targets, poisson_ratio_targets[0])
     if not plot_GT:
-        stiffness_opt = np.append(stiffness_opt, stiffness_opt[0])
+        poisson_ratio_opt = np.append(poisson_ratio_opt, poisson_ratio_opt[0])
     
     fig1 = plt.figure()
     ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
-    if IH == 21:
-        ax1.set_ylim(0.05, 0.35)
-    elif IH == 1:
-        ax1.set_ylim(0, 5.5)
-    ax1.plot(thetas,stiffness,lw=2.5, label = "stiffness initial")
-    ax1.plot(thetas,stiffness_targets,lw=2.5, label = "stiffness target", linestyle = "dashed")
-    # plt.polar(thetas, stiffness, label = "stiffness initial", linewidth=3.0, zorder=0)
-    # plt.polar(thetas, stiffness_targets, linestyle = "dashed", label = "stiffness target", linewidth=3.0, zorder=0)
+    # if IH == 21:
+    #     ax1.set_ylim(0.05, 0.35)
+    # elif IH == 1:
+    #     ax1.set_ylim(0, 5.5)
+    ax1.plot(thetas,poisson_ratio,lw=2.5, label = "poisson_ratio initial")
+    ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson_ratio target", linestyle = "dashed")
+    # plt.polar(thetas, poisson_ratio, label = "poisson_ratio initial", linewidth=3.0, zorder=0)
+    # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
     plt.legend(loc='upper left')
-    plt.savefig("stiffness_optimization_IH"+str(IH)+"_initial.png", dpi=300)
+    plt.savefig("poisson_ratio_optimization_IH"+str(IH)+"_initial.png", dpi=300)
     plt.close()
-    os.system("convert stiffness_optimization_IH"+str(IH)+"_initial.png -trim stiffness_optimization_IH"+str(IH)+"_initial.png")
+    os.system("convert poisson_ratio_optimization_IH"+str(IH)+"_initial.png -trim poisson_ratio_optimization_IH"+str(IH)+"_initial.png")
     if not plot_GT:
         fig1 = plt.figure()
         ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
-        if IH == 21:
-            ax1.set_ylim(0.05, 0.35)
-        elif IH == 1:
-            ax1.set_ylim(0, 5.5)
-        # plt.polar(thetas, stiffness_opt, label = "stiffness optimized", linewidth=3.0, zorder=0)
-        # plt.polar(thetas, stiffness_targets, linestyle = "dashed", label = "stiffness target", linewidth=3.0, zorder=0)
-        ax1.plot(thetas,stiffness_opt,lw=2.5, label = "stiffness optimized")
-        ax1.plot(thetas,stiffness_targets,lw=2.5, label = "stiffness target", linestyle = "dashed")
+        # plt.polar(thetas, poisson_ratio_opt, label = "poisson_ratio optimized", linewidth=3.0, zorder=0)
+        # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
+        ax1.plot(thetas,poisson_ratio_opt,lw=2.5, label = "poisson_ratio optimized")
+        ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson_ratio target", linestyle = "dashed")
         plt.legend(loc='upper left')
-        plt.savefig("stiffness_optimization_IH"+str(IH)+"_optimized.png", dpi=300)
+        plt.savefig("poisson_ratio_optimization_IH"+str(IH)+"_optimized.png", dpi=300)
         plt.close()
-        os.system("convert stiffness_optimization_IH"+str(IH)+"_optimized.png -trim stiffness_optimization_IH"+str(IH)+"_optimized.png")
+        os.system("convert poisson_ratio_optimization_IH"+str(IH)+"_optimized.png -trim poisson_ratio_optimization_IH" + str(IH) + "_optimized.png")
 
 if __name__ == "__main__":
-    # computeStiffness()
-    stiffnessOptimizationSA()
+    # computePoissonRatio()
+    poissonRatioSA()

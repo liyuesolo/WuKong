@@ -992,6 +992,7 @@ def plotNNFDCurves():
         n_tiling_params = 2
         bounds.append([0.105, 0.195])
         bounds.append([0.505, 0.795])
+        ti_init = np.array([0.115, 0.765])
         ti_NN = np.array([0.11611517, 0.6579828])
         ti_LBFGS = np.array([0.105, 0.79499])
         ti_MMA = np.array([0.101928, 0.509179])
@@ -1028,6 +1029,7 @@ def plotNNFDCurves():
     obj_FD_LBFGS = obj(ti_LBFGS)
     obj_FD_MMA = obj(ti_MMA)
     obj_FD_GD = obj(ti_GD)
+    obj_init = obj(ti_init)
 
 
     for i in range(len(strain_samples)):
@@ -1035,6 +1037,7 @@ def plotNNFDCurves():
 
     strain_points = strain_samples[sample_idx]
     stress_targets = [-0.00598749,  0.00477436,  0.04006726]
+    plt.plot(strain_samples, obj_init, label="initial guess", linewidth=3.0, zorder=0)
     plt.plot(strain_samples, obj_FD_GD, label="FD-PGD", linewidth=3.0, zorder=0)
     plt.plot(strain_samples, obj_FD_MMA, label="FD-MMA", linewidth=3.0, zorder=0)
     plt.plot(strain_samples, obj_FD_LBFGS, label="FD-LBFGS-B", linewidth=3.0, zorder=0)
