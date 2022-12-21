@@ -20,7 +20,7 @@ void CellFunctionCentroidXTarget::addGradient(const VectorXT &site, const Vector
     centroid_function.addValue(site, nodes, centroid, cellInfo);
 
     VectorXT temp;
-    VectorXT area_gradient_x = VectorXT::Zero(gradient_x.rows());
+    VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
     area_function.addGradient(site, nodes, temp, area_gradient_x, cellInfo);
     VectorXT centroid_gradient_x = VectorXT::Zero(nodes.rows());
     centroid_function.addGradient(site, nodes, temp, centroid_gradient_x, cellInfo);

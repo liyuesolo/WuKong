@@ -1,15 +1,17 @@
 #pragma once
 
+#include "../../include/Tessellation/CellFunction.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch.h"
 #include "../../include/Energy/CellFunctionArea.h"
 
-class CellFunctionAreaBarrier : public CellFunction {
+class CellFunctionImageMatchAreaScaled : public CellFunction {
 public:
     CellFunctionArea area_function;
-    double epsilon = 1e-14;
-    double exponent = -5;
+    CellFunctionImageMatch image_match_function;
 
 public:
-    virtual void addValue(const VectorXT &site, const VectorXT &nodes, double &value, const CellInfo *cellInfo) const;
+    virtual void
+    addValue(const VectorXT &site, const VectorXT &nodes, double &value, const CellInfo *cellInfo) const;
 
     virtual void
     addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c, VectorXT &gradient_x,

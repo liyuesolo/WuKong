@@ -106,8 +106,9 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
 
 void Foam2D::initImageMatch(MatrixXi &markers) {
     markers = markers.unaryExpr([](int x) { return x - 1; });
+    int threshold = 5;
     for (int i = 0; i < markers.maxCoeff(); i++) {
-        if ((markers.array() == i).count() == 0) {
+        if ((markers.array() == i).count() < threshold) {
             markers = markers.unaryExpr([i](int x) { return x > i ? x - 1 : x; });
             i--;
         }

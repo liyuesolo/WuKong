@@ -1,14 +1,14 @@
-#include "../../include/Energy/CellFunctionAreaBarrier.h"
+#include "../../include/Energy/CellFunctionAreaBarrierExponent.h"
 #include <iostream>
 
-void CellFunctionAreaBarrier::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionAreaBarrierExponent::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
                                        const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);
     value += epsilon * pow(area, exponent);
 }
 
-void CellFunctionAreaBarrier::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionAreaBarrierExponent::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
                                           VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);
@@ -20,7 +20,7 @@ void CellFunctionAreaBarrier::addGradient(const VectorXT &site, const VectorXT &
     gradient_x += epsilon * (exponent * pow(area, exponent - 1.0) * area_gradient_x);
 }
 
-void CellFunctionAreaBarrier::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+void CellFunctionAreaBarrierExponent::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
                                          const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);

@@ -70,6 +70,11 @@ public:
             double alpha = alpha_nominal * pow(.5, i);
             x_cand = x - alpha * dx;
             if (function->evaluate(x_cand) < O0) {
+                // TODO: Logan
+                double alpha2 = alpha * .5;
+                VectorXd x_cand2 = x - alpha2 * dx;
+                if (function->evaluate(x_cand2) < function->evaluate(x_cand)) x_cand = x_cand2;
+                // TODO: Logan
                 x = x_cand;
                 return;
             }

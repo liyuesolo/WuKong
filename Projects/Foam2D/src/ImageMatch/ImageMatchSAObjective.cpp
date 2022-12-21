@@ -1,6 +1,8 @@
 #include "../../include/ImageMatch/ImageMatchSAObjective.h"
-#include "../../include/ImageMatch/CellFunctionImageMatch.h"
+#include "../../include/ImageMatch/CellFunctionImageMatchAreaScaled.h"
 #include "../../src/optLib/NewtonFunctionMinimizer.h"
+
+typedef CellFunctionImageMatchAreaScaled TypedefImageMatchFunction;
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";
@@ -42,14 +44,14 @@ double ImageMatchSAObjective::evaluate(const VectorXd &tau) const {
         return 1e10;
     }
 
-    CellFunctionImageMatch imageMatchFunction;
+    TypedefImageMatchFunction imageMatchFunction;
 
     double O = 0;
     info->getTessellation()->addFunctionValue(imageMatchFunction, O, cellInfos);
 
     std::cout << "Change " << (c_free-c0).norm() << " Objective " << O << std::endl;
 
-    return 1e-2 * O;
+    return O;
 }
 
 void ImageMatchSAObjective::addGradientTo(const VectorXd &tau, VectorXd &grad) const {
@@ -92,13 +94,13 @@ VectorXd ImageMatchSAObjective::get_dOdtau(const VectorXd &tau) const {
         return VectorXT::Zero(tau.rows());
     }
 
-    CellFunctionImageMatch imageMatchFunction;
+    TypedefImageMatchFunction imageMatchFunction;
     info->getTessellation()->addFunctionGradient(imageMatchFunction, dLdc, cellInfos);
 
     VectorXd gradient = dLdc.transpose() * dcdtau;
     std::cout << "Gradient norm " << gradient.norm()  << " " << dcdtau.norm() << " " << dLdc.norm() << " " << solver.info() << std::endl;
 
-    return 1e-2 * gradient;
+    return gradient / fmax(gradient.norm(), 1.0);
 }
 
 bool ImageMatchSAObjective::getC(const VectorXd &tau, VectorXd &c) const {

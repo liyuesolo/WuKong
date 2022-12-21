@@ -4,7 +4,7 @@
 #include "../../include/Foam2DInfo.h"
 
 #include "../../include/Energy/CellFunctionAreaTarget.h"
-#include "../../include/Energy/CellFunctionAreaBarrier.h"
+#include "../../include/Energy/CellFunctionAreaBarrierExponent.h"
 #include "../../include/Energy/CellFunctionPerimeter.h"
 #include "../../include/Energy/CellFunctionCentroidXTarget.h"
 #include "../../include/Energy/CellFunctionCentroidYTarget.h"
@@ -14,7 +14,7 @@ class CellFunctionEnergy : public CellFunctionWeightedSum {
 public:
     CellFunctionAreaTarget area_target_function;
     CellFunctionPerimeter perimeter_function;
-    CellFunctionAreaBarrier area_barrier_function;
+    CellFunctionAreaBarrierExponent area_barrier_function;
     CellFunctionCentroidXTarget centroid_x_function;
     CellFunctionCentroidYTarget centroid_y_function;
     CellFunctionPositionTarget position_target_function;
