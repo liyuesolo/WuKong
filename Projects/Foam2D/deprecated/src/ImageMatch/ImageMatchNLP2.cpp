@@ -1,4 +1,4 @@
-#include "../../include/ImageMatch/ImageMatchNLP2.h"
+#include "Projects/Foam2D/deprecated/include/ImageMatch/ImageMatchNLP2.h"
 
 #define IDX_C(k, i) (((k) * n_free + (i)) * dims)
 #define IDX_A(i) ((N * n_free * dims) + (i))

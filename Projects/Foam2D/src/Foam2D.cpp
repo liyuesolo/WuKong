@@ -6,8 +6,6 @@
 #include "../include/TrajectoryOpt/TrajectoryOptSolver.h"
 #include <thread>
 
-#include "../include/ImageMatch/ImageMatchSolver.h"
-#include "../include/ImageMatch/ImageMatchSolver2.h"
 #include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
 
 Foam2D::Foam2D() {
@@ -24,15 +22,9 @@ Foam2D::Foam2D() {
     energyObjectiveAT.info = info;
     imageMatchObjective.info = info;
     imageMatchSAObjective.info = info;
-    imageMatchNLP.info = info;
-    imageMatchNLP2.info = info;
 
     dynamicObjective.energyObjective = &energyObjective;
     trajOptNLP.energy = &energyObjective;
-    imageMatchNLP.objective = &imageMatchObjective;
-    imageMatchNLP.energy = &energyObjectiveAT;
-    imageMatchNLP2.objective = &imageMatchObjective;
-    imageMatchNLP2.energy = &energyObjectiveAT;
     imageMatchSAObjective.energyObjectiveAT = &energyObjectiveAT;
 }
 
@@ -211,174 +203,174 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
     resetVertexParams();
 }
 
-void Foam2D::imageMatchOptimizeIPOPT() {
-    int dims = 2 + info->getTessellation()->getNumVertexParams();
-    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
-    VectorXT c_free = c.segment(0, info->n_free * dims);
-    VectorXT x_guess(info->n_free * (dims + 1));
-
-    VectorXT tau = info->energy_area_targets;
-    x_guess << c_free, tau;
-    imageMatchNLP.x_guess = x_guess;
-    imageMatchNLP.x_sol = x_guess;
-
-//    nlp.check_gradients(x_guess);
-
-//    double f = nlp.eval_f(x_guess);
-//    std::cout << "f: " << f << std::endl;
-//    VectorXT g = nlp.eval_g(x_guess);
-//    for (int i = 0; i < g.rows(); i++) {
-//        std::cout << "g[" << i << "] = " << g(i) << std::endl;
-//    }
-
-    /** IPOPT SOLVE **/
-    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-
-    app->RethrowNonIpoptException(true);
-
-    app->Options()->SetNumericValue("tol", 1e-5);
-//    app->Options()->SetStringValue("mu_strategy", "monotone");
-//    app->Options()->SetStringValue("mu_strategy", "adaptive");
-
-//    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
-    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
-    app->Options()->SetStringValue("linear_solver", "ma57");
-//    app->Options()->SetStringValue("linear_solver", "pardisomkl");
-    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
-//    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
-    //        app->Options()->SetNumericValue("mu_max", 0.0001);
-    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
-    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
-    //        bound_relax_factor
-    app->Options()->SetStringValue("derivative_test", "first-order");
-    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
-//    app->Options()->SetStringValue("derivative_test_print_all", "yes");
-    // The following overwrites the default name (ipopt.opt) of the
-    // options file
-    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
-
-    // Initialize the IpoptApplication and process the options
-    Ipopt::ApplicationReturnStatus status;
-    status = app->Initialize();
-    if (status != Ipopt::Solve_Succeeded) {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** Error during initialization!" << std::endl;
-        return;
-    }
-
-    // Ask Ipopt to solve the problem
-    std::cout << "Solving problem using IPOPT" << std::endl;
-
-    // objective.bound[0] = 1e-5;
-    // objective.bound[1] = 12.0 * simulation.cells.unit;
-
-    Ipopt::SmartPtr<ImageMatchSolver> mynlp = new ImageMatchSolver(&imageMatchNLP);
-
-    status = app->OptimizeTNLP(mynlp);
-    if (status == Ipopt::Solve_Succeeded) {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** The problem solved!" << std::endl;
-    } else {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** The problem FAILED!" << std::endl;
-    }
-
-    c_free = imageMatchNLP.x_sol.segment(0, info->n_free * dims);
-//    for (int i = 0; i < c_free.rows(); i++) {
-//        std::cout << i % 3 << " " << c_free(i) << std::endl;
-//    }
-    c.segment(0, info->n_free * dims) = c_free;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-
-    info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free);
-}
-
-void Foam2D::imageMatchOptimizeIPOPT2() {
-    int dims = 2 + info->getTessellation()->getNumVertexParams();
-    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
-    VectorXT c_free = c.segment(0, info->n_free * dims);
-    VectorXT x_guess(info->imageMatch_N * info->n_free * dims + info->n_free);
-
-    VectorXT tau = info->energy_area_targets;
-    x_guess << c_free.replicate(info->imageMatch_N, 1), tau;
-    imageMatchNLP2.c0 = c_free;
-    imageMatchNLP2.x_guess = x_guess;
-    imageMatchNLP2.x_sol = x_guess;
-
-//    double f = nlp.eval_f(x_guess);
-//    std::cout << "f: " << f << std::endl;
-//    VectorXT g = nlp.eval_g(x_guess);
-//    for (int i = 0; i < g.rows(); i++) {
-//        std::cout << "g[" << i << "] = " << g(i) << std::endl;
-//    }
-
-    /** IPOPT SOLVE **/
-    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-
-    app->RethrowNonIpoptException(true);
-
-    app->Options()->SetNumericValue("tol", 1e-5);
-//    app->Options()->SetStringValue("mu_strategy", "monotone");
-//    app->Options()->SetStringValue("mu_strategy", "adaptive");
-
-//    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
-    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
-    app->Options()->SetStringValue("linear_solver", "ma57");
-//    app->Options()->SetStringValue("linear_solver", "pardisomkl");
-    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
-//    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
-    //        app->Options()->SetNumericValue("mu_max", 0.0001);
-    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
-    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
-    //        bound_relax_factor
+//void Foam2D::imageMatchOptimizeIPOPT() {
+//    int dims = 2 + info->getTessellation()->getNumVertexParams();
+//    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
+//    VectorXT c_free = c.segment(0, info->n_free * dims);
+//    VectorXT x_guess(info->n_free * (dims + 1));
+//
+//    VectorXT tau = info->energy_area_targets;
+//    x_guess << c_free, tau;
+//    imageMatchNLP.x_guess = x_guess;
+//    imageMatchNLP.x_sol = x_guess;
+//
+////    nlp.check_gradients(x_guess);
+//
+////    double f = nlp.eval_f(x_guess);
+////    std::cout << "f: " << f << std::endl;
+////    VectorXT g = nlp.eval_g(x_guess);
+////    for (int i = 0; i < g.rows(); i++) {
+////        std::cout << "g[" << i << "] = " << g(i) << std::endl;
+////    }
+//
+//    /** IPOPT SOLVE **/
+//    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+//
+//    app->RethrowNonIpoptException(true);
+//
+//    app->Options()->SetNumericValue("tol", 1e-5);
+////    app->Options()->SetStringValue("mu_strategy", "monotone");
+////    app->Options()->SetStringValue("mu_strategy", "adaptive");
+//
+////    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
+//    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+//    app->Options()->SetStringValue("linear_solver", "ma57");
+////    app->Options()->SetStringValue("linear_solver", "pardisomkl");
+//    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
+////    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
+//    //        app->Options()->SetNumericValue("mu_max", 0.0001);
+//    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
+//    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
+//    //        bound_relax_factor
 //    app->Options()->SetStringValue("derivative_test", "first-order");
 //    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
-//    app->Options()->SetStringValue("derivative_test_print_all", "yes");
-    // The following overwrites the default name (ipopt.opt) of the
-    // options file
-    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
-
-    // Initialize the IpoptApplication and process the options
-    Ipopt::ApplicationReturnStatus status;
-    status = app->Initialize();
-    if (status != Ipopt::Solve_Succeeded) {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** Error during initialization!" << std::endl;
-        return;
-    }
-
-    // Ask Ipopt to solve the problem
-    std::cout << "Solving problem using IPOPT" << std::endl;
-
-    // objective.bound[0] = 1e-5;
-    // objective.bound[1] = 12.0 * simulation.cells.unit;
-
-    Ipopt::SmartPtr<ImageMatchSolver2> mynlp = new ImageMatchSolver2(&imageMatchNLP2);
-
-    status = app->OptimizeTNLP(mynlp);
-    if (status == Ipopt::Solve_Succeeded) {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** The problem solved!" << std::endl;
-    } else {
-        std::cout << std::endl
-                  << std::endl
-                  << "*** The problem FAILED!" << std::endl;
-    }
-
-    c_free = imageMatchNLP2.x_sol.segment((info->imageMatch_N - 1) * info->n_free * dims, info->n_free * dims);
-//    for (int i = 0; i < c_free.rows(); i++) {
-//        std::cout << i % 3 << " " << c_free(i) << std::endl;
+////    app->Options()->SetStringValue("derivative_test_print_all", "yes");
+//    // The following overwrites the default name (ipopt.opt) of the
+//    // options file
+//    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
+//
+//    // Initialize the IpoptApplication and process the options
+//    Ipopt::ApplicationReturnStatus status;
+//    status = app->Initialize();
+//    if (status != Ipopt::Solve_Succeeded) {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** Error during initialization!" << std::endl;
+//        return;
 //    }
-    c.segment(0, info->n_free * dims) = c_free;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-
-    info->energy_area_targets = imageMatchNLP2.x_sol.segment(info->imageMatch_N * info->n_free * dims, info->n_free);
-}
+//
+//    // Ask Ipopt to solve the problem
+//    std::cout << "Solving problem using IPOPT" << std::endl;
+//
+//    // objective.bound[0] = 1e-5;
+//    // objective.bound[1] = 12.0 * simulation.cells.unit;
+//
+//    Ipopt::SmartPtr<ImageMatchSolver> mynlp = new ImageMatchSolver(&imageMatchNLP);
+//
+//    status = app->OptimizeTNLP(mynlp);
+//    if (status == Ipopt::Solve_Succeeded) {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** The problem solved!" << std::endl;
+//    } else {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** The problem FAILED!" << std::endl;
+//    }
+//
+//    c_free = imageMatchNLP.x_sol.segment(0, info->n_free * dims);
+////    for (int i = 0; i < c_free.rows(); i++) {
+////        std::cout << i % 3 << " " << c_free(i) << std::endl;
+////    }
+//    c.segment(0, info->n_free * dims) = c_free;
+//    info->getTessellation()->separateVerticesParams(c, vertices, params);
+//
+//    info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free);
+//}
+//
+//void Foam2D::imageMatchOptimizeIPOPT2() {
+//    int dims = 2 + info->getTessellation()->getNumVertexParams();
+//    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
+//    VectorXT c_free = c.segment(0, info->n_free * dims);
+//    VectorXT x_guess(info->imageMatch_N * info->n_free * dims + info->n_free);
+//
+//    VectorXT tau = info->energy_area_targets;
+//    x_guess << c_free.replicate(info->imageMatch_N, 1), tau;
+//    imageMatchNLP2.c0 = c_free;
+//    imageMatchNLP2.x_guess = x_guess;
+//    imageMatchNLP2.x_sol = x_guess;
+//
+////    double f = nlp.eval_f(x_guess);
+////    std::cout << "f: " << f << std::endl;
+////    VectorXT g = nlp.eval_g(x_guess);
+////    for (int i = 0; i < g.rows(); i++) {
+////        std::cout << "g[" << i << "] = " << g(i) << std::endl;
+////    }
+//
+//    /** IPOPT SOLVE **/
+//    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+//
+//    app->RethrowNonIpoptException(true);
+//
+//    app->Options()->SetNumericValue("tol", 1e-5);
+////    app->Options()->SetStringValue("mu_strategy", "monotone");
+////    app->Options()->SetStringValue("mu_strategy", "adaptive");
+//
+////    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
+//    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
+//    app->Options()->SetStringValue("linear_solver", "ma57");
+////    app->Options()->SetStringValue("linear_solver", "pardisomkl");
+//    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
+////    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
+//    //        app->Options()->SetNumericValue("mu_max", 0.0001);
+//    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
+//    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
+//    //        bound_relax_factor
+////    app->Options()->SetStringValue("derivative_test", "first-order");
+////    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
+////    app->Options()->SetStringValue("derivative_test_print_all", "yes");
+//    // The following overwrites the default name (ipopt.opt) of the
+//    // options file
+//    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
+//
+//    // Initialize the IpoptApplication and process the options
+//    Ipopt::ApplicationReturnStatus status;
+//    status = app->Initialize();
+//    if (status != Ipopt::Solve_Succeeded) {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** Error during initialization!" << std::endl;
+//        return;
+//    }
+//
+//    // Ask Ipopt to solve the problem
+//    std::cout << "Solving problem using IPOPT" << std::endl;
+//
+//    // objective.bound[0] = 1e-5;
+//    // objective.bound[1] = 12.0 * simulation.cells.unit;
+//
+//    Ipopt::SmartPtr<ImageMatchSolver2> mynlp = new ImageMatchSolver2(&imageMatchNLP2);
+//
+//    status = app->OptimizeTNLP(mynlp);
+//    if (status == Ipopt::Solve_Succeeded) {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** The problem solved!" << std::endl;
+//    } else {
+//        std::cout << std::endl
+//                  << std::endl
+//                  << "*** The problem FAILED!" << std::endl;
+//    }
+//
+//    c_free = imageMatchNLP2.x_sol.segment((info->imageMatch_N - 1) * info->n_free * dims, info->n_free * dims);
+////    for (int i = 0; i < c_free.rows(); i++) {
+////        std::cout << i % 3 << " " << c_free(i) << std::endl;
+////    }
+//    c.segment(0, info->n_free * dims) = c_free;
+//    info->getTessellation()->separateVerticesParams(c, vertices, params);
+//
+//    info->energy_area_targets = imageMatchNLP2.x_sol.segment(info->imageMatch_N * info->n_free * dims, info->n_free);
+//}
 
 void Foam2D::imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();

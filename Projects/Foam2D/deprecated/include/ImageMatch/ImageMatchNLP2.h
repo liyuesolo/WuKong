@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../ImageMatch/EnergyObjectiveAT.h"
-#include "../ImageMatch/ImageMatchObjective.h"
+#include "Projects/Foam2D/include/ImageMatch/EnergyObjectiveAT.h"
+#include "Projects/Foam2D/include/ImageMatch/ImageMatchObjective.h"
 
 class ImageMatchNLP2 {
 

@@ -1,4 +1,4 @@
-#include "../../include/ImageMatch/ImageMatchNLP.h"
+#include "Projects/Foam2D/deprecated/include/ImageMatch/ImageMatchNLP.h"
 
 void ImageMatchNLP::check_gradients(const Eigen::VectorXd &x) const {
     double eps = 1e-6;

@@ -100,7 +100,7 @@ VectorXd ImageMatchSAObjective::get_dOdtau(const VectorXd &tau) const {
     VectorXd gradient = dLdc.transpose() * dcdtau;
     std::cout << "Gradient norm " << gradient.norm()  << " " << dcdtau.norm() << " " << dLdc.norm() << " " << solver.info() << std::endl;
 
-    return gradient / fmax(gradient.norm(), 1.0);
+    return gradient / fmax(gradient.norm() * 100.0, 1.0);
 }
 
 bool ImageMatchSAObjective::getC(const VectorXd &tau, VectorXd &c) const {

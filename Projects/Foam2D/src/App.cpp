@@ -110,7 +110,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Image Match");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
-            matchShowImage = true;
+            matchShowImage = false;
             matchShowPixels = false;
         }
         if (generate_scenario_type == 0) {
@@ -136,12 +136,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             if (ImGui::SliderFloat("A Slider", &matchImageW, 0.0, 1.0)) {
                 updateViewerData(viewer);
             }
-            if (ImGui::Button("Match IPOPT")) {
-                foam.imageMatchOptimizeIPOPT2();
-                numAreaTargets = foam.info->n_free;
-                areaTargets = foam.info->energy_area_targets;
-                updateViewerData(viewer);
-            }
+//            if (ImGui::Button("Match IPOPT")) {
+//                foam.imageMatchOptimizeIPOPT2();
+//                numAreaTargets = foam.info->n_free;
+//                areaTargets = foam.info->energy_area_targets;
+//                updateViewerData(viewer);
+//            }
             if (ImGui::Button("Start SA")) {
                 dynamics = false;
                 matchSA = true;
@@ -149,9 +149,6 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             if (ImGui::Button("Stop SA")) {
                 matchSA = false;
             }
-        } else {
-            matchShowImage = false;
-            matchShowPixels = false;
         }
 
         if (ImGui::Button("Generate")) {
@@ -354,6 +351,7 @@ void Foam2DApp::generateScenario() {
     if (generate_scenario_type == 3){
         numAreaTargets = foam.info->n_free;
         areaTargets = foam.info->energy_area_targets;
+        matchShowImage = true;
     } else {
         foam.info->energy_area_targets.resize(foam.info->n_free);
         for (int i = 0; i < foam.info->n_free; i++) {
