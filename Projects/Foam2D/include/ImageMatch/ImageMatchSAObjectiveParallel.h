@@ -25,5 +25,9 @@ public:
 
     VectorXd get_dOdtau(const VectorXd &tau) const;
 
+    virtual void getHessian(const VectorXd &tau, SparseMatrixd &hessian) const;
+
+    Eigen::SparseMatrix<double> get_d2Odtau2(const VectorXd &tau) const;
+
     bool getC(const VectorXd &tau, Tessellation *tessellation, VectorXT &c) const;
 };

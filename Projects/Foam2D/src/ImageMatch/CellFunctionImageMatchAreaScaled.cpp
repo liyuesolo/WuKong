@@ -45,9 +45,13 @@ void CellFunctionImageMatchAreaScaled::addHessian(const VectorXT &site, const Ve
     MatrixXT image_match_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
     image_match_function.addHessian(site, nodes, image_match_hessian, cellInfo);
 
-    hessian += image_match_hessian / area
+    Eigen::Ref<MatrixXT> area_hess = area_hessian.bottomRightCorner(nodes.rows(), nodes.rows());
+    Eigen::Ref<MatrixXT> image_match_hess = image_match_hessian.bottomRightCorner(nodes.rows(), nodes.rows());
+    Eigen::Ref<MatrixXT> hess = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
+
+    hess += image_match_hess / area
             - area_gradient * image_match_gradient.transpose() / pow(area, 2.0)
             - image_match_gradient * area_gradient.transpose() / pow(area, 2.0)
             + 2 * image_match * area_gradient * area_gradient.transpose() / pow(area, 3.0)
-            - image_match * area_hessian / pow(area, 2.0);
+            - image_match * area_hess / pow(area, 2.0);
 }

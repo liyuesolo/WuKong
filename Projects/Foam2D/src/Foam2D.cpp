@@ -7,12 +7,12 @@
 #include <thread>
 
 #include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
-#include "../src/optLib/GradientDescentLineSearchParallel.h"
+#include "../src/optLib/ParallelLineSearchMinimizers.h"
 
 Foam2D::Foam2D() {
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-10, 15));
-    minimizers.push_back(new GradientDescentLineSearchParallel(1, 1e-6, 7));
+    minimizers.push_back(new GradientDescentLineSearchParallel(1, 1e-6, 5));
 
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
@@ -417,8 +417,10 @@ void Foam2D::optimize(int mode) {
             imageMatchSAObjective.c0 = c_free;
             // Only gradient descent available here.
             minimizers[2]->minimize(&imageMatchSAObjective, info->energy_area_targets);
+
             c_free = (imageMatchSAObjective.sols.begin())->second;
             imageMatchSAObjective.sols.clear();
+
 //            if(!imageMatchSAObjective.getC(info->energy_area_targets, info->getTessellation(), c_free)){
 //                std::cout << "Output invalid wowzers!!!" << std::endl << std::endl;
 //            }

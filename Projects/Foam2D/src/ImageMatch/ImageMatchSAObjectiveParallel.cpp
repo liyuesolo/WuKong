@@ -88,22 +88,11 @@ VectorXd ImageMatchSAObjectiveParallel::get_dOdtau(const VectorXd &tau) const {
     SparseMatrixd dGdtau = energyHessianAT.block(0, c0.rows(), c0.rows(), tau.rows());
     SparseMatrixd diag = VectorXT::Ones(c0.rows()).asDiagonal().toDenseMatrix().sparseView();
     double stab = 1e-6;
-//    for (int i = 0; i < 10; i++) {
-//        Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(dGdc + (stab * diag));
-//        bool hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
-//        std::cout << "Hessian pd " << hessian_pd << std::endl;
-//        if (hessian_pd) break;
-//    }
-    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver;
-//    Eigen::SparseLU<SparseMatrixd> solver;
+    Eigen::SparseLU<SparseMatrixd> solver;
     solver.compute(dGdc + (stab * diag));
     SparseMatrixd dcdtau = solver.solve(-dGdtau);
 
     VectorXT dLdc = VectorXT::Zero(c_free.rows());
-    if (!tessellation.isValid) {
-        return VectorXT::Zero(tau.rows());
-    }
-
     TypedefImageMatchFunction imageMatchFunction;
     tessellation.addFunctionGradient(imageMatchFunction, dLdc, cellInfos);
 
@@ -112,6 +101,48 @@ VectorXd ImageMatchSAObjectiveParallel::get_dOdtau(const VectorXd &tau) const {
 
     return gradient / fmax(gradient.norm() * 100.0, 1.0);
 }
+
+void ImageMatchSAObjectiveParallel::getHessian(const VectorXd &tau, SparseMatrixd &hessian) const {
+    hessian = get_d2Odtau2(tau);
+}
+
+// TODO: This approximation doesn't work very well...
+Eigen::SparseMatrix<double> ImageMatchSAObjectiveParallel::get_d2Odtau2(const VectorXd &tau) const {
+    Power tessellation;
+    std::vector<CellInfo> cellInfos;
+    VectorXT c_free;
+    bool success = preProcess(tau, &tessellation, cellInfos, c_free, false);
+
+    if (!success) {
+        std::cout << "Failed to evaluate image match hessian. Something went wrong here. :(" << std::endl;
+        return {};
+    }
+
+    VectorXT x(c0.rows() + tau.rows());
+    x << c_free, tau;
+    EnergyObjectiveAT energyObjectiveAT;
+    Foam2DInfo tempInfo(*info);
+    tempInfo.tessellation = 1;
+    tempInfo.tessellations[1] = &tessellation;
+    energyObjectiveAT.info = &tempInfo;
+    SparseMatrixd energyHessianAT;
+    energyObjectiveAT.getHessian(x, energyHessianAT);
+
+    SparseMatrixd dGdc = energyHessianAT.block(0, 0, c0.rows(), c0.rows());
+    SparseMatrixd dGdtau = energyHessianAT.block(0, c0.rows(), c0.rows(), tau.rows());
+    SparseMatrixd diag = VectorXT::Ones(c0.rows()).asDiagonal().toDenseMatrix().sparseView();
+    double stab = 1e-6;
+    Eigen::SparseLU<SparseMatrixd> solver;
+    solver.compute(dGdc + (stab * diag));
+    SparseMatrixd dcdtau = solver.solve(-dGdtau);
+
+    MatrixXT d2Ldc2 = MatrixXT::Zero(c_free.rows(), c_free.rows());
+    TypedefImageMatchFunction imageMatchFunction;
+    tessellation.addFunctionHessian(imageMatchFunction, d2Ldc2, cellInfos);
+
+    return (dcdtau.transpose() * d2Ldc2 * dcdtau).sparseView();
+}
+
 
 bool ImageMatchSAObjectiveParallel::getC(const VectorXd &tau, Tessellation *tessellation, VectorXT &c) const {
     NewtonFunctionMinimizer newton(50, 1e-6, 15);
