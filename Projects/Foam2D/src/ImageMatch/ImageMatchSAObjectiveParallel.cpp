@@ -1,7 +1,8 @@
-#include "../../include/ImageMatch/ImageMatchSAObjective.h"
+#include "../../include/ImageMatch/ImageMatchSAObjectiveParallel.h"
 #include "../../include/ImageMatch/CellFunctionImageMatchAreaScaled.h"
 #include "../../src/optLib/NewtonFunctionMinimizer.h"
 #include "../../include/Energy/EnergyObjective.h"
+#include "../../include/Tessellation/Power.h"
 
 typedef CellFunctionImageMatchAreaScaled TypedefImageMatchFunction;
 
@@ -13,23 +14,32 @@ static void printVectorXT(std::string name, const VectorXT &x, int start = 0, in
     std::cout << "]" << std::endl;
 }
 
-void ImageMatchSAObjective::preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const {
+bool ImageMatchSAObjectiveParallel::preProcess(const VectorXd &tau, Tessellation *tessellation, std::vector<CellInfo> &cellInfos, VectorXd &c_free, bool need_get_c = true) const {
+    c_free = c0;
+    if (need_get_c && !getC(tau, tessellation, c_free)) {
+        return false;
+    }
+
     VectorXd c(c_free.size() + info->c_fixed.size());
     c << c_free, info->c_fixed;
     VectorXT vertices;
     VectorXT params;
-    info->getTessellation()->separateVerticesParams(c, vertices, params);
-    info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
+    tessellation->separateVerticesParams(c, vertices, params);
+    tessellation->tessellate(vertices, params, info->boundary, info->n_free);
 
     cellInfos.resize(info->n_free);
     for (int i = 0; i < info->n_free; i++) {
         cellInfos[i].border_pix = pix[i];
     }
+
+    return true;
 }
 
-double ImageMatchSAObjective::evaluate(const VectorXd &tau) const {
+double ImageMatchSAObjectiveParallel::evaluate(const VectorXd &tau) const {
+    Power tessellation;
+    std::vector<CellInfo> cellInfos;
     VectorXT c_free;
-    bool success = getC(tau, c_free);
+    bool success = preProcess(tau, &tessellation, cellInfos, c_free);
 
     if (!success) {
         std::cout << "Minimum not found in getC. Returning large objective value." << std::endl;
@@ -37,45 +47,41 @@ double ImageMatchSAObjective::evaluate(const VectorXd &tau) const {
         return 1e10;
     }
 
-    std::vector<CellInfo> cellInfos;
-    preProcess(c_free, cellInfos);
-
-    if (!info->getTessellation()->isValid) {
-//        std::cout << "Invalid tessellation in getC. Returning large objective value." << std::endl;
-        return 1e10;
-    }
-
     TypedefImageMatchFunction imageMatchFunction;
 
     double O = 0;
-    info->getTessellation()->addFunctionValue(imageMatchFunction, O, cellInfos);
+    tessellation.addFunctionValue(imageMatchFunction, O, cellInfos);
 
     std::cout << "Change " << (c_free-c0).norm() << " Objective " << O << std::endl;
+    sols.insert(std::pair<double, VectorXT>(O, c_free));
 
     return O;
 }
 
-void ImageMatchSAObjective::addGradientTo(const VectorXd &tau, VectorXd &grad) const {
+void ImageMatchSAObjectiveParallel::addGradientTo(const VectorXd &tau, VectorXd &grad) const {
     grad += get_dOdtau(tau);
 }
 
 // Not a real gradient - don't check with FD. This is the sensitivity analysis line search direction.
-VectorXd ImageMatchSAObjective::get_dOdtau(const VectorXd &tau) const {
+VectorXd ImageMatchSAObjectiveParallel::get_dOdtau(const VectorXd &tau) const {
+    Power tessellation;
+    std::vector<CellInfo> cellInfos;
     VectorXT c_free;
-    bool success = getC(tau, c_free);
+    bool success = preProcess(tau, &tessellation, cellInfos, c_free, false);
 
     if (!success) {
+        std::cout << "Failed to evaluate image match gradient. Something went wrong here. :(" << std::endl;
         return VectorXT::Zero(tau.rows());
     }
 
-    std::vector<CellInfo> cellInfos;
-    preProcess(c_free, cellInfos);
-
     VectorXT x(c0.rows() + tau.rows());
     x << c_free, tau;
-    SparseMatrixd energyHessianAT;
     EnergyObjectiveAT energyObjectiveAT;
-    energyObjectiveAT.info = info;
+    Foam2DInfo tempInfo(*info);
+    tempInfo.tessellation = 1;
+    tempInfo.tessellations[1] = &tessellation;
+    energyObjectiveAT.info = &tempInfo;
+    SparseMatrixd energyHessianAT;
     energyObjectiveAT.getHessian(x, energyHessianAT);
 
     SparseMatrixd dGdc = energyHessianAT.block(0, 0, c0.rows(), c0.rows());
@@ -88,17 +94,18 @@ VectorXd ImageMatchSAObjective::get_dOdtau(const VectorXd &tau) const {
 //        std::cout << "Hessian pd " << hessian_pd << std::endl;
 //        if (hessian_pd) break;
 //    }
-    Eigen::SparseLU<SparseMatrixd> solver;
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver;
+//    Eigen::SparseLU<SparseMatrixd> solver;
     solver.compute(dGdc + (stab * diag));
     SparseMatrixd dcdtau = solver.solve(-dGdtau);
 
     VectorXT dLdc = VectorXT::Zero(c_free.rows());
-    if (!info->getTessellation()->isValid) {
+    if (!tessellation.isValid) {
         return VectorXT::Zero(tau.rows());
     }
 
     TypedefImageMatchFunction imageMatchFunction;
-    info->getTessellation()->addFunctionGradient(imageMatchFunction, dLdc, cellInfos);
+    tessellation.addFunctionGradient(imageMatchFunction, dLdc, cellInfos);
 
     VectorXd gradient = dLdc.transpose() * dcdtau;
     std::cout << "Gradient norm " << gradient.norm()  << " " << dcdtau.norm() << " " << dLdc.norm() << " " << solver.info() << std::endl;
@@ -106,22 +113,20 @@ VectorXd ImageMatchSAObjective::get_dOdtau(const VectorXd &tau) const {
     return gradient / fmax(gradient.norm() * 100.0, 1.0);
 }
 
-bool ImageMatchSAObjective::getC(const VectorXd &tau, VectorXd &c) const {
+bool ImageMatchSAObjectiveParallel::getC(const VectorXd &tau, Tessellation *tessellation, VectorXT &c) const {
     NewtonFunctionMinimizer newton(50, 1e-6, 15);
 
     EnergyObjective energyObjective;
     Foam2DInfo tempInfo(*info);
     tempInfo.energy_area_targets = tau;
+    tempInfo.tessellation = 1;
+    tempInfo.tessellations[1] = tessellation;
     energyObjective.info = &tempInfo;
 
     c = c0;
-    bool success = newton.minimize(&energyObjective, c);
+    newton.minimize(&energyObjective, c);
 
-    if (success && !energyObjective.info->getTessellation()->isValid) {
-        std::cout << "AAAAA invalid tessellation!!!" << std::endl;
-    }
-
-//    bool success = energyObjective.getGradient(c).norm() < 1e-6 && energyObjective.info->getTessellation()->isValid;
+    bool success = energyObjective.getGradient(c).norm() < 1e-6 && energyObjective.info->getTessellation()->isValid;
 //    if (!success) {
 //        std::cout << "Valid " << energyObjective.info->getTessellation()->isValid << " Grad " << energyObjective.getGradient(c).norm() << std::endl;
 //    }

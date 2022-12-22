@@ -7,10 +7,12 @@
 #include <thread>
 
 #include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
+#include "../src/optLib/GradientDescentLineSearchParallel.h"
 
 Foam2D::Foam2D() {
     minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
     minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-10, 15));
+    minimizers.push_back(new GradientDescentLineSearchParallel(1, 1e-6, 7));
 
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
@@ -19,13 +21,11 @@ Foam2D::Foam2D() {
     energyObjective.info = info;
     dynamicObjective.info = info;
     trajOptNLP.info = info;
-    energyObjectiveAT.info = info;
     imageMatchObjective.info = info;
     imageMatchSAObjective.info = info;
 
     dynamicObjective.energyObjective = &energyObjective;
     trajOptNLP.energy = &energyObjective;
-    imageMatchSAObjective.energyObjectiveAT = &energyObjectiveAT;
 }
 
 void Foam2D::resetVertexParams() {
@@ -416,10 +416,12 @@ void Foam2D::optimize(int mode) {
         case 2:
             imageMatchSAObjective.c0 = c_free;
             // Only gradient descent available here.
-            minimizers[0]->minimize(&imageMatchSAObjective, info->energy_area_targets);
-            if(!imageMatchSAObjective.getC(info->energy_area_targets, c_free)){
-                std::cout << "Output invalid wowzers!!!" << std::endl << std::endl;
-            }
+            minimizers[2]->minimize(&imageMatchSAObjective, info->energy_area_targets);
+            c_free = (imageMatchSAObjective.sols.begin())->second;
+            imageMatchSAObjective.sols.clear();
+//            if(!imageMatchSAObjective.getC(info->energy_area_targets, info->getTessellation(), c_free)){
+//                std::cout << "Output invalid wowzers!!!" << std::endl << std::endl;
+//            }
             break;
         default:
             std::cout << "Invalid optimization mode?" << std::endl;

@@ -15,7 +15,7 @@
 #include "../include/TrajectoryOpt/TrajectoryOptNLP.h"
 #include "../include/ImageMatch/EnergyObjectiveAT.h"
 #include "../include/ImageMatch/ImageMatchObjective.h"
-#include "../include/ImageMatch/ImageMatchSAObjective.h"
+#include "../include/ImageMatch/ImageMatchSAObjectiveParallel.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
 #include "../include/Foam2DInfo.h"
 
@@ -39,9 +39,8 @@ public:
     EnergyObjective energyObjective;
     DynamicObjective dynamicObjective;
     TrajectoryOptNLP trajOptNLP;
-    EnergyObjectiveAT energyObjectiveAT;
     ImageMatchObjective imageMatchObjective;
-    ImageMatchSAObjective imageMatchSAObjective;
+    ImageMatchSAObjectiveParallel imageMatchSAObjective;
 
     VectorXT vertices;
     VectorXT params;

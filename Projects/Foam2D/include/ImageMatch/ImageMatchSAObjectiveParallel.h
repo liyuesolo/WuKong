@@ -4,7 +4,7 @@
 #include "../../include/Foam2DInfo.h"
 #include "../../include/ImageMatch/EnergyObjectiveAT.h"
 
-class ImageMatchSAObjective : public ObjectiveFunction {
+class ImageMatchSAObjectiveParallel : public ObjectiveFunction {
 
 public:
     std::vector<VectorXd> pix;
@@ -14,9 +14,10 @@ public:
     VectorXT c0;
 
     Foam2DInfo *info;
+    mutable std::map<double, VectorXT> sols;
 
 public:
-    void preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const;
+    bool preProcess(const VectorXd &tau, Tessellation *tessellation, std::vector<CellInfo> &cellInfos, VectorXd &c_free, bool need_get_c) const;
 
     virtual double evaluate(const VectorXd &tau) const;
 
@@ -24,5 +25,5 @@ public:
 
     VectorXd get_dOdtau(const VectorXd &tau) const;
 
-    bool getC(const VectorXd &tau, VectorXT &c) const;
+    bool getC(const VectorXd &tau, Tessellation *tessellation, VectorXT &c) const;
 };
