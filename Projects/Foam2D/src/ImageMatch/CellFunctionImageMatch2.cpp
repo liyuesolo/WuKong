@@ -145,6 +145,8 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
+    Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
+
     double xp, yp;
     int x0i, y0i, x1i, y1i;
     double x0, y0, x1, y1;
@@ -181,10 +183,10 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
             t5 = t5 * t8;
             t10 = xp - x1;
             t6 = t4 * (0.8e1 * t2 * t3 * t6 * t8 - 0.2e1 * t1 * t10) + 0.4e1 * t5 * (t1 * t3 - t10 * t2);
-            hessian(x0i,x0i) += 0.2e1 * t4 * (pow(t1, 0.2e1) - t7) + 0.8e1 * t5 * t2 * (t9 * t2 + t1);
-            hessian(x0i,y0i) += t6;
-            hessian(y0i,x0i) += t6;
-            hessian(y0i,y0i) += -0.2e1 * t4 * (-pow(t10, 0.2e1) + t7) - 0.8e1 * t5 * t3 * (-t9 * t3 + t10);
+            hess_xx(x0i,x0i) += 0.2e1 * t4 * (pow(t1, 0.2e1) - t7) + 0.8e1 * t5 * t2 * (t9 * t2 + t1);
+            hess_xx(x0i,y0i) += t6;
+            hess_xx(y0i,x0i) += t6;
+            hess_xx(y0i,y0i) += -0.2e1 * t4 * (-pow(t10, 0.2e1) + t7) - 0.8e1 * t5 * t3 * (-t9 * t3 + t10);
         }
         else {
             t1 = -y1 + yp;
@@ -223,22 +225,22 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
             t9 = t21 * t14 * (-t3 + t20) - t11 - 0.2e1 * t6 * (-t18 * t8 + t9);
             t4 = t21 * t22 * (t7 + t18) - 0.2e1 * t6 * (t18 * t7 - t17) - t16 * t4;
             t2 = -t21 * t14 * (-t3 + t2) + t6 * (-0.2e1 * t7 * t8 + t10);
-            hessian(x0i,x0i) += 0.8e1 * t15 * (t13 + t1) + 0.2e1 * t6 * (pow(t1, 0.2e1) - t17);
-            hessian(x0i,y0i) += t23;
-            hessian(x0i,x1i) += t5;
-            hessian(x0i,y1i) += t19;
-            hessian(y0i,x0i) += t23;
-            hessian(y0i,y0i) += 0.2e1 * t6 * (pow(t18, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t18);
-            hessian(y0i,x1i) += t9;
-            hessian(y0i,y1i) += t4;
-            hessian(x1i,x0i) += t5;
-            hessian(x1i,y0i) += t9;
-            hessian(x1i,x1i) += 0.2e1 * t6 * (pow(t8, 0.2e1) - t17) + 0.8e1 * t15 * (t13 + t8);
-            hessian(x1i,y1i) += t2;
-            hessian(y1i,x0i) += t19;
-            hessian(y1i,y0i) += t4;
-            hessian(y1i,x1i) += t2;
-            hessian(y1i,y1i) += 0.2e1 * t6 * (pow(t7, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t7);
+            hess_xx(x0i,x0i) += 0.8e1 * t15 * (t13 + t1) + 0.2e1 * t6 * (pow(t1, 0.2e1) - t17);
+            hess_xx(x0i,y0i) += t23;
+            hess_xx(x0i,x1i) += t5;
+            hess_xx(x0i,y1i) += t19;
+            hess_xx(y0i,x0i) += t23;
+            hess_xx(y0i,y0i) += 0.2e1 * t6 * (pow(t18, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t18);
+            hess_xx(y0i,x1i) += t9;
+            hess_xx(y0i,y1i) += t4;
+            hess_xx(x1i,x0i) += t5;
+            hess_xx(x1i,y0i) += t9;
+            hess_xx(x1i,x1i) += 0.2e1 * t6 * (pow(t8, 0.2e1) - t17) + 0.8e1 * t15 * (t13 + t8);
+            hess_xx(x1i,y1i) += t2;
+            hess_xx(y1i,x0i) += t19;
+            hess_xx(y1i,y0i) += t4;
+            hess_xx(y1i,x1i) += t2;
+            hess_xx(y1i,y1i) += 0.2e1 * t6 * (pow(t7, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t7);
         }
     }
 }

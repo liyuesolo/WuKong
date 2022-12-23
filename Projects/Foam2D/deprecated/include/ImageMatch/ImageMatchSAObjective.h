@@ -1,8 +1,11 @@
 #pragma once
 
-#include "../../src/optLib/ObjectiveFunction.h"
-#include "../../include/Foam2DInfo.h"
-#include "../../include/ImageMatch/EnergyObjectiveAT.h"
+#include "Projects/Foam2D/src/optLib/ObjectiveFunction.h"
+#include "Projects/Foam2D/include/Foam2DInfo.h"
+#include "Projects/Foam2D/include/ImageMatch/EnergyObjectiveAT.h"
+#include "Projects/Foam2D/include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
+
+typedef CellFunctionImageMatch2AreaScaled TypedefImageMatchFunction;
 
 class ImageMatchSAObjective : public ObjectiveFunction {
 

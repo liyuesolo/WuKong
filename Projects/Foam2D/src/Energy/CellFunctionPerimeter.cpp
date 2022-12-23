@@ -47,7 +47,6 @@ void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &no
         t2 = t3 * t2;
         t1 = t3 * t1;
 
-
         gradient_x(x0i) += -t1;
         gradient_x(y0i) += t2;
         gradient_x(x1i) += t1;

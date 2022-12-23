@@ -2,6 +2,7 @@
 
 #include "../../src/optLib/ObjectiveFunction.h"
 #include "../../include/Foam2DInfo.h"
+#include "../../include/ImageMatch/ImageMatchSAObjectiveParallel.h"
 
 class ImageMatchObjective : public ObjectiveFunction {
 

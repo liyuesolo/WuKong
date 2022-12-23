@@ -9,10 +9,10 @@ Projects/DigitalFabrics3D/IsohedraTiling
 Libs/lbfgs
 *.obj
 *.txt
-Projects/Foam2D/codegen/codegen_energy/*
-Projects/Foam2D/codegen/codegen_imagematch/*
-Projects/Foam2D/codegen/codegen_energy_areatarget/*
-Projects/Foam2D/codegen/__pycache__/*
+Projects/Foam2D/deprecated/codegen/codegen_energy/*
+Projects/Foam2D/deprecated/codegen/codegen_imagematch/*
+Projects/Foam2D/deprecated/codegen/codegen_energy_areatarget/*
+Projects/Foam2D/deprecated/codegen/__pycache__/*
 .idea/*
 cmake-build-debug/*
 cmake-build-release/*

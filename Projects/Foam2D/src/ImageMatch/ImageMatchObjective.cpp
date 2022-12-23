@@ -23,7 +23,7 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
         return 1e10;
     }
 
-    CellFunctionImageMatch2AreaScaled imageMatchFunction;
+    TypedefImageMatchFunction imageMatchFunction;
 
     double O = 0;
     info->getTessellation()->addFunctionValue(imageMatchFunction, O, cellInfos);
@@ -44,7 +44,7 @@ VectorXd ImageMatchObjective::get_dOdc(const VectorXd &c_free) const {
         return gradient;
     }
 
-    CellFunctionImageMatch2AreaScaled imageMatchFunction;
+    TypedefImageMatchFunction imageMatchFunction;
     info->getTessellation()->addFunctionGradient(imageMatchFunction, gradient, cellInfos);
 
     return gradient;

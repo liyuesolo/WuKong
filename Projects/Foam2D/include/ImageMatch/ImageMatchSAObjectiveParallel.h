@@ -3,6 +3,10 @@
 #include "../../src/optLib/ObjectiveFunction.h"
 #include "../../include/Foam2DInfo.h"
 #include "../../include/ImageMatch/EnergyObjectiveAT.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch1AreaScaled.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
+
+typedef CellFunctionImageMatch2AreaScaled TypedefImageMatchFunction;
 
 class ImageMatchSAObjectiveParallel : public ObjectiveFunction {
 

@@ -1,9 +1,6 @@
-#include "../../include/ImageMatch/ImageMatchSAObjective.h"
-#include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
-#include "../../src/optLib/NewtonFunctionMinimizer.h"
-#include "../../include/Energy/EnergyObjective.h"
-
-typedef CellFunctionImageMatch2AreaScaled TypedefImageMatchFunction;
+#include "Projects/Foam2D/deprecated/include/ImageMatch/ImageMatchSAObjective.h"
+#include "Projects/Foam2D/src/optLib/NewtonFunctionMinimizer.h"
+#include "Projects/Foam2D/include/Energy/EnergyObjective.h"
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";

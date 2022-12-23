@@ -1,10 +1,7 @@
 #include "../../include/ImageMatch/ImageMatchSAObjectiveParallel.h"
-#include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
 #include "../../src/optLib/NewtonFunctionMinimizer.h"
 #include "../../include/Energy/EnergyObjective.h"
 #include "../../include/Tessellation/Power.h"
-
-typedef CellFunctionImageMatch2AreaScaled TypedefImageMatchFunction;
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";
