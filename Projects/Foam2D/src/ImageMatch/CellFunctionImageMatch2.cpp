@@ -1,4 +1,4 @@
-#include "../../include/ImageMatch/CellFunctionImageMatch.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch2.h"
 #include <iostream>
 
 static void get_closest_idx(const double &xp, const double &yp, const VectorXT &nodes, int &closest_idx, bool &is_edge) {
@@ -52,7 +52,7 @@ static void get_closest_idx(const double &xp, const double &yp, const VectorXT &
     }
 }
 
-void CellFunctionImageMatch::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
                                           const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
@@ -89,7 +89,7 @@ void CellFunctionImageMatch::addValue(const VectorXT &site, const VectorXT &node
     }
 }
 
-void CellFunctionImageMatch::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
                                              VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
@@ -140,7 +140,7 @@ void CellFunctionImageMatch::addGradient(const VectorXT &site, const VectorXT &n
     }
 }
 
-void CellFunctionImageMatch::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
                                             const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;

@@ -1,5 +1,5 @@
 #include "../../include/ImageMatch/ImageMatchObjective.h"
-#include "../../include/ImageMatch/CellFunctionImageMatchAreaScaled.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
 
 void ImageMatchObjective::preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const {
     VectorXd c(c_free.size() + info->c_fixed.size());
@@ -23,7 +23,7 @@ double ImageMatchObjective::evaluate(const VectorXd &c_free) const {
         return 1e10;
     }
 
-    CellFunctionImageMatchAreaScaled imageMatchFunction;
+    CellFunctionImageMatch2AreaScaled imageMatchFunction;
 
     double O = 0;
     info->getTessellation()->addFunctionValue(imageMatchFunction, O, cellInfos);
@@ -44,7 +44,7 @@ VectorXd ImageMatchObjective::get_dOdc(const VectorXd &c_free) const {
         return gradient;
     }
 
-    CellFunctionImageMatchAreaScaled imageMatchFunction;
+    CellFunctionImageMatch2AreaScaled imageMatchFunction;
     info->getTessellation()->addFunctionGradient(imageMatchFunction, gradient, cellInfos);
 
     return gradient;

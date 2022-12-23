@@ -1,13 +1,13 @@
 #pragma once
 
 #include "../../include/Tessellation/CellFunction.h"
-#include "../../include/ImageMatch/CellFunctionImageMatch.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch2.h"
 #include "../../include/Energy/CellFunctionArea.h"
 
-class CellFunctionImageMatchAreaScaled : public CellFunction {
+class CellFunctionImageMatch2AreaScaled : public CellFunction {
 public:
     CellFunctionArea area_function;
-    CellFunctionImageMatch image_match_function;
+    CellFunctionImageMatch2 image_match_function;
 
 public:
     virtual void

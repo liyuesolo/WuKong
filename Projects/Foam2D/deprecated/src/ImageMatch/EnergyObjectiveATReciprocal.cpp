@@ -1,6 +1,6 @@
-#include "../../include/ImageMatch/EnergyObjectiveATReciprocal.h"
-#include "../../include/Energy/CellFunctionEnergy.h"
-#include "../../include/Energy/CellFunctionArea.h"
+#include "Projects/Foam2D/deprecated/include/ImageMatch/EnergyObjectiveATReciprocal.h"
+#include "Projects/Foam2D/include/Energy/CellFunctionEnergy.h"
+#include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
 
 static void printVectorXT(std::string name, const VectorXT &x, int start = 0, int space = 1) {
     std::cout << name << ": [";

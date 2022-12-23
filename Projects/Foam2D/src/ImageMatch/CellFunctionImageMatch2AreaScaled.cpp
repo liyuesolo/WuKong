@@ -1,7 +1,7 @@
-#include "../../include/ImageMatch/CellFunctionImageMatchAreaScaled.h"
+#include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
 #include <iostream>
 
-void CellFunctionImageMatchAreaScaled::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionImageMatch2AreaScaled::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
                                           const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);
@@ -11,7 +11,7 @@ void CellFunctionImageMatchAreaScaled::addValue(const VectorXT &site, const Vect
     value += image_match / area;
 }
 
-void CellFunctionImageMatchAreaScaled::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionImageMatch2AreaScaled::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
                                              VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);
@@ -27,7 +27,7 @@ void CellFunctionImageMatchAreaScaled::addGradient(const VectorXT &site, const V
     gradient_x += image_match_gradient / area - image_match * area_gradient / pow(area, 2);
 }
 
-void CellFunctionImageMatchAreaScaled::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+void CellFunctionImageMatch2AreaScaled::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
                                             const CellInfo *cellInfo) const {
     double area = 0;
     area_function.addValue(site, nodes, area, cellInfo);

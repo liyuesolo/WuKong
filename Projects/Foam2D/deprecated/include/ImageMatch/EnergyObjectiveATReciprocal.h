@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../src/optLib/ObjectiveFunction.h"
-#include "../../include/Foam2DInfo.h"
+#include "Projects/Foam2D/src/optLib/ObjectiveFunction.h"
+#include "Projects/Foam2D/include/Foam2DInfo.h"
 
 class EnergyObjectiveATReciprocal : public ObjectiveFunction {
 

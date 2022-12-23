@@ -2,7 +2,7 @@
 
 #include "../../include/Tessellation/CellFunction.h"
 
-class CellFunctionImageMatch : public CellFunction {
+class CellFunctionImageMatch2 : public CellFunction {
 public:
 
 public:
