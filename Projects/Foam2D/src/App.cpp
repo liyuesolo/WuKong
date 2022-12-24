@@ -6,15 +6,19 @@
 #include <opencv4/opencv2/core/eigen.hpp>
 
 #include "../include/ImageMatch/Segmentation.h"
+#include "../src/optLib/ParallelLineSearchMinimizers.h"
 
 void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
-        ImGui::Checkbox("Optimize", &optimize);
+        if (ImGui::Checkbox("Optimize", &optimize)) {
+            foam.minimizerBFGS.inverseHessian = MatrixXd();
+        }
 
         std::vector<std::string> optTypes;
         optTypes.push_back("Gradient Descent");
         optTypes.push_back("Newton's Method");
+        optTypes.push_back("BFGS");
         ImGui::Combo("Optimizer", &foam.opttype, optTypes);
 
         ImGui::Spacing();
@@ -143,6 +147,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 //                updateViewerData(viewer);
 //            }
             if (ImGui::Button("Start SA")) {
+                foam.minimizerImageMatch.alpha_nominal = 1;
                 dynamics = false;
                 matchSA = true;
             }
@@ -226,6 +231,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 switch (key) {
                     case GLFW_KEY_SPACE:
                         optimize = !optimize;
+                        foam.minimizerBFGS.inverseHessian = MatrixXd();
                         return false;
                     default:
                         return false;

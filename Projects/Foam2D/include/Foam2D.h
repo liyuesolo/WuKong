@@ -17,6 +17,9 @@
 #include "../include/ImageMatch/ImageMatchObjective.h"
 #include "../include/ImageMatch/ImageMatchSAObjectiveParallel.h"
 #include "../src/optLib/GradientDescentMinimizer.h"
+#include "../src/optLib/NewtonFunctionMinimizer.h"
+#include "../src/optLib/FancyBFGSMinimizer.h"
+#include "../src/optLib/ParallelLineSearchMinimizers.h"
 #include "../include/Foam2DInfo.h"
 
 using TV = Vector<double, 2>;
@@ -33,7 +36,10 @@ using VectorXf = Vector<float, Eigen::Dynamic>;
 
 class Foam2D {
 public:
-    std::vector<GradientDescentLineSearch *> minimizers;
+    GradientDescentLineSearch minimizerGradientDescent = GradientDescentLineSearch(1, 1e-6, 15);
+    NewtonFunctionMinimizer minimizerNewton = NewtonFunctionMinimizer(1, 1e-10, 15);
+    FancyBFGSMinimizer minimizerBFGS = FancyBFGSMinimizer(1, 1e-10, 15);
+    GradientDescentLineSearchParallel minimizerImageMatch = GradientDescentLineSearchParallel(1, 1e-6, 5);
     int opttype = 1;
 
     EnergyObjective energyObjective;

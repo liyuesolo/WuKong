@@ -2,6 +2,7 @@
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
+#include "../src/optLib/FancyBFGSMinimizer.h"
 #include <random>
 #include "../include/TrajectoryOpt/TrajectoryOptSolver.h"
 #include <thread>
@@ -10,10 +11,6 @@
 #include "../src/optLib/ParallelLineSearchMinimizers.h"
 
 Foam2D::Foam2D() {
-    minimizers.push_back(new GradientDescentLineSearch(1, 1e-6, 15));
-    minimizers.push_back(new NewtonFunctionMinimizer(1, 1e-10, 15));
-    minimizers.push_back(new GradientDescentLineSearchParallel(1, 1e-6, 5));
-
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
     info->tessellations.push_back(new Power());
@@ -404,19 +401,34 @@ void Foam2D::optimize(int mode) {
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
 
+    GradientDescentLineSearch* minimizer;
+    switch (opttype) {
+        case 0:
+            minimizer = &minimizerGradientDescent;
+            break;
+        case 1:
+            minimizer = &minimizerNewton;
+            break;
+        case 2:
+            minimizer = &minimizerBFGS;
+            break;
+        default:
+            std::cout << "Invalid minimizer!!!" << std::endl;
+    }
+
     switch (mode) {
         case 0:
 //            energyObjective.check_gradients(c_free);
-            minimizers[opttype]->minimize(&energyObjective, c_free);
+            minimizer->minimize(&energyObjective, c_free);
             break;
         case 1:
 //            dynamicObjective.check_gradients(c_free);
-            minimizers[opttype]->minimize(&dynamicObjective, c_free);
+            minimizer->minimize(&dynamicObjective, c_free);
             break;
         case 2:
             imageMatchSAObjective.c0 = c_free;
             // Only gradient descent available here.
-            minimizers[2]->minimize(&imageMatchSAObjective, info->energy_area_targets);
+            minimizerImageMatch.minimize(&imageMatchSAObjective, info->energy_area_targets);
 
             c_free = (imageMatchSAObjective.sols.begin())->second;
             imageMatchSAObjective.sols.clear();
