@@ -96,3 +96,95 @@ def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params,
             options={'disp' : False})
     
     return np.reshape(result.x, (m, 3))
+
+def computeUniaxialStrainThetaBatch(n_tiling_params, strain, 
+    thetas, model, tiling_params, verbose = True):
+
+    
+    strain_init = []
+    for theta in thetas:
+        d = np.array([np.cos(theta), np.sin(theta)])
+        strain_tensor_init = np.outer(d, d) * strain
+        strain_init.append(np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]]))
+
+    strain_init = np.array(strain_init).flatten()
+    
+    m = len(strain_init) // 3
+    n = len(strain_init)
+    A = np.zeros((m, n))
+    lb = []
+    ub = []
+
+    for i in range(m):
+        d = np.array([np.cos(thetas[i]), np.sin(thetas[i])])
+        A[i, i * 3:i * 3 + 3] = computedCdE(d)
+        lb.append(strain)
+        ub.append(strain)
+
+    uniaxial_strain_constraint = LinearConstraint(A, lb, ub)
+
+    def hessian(x):
+        
+        H = hessPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
+            tf.convert_to_tensor(tiling_params), model)
+        H = H.numpy()
+        return H
+
+    def objAndEnergy(x):
+        obj, grad = objGradPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
+            tf.convert_to_tensor(tiling_params), model)
+        
+        obj = obj.numpy()
+        grad = grad.numpy().flatten()
+        return obj, grad
+
+    if verbose:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints=[uniaxial_strain_constraint],
+            options={'disp' : True})
+    else:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, 
+            hess=hessian,
+            constraints= [uniaxial_strain_constraint],
+            options={'disp' : False})
+    
+    return np.reshape(result.x, (m, 3))
+
+@tf.function
+def valueGradHessian(n_tiling_params, inputs, model):
+    batch_dim = inputs.shape[0]
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(inputs)
+        with tf.GradientTape() as tape:
+            tape.watch(inputs)
+            psi = model(inputs, training=False)
+            dedlambda = tape.gradient(psi, inputs)
+            
+            stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+            
+    C = tape_outer.batch_jacobian(stress, inputs)[:, :, n_tiling_params:]
+    del tape
+    del tape_outer
+    return psi, stress, C
+
+@tf.function
+def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
+    batch_dim = inputs.shape[0]
+    thetas = tf.expand_dims(thetas, axis=1)
+    
+    d_voigt = tf.concat((tf.math.cos(thetas) * tf.math.cos(thetas), 
+                        tf.math.sin(thetas) * tf.math.sin(thetas), 
+                        tf.math.sin(thetas) * tf.math.cos(thetas)), 
+                        axis = 1)
+    psi, stress, C = valueGradHessian(n_tiling_params, inputs, model)
+    
+    Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
+    dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
+    
+    stiffness = tf.divide(tf.constant([1.0], dtype=tf.float64), dTSd)
+    for i in range(1, C.shape[0]):
+        
+        Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
+        dTSd = tf.expand_dims(tf.tensordot(d_voigt[i, :], Sd, 1), axis=0)
+        stiffness = tf.concat((stiffness, tf.divide(tf.constant([1.0], dtype=tf.float64), dTSd)), 0)
+    return tf.squeeze(stiffness)

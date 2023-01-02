@@ -78,29 +78,6 @@ def valueGradHessian(n_tiling_params, inputs, model):
     del tape_outer
     return psi, stress, C
 
-@tf.function
-def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
-    batch_dim = inputs.shape[0]
-    thetas = tf.expand_dims(thetas, axis=1)
-    
-    d_voigt = tf.concat((tf.math.cos(thetas) * tf.math.cos(thetas), 
-                        tf.math.sin(thetas) * tf.math.sin(thetas), 
-                        tf.math.sin(thetas) * tf.math.cos(thetas)), 
-                        axis = 1)
-    psi, stress, C = valueGradHessian(n_tiling_params, inputs, model)
-    
-    Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
-    dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
-    
-    for i in range(1, C.shape[0]):
-        
-        Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
-        dTSd = tf.concat((tf.expand_dims(tf.tensordot(d_voigt[i, :], Sd, 1), axis=0), dTSd), 0)
-        
-    stiffness = tf.squeeze(tf.math.divide(tf.ones((batch_dim), dtype=tf.float64), tf.expand_dims(dTSd, axis=0)))
-    # stiffness2 = tf.constant(2.0) * tf.math.divide(tf.squeeze(psi), tf.constant(0.1) * tf.ones((batch_dim)))
-    
-    return stiffness, stiffness
 
 def computeUniaxialStrainThetaBatch(n_tiling_params, strain, 
     thetas, model, tiling_params, verbose = True):
@@ -260,10 +237,10 @@ def optimizeStiffnessProfile():
     
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH21" + '.tf')
-    stiffness, stiffness2 = computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(all_data), 
+    stiffness = computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(all_data), 
         tf.convert_to_tensor(thetas), model)
     stiffness = stiffness.numpy()
-    stiffness2 = stiffness2.numpy()
+    
     
     energy_pred, grad_pred, C = valueGradHessian(n_tiling_params, tf.convert_to_tensor(all_data), model)
 
@@ -352,9 +329,11 @@ def loadModel(IH):
 
 def computeStiffness():
     bounds = []
-    IH = 1
+    IH = 50
     n_sp_theta = 50
-    thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta))
+    dtheta = np.pi/float(n_sp_theta)
+    thetas = np.arange(0.0, np.pi, dtheta)
+    # print(len(thetas))
     strain = 0.01
     current_dir = os.path.dirname(os.path.realpath(__file__))
     idx = np.arange(0, len(thetas), 5)
@@ -374,9 +353,9 @@ def computeStiffness():
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
         bounds.append([0.25, 0.75])
-        # ti = np.array([0.2308, 0.5])
-        ti = np.array([0.2903, 0.6714])
-        sample_idx = [2, 7, -1]
+        ti_default = np.array([0.2308, 0.5])
+        # ti = np.array([0.2903, 0.6714])
+        ti = ti_default
     elif IH == 67:
         # n_sp_theta = 100
         strain = 0.05
@@ -399,17 +378,31 @@ def computeStiffness():
         # ti_target = np.array([0.6, 0.6])
         idx = np.arange(0, len(thetas), 5)
     elif IH == 1:
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
+        strain = -0.1
+        if strain < 0:
+            strain = strain - 0.5 * strain * strain
+        else:
+            strain = strain + 0.5 * strain * strain
         n_tiling_params = 4
         bounds.append([0.05, 0.3])
         bounds.append([0.25, 0.75])
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
         # ti = np.array([0.1224, 0.5, 0.1434, 0.625])
-        ti = np.array([0.1224, 0.6, 0.13, 0.625])
-        # ti_target = np.array([0.6, 0.6])
-        idx = np.arange(0, len(thetas), 5)
+        ti = np.array([0.1224,  0.5254, 0.1433, 0.49])
+    elif IH == 3:
+        strain = 0.1
+        if strain < 0:
+            strain = strain - 0.5 * strain * strain
+        else:
+            strain = strain + 0.5 * strain * strain
+        n_tiling_params = 4
+        bounds.append([0.05, 0.5])
+        bounds.append([0.2, 0.8])
+        bounds.append([0.08, 0.5])
+        bounds.append([0.4, 0.8])
+        # ti = np.array([0.1224,  0.5, 0.2253, 0.625])
+        ti = np.array([0.12,  0.5, 0.2, 0.625])
 
     # strain = -0.12
     # strain = strain - 0.5 * strain * strain
@@ -425,24 +418,25 @@ def computeStiffness():
     model.load_weights(save_path + "IH" + model_name + '.tf')
 
     uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
-    # print(uniaxial_strain)
+    
     # stiffness = generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model)
 
     batch_dim = len(thetas)
     ti_batch = np.tile(ti, (batch_dim, 1))
+    
     # uniaxial_strain = np.reshape(uniaxial_strain, (batch_dim, 3))
     nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
-    stiffness, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+    
+    stiffness  = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
-                
-    # stiffness = stiffness.numpy()
+    stiffness = stiffness.numpy()
+
     for i in range(n_sp_theta):
         thetas= np.append(thetas, thetas[i] - np.pi)
         stiffness = np.append(stiffness, stiffness[i])
-    thetas = np.append(thetas, thetas[0])
-    stiffness = np.append(stiffness, stiffness[0])
+
     plt.polar(thetas, stiffness, label = "tensor", linewidth=3.0)
-    plt.savefig("stiffness.png", dpi=300)
+    plt.savefig("images/stiffness.png", dpi=300)
     plt.close()
 
 def computeStiffnessBatch():
@@ -493,7 +487,7 @@ def computeStiffnessBatch():
                 f.write(str(np.max(error)) + " " + str(np.min(error)) + " " + str(np.mean(error)) + "\n")
                 ti_tile = np.tile([t1, t2], (len(thetas), 1))
                 nn_inputs = np.hstack((ti_tile, uniaxial_strain))
-                stiffness, _= computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(nn_inputs), 
+                stiffness = computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(nn_inputs), 
                     tf.convert_to_tensor(thetas), model)
                 
                 for i in range(n_sp_theta):
@@ -658,7 +652,7 @@ def generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model):
     ti_batch = np.tile(ti, (batch_dim, 1))
     uniaxial_strain = np.reshape(uniaxial_strain, (batch_dim, 3))
     nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
-    stiffness, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+    stiffness = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
     stiffness = stiffness.numpy()
     return stiffness
@@ -824,7 +818,7 @@ def stiffnessOptimizationSA():
 
         uniaxial_strain_opt = np.reshape(uniaxial_strain_opt, (batch_dim, 3))
         nn_inputs = tf.convert_to_tensor(np.hstack((np.tile(result.x, (batch_dim, 1)), uniaxial_strain_opt)))
-        stiffness_opt, _ = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
+        stiffness_opt = computeDirectionalStiffness(n_tiling_params, nn_inputs, 
                         tf.convert_to_tensor(thetas), model)
         stiffness_opt = stiffness_opt.numpy()
         print(result.x)
@@ -889,5 +883,5 @@ def stiffnessOptimizationSA():
         os.system("convert stiffness_optimization_IH"+str(IH)+"_optimized.png -trim stiffness_optimization_IH"+str(IH)+"_optimized.png")
 
 if __name__ == "__main__":
-    # computeStiffness()
-    stiffnessOptimizationSA()
+    computeStiffness()
+    # stiffnessOptimizationSA()
