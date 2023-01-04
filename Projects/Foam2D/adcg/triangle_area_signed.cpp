@@ -1,10 +1,8 @@
 #include "../include/constants.hpp"
 
 #include <iosfwd>
-#include <array>
+#include <vector>
 #include <cppad/cg.hpp>
-//#include <cppad/example/cppad_eigen.hpp>
-
 
 using namespace CppAD;
 using namespace CppAD::cg;
@@ -12,39 +10,34 @@ using namespace CppAD::cg;
 using CGD = CG<double>;
 using ADCG = AD<CGD>;
 
+
+
 template <typename T>
-// vertices are stored as x1, y1, x2, ..., xN_SEGMENTS, yN_SEGMENTS
-T LineLength(const std::array<T,4>& vertices) {
-	// vertices is an array of vertices stored as 2d coordinates
-	T horz = vertices[2] - vertices[0];
-	T vert = vertices[3] - vertices[1];
-	return sqrt(pow(horz, 2) + pow(vert, 2));
+inline void triangle_area_signed(const T* a, const T* b, const T* c, T* y) {
+	const T abx = b[0] - a[0], aby = b[1] - a[1];
+	const T acx = c[0] - a[0], acy = c[1] - a[1];
+	*y = abx * acy - aby * acx;
 }
 
 
 int main() {
 
-	CppAD::vector<ADCG> x(4);
-
+	constexpr int N = 6;
+	CppAD::vector<ADCG> x(N);
 	CppAD::vector<ADCG> y(1);
 
 	Independent(x);
-	std::array<ADCG, 4> x_a = {x[0], x[1], x[2], x[3]};
-	y[0] = LineLength(x_a);
+	triangle_area_signed(x.data(), x.data()+2, x.data()+4, y.data());
 	ADFun<CGD> fun(x, y);
-
 	CodeHandler<double> handler;
 
-	CppAD::vector<CGD> indVars(4);
+	CppAD::vector<CGD> indVars(N);
 	handler.makeVariables(indVars);
-
 
 	LanguageC<double> langC("double");
 	LangCDefaultVariableNameGenerator<double> nameGen;
 
 	std::ostringstream code;
-
-#define JACOBIAN 0
 
 # if JACOBIAN
 	CppAD::vector<CGD> jac = fun.Jacobian(indVars);
