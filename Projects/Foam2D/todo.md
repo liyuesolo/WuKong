@@ -1,4 +1,6 @@
 To Do 
+=====
+
 - [ ] Write frame data into results file
 - [ ] Set segment size etc. from intereface
 - [ ] Split up interface nicely
@@ -105,9 +107,3 @@ To Do
 - Next major steps
    * [X] Introduce adhesion
    * [ ] Prohibit self-intersections
-- [ ] 
-- [ ] 
-
-Next version of the thing:
-- use an std::vector for the vertices
-- cells have very little significance in the code, dof's matter
