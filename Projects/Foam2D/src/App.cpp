@@ -147,7 +147,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 //                updateViewerData(viewer);
 //            }
             if (ImGui::Button("Start SA")) {
-                foam.minimizerImageMatch.alpha_nominal = 1;
+//                foam.minimizerImageMatch.alpha_nominal = 1;
                 dynamics = false;
                 matchSA = true;
             }

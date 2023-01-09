@@ -343,7 +343,7 @@ Tessellation::addSingleCellFunctionValue(int cell, const CellFunction &function,
 
 void
 Tessellation::addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient,
-                                         const CellInfo *cellInfo) {
+                                            const CellInfo *cellInfo) {
     int dims = 2 + getNumVertexParams();
     int n_cells = cells.size();
 
@@ -375,14 +375,14 @@ Tessellation::addSingleCellFunctionGradient(int cell, const CellFunction &functi
 void
 Tessellation::addFunctionValue(const CellFunction &function, double &value,
                                const std::vector<CellInfo> cellInfos) {
+    int dims = 2 + getNumVertexParams();
     for (int cell = 0; cell < cells.size(); cell++) {
         VectorXi nodeIndices = cells[cell];
 
-        VectorXT site(2);
+        VectorXT site(dims);
         VectorXT nodes(nodeIndices.rows() * 2);
 
-        int dims = 2 + getNumVertexParams();
-        site = c.segment<2>(cell * dims);
+        site = c.segment(cell * dims, dims);
         for (int i = 0; i < nodeIndices.rows(); i++) {
             nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
         }
@@ -402,11 +402,10 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
     for (int cell = 0; cell < n_cells; cell++) {
         VectorXi nodeIndices = cells[cell];
 
-        VectorXT site(2);
+        VectorXT site(dims);
         VectorXT nodes(nodeIndices.rows() * 2);
 
-        int dims = 2 + getNumVertexParams();
-        site = c.segment<2>(cell * dims);
+        site = c.segment(cell * dims, dims);
         for (int i = 0; i < nodeIndices.rows(); i++) {
             nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
         }
@@ -415,7 +414,7 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
         VectorXT gradient_x = VectorXT::Zero(nodes.rows());
         function.addGradient(site, nodes, gradient_c, gradient_x, &cellInfos[cell]);
 
-        dOdc.segment<2>(cell * dims) += gradient_c;
+        dOdc.segment(cell * dims, dims) += gradient_c;
         for (int i = 0; i < nodeIndices.rows(); i++) {
             dOdx.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
         }
@@ -438,10 +437,10 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
     for (int cell = 0; cell < n_cells; cell++) {
         VectorXi nodeIndices = cells[cell];
 
-        VectorXT site(2);
+        VectorXT site(dims);
         VectorXT nodes(nodeIndices.rows() * 2);
 
-        site = c.segment<2>(cell * dims);
+        site = c.segment(cell * dims, dims);
         for (int i = 0; i < nodeIndices.rows(); i++) {
             nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
         }
@@ -463,7 +462,7 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         Eigen::Ref<MatrixXT> hessian_local_xx = hessian_local.block(site.rows(), site.rows(), nodes.rows(),
                                                                     nodes.rows());
 
-        hessian_cc.block<2, 2>(cell * dims, cell * dims) += hessian_local_cc;
+        hessian_cc.block(cell * dims, cell * dims, dims, dims) += hessian_local_cc;
         for (int i = 0; i < nodeIndices.rows(); i++) {
             hessian_cx.block<2, 2>(cell * dims, nodeIndices(i) * 2) += hessian_local_cx.block<2, 2>(0, i * 2);
             hessian_xc.block<2, 2>(nodeIndices(i) * 2, cell * dims) += hessian_local_xc.block<2, 2>(i * 2, 0);

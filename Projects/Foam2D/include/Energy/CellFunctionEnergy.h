@@ -9,6 +9,7 @@
 #include "../../include/Energy/CellFunctionCentroidXTarget.h"
 #include "../../include/Energy/CellFunctionCentroidYTarget.h"
 #include "../../include/Energy/CellFunctionPositionTarget.h"
+#include "../../include/Energy/CellFunctionZPenalty.h"
 
 class CellFunctionEnergy : public CellFunctionWeightedSum {
 public:
@@ -18,6 +19,7 @@ public:
     CellFunctionCentroidXTarget centroid_x_function;
     CellFunctionCentroidYTarget centroid_y_function;
     CellFunctionPositionTarget position_target_function;
+    CellFunctionZPenalty z_penalty_function;
 public:
     CellFunctionEnergy(Foam2DInfo *info) : CellFunctionWeightedSum() {
         functions.push_back(&area_target_function);
@@ -37,5 +39,8 @@ public:
 
         functions.push_back(&area_barrier_function);
         weights.push_back(1.0);
+
+        functions.push_back(&z_penalty_function);
+        weights.push_back(1e-3);
     };
 };

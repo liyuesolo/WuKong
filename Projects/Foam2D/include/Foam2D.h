@@ -39,7 +39,8 @@ public:
     GradientDescentLineSearch minimizerGradientDescent = GradientDescentLineSearch(1, 1e-6, 15);
     NewtonFunctionMinimizer minimizerNewton = NewtonFunctionMinimizer(1, 1e-10, 15);
     FancyBFGSMinimizer minimizerBFGS = FancyBFGSMinimizer(1, 1e-10, 15);
-    GradientDescentLineSearchParallel minimizerImageMatch = GradientDescentLineSearchParallel(1, 1e-6, 5);
+    FancyBFGSMinimizerParallel minimizerImageMatch = FancyBFGSMinimizerParallel(1, 1e-16, 8);
+//    GradientDescentLineSearchParallel minimizerImageMatch = GradientDescentLineSearchParallel(1, 1e-6, 5);
     int opttype = 1;
 
     EnergyObjective energyObjective;

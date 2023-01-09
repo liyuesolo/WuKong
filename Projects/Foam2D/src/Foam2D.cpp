@@ -401,7 +401,7 @@ void Foam2D::optimize(int mode) {
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
 
-    GradientDescentLineSearch* minimizer;
+    GradientDescentLineSearch *minimizer;
     switch (opttype) {
         case 0:
             minimizer = &minimizerGradientDescent;
@@ -427,7 +427,12 @@ void Foam2D::optimize(int mode) {
             break;
         case 2:
             imageMatchSAObjective.c0 = c_free;
-            // Only gradient descent available here.
+            imageMatchSAObjective.tau0 = info->energy_area_targets;
+            imageMatchSAObjective.dcdtau = SparseMatrixd(1, 1);
+
+//            imageMatchSAObjective.check_gradients(info->energy_area_targets);
+//            imageMatchSAObjective.sols.clear();
+
             minimizerImageMatch.minimize(&imageMatchSAObjective, info->energy_area_targets);
 
             c_free = (imageMatchSAObjective.sols.begin())->second;
