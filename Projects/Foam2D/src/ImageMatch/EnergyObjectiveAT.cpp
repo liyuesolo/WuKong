@@ -34,6 +34,15 @@ void EnergyObjectiveAT::preProcess(const VectorXd &x, std::vector<CellInfo> &cel
         cellInfos[i].target_area = x(c_free.rows() + i);
         cellInfos[i].agent = false;
     }
+    for (int i = 0; i < info->n_free; i++) {
+        VectorXi neighborhood = info->getTessellation()->neighborhoods[i];
+        cellInfos[i].neighbor_affinity = neighborhood.unaryExpr(
+                [&](int x) {
+                    if (x >= info->n_free) return 0;
+                    else if (x % 2 == i % 2) return 0;
+                    else return 1;
+                }).cast<double>();
+    }
 }
 
 double EnergyObjectiveAT::evaluate(const VectorXd &x) const {
