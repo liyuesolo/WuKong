@@ -716,7 +716,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &neighbors = info->getTessellation()->todo_neighborhoods[i];
+        VectorXi &neighbors = info->getTessellation()->neighborhoods[i];
         size_t degree = neighbors.size();
 
         TV v0 = vertices.segment<2>(i * 2);
@@ -767,8 +767,13 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
                                                                                    info->energy_area_targets(
                                                                                            currentCell)));
 
+//        Fc.row(i) = currentCell % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
+
+//        double cc = currentCell * 1.0 / info->n_free;
+//        Fc.row(i) = TV3(cc, cc, cc);
+
         currentIdxInCell++;
-        if (currentIdxInCell == info->getTessellation()->todo_neighborhoods[currentCell].size()) {
+        if (currentIdxInCell == info->getTessellation()->neighborhoods[currentCell].size()) {
             currentIdxInCell = 0;
             currentCell++;
         }
@@ -866,7 +871,7 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        std::vector<int> &neighbors = info->getTessellation()->todo_neighborhoods[i];
+        VectorXi &neighbors = info->getTessellation()->neighborhoods[i];
         size_t degree = neighbors.size();
 
         TV v0 = vertices.segment<2>(i * 2);

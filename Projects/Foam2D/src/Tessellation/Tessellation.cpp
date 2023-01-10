@@ -512,8 +512,12 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     boundary = boundary_;
 
     VectorXi dualRaw = getDualGraph(vertices, params);
-    std::vector<std::vector<int>> neighborhoods = getNeighborsClipped(vertices, params, dualRaw, boundary, n_free);
-    todo_neighborhoods = neighborhoods;
+    std::vector<std::vector<int>> neighborhoods_stdvec = getNeighborsClipped(vertices, params, dualRaw, boundary,
+                                                                             n_free);
+    neighborhoods.resize(neighborhoods_stdvec.size());
+    for (int i = 0; i < neighborhoods.size(); i++) {
+        neighborhoods[i] = Eigen::Map<VectorXi>(neighborhoods_stdvec[i].data(), neighborhoods_stdvec[i].size());
+    }
 
     auto cmp = [](IV3 a, IV3 b) {
         for (int i = 0; i < 3; i++) {
@@ -525,7 +529,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     std::set<IV3, decltype(cmp)> triplets(cmp);
 
     for (int i = 0; i < n_free; i++) {
-        std::vector<int> cell = neighborhoods[i];
+        VectorXi cell = neighborhoods[i];
         for (int j = 0; j < cell.size(); j++) {
             int n1 = cell[j];
             int n2 = cell[(j + 1) % cell.size()];
@@ -540,7 +544,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
     cells.resize(n_free);
     for (int i = 0; i < n_free; i++) {
-        std::vector<int> neighborhood = neighborhoods[i];
+        VectorXi neighborhood = neighborhoods[i];
         VectorXi cell(neighborhood.size());
 
         for (int j = 0; j < neighborhood.size(); j++) {

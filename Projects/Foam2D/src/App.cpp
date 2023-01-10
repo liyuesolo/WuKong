@@ -94,6 +94,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::InputDouble("Centroid Weight", &foam.info->energy_centroid_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Drag Target Weight", &foam.info->energy_drag_target_weight, 0.01f, 0.01f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Adhesion Weight", &foam.info->energy_adhesion_weight, 0.001f, 0.001f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -291,14 +293,12 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 } else if (optimize) {
                     if (!dynamics && !matchSA) {
                         foam.optimize(0);
-                    }
-                    else if (dynamics) {
+                    } else if (dynamics) {
                         foam.optimize(1);
                         if (foam.isConvergedDynamic(dynamics_tol)) {
                             foam.dynamicsNewStep();
                         }
-                    }
-                    else if (matchSA) {
+                    } else if (matchSA) {
                         foam.optimize(2);
                         areaTargets = foam.info->energy_area_targets;
                     }
@@ -354,7 +354,7 @@ void Foam2DApp::generateScenario() {
             std::cout << "Error: scenario not implemented!";
     }
 
-    if (generate_scenario_type == 3){
+    if (generate_scenario_type == 3) {
         numAreaTargets = foam.info->n_free;
         areaTargets = foam.info->energy_area_targets;
         matchShowImage = true;

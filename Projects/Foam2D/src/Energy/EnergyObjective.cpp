@@ -76,6 +76,20 @@ void EnergyObjective::preProcess(const VectorXd &c_free, std::vector<CellInfo> &
         cellInfos[info->selected].agent = true;
         cellInfos[info->selected].target_position = info->selected_target_pos;
     }
+    for (int i = 0; i < info->n_free; i++) {
+        VectorXi neighborhood = info->getTessellation()->neighborhoods[i];
+        cellInfos[i].neighbor_affinity = neighborhood.unaryExpr(
+                [&](int x) {
+                    if (x >= info->n_free) return 0;
+                    else if (x % 2 == i % 2) return 0;
+                    else return 1;
+                }).cast<double>();
+//        cellInfos[i].neighbor_affinity = neighborhood.unaryExpr(
+//                [&](int x) {
+//                    if (x >= info->n_free) return 0;
+//                    else return abs(x - i);
+//                }).cast<double>();
+    }
 }
 
 double EnergyObjective::evaluate(const VectorXd &c_free) const {

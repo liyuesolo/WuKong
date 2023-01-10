@@ -32,7 +32,7 @@ class Tessellation {
 public:
     VectorXi dual;
     std::vector<VectorXi> cells;
-    std::vector<std::vector<int>> todo_neighborhoods;
+    std::vector<VectorXi> neighborhoods;
     VectorXT c;
     VectorXT x;
 
@@ -80,7 +80,8 @@ public:
 
     void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
 
-    void addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient, const CellInfo *cellInfo);
+    void
+    addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient, const CellInfo *cellInfo);
 
     void addFunctionValue(const CellFunction &function, double &value, std::vector<CellInfo> cellInfos);
 

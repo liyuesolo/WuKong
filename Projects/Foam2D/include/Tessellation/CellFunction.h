@@ -23,6 +23,7 @@ struct CellInfo {
     bool agent = false;
     TV target_position;
     VectorXT border_pix;
+    VectorXT neighbor_affinity;
 };
 
 class CellFunction {

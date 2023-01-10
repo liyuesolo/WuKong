@@ -134,7 +134,8 @@ VectorXd ImageMatchSAObjectiveParallel::get_dOdtau(const VectorXd &tau) const {
 //    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> pdsolver(dGdc + (stab * diag));
 //    bool hessian_pd = pdsolver.info() != Eigen::ComputationInfo::NumericalIssue;
 //    std::cout << "dGdc pd " << hessian_pd << std::endl;
-    Eigen::SparseLU<SparseMatrixd> solver;
+//    Eigen::SparseLU<SparseMatrixd> solver;
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver;
     solver.compute(dGdc + (stab * diag));
 //    std::cout << "absdet " << solver.absDeterminant() << std::endl;
     dcdtau = solver.solve(-dGdtau);
