@@ -27,6 +27,8 @@ class CellFunction;
 
 class CellInfo;
 
+class Boundary;
+
 class Tessellation {
 
 public:
@@ -39,10 +41,12 @@ public:
     bool isValid = false;
 private:
     VectorXT boundary;
+    Boundary *bdry;
 
 //    MatrixXT dxdc;
     Eigen::SparseMatrix<double> dxdc;
-    std::vector<MatrixXT> d2xdc2;
+    Eigen::SparseMatrix<double> dxdv;
+    std::vector<MatrixXT> d2xdy2;
 
     // Computes list of indices of neighboring sites, ordered counterclockwise.
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
@@ -76,7 +80,7 @@ public:
     void getNodeWrapper(int i0, int i1, int i2, TV &node);
 
     void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
-                        MatrixXT &hessY);
+                        MatrixXT &hessY, int &mode);
 
     void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
 

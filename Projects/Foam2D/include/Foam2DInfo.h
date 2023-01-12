@@ -10,6 +10,7 @@
 
 #include "VecMatDef.h"
 #include "Projects/Foam2D/include/Tessellation/Tessellation.h"
+#include "Projects/Foam2D/include/Boundary/Boundary.h"
 
 class Foam2DInfo {
 public:
@@ -18,7 +19,7 @@ public:
 
     int n_free;
     int n_fixed;
-    VectorXT boundary;
+    Boundary *boundary;
     VectorXT c_fixed;
 
     VectorXT energy_area_targets;
