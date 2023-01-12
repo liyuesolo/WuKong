@@ -77,7 +77,7 @@ public:
     void resetVertexParams();
 
     void getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
-                                   MatrixXi &F, MatrixXT &Fc);
+                                   MatrixXi &F, MatrixXT &Fc, int colormode);
 
     void getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                     MatrixXi &F, MatrixXT &Fc);

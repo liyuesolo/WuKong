@@ -100,6 +100,16 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Spacing();
         ImGui::Spacing();
 
+        std::vector<std::string> colorModes;
+        colorModes.push_back("Area Objective");
+        colorModes.push_back("Adhesion Affinity");
+        if (ImGui::Combo("Color Mode", &colormode, colorModes)) {
+            updateViewerData(viewer);
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
         if (ImGui::Checkbox("Show Dual", &show_dual)) {
             updateViewerData(viewer);
         }
@@ -379,7 +389,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     if (show_dual) {
         foam.getTriangulationViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
     } else {
-        foam.getTessellationViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);
+        foam.getTessellationViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc, colormode);
     }
     if (trajOptMode && trajOptOptimized) {
         foam.addTrajectoryOptViewerData(points, nodes, lines, points_c, lines_c, V, F, Fc);

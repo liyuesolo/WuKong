@@ -693,7 +693,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 }
 
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
-                                       MatrixXi &F, MatrixXT &Fc) {
+                                       MatrixXi &F, MatrixXT &Fc, int colormode = 0) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     long n_vtx = vertices.rows() / 2, n_faces = info->getTessellation()->dual.rows() / 3, n_bdy =
             info->boundary.rows() / 2;
@@ -763,11 +763,14 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
         E.row(i) = IV(i * 3 + 1, i * 3 + 2);
         F.row(i) = IV3(i * 3 + 0, i * 3 + 1, i * 3 + 2);
-        Fc.row(i) = (currentCell == info->selected ? TV3(0.4, 0.4, 0.4) : getColor(areas(currentCell),
-                                                                                   info->energy_area_targets(
-                                                                                           currentCell)));
 
-//        Fc.row(i) = currentCell % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
+        if (colormode == 0) {
+            Fc.row(i) = (currentCell == info->selected ? TV3(0.4, 0.4, 0.4) : getColor(areas(currentCell),
+                                                                                       info->energy_area_targets(
+                                                                                               currentCell)));
+        } else {
+            Fc.row(i) = currentCell % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
+        }
 
 //        double cc = currentCell * 1.0 / info->n_free;
 //        Fc.row(i) = TV3(cc, cc, cc);
