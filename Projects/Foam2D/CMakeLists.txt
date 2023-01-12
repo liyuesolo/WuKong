@@ -1,8 +1,8 @@
 add_definitions(-DCGAL_DISABLE_ROUNDING_MATH_CHECK)
 set(DEPS Half tbb tbbmalloc tbbmalloc_proxy igl::core igl::opengl_glfw igl::triangle igl::opengl_glfw_imgui igl::png CGAL suitesparseconfig metis)
 
-file(GLOB HEADERS "include/*.h" "include/*.hpp" "include/Tessellation/*.h" "include/Energy/*.h" "include/ImageMatch/*.h" "include/TrajectoryOpt/*.h" "src/implot/*.h")
-file(GLOB SOURCES "src/*.cpp" "src/Tessellation/*.cpp" "src/Energy/*.cpp" "src/ImageMatch/*.cpp" "src/TrajectoryOpt/*.cpp" "src/implot/*.cpp")
+file(GLOB HEADERS "include/*.h" "include/*.hpp" "include/Tessellation/*.h" "include/Boundary/*.h" "include/Energy/*.h" "include/ImageMatch/*.h" "include/TrajectoryOpt/*.h" "src/implot/*.h")
+file(GLOB SOURCES "src/*.cpp" "src/Tessellation/*.cpp" "src/Boundary/*.cpp" "src/Energy/*.cpp" "src/ImageMatch/*.cpp" "src/TrajectoryOpt/*.cpp" "src/implot/*.cpp")
 
 add_executable(Foam2D ${HEADERS} ${SOURCES})
 
