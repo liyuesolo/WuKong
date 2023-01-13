@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 
 #include "Projects/Foam2D/include/VecMatDef.h"
+#include <iostream>
 
 using TV = Vector<double, 2>;
 using TV3 = Vector<double, 3>;
@@ -42,13 +43,13 @@ private:
 
 protected:
     inline void setGradientEntry(int iv, int ip, double value) {
-        if (free_map(ip) > 0) {
+        if (free_map(ip) >= 0) {
             dvdp(iv, free_map(ip)) = value;
         }
     };
 
     inline void setHessianEntry(int iv, int ip0, int ip1, double value) {
-        if (free_map(ip0) > 0 && free_map(ip1) > 0) {
+        if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
             d2vdp2[iv](ip0, ip1) = value;
         }
     };
@@ -76,4 +77,12 @@ public:
         computeGradient();
         computeHessian();
     };
+
+    VectorXT get_p_free() {
+        VectorXT ret(nfree);
+        for (int i = 0; i < nfree; i++) {
+            ret(i) = p(free_idx(i));
+        }
+        return ret;
+    }
 };

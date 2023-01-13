@@ -45,10 +45,8 @@ static bool lineSegmentIntersection(const TV &p0, const TV &p1, const TV &p2, co
 }
 
 std::vector<std::vector<int>>
-Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual,
-                                  const VectorXT &boundary,
-                                  int n_cells) {
-    int n_vtx = vertices.rows() / 2, n_bdy = boundary.rows() / 2;
+Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells) {
+    int n_vtx = vertices.rows() / 2, n_bdy = bdry->v.rows() / 2;
 
     std::vector<std::vector<int>> neighborsRaw = getNeighbors(vertices, dual, n_cells);
     if (n_bdy == 0) return neighborsRaw;
@@ -73,7 +71,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             TV v;
             getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v);
             nodes[j] = v;
-            inPoly[j] = pointInPolygon(v, boundary);
+            inPoly[j] = pointInPolygon(v, bdry->v);
         }
 
         for (size_t j = 0; j < degree; j++) {
@@ -90,8 +88,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 // Add neighbor and then boundary edge.
                 neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
                 for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = boundary.segment<2>(k * 2);
-                    TV v3 = boundary.segment<2>(((k + 1) % n_bdy) * 2);
+                    TV v2 = bdry->v.segment<2>(k * 2);
+                    TV v3 = bdry->v.segment<2>(((k + 1) % n_bdy) * 2);
                     TV intersect;
                     if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
                         neighborsClipped[i].push_back(n_vtx + k);
@@ -101,8 +99,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             } else if (!inPoly0 && inPoly1) {
                 // Add boundary edge and then neighbor.
                 for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = boundary.segment<2>(k * 2);
-                    TV v3 = boundary.segment<2>(((k + 1) % n_bdy) * 2);
+                    TV v2 = bdry->v.segment<2>(k * 2);
+                    TV v3 = bdry->v.segment<2>(((k + 1) % n_bdy) * 2);
                     TV intersect;
                     if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
                         neighborsClipped[i].push_back(n_vtx + k);
@@ -116,8 +114,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 std::vector<int> intersectIndices;
                 std::vector<double> intersectDistances;
                 for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = boundary.segment<2>(k * 2);
-                    TV v3 = boundary.segment<2>(((k + 1) % n_bdy) * 2);
+                    TV v2 = bdry->v.segment<2>(k * 2);
+                    TV v3 = bdry->v.segment<2>(((k + 1) % n_bdy) * 2);
                     TV intersect;
                     if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
                         intersectIndices.push_back(k);
@@ -222,7 +220,11 @@ void
 Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node) {
     int dims = 2 + getNumVertexParams();
     int n_vtx = c.rows() / dims;
-    int n_bdy = boundary.rows() / 2;
+    int n_bdy = bdry->v.rows() / 2;
+
+    if (i2 < i1 && i2 < n_vtx) {
+        std::swap(i1, i2);
+    }
 
     VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
     VectorXT v1, v2;
@@ -235,13 +237,13 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node) {
     } else if (i1 < n_vtx && i2 >= n_vtx) {
         // Boundary node with n2 a boundary edge.
         v1 = c.segment(i1 * dims, dims);
-        b0 = boundary.segment<2>((i2 - n_vtx) * 2);
-        b1 = boundary.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
+        b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
+        b1 = bdry->v.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
         getBoundaryNode(v0, v1, b0, b1, node);
     } else {
         // Boundary vertex.
         assert(i1 >= n_vtx && i2 >= n_vtx);
-        node = boundary.segment<2>((i2 - n_vtx) * 2);
+        node = bdry->v.segment<2>((i2 - n_vtx) * 2);
     }
 }
 
@@ -250,7 +252,7 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
                              MatrixXT &hessY, int &mode) {
     int dims = 2 + getNumVertexParams();
     int n_vtx = c.rows() / dims;
-    int n_bdy = boundary.rows() / 2;
+    int n_bdy = bdry->v.rows() / 2;
 
     VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
     VectorXT v1, v2;
@@ -275,8 +277,8 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
         mode = 1;
 
         v1 = c.segment(i1 * dims, dims);
-        b0 = boundary.segment<2>((i2 - n_vtx) * 2);
-        b1 = boundary.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
+        b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
+        b1 = bdry->v.segment<2>(((i2 - n_vtx + 1) % n_bdy) * 2);
         getBoundaryNode(v0, v1, b0, b1, node);
 
         gradX.resize(dims * 2 + 4);
@@ -291,10 +293,10 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
         assert(i1 >= n_vtx && i2 >= n_vtx);
         mode = 2;
 
-        TV b1s = boundary.segment<2>((i1 - n_vtx) * 2);
-        TV b1e = boundary.segment<2>(((i1 + 1 - n_vtx) % n_bdy) * 2);
-        TV b2s = boundary.segment<2>((i2 - n_vtx) * 2);
-        TV b2e = boundary.segment<2>(((i2 + 1 - n_vtx) % n_bdy) * 2);
+        TV b1s = bdry->v.segment<2>((i1 - n_vtx) * 2);
+        TV b1e = bdry->v.segment<2>(((i1 + 1 - n_vtx) % n_bdy) * 2);
+        TV b2s = bdry->v.segment<2>((i2 - n_vtx) * 2);
+        TV b2e = bdry->v.segment<2>(((i2 + 1 - n_vtx) % n_bdy) * 2);
 
         assert(b1e == b2s || b2e == b1s);
         gradX = VectorXT::Zero(4);
@@ -410,7 +412,14 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
         }
     }
 
-    gradient += dxdc.transpose() * partial_x + partial_c;
+    Eigen::Ref<VectorXT> gradient_c = gradient.segment(0, dims * n_cells);
+    Eigen::Ref<VectorXT> gradient_p = gradient.segment(dims * n_cells, bdry->nfree);
+
+    gradient_c += dxdc.transpose() * partial_x + partial_c;
+    if (bdry->nfree > 0) {
+        // TODO: Add partial_p
+        gradient_p += (dxdv * bdry->dvdp).transpose() * partial_x;
+    }
 }
 
 void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &hessian,
@@ -462,11 +471,11 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
 
     Eigen::Ref<MatrixXT> hessian_cc = hessian.block(0, 0, dims * n_cells, dims * n_cells);
     Eigen::Ref<MatrixXT> hessian_cp = hessian.block(0, dims * n_cells, dims * n_cells, bdry->nfree);
-    Eigen::Ref<MatrixXT> hessian_pp = hessian.block(dims * n_cells, dims * n_cells, dims * n_cells, bdry->nfree);
+    Eigen::Ref<MatrixXT> hessian_pp = hessian.block(dims * n_cells, dims * n_cells, bdry->nfree, bdry->nfree);
 
     MatrixXT sum_f_cc = MatrixXT::Zero(dims * n_cells, dims * n_cells);
-    MatrixXT sum_f_cv = MatrixXT::Zero(dims * n_cells, boundary.rows());
-    MatrixXT sum_f_vv = MatrixXT::Zero(boundary.rows(), boundary.rows());
+    MatrixXT sum_f_cv = MatrixXT::Zero(dims * n_cells, bdry->v.rows());
+    MatrixXT sum_f_vv = MatrixXT::Zero(bdry->v.rows(), bdry->v.rows());
     for (int ii = 0; ii < x.rows(); ii++) {
         IV3 face = dual.segment<3>(3 * ((int) (ii / 2)));
         MatrixXT hess = d2xdy2[ii];
@@ -485,13 +494,13 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         }
 
         int n_sites = c.rows() / dims;
-        int n_bdy = boundary.rows() / 2;
+        int n_bdy = bdry->v.rows() / 2;
         // Boundary edge vertices
-        if (face(2) > n_sites) {
+        if (face(2) >= n_sites) {
             int ib0 = (face(2) - n_sites) * 2;
             int ib1 = ((face(2) - n_sites + 1) % n_bdy) * 2;
 
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 2; i++) {
                 if (face(i) >= n_cells) continue;
 
                 sum_f_cv.block(face(i) * dims, ib0, dims, 2) +=
@@ -507,41 +516,41 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         }
     }
 
-    MatrixXT sum_x_pp = MatrixXT::Zero(bdry->nfree, bdry->nfree);
-    for (int ii = 0; ii < boundary.rows(); ii++) {
-        sum_x_pp += dxdv.col(ii).transpose() * bdry->d2vdp2[ii];
-    }
-
     hessian_cc +=
             partial_cc + partial_cx * dxdc + dxdc.transpose() * (partial_cx.transpose() + partial_xx * dxdc) + sum_f_cc;
 
-    MatrixXT dxdp = dxdv * bdry->dvdp;
-    hessian_cp += dxdc.transpose() * partial_xx * dxdp + sum_f_cv * bdry->dvdp;
+    if (bdry->nfree > 0) {
+        MatrixXT dxdp = dxdv * bdry->dvdp;
+        hessian_cp += dxdc.transpose() * partial_xx * dxdp + partial_cx * dxdp + sum_f_cv * bdry->dvdp;
 
-    // TODO: Add partial_pp
-    hessian_pp += dxdp.transpose() * partial_xx * dxdp + bdry->dvdp.transpose() * sum_f_vv * bdry->dvdp +
-                  partial_x.transpose() * sum_x_pp;
+        // TODO: Add partial_pp
 
-    hessian.block(dims * n_cells, 0, bdry->nfree, dims * n_cells) = hessian_cp.transpose();
+        MatrixXT sum_x_pp = MatrixXT::Zero(bdry->nfree, bdry->nfree);
+        for (int ii = 0; ii < bdry->v.rows(); ii++) {
+            sum_x_pp += (partial_x.transpose() * dxdv.col(ii)) * bdry->d2vdp2[ii];
+        }
+        hessian_pp += dxdp.transpose() * partial_xx * dxdp + bdry->dvdp.transpose() * sum_f_vv * bdry->dvdp + sum_x_pp;
+
+        hessian.block(dims * n_cells, 0, bdry->nfree, dims * n_cells) = hessian_cp.transpose();
+    }
 }
 
-void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_,
-                              const int n_free) {
+void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, Boundary *bdry_new, const int n_free) {
     VectorXT c_new = combineVerticesParams(vertices, params);
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
     bool same = true;
     same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
-    same = same && (boundary_.rows() == boundary.rows() && boundary_ == boundary);
+    same = same && (bdry_new->v.rows() == last_boundary.rows() && bdry_new->v == last_boundary);
     same = same && (n_free == cells.size());
     if (same) return;
+    bdry = bdry_new;
+    last_boundary = bdry_new->v;
 
     c = c_new;
-    boundary = boundary_;
 
     VectorXi dualRaw = getDualGraph(vertices, params);
-    std::vector<std::vector<int>> neighborhoods_stdvec = getNeighborsClipped(vertices, params, dualRaw, boundary,
-                                                                             n_free);
+    std::vector<std::vector<int>> neighborhoods_stdvec = getNeighborsClipped(vertices, params, dualRaw, n_free);
     neighborhoods.resize(neighborhoods_stdvec.size());
     for (int i = 0; i < neighborhoods.size(); i++) {
         neighborhoods[i] = Eigen::Map<VectorXi>(neighborhoods_stdvec[i].data(), neighborhoods_stdvec[i].size());
@@ -601,7 +610,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     x.resize(faces.size() * 2);
     x.setZero();
     MatrixXT dxdc_dense = MatrixXT::Zero(faces.size() * 2, n_free * dims);
-    MatrixXT dxdv_dense = MatrixXT::Zero(faces.size() * 2, boundary.rows());
+    MatrixXT dxdv_dense = MatrixXT::Zero(faces.size() * 2, bdry->v.rows());
     d2xdy2.resize(faces.size() * 2);
     for (int i = 0; i < faces.size(); i++) {
         IV3 face = faces[i];
@@ -615,7 +624,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
         // Assemble global Jacobian matrix dxdc.
         int n_sites = c.rows() / dims;
-        int n_bdy = boundary.rows() / 2;
+        int n_bdy = bdry->v.rows() / 2;
         switch (type) {
             case 0:
                 for (int j = 0; j < 3; j++) {
@@ -647,27 +656,19 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                 break;
             case 2:
                 for (int k = 0; k < 2; k++) {
-                    dxdv_dense(i * 2 + 0, (face[1] - n_sites) * 2 + k) = gradX(2 * dims + k);
-                    dxdv_dense(i * 2 + 0, ((face[1] - n_sites + 1) % n_bdy) * 2 + k) = gradX(2 * dims + 2 + k);
-                    dxdv_dense(i * 2 + 1, (face[1] - n_sites) * 2 + k) = gradY(2 * dims + k);
-                    dxdv_dense(i * 2 + 1, ((face[1] - n_sites + 1) % n_bdy) * 2 + k) = gradY(2 * dims + 2 + k);
+                    dxdv_dense(i * 2 + 0, (face[1] - n_sites) * 2 + k) = gradX(k);
+                    dxdv_dense(i * 2 + 0, ((face[1] - n_sites + 1) % n_bdy) * 2 + k) = gradX(2 + k);
+                    dxdv_dense(i * 2 + 1, (face[1] - n_sites) * 2 + k) = gradY(k);
+                    dxdv_dense(i * 2 + 1, ((face[1] - n_sites + 1) % n_bdy) * 2 + k) = gradY(2 + k);
                 }
                 break;
             default:
                 assert(0);
                 break;
         }
-        for (int j = 0; j < gradX.size() / dims; j++) {
-            if (face[j] >= n_free) {
-                continue;
-            }
-            for (int k = 0; k < dims; k++) {
-                dxdc_dense(i * 2 + 0, face[j] * dims + k) = gradX(j * dims + k);
-                dxdc_dense(i * 2 + 1, face[j] * dims + k) = gradY(j * dims + k);
-            }
-        }
     }
     dxdc = dxdc_dense.sparseView();
+    dxdv = dxdv_dense.sparseView();
 
     isValid = true;
     for (int i = 0; i < n_free; i++) {

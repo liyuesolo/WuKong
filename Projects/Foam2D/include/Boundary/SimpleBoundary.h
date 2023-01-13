@@ -15,5 +15,9 @@ private:
     virtual void computeHessian();
 
 public:
-    SimpleBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {}
+    SimpleBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
+        computeVertices();
+        computeGradient();
+        computeHessian();
+    }
 };

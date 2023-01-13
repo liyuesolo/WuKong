@@ -18,7 +18,7 @@ void CircleBoundary::computeGradient() {
     double r = p(0);
     double t0 = p(1);
 
-    dvdp.resize(v.rows(), nfree);
+    dvdp = MatrixXT::Zero(v.rows(), nfree);
     for (int i = 0; i < nsides; i++) {
         double t = t0 + i * M_PI * 2.0 / nsides;
 
@@ -36,8 +36,8 @@ void CircleBoundary::computeHessian() {
 
     d2vdp2.resize(v.rows());
     for (int i = 0; i < nsides; i++) {
-        d2vdp2[i * 2 + 0].resize(nfree, nfree);
-        d2vdp2[i * 2 + 1].resize(nfree, nfree);
+        d2vdp2[i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
+        d2vdp2[i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
 
         double t = t0 + i * M_PI * 2.0 / nsides;
 

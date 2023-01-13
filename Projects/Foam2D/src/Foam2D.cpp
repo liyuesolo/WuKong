@@ -10,6 +10,8 @@
 #include "Projects/Foam2D/include/Energy/CellFunctionArea.h"
 #include "../src/optLib/ParallelLineSearchMinimizers.h"
 
+#include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
+
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
@@ -52,7 +54,7 @@ void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
     vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment(info->n_free * 2, info->n_fixed * 2) = boundary_points;
 
-    info->boundary.resize(0);
+    info->boundary = new SimpleBoundary({}, {});
 
     resetVertexParams();
 }
@@ -64,7 +66,7 @@ void Foam2D::initBasicTestCase() {
     vertices.resize((info->n_free + info->n_fixed) * 2);
     vertices << -0.5, 0, 0.5, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
 
-    info->boundary.resize(0);
+    info->boundary = new SimpleBoundary({}, {});
 
     resetVertexParams();
 }
@@ -87,8 +89,14 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
 
-    info->boundary.resize(4 * 2);
-    info->boundary << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+    VectorXT v(4 * 2);
+    v << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+
+    VectorXi free_bdry_idx(2);
+    free_bdry_idx(0) = 0;
+    free_bdry_idx(1) = 1;
+
+    info->boundary = new SimpleBoundary(v, free_bdry_idx);
 
     resetVertexParams();
 }
@@ -118,8 +126,9 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
     double dx = imageMatchObjective.dx;
     double dy = imageMatchObjective.dy;
 
-    info->boundary.resize(4 * 2);
-    info->boundary << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+    VectorXT v(4 * 2);
+    v << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+    info->boundary = new SimpleBoundary(v, {});
 
     // Get only boundary pixel info in order to set objective function pixels.
     VectorXi countOuter = VectorXi::Zero(info->n_free);
@@ -200,175 +209,6 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
     resetVertexParams();
 }
 
-//void Foam2D::imageMatchOptimizeIPOPT() {
-//    int dims = 2 + info->getTessellation()->getNumVertexParams();
-//    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
-//    VectorXT c_free = c.segment(0, info->n_free * dims);
-//    VectorXT x_guess(info->n_free * (dims + 1));
-//
-//    VectorXT tau = info->energy_area_targets;
-//    x_guess << c_free, tau;
-//    imageMatchNLP.x_guess = x_guess;
-//    imageMatchNLP.x_sol = x_guess;
-//
-////    nlp.check_gradients(x_guess);
-//
-////    double f = nlp.eval_f(x_guess);
-////    std::cout << "f: " << f << std::endl;
-////    VectorXT g = nlp.eval_g(x_guess);
-////    for (int i = 0; i < g.rows(); i++) {
-////        std::cout << "g[" << i << "] = " << g(i) << std::endl;
-////    }
-//
-//    /** IPOPT SOLVE **/
-//    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-//
-//    app->RethrowNonIpoptException(true);
-//
-//    app->Options()->SetNumericValue("tol", 1e-5);
-////    app->Options()->SetStringValue("mu_strategy", "monotone");
-////    app->Options()->SetStringValue("mu_strategy", "adaptive");
-//
-////    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
-//    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
-//    app->Options()->SetStringValue("linear_solver", "ma57");
-////    app->Options()->SetStringValue("linear_solver", "pardisomkl");
-//    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
-////    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
-//    //        app->Options()->SetNumericValue("mu_max", 0.0001);
-//    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
-//    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
-//    //        bound_relax_factor
-//    app->Options()->SetStringValue("derivative_test", "first-order");
-//    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
-////    app->Options()->SetStringValue("derivative_test_print_all", "yes");
-//    // The following overwrites the default name (ipopt.opt) of the
-//    // options file
-//    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
-//
-//    // Initialize the IpoptApplication and process the options
-//    Ipopt::ApplicationReturnStatus status;
-//    status = app->Initialize();
-//    if (status != Ipopt::Solve_Succeeded) {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** Error during initialization!" << std::endl;
-//        return;
-//    }
-//
-//    // Ask Ipopt to solve the problem
-//    std::cout << "Solving problem using IPOPT" << std::endl;
-//
-//    // objective.bound[0] = 1e-5;
-//    // objective.bound[1] = 12.0 * simulation.cells.unit;
-//
-//    Ipopt::SmartPtr<ImageMatchSolver> mynlp = new ImageMatchSolver(&imageMatchNLP);
-//
-//    status = app->OptimizeTNLP(mynlp);
-//    if (status == Ipopt::Solve_Succeeded) {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** The problem solved!" << std::endl;
-//    } else {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** The problem FAILED!" << std::endl;
-//    }
-//
-//    c_free = imageMatchNLP.x_sol.segment(0, info->n_free * dims);
-////    for (int i = 0; i < c_free.rows(); i++) {
-////        std::cout << i % 3 << " " << c_free(i) << std::endl;
-////    }
-//    c.segment(0, info->n_free * dims) = c_free;
-//    info->getTessellation()->separateVerticesParams(c, vertices, params);
-//
-//    info->energy_area_targets = imageMatchNLP.x_sol.segment(info->n_free * dims, info->n_free);
-//}
-//
-//void Foam2D::imageMatchOptimizeIPOPT2() {
-//    int dims = 2 + info->getTessellation()->getNumVertexParams();
-//    VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
-//    VectorXT c_free = c.segment(0, info->n_free * dims);
-//    VectorXT x_guess(info->imageMatch_N * info->n_free * dims + info->n_free);
-//
-//    VectorXT tau = info->energy_area_targets;
-//    x_guess << c_free.replicate(info->imageMatch_N, 1), tau;
-//    imageMatchNLP2.c0 = c_free;
-//    imageMatchNLP2.x_guess = x_guess;
-//    imageMatchNLP2.x_sol = x_guess;
-//
-////    double f = nlp.eval_f(x_guess);
-////    std::cout << "f: " << f << std::endl;
-////    VectorXT g = nlp.eval_g(x_guess);
-////    for (int i = 0; i < g.rows(); i++) {
-////        std::cout << "g[" << i << "] = " << g(i) << std::endl;
-////    }
-//
-//    /** IPOPT SOLVE **/
-//    Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-//
-//    app->RethrowNonIpoptException(true);
-//
-//    app->Options()->SetNumericValue("tol", 1e-5);
-////    app->Options()->SetStringValue("mu_strategy", "monotone");
-////    app->Options()->SetStringValue("mu_strategy", "adaptive");
-//
-////    app->Options()->SetStringValue("output_file", data_folder + "/ipopt.out");
-//    app->Options()->SetStringValue("hessian_approximation", "limited-memory");
-//    app->Options()->SetStringValue("linear_solver", "ma57");
-////    app->Options()->SetStringValue("linear_solver", "pardisomkl");
-//    // app->Options()->SetIntegerValue("limited_memory_max_history", 50);
-////    app->Options()->SetIntegerValue("accept_after_max_steps", 20);
-//    //        app->Options()->SetNumericValue("mu_max", 0.0001);
-//    //        app->Options()->SetNumericValue("constr_viol_tol", T(1e-7));
-//    //        app->Options()->SetNumericValue("acceptable_constr_viol_tol", T(1e-7));
-//    //        bound_relax_factor
-////    app->Options()->SetStringValue("derivative_test", "first-order");
-////    app->Options()->SetNumericValue("derivative_test_tol", 1e-6);
-////    app->Options()->SetStringValue("derivative_test_print_all", "yes");
-//    // The following overwrites the default name (ipopt.opt) of the
-//    // options file
-//    // app->Options()->SetStringValue("option_file_name", "hs071.opt");
-//
-//    // Initialize the IpoptApplication and process the options
-//    Ipopt::ApplicationReturnStatus status;
-//    status = app->Initialize();
-//    if (status != Ipopt::Solve_Succeeded) {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** Error during initialization!" << std::endl;
-//        return;
-//    }
-//
-//    // Ask Ipopt to solve the problem
-//    std::cout << "Solving problem using IPOPT" << std::endl;
-//
-//    // objective.bound[0] = 1e-5;
-//    // objective.bound[1] = 12.0 * simulation.cells.unit;
-//
-//    Ipopt::SmartPtr<ImageMatchSolver2> mynlp = new ImageMatchSolver2(&imageMatchNLP2);
-//
-//    status = app->OptimizeTNLP(mynlp);
-//    if (status == Ipopt::Solve_Succeeded) {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** The problem solved!" << std::endl;
-//    } else {
-//        std::cout << std::endl
-//                  << std::endl
-//                  << "*** The problem FAILED!" << std::endl;
-//    }
-//
-//    c_free = imageMatchNLP2.x_sol.segment((info->imageMatch_N - 1) * info->n_free * dims, info->n_free * dims);
-////    for (int i = 0; i < c_free.rows(); i++) {
-////        std::cout << i % 3 << " " << c_free(i) << std::endl;
-////    }
-//    c.segment(0, info->n_free * dims) = c_free;
-//    info->getTessellation()->separateVerticesParams(c, vertices, params);
-//
-//    info->energy_area_targets = imageMatchNLP2.x_sol.segment(info->imageMatch_N * info->n_free * dims, info->n_free);
-//}
-
 void Foam2D::imageMatchGetInfo(double &obj_value, std::vector<VectorXd> &pix) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXd c = info->getTessellation()->combineVerticesParams(vertices, params);
@@ -401,6 +241,10 @@ void Foam2D::optimize(int mode) {
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
 
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
+
     GradientDescentLineSearch *minimizer;
     switch (opttype) {
         case 0:
@@ -418,14 +262,23 @@ void Foam2D::optimize(int mode) {
 
     switch (mode) {
         case 0:
-//            energyObjective.check_gradients(c_free);
-            minimizer->minimize(&energyObjective, c_free);
+//            energyObjective.check_gradients(y);
+            minimizer->minimize(&energyObjective, y);
+            c_free = y.segment(0, c_free.rows());
+            p_free = y.segment(c_free.rows(), p_free.rows());
             break;
         case 1:
-//            dynamicObjective.check_gradients(c_free);
-            minimizer->minimize(&dynamicObjective, c_free);
+//            dynamicObjective.check_gradients(y);
+            minimizer->minimize(&dynamicObjective, y);
+            c_free = y.segment(0, c_free.rows());
+            p_free = y.segment(c_free.rows(), p_free.rows());
             break;
         case 2:
+            if (info->boundary->nfree > 0) {
+                std::cout << "WARNING: Image match with free boundaries not supported!" << std::endl;
+                assert(0);
+            }
+
             imageMatchSAObjective.c0 = c_free;
             imageMatchSAObjective.tau0 = info->energy_area_targets;
             imageMatchSAObjective.dcdtau = SparseMatrixd(1, 1);
@@ -445,6 +298,8 @@ void Foam2D::optimize(int mode) {
         default:
             std::cout << "Invalid optimization mode?" << std::endl;
     }
+
+    info->boundary->compute(p_free);
 
     c.segment(0, info->n_free * (2 + info->getTessellation()->getNumVertexParams())) = c_free;
     info->getTessellation()->separateVerticesParams(c, vertices, params);
@@ -696,7 +551,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
                                        MatrixXi &F, MatrixXT &Fc, int colormode = 0) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
     long n_vtx = vertices.rows() / 2, n_faces = info->getTessellation()->dual.rows() / 3, n_bdy =
-            info->boundary.rows() / 2;
+            info->boundary->v.rows() / 2;
 
     // Overlay points and edges
     S.resize(n_vtx, 3);
@@ -868,7 +723,7 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     areas.resize(n_cells);
     areas.setZero();
 
-    int n_vtx = vertices.rows() / 2, n_bdy = info->boundary.rows() / 2;
+    int n_vtx = vertices.rows() / 2, n_bdy = info->boundary->v.rows() / 2;
 
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     int dims = 2 + info->getTessellation()->getNumVertexParams();

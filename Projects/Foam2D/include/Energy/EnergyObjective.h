@@ -10,17 +10,17 @@ public:
 
 public:
 
-    void check_gradients(const VectorXd &c_free) const;
+    void check_gradients(const VectorXd &y) const;
 
-    void preProcess(const VectorXd &c_free, std::vector<CellInfo> &cellInfos) const;
+    void preProcess(const VectorXd &y, std::vector<CellInfo> &cellInfos) const;
 
-    virtual double evaluate(const VectorXd &c_free) const;
+    virtual double evaluate(const VectorXd &y) const;
 
-    virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const;
+    virtual void addGradientTo(const VectorXd &y, VectorXd &grad) const;
 
-    VectorXd get_dOdc(const VectorXd &c_free) const;
+    VectorXd get_dOdc(const VectorXd &y) const;
 
-    virtual void getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const;
+    virtual void getHessian(const VectorXd &y, SparseMatrixd &hessian) const;
 
-    Eigen::SparseMatrix<double> get_d2Odc2(const VectorXd &c_free) const;
+    Eigen::SparseMatrix<double> get_d2Odc2(const VectorXd &y) const;
 };

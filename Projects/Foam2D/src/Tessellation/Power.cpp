@@ -665,7 +665,7 @@ void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
     double x4 = b1(0);
     double y4 = b1(1);
 
-    int n = 9;
+    int n = 10;
     double hessX_c[n][n];
     double hessY_c[n][n];
 

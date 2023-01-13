@@ -40,7 +40,7 @@ public:
 
     bool isValid = false;
 private:
-    VectorXT boundary;
+    VectorXT last_boundary;
     Boundary *bdry;
 
 //    MatrixXT dxdc;
@@ -97,10 +97,9 @@ public:
 
     // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
     std::vector<std::vector<int>>
-    getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual,
-                        const VectorXT &boundary, int n_cells);
+    getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells);
 
-    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &boundary_, int n_free);
+    void tessellate(const VectorXT &vertices, const VectorXT &params, Boundary *bdry_new, int n_free);
 
     virtual int getNumVertexParams() = 0;
 

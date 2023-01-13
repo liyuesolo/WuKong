@@ -410,14 +410,15 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
 //    bb_c << 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0;
 //    viewer.data(0).add_edges(bb, bb_p2, bb_c);
 
-    int nb = foam.info->boundary.rows() / 2;
+    int nb = foam.info->boundary->v.rows() / 2;
     MatrixXd b1, b2, bc;
     b1.resize(nb, 3);
     b2.resize(nb, 3);
     bc.resize(nb, 3);
     for (int i = 0; i < nb; i++) {
-        b1.row(i) = TV3(foam.info->boundary(2 * i + 0), foam.info->boundary(2 * i + 1), 0);
-        b2.row(i) = TV3(foam.info->boundary(2 * ((i + 1) % nb) + 0), foam.info->boundary(2 * ((i + 1) % nb) + 1), 0);
+        b1.row(i) = TV3(foam.info->boundary->v(2 * i + 0), foam.info->boundary->v(2 * i + 1), 0);
+        b2.row(i) = TV3(foam.info->boundary->v(2 * ((i + 1) % nb) + 0), foam.info->boundary->v(2 * ((i + 1) % nb) + 1),
+                        0);
         bc.row(i) = TV3(1, 0, 0);
     }
     viewer.data(0).add_edges(b1, b2, bc);
