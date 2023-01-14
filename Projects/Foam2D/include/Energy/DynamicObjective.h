@@ -8,24 +8,22 @@ class DynamicObjective : public ObjectiveFunction {
 public:
     EnergyObjective *energyObjective;
 
-    VectorXd c_prev;
+    VectorXd y_prev;
     VectorXd v_prev;
 
     Foam2DInfo *info;
 
 public:
 
-    void check_gradients(const VectorXd &c_free) const;
+    void check_gradients(const VectorXd &y) const;
 
-    VectorXd get_a(const VectorXd &c_free) const;
+    VectorXd get_a(const VectorXd &y) const;
 
-    void newStep(const Eigen::VectorXd &c_free);
+    void newStep(const Eigen::VectorXd &y);
 
-    virtual double evaluate(const VectorXd &c_free) const;
+    virtual double evaluate(const VectorXd &y) const;
 
-    virtual void addGradientTo(const VectorXd &c_free, VectorXd &grad) const;
+    virtual void addGradientTo(const VectorXd &y, VectorXd &grad) const;
 
-    VectorXd getGradient(const VectorXd &c_free) const;
-
-    virtual void getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const;
+    virtual void getHessian(const VectorXd &y, SparseMatrixd &hessian) const;
 };

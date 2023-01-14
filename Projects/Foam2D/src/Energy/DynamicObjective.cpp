@@ -1,18 +1,18 @@
 #include "../../include/Energy/DynamicObjective.h"
 
-void DynamicObjective::newStep(const Eigen::VectorXd &c_free) {
-    v_prev = (c_free - c_prev) / info->dynamics_dt;
-    c_prev = c_free;
+void DynamicObjective::newStep(const Eigen::VectorXd &y) {
+    v_prev = (y - y_prev) / info->dynamics_dt;
+    y_prev = y;
 }
 
-VectorXd DynamicObjective::get_a(const VectorXd &c_free) const {
-    return (c_free - c_prev) / (info->dynamics_dt * info->dynamics_dt) - v_prev / info->dynamics_dt;
+VectorXd DynamicObjective::get_a(const VectorXd &y) const {
+    return (y - y_prev) / (info->dynamics_dt * info->dynamics_dt) - v_prev / info->dynamics_dt;
 }
 
-void DynamicObjective::check_gradients(const VectorXd &c_free) const {
+void DynamicObjective::check_gradients(const VectorXd &y) const {
     double eps = 1e-4;
 
-    VectorXd x = c_free;
+    VectorXd x = y;
 
     double f = evaluate(x);
     VectorXd grad = getGradient(x);
@@ -53,35 +53,29 @@ void DynamicObjective::check_gradients(const VectorXd &c_free) const {
     }
 }
 
-double DynamicObjective::evaluate(const VectorXd &c_free) const {
-    double O = energyObjective->evaluate(c_free);
+double DynamicObjective::evaluate(const VectorXd &y) const {
+    double O = energyObjective->evaluate(y);
 
-    VectorXd a = get_a(c_free);
+    VectorXd a = get_a(y);
     O += .5 * pow(info->dynamics_dt, 2) * a.transpose() * info->dynamics_m * a;
     O += (1.0 / info->dynamics_dt) *
-         (0.5 * c_free.transpose() * info->dynamics_eta * c_free -
-          c_free.transpose() * info->dynamics_eta * c_prev).value();
+         (0.5 * y.transpose() * info->dynamics_eta * y -
+          y.transpose() * info->dynamics_eta * y_prev).value();
 
     return O;
 }
 
-void DynamicObjective::addGradientTo(const VectorXd &c_free, VectorXd &grad) const {
-    energyObjective->addGradientTo(c_free, grad);
+void DynamicObjective::addGradientTo(const VectorXd &y, VectorXd &grad) const {
+    energyObjective->addGradientTo(y, grad);
 
-    grad += info->dynamics_m * get_a(c_free);
-    grad += info->dynamics_eta * (c_free - c_prev) / info->dynamics_dt;
+    grad += info->dynamics_m * get_a(y);
+    grad += info->dynamics_eta * (y - y_prev) / info->dynamics_dt;
 }
 
-VectorXd DynamicObjective::getGradient(const VectorXd &c_free) const {
-    VectorXT grad = VectorXT::Zero(c_free.rows());
-    addGradientTo(c_free, grad);
-    return grad;
-}
+void DynamicObjective::getHessian(const VectorXd &y, SparseMatrixd &hessian) const {
+    energyObjective->getHessian(y, hessian);
 
-void DynamicObjective::getHessian(const VectorXd &c_free, SparseMatrixd &hessian) const {
-    energyObjective->getHessian(c_free, hessian);
-
-    for (int i = 0; i < c_free.size(); ++i) {
+    for (int i = 0; i < y.size(); ++i) {
         hessian.coeffRef(i, i) += info->dynamics_m / pow(info->dynamics_dt, 2);
         hessian.coeffRef(i, i) += info->dynamics_eta / info->dynamics_dt;
     }

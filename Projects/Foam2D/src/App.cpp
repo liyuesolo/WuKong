@@ -124,6 +124,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Gradient Test");
         scenarios.push_back("Bounding Box");
         scenarios.push_back("Image Match");
+        scenarios.push_back("Dynamic Box");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = false;
@@ -166,6 +167,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             if (ImGui::Button("Stop SA")) {
                 matchSA = false;
             }
+        }
+        if (generate_scenario_type == 4) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
 
         if (ImGui::Button("Generate")) {
@@ -359,6 +364,9 @@ void Foam2DApp::generateScenario() {
             imageMatchSegmentation(matchImage, matchSegmented, matchMarkers, matchColors);
             cv::cv2eigen(matchMarkers, markersEigen);
             foam.initImageMatch(markersEigen);
+            break;
+        case 4:
+            foam.initDynamicBox(generate_scenario_free_sites);
             break;
         default:
             std::cout << "Error: scenario not implemented!";

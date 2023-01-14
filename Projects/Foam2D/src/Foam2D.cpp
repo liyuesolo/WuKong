@@ -11,6 +11,7 @@
 #include "../src/optLib/ParallelLineSearchMinimizers.h"
 
 #include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
+#include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
 
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
@@ -91,12 +92,32 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
 
     VectorXT v(4 * 2);
     v << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
+    info->boundary = new SimpleBoundary(v, {});
 
-    VectorXi free_bdry_idx(2);
-    free_bdry_idx(0) = 0;
-    free_bdry_idx(1) = 1;
+    resetVertexParams();
+}
 
-    info->boundary = new SimpleBoundary(v, free_bdry_idx);
+void Foam2D::initDynamicBox(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double dx = 0.75;
+    double dy = 0.75;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-dx, dx);
+
+    vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    TV p(0.75 * sqrt(2.0), M_PI_4);
+    IV free_idx(0, 1);
+    info->boundary = new CircleBoundary(p, free_idx, 4);
 
     resetVertexParams();
 }
@@ -222,9 +243,12 @@ void Foam2D::dynamicsInit() {
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
 
-    dynamicObjective.c_prev = c_free;
-    dynamicObjective.v_prev = VectorXd::Zero(c_free.rows());
+    dynamicObjective.y_prev = y;
+    dynamicObjective.v_prev = VectorXd::Zero(y.rows());
     trajOptNLP.c0 = c_free;
     trajOptNLP.v0 = VectorXd::Zero(c_free.rows());
 }
@@ -233,7 +257,11 @@ void Foam2D::dynamicsNewStep() {
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0,
                                 info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
-    dynamicObjective.newStep(c_free);
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
+
+    dynamicObjective.newStep(y);
 }
 
 void Foam2D::optimize(int mode) {
@@ -758,24 +786,30 @@ bool Foam2D::isConvergedDynamic(double tol) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0, info->n_free * dims);
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
 
-    return dynamicObjective.getGradient(c_free).norm() < tol;
+    return dynamicObjective.getGradient(y).norm() < tol;
 }
 
 void Foam2D::getPlotObjectiveStats(bool dynamics, double &obj_value, double &gradient_norm, bool &hessian_pd) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0, info->n_free * dims);
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
 
     Eigen::SparseMatrix<double> hessian;
     if (dynamics) {
-        obj_value = dynamicObjective.evaluate(c_free);
-        gradient_norm = dynamicObjective.getGradient(c_free).norm();
-        dynamicObjective.getHessian(c_free, hessian);
+        obj_value = dynamicObjective.evaluate(y);
+        gradient_norm = dynamicObjective.getGradient(y).norm();
+        dynamicObjective.getHessian(y, hessian);
     } else {
-        obj_value = energyObjective.evaluate(c_free);
-        gradient_norm = energyObjective.getGradient(c_free).norm();
-        energyObjective.getHessian(c_free, hessian);
+        obj_value = energyObjective.evaluate(y);
+        gradient_norm = energyObjective.getGradient(y).norm();
+        energyObjective.getHessian(y, hessian);
     }
     Eigen::SimplicialLLT<Eigen::SparseMatrix<double>, Eigen::Lower> solver(hessian);
     hessian_pd = solver.info() != Eigen::ComputationInfo::NumericalIssue;
@@ -787,6 +821,9 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
     int dims = 2 + info->getTessellation()->getNumVertexParams();
     VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
     VectorXT c_free = c.segment(0, info->n_free * dims);
+    VectorXT p_free = info->boundary->get_p_free();
+    VectorXT y(c_free.rows() + p_free.rows());
+    y << c_free, p_free;
 
     obj.resize(image_size * image_size * 3);
 
@@ -795,9 +832,9 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
 
     int xindex = selected_vertex * dims + 0;
     int yindex = selected_vertex * dims + 1;
-    VectorXT DX = VectorXT::Zero(c_free.rows());
+    VectorXT DX = VectorXT::Zero(y.rows());
     DX(xindex) = 1;
-    VectorXT DY = VectorXT::Zero(c_free.rows());
+    VectorXT DY = VectorXT::Zero(y.rows());
     DY(yindex) = 1;
     for (int i = 0; i < image_size; i++) {
         for (int j = 0; j < image_size; j++) {
@@ -807,22 +844,22 @@ Foam2D::getPlotObjectiveFunctionLandscape(int selected_vertex, int type, int ima
 
             switch (type) {
                 case 0:
-                    o = energyObjective.evaluate(c_free + dx * DX + dy * DY);
+                    o = energyObjective.evaluate(y + dx * DX + dy * DY);
                     break;
                 case 1:
-                    o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+                    o = energyObjective.get_dOdc(y + dx * DX + dy * DY)(xindex);
                     break;
                 case 2:
-                    o = energyObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+                    o = energyObjective.get_dOdc(y + dx * DX + dy * DY)(yindex);
                     break;
                 case 3:
-                    o = imageMatchObjective.evaluate(c_free + dx * DX + dy * DY);
+                    o = imageMatchObjective.evaluate(y + dx * DX + dy * DY);
                     break;
                 case 4:
-                    o = imageMatchObjective.get_dOdc(c_free + dx * DX + dy * DY)(xindex);
+                    o = imageMatchObjective.get_dOdc(y + dx * DX + dy * DY)(xindex);
                     break;
                 case 5:
-                    o = imageMatchObjective.get_dOdc(c_free + dx * DX + dy * DY)(yindex);
+                    o = imageMatchObjective.get_dOdc(y + dx * DX + dy * DY)(yindex);
                     break;
             }
 

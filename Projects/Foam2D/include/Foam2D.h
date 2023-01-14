@@ -62,6 +62,8 @@ public:
 
     void initRandomCellsInBox(int n_free_in);
 
+    void initDynamicBox(int n_free_in);
+
     void initImageMatch(MatrixXi &markers);
 
     void dynamicsInit();
