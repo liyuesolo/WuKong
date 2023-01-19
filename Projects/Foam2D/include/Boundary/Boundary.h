@@ -33,6 +33,8 @@ public:
     MatrixXT dvdp;
     std::vector<MatrixXT> d2vdp2;
 
+    VectorXi next;
+
 private:
 
     virtual void computeVertices() = 0;
@@ -50,7 +52,7 @@ protected:
 
     inline void setHessianEntry(int iv, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            d2vdp2[iv](ip0, ip1) = value;
+            d2vdp2[iv](free_map(ip0), free_map(ip1)) = value;
         }
     };
 

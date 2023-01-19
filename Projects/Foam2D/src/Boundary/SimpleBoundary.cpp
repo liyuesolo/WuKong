@@ -2,6 +2,10 @@
 
 void SimpleBoundary::computeVertices() {
     v = p;
+
+    int n_vtx = v.rows() / 2;
+    next.resize(n_vtx);
+    next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
 }
 
 void SimpleBoundary::computeGradient() {

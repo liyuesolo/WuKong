@@ -64,6 +64,8 @@ public:
 
     void initDynamicBox(int n_free_in);
 
+    void initRigidBodyAgent(int n_free_in);
+
     void initImageMatch(MatrixXi &markers);
 
     void dynamicsInit();

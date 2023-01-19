@@ -12,6 +12,7 @@
 
 #include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
+#include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
@@ -106,7 +107,6 @@ void Foam2D::initDynamicBox(int n_free_in) {
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double dx = 0.75;
-    double dy = 0.75;
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -118,6 +118,53 @@ void Foam2D::initDynamicBox(int n_free_in) {
     TV p(0.75 * sqrt(2.0), M_PI_4);
     IV free_idx(0, 1);
     info->boundary = new CircleBoundary(p, free_idx, 4);
+
+    resetVertexParams();
+}
+
+void Foam2D::initRigidBodyAgent(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+//    VectorXT agent(8);
+//    double a = 0.15;
+//    agent << -a, -a, -a, a, a, a, a, -a;
+
+    int nsides = 100;
+    VectorXT agent(nsides * 2);
+    double a = 0.2;
+    double b = 0.1;
+    for (int i = 0; i < nsides; i++) {
+        agent(i * 2 + 0) = a * cos(-i * 2 * M_PI / nsides);
+        agent(i * 2 + 1) = b * sin(-i * 2 * M_PI / nsides);
+    }
+
+    double dx = 0.75;
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-dx, dx);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (fabs(x) < a && fabs(y) < a) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    TV3 p(0, 0, 0);
+//    VectorXi free_idx(1);
+//    free_idx(0) = 2;
+    IV3 free_idx(0, 1, 2);
+    info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent);
 
     resetVertexParams();
 }
@@ -578,8 +625,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                        MatrixXi &F, MatrixXT &Fc, int colormode = 0) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
-    long n_vtx = vertices.rows() / 2, n_faces = info->getTessellation()->dual.rows() / 3, n_bdy =
-            info->boundary->v.rows() / 2;
+    long n_vtx = vertices.rows() / 2;
 
     // Overlay points and edges
     S.resize(n_vtx, 3);

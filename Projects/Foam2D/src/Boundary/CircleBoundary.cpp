@@ -12,6 +12,10 @@ void CircleBoundary::computeVertices() {
         v(i * 2 + 0) = r * cos(t);
         v(i * 2 + 1) = r * sin(t);
     }
+
+    int n_vtx = v.rows() / 2;
+    next.resize(n_vtx);
+    next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
 }
 
 void CircleBoundary::computeGradient() {

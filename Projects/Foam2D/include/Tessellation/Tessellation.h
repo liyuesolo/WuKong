@@ -15,8 +15,9 @@ enum TessellationType {
 using TV = Vector<double, 2>;
 using TV3 = Vector<double, 3>;
 using TM = Matrix<double, 2, 2>;
-using IV3 = Vector<int, 3>;
 using IV = Vector<int, 2>;
+using IV3 = Vector<int, 3>;
+using IV4 = Vector<int, 4>;
 
 using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
 using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;

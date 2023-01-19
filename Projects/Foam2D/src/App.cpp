@@ -125,6 +125,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Bounding Box");
         scenarios.push_back("Image Match");
         scenarios.push_back("Dynamic Box");
+        scenarios.push_back("Rigid Body Agent");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = false;
@@ -169,6 +170,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             }
         }
         if (generate_scenario_type == 4) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 5) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -368,6 +373,9 @@ void Foam2DApp::generateScenario() {
         case 4:
             foam.initDynamicBox(generate_scenario_free_sites);
             break;
+        case 5:
+            foam.initRigidBodyAgent(generate_scenario_free_sites);
+            break;
         default:
             std::cout << "Error: scenario not implemented!";
     }
@@ -424,8 +432,9 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     b2.resize(nb, 3);
     bc.resize(nb, 3);
     for (int i = 0; i < nb; i++) {
-        b1.row(i) = TV3(foam.info->boundary->v(2 * i + 0), foam.info->boundary->v(2 * i + 1), 0);
-        b2.row(i) = TV3(foam.info->boundary->v(2 * ((i + 1) % nb) + 0), foam.info->boundary->v(2 * ((i + 1) % nb) + 1),
+        int i0 = i, i1 = foam.info->boundary->next(i);
+        b1.row(i) = TV3(foam.info->boundary->v(2 * i0 + 0), foam.info->boundary->v(2 * i0 + 1), 0);
+        b2.row(i) = TV3(foam.info->boundary->v(2 * i1 + 0), foam.info->boundary->v(2 * i1 + 1),
                         0);
         bc.row(i) = TV3(1, 0, 0);
     }
