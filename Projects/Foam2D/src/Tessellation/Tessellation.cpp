@@ -21,7 +21,7 @@ static bool pointInBounds(const TV &point, const Boundary *boundary) {
         w += a;
     }
 
-    return fabs(w) > M_PI;
+    return w > M_PI; // w == (2 * M_PI)
 }
 
 static inline bool lineSegmentIntersection(const TV &p0, const TV &p1, const TV &p2, const TV &p3, TV &intersect) {
@@ -67,10 +67,12 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
     for (int i = 0; i < n_cells; i++) {
         std::vector<int> &neighbors = neighborsRaw[i];
         size_t degree = neighbors.size();
+        if (degree == 0) {
+            continue; // TODO: This will lead to invalid triangulation, maybe exit early.
+        }
 
         VectorXT c0 = c.segment(i * dims, dims);
         std::vector<TV> nodes(degree);
-        std::vector<bool> inPoly(degree);
 
         for (size_t j = 0; j < degree; j++) {
             int n1 = neighbors[j];
@@ -79,71 +81,33 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             TV v;
             getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v);
             nodes[j] = v;
-            inPoly[j] = pointInBounds(v, bdry);
         }
 
-        for (size_t j = 0; j < degree; j++) {
-            bool inPoly0 = inPoly[j];
-            bool inPoly1 = inPoly[(j + 1) % degree];
+        bool inPoly = pointInBounds(nodes[0], bdry);
 
+        for (size_t j = 0; j < degree; j++) {
             TV v0 = nodes[j];
             TV v1 = nodes[(j + 1) % degree];
 
-            if (inPoly0 && inPoly1) {
-                // Just add neighbor.
-                neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
-            } else if (inPoly0 && !inPoly1) {
-                // Add neighbor and then boundary edge.
-                neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
-                for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = bdry->v.segment<2>(k * 2);
-                    TV v3 = bdry->v.segment<2>(bdry->next(k) * 2);
-                    TV intersect;
-                    if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
-                        neighborsClipped[i].push_back(n_vtx + k);
-                        break; // Can only be one intersection.
-                    }
+            std::vector<std::pair<double, int>> intersections;
+            for (size_t k = 0; k < n_bdy; k++) {
+                TV v2 = bdry->v.segment<2>(k * 2);
+                TV v3 = bdry->v.segment<2>(bdry->next(k) * 2);
+                TV intersect;
+                if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
+                    intersections.emplace_back((intersect - v0).norm(), k);
                 }
-            } else if (!inPoly0 && inPoly1) {
-                // Add boundary edge and then neighbor.
-                for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = bdry->v.segment<2>(k * 2);
-                    TV v3 = bdry->v.segment<2>(bdry->next(k) * 2);
-                    TV intersect;
-                    if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
-                        neighborsClipped[i].push_back(n_vtx + k);
-                        break; // Can only be one intersection.
-                    }
-                }
-                neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
-            } else {
-                // Check if zero or two intersections.
-                assert(!inPoly0 && !inPoly1);
-                std::vector<int> intersectIndices;
-                std::vector<double> intersectDistances;
-                for (size_t k = 0; k < n_bdy; k++) {
-                    TV v2 = bdry->v.segment<2>(k * 2);
-                    TV v3 = bdry->v.segment<2>(bdry->next(k) * 2);
-                    TV intersect;
-                    if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
-                        intersectIndices.push_back(k);
-                        intersectDistances.push_back((intersect - v0).norm());
-                    }
-                }
+            }
+            std::sort(intersections.begin(), intersections.end());
 
-                assert(intersectIndices.size() == 0 || intersectIndices.size() == 2);
-                // If zero, do nothing.
-                // If two, add closer edge, then neighbor, then farther edge.
-                if (intersectIndices.size() == 2) {
-                    if (intersectDistances[0] < intersectDistances[1]) {
-                        neighborsClipped[i].push_back(n_vtx + intersectIndices[0]);
-                        neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
-                        neighborsClipped[i].push_back(n_vtx + intersectIndices[1]);
-                    } else {
-                        neighborsClipped[i].push_back(n_vtx + intersectIndices[1]);
-                        neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
-                        neighborsClipped[i].push_back(n_vtx + intersectIndices[0]);
-                    }
+            if (inPoly) {
+                neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
+            }
+            for (auto intersection: intersections) {
+                inPoly = !inPoly;
+                neighborsClipped[i].push_back(n_vtx + intersection.second);
+                if (inPoly) {
+                    neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
                 }
             }
         }
@@ -303,7 +267,7 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
         TV b1s = bdry->v.segment<2>((i1 - n_vtx) * 2);
         TV b1e = bdry->v.segment<2>(bdry->next(i1 - n_vtx) * 2);
 
-        assert(bdry->next(i1 - n_vtx) == i2 - n_vtx || bdry->next(i2 - n_vtx) == ii - n_vtx);
+        assert(bdry->next(i1 - n_vtx) == i2 - n_vtx || bdry->next(i2 - n_vtx) == i1 - n_vtx);
         gradX = VectorXT::Zero(4);
         gradY = VectorXT::Zero(4);
         if (bdry->next(i1 - n_vtx) == i2 - n_vtx) {
@@ -422,7 +386,6 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
 
     gradient_c += dxdc.transpose() * partial_x + partial_c;
     if (bdry->nfree > 0) {
-        // TODO: Add partial_p
         gradient_p += (dxdv * bdry->dvdp).transpose() * partial_x;
     }
 }
@@ -529,8 +492,6 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         Eigen::SparseMatrix<double> dxdp = (dxdv * bdry->dvdp).sparseView();
         hessian_cp += dxdc_T * partial_xx * dxdp + partial_cx * dxdp + sum_f_cv * bdry->dvdp;
 
-        // TODO: Add partial_pp
-
         MatrixXT sum_x_pp = MatrixXT::Zero(bdry->nfree, bdry->nfree);
         MatrixXT partial_x_T = partial_x.transpose();
         for (int ii = 0; ii < bdry->v.rows(); ii++) {
@@ -556,6 +517,11 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     bdry = bdry_new;
     last_boundary = bdry_new->v;
     c = c_new;
+
+    if (!bdry->checkValid()) {
+        isValid = false;
+        return;
+    }
 
     VectorXi dualRaw = getDualGraph(vertices, params);
     std::vector<std::vector<int>> neighborhoods_stdvec = getNeighborsClipped(vertices, params, dualRaw, n_free);

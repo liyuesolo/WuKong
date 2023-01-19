@@ -1,6 +1,27 @@
 #include "../../include/Boundary/RigidBodyAgentBoundary.h"
 #include <cmath>
 
+// Prevent floating rigid body from going through walls. TODO: Log barriers using energy function?
+bool RigidBodyAgentBoundary::checkValid() {
+    double bx = 0.75, by = 0.75;
+
+    double dx = p(0);
+    double dy = p(1);
+    double t = p(2);
+
+    int nsides = agentShape.rows() / 2;
+    for (int i = 0; i < nsides; i++) {
+        double x0 = agentShape(i * 2 + 0);
+        double y0 = agentShape(i * 2 + 1);
+        double x = (x0 * cos(t) - y0 * sin(t)) + dx;
+        double y = (x0 * sin(t) + y0 * cos(t)) + dy;
+
+        if (fabs(x) > bx || fabs(y) > by) return false;
+    }
+
+    return true;
+}
+
 void RigidBodyAgentBoundary::computeVertices() {
     double bx = 0.75, by = 0.75;
     VectorXT box(4 * 2);

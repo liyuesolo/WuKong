@@ -111,6 +111,8 @@ double EnergyObjective::evaluate(const VectorXd &y) const {
     double O = 0;
     info->getTessellation()->addFunctionValue(energy, O, cellInfos);
 
+    O += info->boundary->computeEnergy();
+
     return O;
 }
 
@@ -129,6 +131,8 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
 
     CellFunctionEnergy energy(info);
     info->getTessellation()->addFunctionGradient(energy, gradient, cellInfos);
+
+    gradient.bottomRows(info->boundary->nfree) += info->boundary->computeEnergyGradient();
 
     return gradient;
 }
@@ -149,7 +153,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
     CellFunctionEnergy energy(info);
     info->getTessellation()->addFunctionHessian(energy, hessian, cellInfos);
 
-//    hessian += 1e-6 * VectorXT::Ones(c_free.rows()).asDiagonal();
+    hessian.bottomRightCorner(info->boundary->nfree, info->boundary->nfree) += info->boundary->computeEnergyHessian();
 
     return hessian.sparseView();
 }

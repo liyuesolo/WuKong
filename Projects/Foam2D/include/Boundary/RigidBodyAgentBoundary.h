@@ -16,6 +16,9 @@ private:
     virtual void computeHessian();
 
 public:
+    virtual bool checkValid();
+
+public:
     RigidBodyAgentBoundary(const VectorXT &p_, const VectorXi &free_, VectorXT agentShape_) : Boundary(p_, free_),
                                                                                               agentShape(agentShape_) {
         computeVertices();

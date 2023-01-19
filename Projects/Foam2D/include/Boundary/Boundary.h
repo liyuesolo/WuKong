@@ -43,6 +43,15 @@ private:
 
     virtual void computeHessian() = 0;
 
+public:
+    virtual bool checkValid() { return true; };
+
+    virtual double computeEnergy() { return 0; };
+
+    virtual VectorXT computeEnergyGradient() { return VectorXT::Zero(nfree); };
+
+    virtual MatrixXT computeEnergyHessian() { return MatrixXT::Zero(nfree, nfree); };
+
 protected:
     inline void setGradientEntry(int iv, int ip, double value) {
         if (free_map(ip) >= 0) {
