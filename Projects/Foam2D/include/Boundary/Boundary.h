@@ -19,6 +19,14 @@ using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
 using VectorXi = Vector<int, Eigen::Dynamic>;
 
+struct BoundaryIntersection {
+    int i_cell;
+    double t_cell;
+    int i_bdry;
+    double t_bdry;
+    int flag;
+};
+
 class Boundary {
 
 public:
@@ -57,43 +65,24 @@ protected:
         if (free_map(ip) >= 0) {
             dvdp(iv, free_map(ip)) = value;
         }
-    };
+    }
 
     inline void setHessianEntry(int iv, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
             d2vdp2[iv](free_map(ip0), free_map(ip1)) = value;
         }
-    };
+    }
 
 public:
-    Boundary(const VectorXT &p_, const VectorXi &free_) {
-        p = p_;
-        free_idx = free_;
+    Boundary(const VectorXT &p_, const VectorXi &free_);
 
-        np = p.rows();
-        nfree = free_idx.rows();
+    void compute(const VectorXT &p_free);
 
-        free_map = -1 * VectorXi::Ones(np);
-        for (int i = 0; i < nfree; i++) {
-            free_map(free_idx(i)) = i;
-        }
-    }
+    VectorXT get_p_free();
 
-    void compute(const VectorXT &p_free) {
-        for (int i = 0; i < nfree; i++) {
-            p(free_idx(i)) = p_free(i);
-        }
+    bool pointInBounds(const TV &point);
 
-        computeVertices();
-        computeGradient();
-        computeHessian();
-    };
+    bool boundarySegmentIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect);
 
-    VectorXT get_p_free() {
-        VectorXT ret(nfree);
-        for (int i = 0; i < nfree; i++) {
-            ret(i) = p(free_idx(i));
-        }
-        return ret;
-    }
+    bool getCellIntersections(const std::vector<TV> &nodes, std::vector<BoundaryIntersection> &intersections);
 };

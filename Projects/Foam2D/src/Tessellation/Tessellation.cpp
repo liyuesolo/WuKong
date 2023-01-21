@@ -4,62 +4,20 @@
 #include <set>
 #include <iostream>
 
-static bool pointInBounds(const TV &point, const Boundary *boundary) {
-    int np = boundary->v.rows() / 2;
-
-    double w = 0; // Winding number
-    for (int i = 0; i < np; i++) {
-        int j = boundary->next(i);
-        double x1 = boundary->v(2 * i + 0);
-        double y1 = boundary->v(2 * i + 1);
-        double x2 = boundary->v(2 * j + 0);
-        double y2 = boundary->v(2 * j + 1);
-
-        double a = atan2(y2 - point.y(), x2 - point.x()) - atan2(y1 - point.y(), x1 - point.x());
-        if (a > M_PI) a -= 2 * M_PI;
-        if (a < -M_PI) a += 2 * M_PI;
-        w += a;
-    }
-
-    return w > M_PI; // w == (2 * M_PI)
-}
-
-static inline bool lineSegmentIntersection(const TV &p0, const TV &p1, const TV &p2, const TV &p3, TV &intersect) {
-    if (std::min(p0.x(), p1.x()) > std::max(p2.x(), p3.x()) ||
-        std::max(p0.x(), p1.x()) < std::min(p2.x(), p3.x()) ||
-        std::min(p0.y(), p1.y()) > std::max(p2.y(), p3.y()) ||
-        std::max(p0.y(), p1.y()) < std::min(p2.y(), p3.y())) {
-        return false;
-    }
-
-    double s1_x, s1_y, s2_x, s2_y;
-    s1_x = p1.x() - p0.x();
-    s1_y = p1.y() - p0.y();
-    s2_x = p3.x() - p2.x();
-    s2_y = p3.y() - p2.y();
-
-    double s, t;
-    s = (-s1_y * (p0.x() - p2.x()) + s1_x * (p0.y() - p2.y())) / (-s2_x * s1_y + s1_x * s2_y);
-    t = (s2_x * (p0.y() - p2.y()) - s2_y * (p0.x() - p2.x())) / (-s2_x * s1_y + s1_x * s2_y);
-
-    if (s >= 0 && s <= 1 && t >= 0 && t <= 1) {
-        // Collision detected
-        intersect.x() = p0.x() + (t * s1_x);
-        intersect.y() = p0.y() + (t * s1_y);
-        return true;
-    }
-
-    return false; // No collision
-}
-
-std::vector<std::vector<int>>
+bool
 Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells) {
     int n_vtx = vertices.rows() / 2, n_bdy = bdry->v.rows() / 2;
 
     std::vector<std::vector<int>> neighborsRaw = getNeighbors(vertices, dual, n_cells);
-    if (n_bdy == 0) return neighborsRaw;
+    if (n_bdy == 0) {
+        neighborhoods = neighborsRaw;
+        return true;
+    };
 
-    std::vector<std::vector<int>> neighborsClipped(n_cells);
+    neighborhoods.clear();
+    neighborhoods.resize(n_cells);
+    neighborhoodFlags.clear();
+    neighborhoodFlags.resize(n_cells);
 
     VectorXT c = combineVerticesParams(vertices, params);
     int dims = 2 + getNumVertexParams();
@@ -68,7 +26,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
         std::vector<int> &neighbors = neighborsRaw[i];
         size_t degree = neighbors.size();
         if (degree == 0) {
-            continue; // TODO: This will lead to invalid triangulation, maybe exit early.
+            return false;
         }
 
         VectorXT c0 = c.segment(i * dims, dims);
@@ -83,57 +41,50 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
             nodes[j] = v;
         }
 
-        bool inPoly = pointInBounds(nodes[0], bdry);
+        std::vector<BoundaryIntersection> intersections;
+        if (!bdry->getCellIntersections(nodes, intersections)) {
+            return false;
+        }
 
+        bool inPoly = bdry->pointInBounds(nodes[0]);
+        int intersectIdx = 0;
         for (size_t j = 0; j < degree; j++) {
-            TV v0 = nodes[j];
-            TV v1 = nodes[(j + 1) % degree];
-
-            std::vector<std::pair<double, int>> intersections;
-            for (size_t k = 0; k < n_bdy; k++) {
-                TV v2 = bdry->v.segment<2>(k * 2);
-                TV v3 = bdry->v.segment<2>(bdry->next(k) * 2);
-                TV intersect;
-                if (lineSegmentIntersection(v0, v1, v2, v3, intersect)) {
-                    intersections.emplace_back((intersect - v0).norm(), k);
-                }
-            }
-            std::sort(intersections.begin(), intersections.end());
-
             if (inPoly) {
-                neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
+                neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
             }
-            for (auto intersection: intersections) {
+            while (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
                 inPoly = !inPoly;
-                neighborsClipped[i].push_back(n_vtx + intersection.second);
+
+                neighborhoods[i].push_back(n_vtx + intersections[intersectIdx].i_bdry);
                 if (inPoly) {
-                    neighborsClipped[i].push_back(neighbors[(j + 1) % degree]);
+                    neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
                 }
+
+                intersectIdx++;
             }
         }
 
-        // TODO: Check if cell has more than one connected component after clipping, cause isValid=false if so.
-        size_t clippedDegree = neighborsClipped[i].size();
+        size_t clippedDegree = neighborhoods[i].size();
         for (int j = 0; j < clippedDegree; j++) {
-            int n1 = neighborsClipped[i][j];
-            int n2 = neighborsClipped[i][(j + 1) % clippedDegree];
+            int n1 = neighborhoods[i][j];
+            int n2 = neighborhoods[i][(j + 1) % clippedDegree];
 
             if (n1 >= n_vtx && n2 >= n_vtx) {
                 if (n1 == n2) {
-                    neighborsClipped[i].erase(neighborsClipped[i].begin() + j);
+                    neighborhoods[i].erase(neighborhoods[i].begin() + j);
                     clippedDegree--;
                     j--;
                 } else if (bdry->next(n1 - n_vtx) == n2 - n_vtx) {
                     // Do nothing
                 } else {
-                    neighborsClipped[i].insert(neighborsClipped[i].begin() + j + 1, bdry->next(n1 - n_vtx) + n_vtx);
+                    neighborhoods[i].insert(neighborhoods[i].begin() + j + 1, bdry->next(n1 - n_vtx) + n_vtx);
                     clippedDegree++;
                 }
             }
         }
     }
 
-    return neighborsClipped;
+    return true;
 }
 
 std::vector<std::vector<int>>
@@ -189,35 +140,35 @@ Tessellation::getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n
     return neighborLists;
 }
 
-void
-Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node) {
-    int dims = 2 + getNumVertexParams();
-    int n_vtx = c.rows() / dims;
-
-    if (i2 < i1 && i2 < n_vtx) {
-        std::swap(i1, i2);
-    }
-
-    VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
-    VectorXT v1, v2;
-    TV b0, b1;
-    if (i1 < n_vtx && i2 < n_vtx) {
-        // Normal node.
-        v1 = c.segment(i1 * dims, dims);
-        v2 = c.segment(i2 * dims, dims);
-        getNode(v0, v1, v2, node);
-    } else if (i1 < n_vtx && i2 >= n_vtx) {
-        // Boundary node with n2 a boundary edge.
-        v1 = c.segment(i1 * dims, dims);
-        b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
-        b1 = bdry->v.segment<2>(bdry->next((i2 - n_vtx)) * 2);
-        getBoundaryNode(v0, v1, b0, b1, node);
-    } else {
-        // Boundary vertex.
-        assert(i1 >= n_vtx && i2 >= n_vtx);
-        node = bdry->v.segment<2>((i2 - n_vtx) * 2);
-    }
-}
+//void
+//Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node) {
+//    int dims = 2 + getNumVertexParams();
+//    int n_vtx = c.rows() / dims;
+//
+//    if (i2 < i1 && i2 < n_vtx) {
+//        std::swap(i1, i2);
+//    }
+//
+//    VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
+//    VectorXT v1, v2;
+//    TV b0, b1;
+//    if (i1 < n_vtx && i2 < n_vtx) {
+//        // Normal node.
+//        v1 = c.segment(i1 * dims, dims);
+//        v2 = c.segment(i2 * dims, dims);
+//        getNode(v0, v1, v2, node);
+//    } else if (i1 < n_vtx && i2 >= n_vtx) {
+//        // Boundary node with n2 a boundary edge.
+//        v1 = c.segment(i1 * dims, dims);
+//        b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
+//        b1 = bdry->v.segment<2>(bdry->next((i2 - n_vtx)) * 2);
+//        getBoundaryNode(v0, v1, b0, b1, node);
+//    } else {
+//        // Boundary vertex.
+//        assert(i1 >= n_vtx && i2 >= n_vtx);
+//        node = bdry->v.segment<2>((i2 - n_vtx) * 2);
+//    }
+//}
 
 void
 Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
@@ -524,10 +475,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     }
 
     VectorXi dualRaw = getDualGraph(vertices, params);
-    std::vector<std::vector<int>> neighborhoods_stdvec = getNeighborsClipped(vertices, params, dualRaw, n_free);
-    neighborhoods.resize(neighborhoods_stdvec.size());
-    for (int i = 0; i < neighborhoods.size(); i++) {
-        neighborhoods[i] = Eigen::Map<VectorXi>(neighborhoods_stdvec[i].data(), neighborhoods_stdvec[i].size());
+    if (!getNeighborsClipped(vertices, params, dualRaw, n_free)) {
+        isValid = false;
+        return;
     }
 
     // Fourth field is a flag set to 1 only if
@@ -543,7 +493,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     std::set<IV4, decltype(cmp)> triplets(cmp);
 
     for (int i = 0; i < n_free; i++) {
-        VectorXi cell = neighborhoods[i];
+        std::vector<int> cell = neighborhoods[i];
         for (int j = 0; j < cell.size(); j++) {
             int n1 = cell[j];
             int n2 = cell[(j + 1) % cell.size()];
@@ -558,7 +508,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
     cells.resize(n_free);
     for (int i = 0; i < n_free; i++) {
-        VectorXi neighborhood = neighborhoods[i];
+        std::vector<int> neighborhood = neighborhoods[i];
         VectorXi cell(neighborhood.size());
 
         for (int j = 0; j < neighborhood.size(); j++) {
@@ -649,6 +599,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     for (int i = 0; i < n_free; i++) {
         if (cells[i].rows() < 3) {
             isValid = false;
+            return;
         }
     }
 }

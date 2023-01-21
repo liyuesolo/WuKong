@@ -35,7 +35,9 @@ class Tessellation {
 public:
     VectorXi dual;
     std::vector<VectorXi> cells;
-    std::vector<VectorXi> neighborhoods;
+    std::vector<std::vector<int>> neighborhoods;
+    std::vector<std::vector<int>> neighborhoodFlags;
+    std::vector<VectorXi> segment;
     VectorXT c;
     VectorXT x;
 
@@ -61,6 +63,9 @@ private:
     virtual void
     getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &hessX, MatrixXT &hessY) = 0;
 
+    void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
+                        MatrixXT &hessY, int &mode);
+
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, TV &node) = 0;
 
@@ -78,11 +83,6 @@ public:
     // Returns the dual graph of the tesselation. For standard Voronoi tessellation, this is the Delaunay triangulation.
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params) = 0;
 
-    void getNodeWrapper(int i0, int i1, int i2, TV &node);
-
-    void getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
-                        MatrixXT &hessY, int &mode);
-
     void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
 
     void
@@ -97,7 +97,7 @@ public:
     addFunctionHessian(const CellFunction &function, MatrixXT &hessian, std::vector<CellInfo> cellInfos);
 
     // Computes list of indices of neighboring sites and boundary edges, ordered counterclockwise.
-    std::vector<std::vector<int>>
+    bool
     getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells);
 
     void tessellate(const VectorXT &vertices, const VectorXT &params, Boundary *bdry_new, int n_free);

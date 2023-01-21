@@ -645,21 +645,14 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        VectorXi &neighbors = info->getTessellation()->neighborhoods[i];
-        size_t degree = neighbors.size();
+        VectorXi nodeIndices = info->getTessellation()->cells[i];
+        size_t degree = nodeIndices.size();
 
         TV v0 = vertices.segment<2>(i * 2);
-        VectorXT c0 = c.segment(i * dims, dims);
 
         for (size_t j = 0; j < degree; j++) {
-            TV v1, v2;
-
-            int n1 = neighbors[j];
-            int n2 = neighbors[(j + 1) % degree];
-            int n3 = neighbors[(j + 2) % degree];
-
-            info->getTessellation()->getNodeWrapper(i, n1, n2, v1);
-            info->getTessellation()->getNodeWrapper(i, n2, n3, v2);
+            TV v1 = info->getTessellation()->x.segment<2>(nodeIndices[j] * 2);
+            TV v2 = info->getTessellation()->x.segment<2>(nodeIndices[(j + 1) % degree] * 2);
 
             face0.push_back(v0);
             face1.push_back(v1);
@@ -705,7 +698,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 //        Fc.row(i) = TV3(cc, cc, cc);
 
         currentIdxInCell++;
-        if (currentIdxInCell == info->getTessellation()->neighborhoods[currentCell].size()) {
+        if (currentIdxInCell == info->getTessellation()->cells[currentCell].size()) {
             currentIdxInCell = 0;
             currentCell++;
         }
@@ -803,21 +796,14 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        VectorXi &neighbors = info->getTessellation()->neighborhoods[i];
-        size_t degree = neighbors.size();
+        VectorXi nodeIndices = info->getTessellation()->cells[i];
+        size_t degree = nodeIndices.size();
 
         TV v0 = vertices.segment<2>(i * 2);
-        VectorXT c0 = c.segment(i * dims, dims);
 
         for (size_t j = 0; j < degree; j++) {
-            TV v1, v2;
-
-            int n1 = neighbors[j];
-            int n2 = neighbors[(j + 1) % degree];
-            int n3 = neighbors[(j + 2) % degree];
-
-            info->getTessellation()->getNodeWrapper(i, n1, n2, v1);
-            info->getTessellation()->getNodeWrapper(i, n2, n3, v2);
+            TV v1 = info->getTessellation()->x.segment<2>(nodeIndices[j] * 2);
+            TV v2 = info->getTessellation()->x.segment<2>(nodeIndices[(j + 1) % degree] * 2);
 
             areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
         }
