@@ -8,6 +8,7 @@ bool
 Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells) {
     int n_vtx = vertices.rows() / 2, n_bdy = bdry->v.rows() / 2;
 
+    cells.clear();
     cells.resize(n_cells);
 
     std::vector<std::vector<int>> neighborsRaw = getNeighbors(vertices, dual, n_cells);
@@ -41,7 +42,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
 
             TV v;
             getNode(c0, c.segment(n1 * dims, dims), c.segment(n2 * dims, dims), v);
-            nodes[j] = v;
+            nodes[(j + 1) % degree] = v;
         }
 
         std::vector<BoundaryIntersection> intersections;
@@ -54,90 +55,125 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 cells[i].edges[j].neighbor = neighborsRaw[i][j];
                 cells[i].edges[j].nextEdge = (j + 1) % neighborsRaw[i].size();
             }
-            continue;
-        }
+        } else {
+            int loopStartIndex = 0;
+            BoundaryIntersection loopStartIntersection = intersections[1];
+            int startIndex = 1;
+            bool isLoopStart = true;
+            while (!intersections.empty()) {
+                assert(intersections.size() % 2 == 0);
+                BoundaryIntersection intersect1 = intersections[startIndex];
 
-        bool inPoly = bdry->pointInBounds(nodes[0]);
-        while (!intersections.empty()) {
-            BoundaryIntersection intersect0 = intersections[0];
+                VectorXi segmentDists = -1 * VectorXi::Ones(n_bdy);
+                int curr = intersect1.i_bdry;
+                int segmentDist = 0;
+                do {
+                    segmentDists(curr) = segmentDist;
+                    curr = bdry->next(curr);
+                    segmentDist++;
+                } while (curr != intersect1.i_bdry);
 
-            VectorXi segmentDists = -1 * VectorXi::Ones(n_bdy);
-            int curr = intersect0.i_bdry;
-            int segmentDist = 0;
-            do {
-                segmentDists(curr) = segmentDist;
-                curr = bdry->next(curr);
-                segmentDist++;
-            } while (curr != intersect0.i_bdry);
+                // Find next intersection along boundary.
+                double minDist = 1e10;
+                int minIdx = -1;
+                for (int j = 0; j < intersections.size(); j++) {
+                    if (j == startIndex) continue;
 
-            // Find next intersection along boundary.
-            double minDist = 1e10;
-            int minIdx = -1;
-            for (int j = 0; j < intersections.size(); j++) {
-                if (j == i) continue;
+                    BoundaryIntersection intersectCurr = intersections[j];
+                    if (segmentDists(intersectCurr.i_bdry) == -1) continue;
 
-                BoundaryIntersection intersectCurr = intersections[j];
-                if (segmentDists(intersectCurr.i_bdry) == -1) continue;
+                    double dist = segmentDists(intersectCurr.i_bdry) + intersectCurr.t_bdry - intersect1.t_bdry;
+                    if (dist < 0) dist += n_bdy;
 
-                double dist = segmentDists(intersectCurr.i_bdry) + intersectCurr.t_bdry - intersect0.t_bdry;
-                if (dist < 0) dist += n_bdy;
+                    if (dist < minDist) {
+                        minDist = dist;
+                        minIdx = j;
+                    }
+                }
 
-                if (dist < minDist) {
-                    minDist = dist;
-                    minIdx = j;
+                BoundaryIntersection intersectNext = intersections[minIdx];
+                int i_bdry = intersect1.i_bdry;
+                while (true) {
+                    cells[i].edges.emplace_back();
+                    cells[i].edges.back().neighbor = n_vtx + i_bdry;
+                    cells[i].edges.back().nextEdge = cells[i].edges.size();
+                    if (i_bdry == intersectNext.i_bdry) break;
+                    i_bdry = bdry->next(i_bdry);
+                }
+
+                assert(minIdx + 1 < intersections.size());
+                BoundaryIntersection intersectNext2 = (minIdx == 0 ? loopStartIntersection : intersections[minIdx + 1]);
+                int i_cell = intersectNext.i_cell;
+                bool bad = (minIdx == 0 && isLoopStart && intersectNext.t_cell > intersect1.t_cell);
+                while (true) {
+                    cells[i].edges.emplace_back();
+                    cells[i].edges.back().neighbor = neighbors[i_cell];
+                    cells[i].edges.back().nextEdge = cells[i].edges.size();
+                    if (i_cell == intersectNext2.i_cell && !bad) break;
+                    bad = false;
+                    i_cell = (i_cell + 1) % degree;
+                }
+
+                if (minIdx == 0) {
+                    intersections.erase(intersections.begin() + startIndex);
+                    intersections.erase(intersections.begin());
+
+                    cells[i].edges.back().nextEdge = loopStartIndex;
+                    loopStartIndex = cells[i].edges.size();
+                    loopStartIntersection = intersections[1];
+                    startIndex = 1;
+                    isLoopStart = true;
+                } else {
+                    intersections.erase(intersections.begin() + std::max(minIdx, startIndex));
+                    intersections.erase(intersections.begin() + std::min(minIdx, startIndex));
+                    startIndex = minIdx - 1;
+                    isLoopStart = false;
                 }
             }
-
-            BoundaryIntersection intersect1 = intersections[minIdx];
-
-            int i_bdry = intersect0.i_bdry;
-            do {
-
-            } while (i_bdry != intersect1.i_bdry);
         }
 
-        // TODO: DO THISSSS
-//
-//        int intersectIdx = 0;
-//        for (size_t j = 0; j < degree; j++) {
-//            if (inPoly) {
-//                neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
-//            }
-//
-//            if (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
-//
-//            }
-//
-//            while (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
-//                inPoly = !inPoly;
-//
-//                neighborhoods[i].push_back(n_vtx + intersections[intersectIdx].i_bdry);
-//                if (inPoly) {
-//                    neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
-//                }
-//
-//                intersectIdx++;
-//            }
-//        }
-//
-//        size_t clippedDegree = neighborhoods[i].size();
-//        for (int j = 0; j < clippedDegree; j++) {
-//            int n1 = neighborhoods[i][j];
-//            int n2 = neighborhoods[i][(j + 1) % clippedDegree];
-//
-//            if (n1 >= n_vtx && n2 >= n_vtx) {
-//                if (n1 == n2) {
-//                    neighborhoods[i].erase(neighborhoods[i].begin() + j);
-//                    clippedDegree--;
-//                    j--;
-//                } else if (bdry->next(n1 - n_vtx) == n2 - n_vtx) {
-//                    // Do nothing
-//                } else {
-//                    neighborhoods[i].insert(neighborhoods[i].begin() + j + 1, bdry->next(n1 - n_vtx) + n_vtx);
-//                    clippedDegree++;
-//                }
-//            }
-//        }
+        // Check for boundary sections completely enclosed by the cell
+        for (int b = 0; b < n_bdy; b++) {
+            if (bdry->next(b) != b + 1) {
+                TV point = bdry->v.segment<2>(b * 2);
+
+                double w = 0; // Winding number
+                for (int j = 0; j < degree; j++) {
+                    double x1 = nodes[j](0);
+                    double y1 = nodes[j](1);
+                    double x2 = nodes[(j + 1) % degree](0);
+                    double y2 = nodes[(j + 1) % degree](1);
+
+                    double a = atan2(y2 - point.y(), x2 - point.x()) - atan2(y1 - point.y(), x1 - point.x());
+                    if (a > M_PI) a -= 2 * M_PI;
+                    if (a < -M_PI) a += 2 * M_PI;
+                    w += a;
+                }
+
+                bool isEnclosed = w > M_PI;
+
+                for (int j = 0; j < cells[i].edges.size(); j++) {
+                    if (cells[i].edges[j].neighbor == n_vtx + b) {
+                        isEnclosed = false;
+                        break;
+                    }
+                }
+
+                if (isEnclosed) {
+                    int b2 = b;
+                    int startEdge = cells[i].edges.size();
+                    do {
+                        cells[i].edges.emplace_back();
+                        cells[i].edges.back().neighbor = n_vtx + b2;
+                        cells[i].edges.back().nextEdge = cells[i].edges.size();
+                        b2 = bdry->next(b2);
+                    } while (b2 != b);
+                    cells[i].edges.back().nextEdge = startEdge;
+
+                    cells[i].holes.push_back(bdry->p.segment<2>(0));
+                }
+            }
+        }
     }
 
     return true;

@@ -1,3 +1,5 @@
+#include <igl/triangle/triangulate.h>
+
 #include "../include/Foam2D.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
@@ -634,10 +636,6 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         S.row(i).segment<2>(0) = vertices.segment<2>(i * 2);
     }
 
-    std::vector<TV> face0;
-    std::vector<TV> face1;
-    std::vector<TV> face2;
-
     int n_cells = info->n_free;
     VectorXT areas = VectorXT::Zero(n_cells);
 
@@ -646,63 +644,90 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
     for (int i = 0; i < n_cells; i++) {
         Cell cell = info->getTessellation()->cells[i];
-        size_t degree = cell.edges.size();
-
-        TV v0 = vertices.segment<2>(i * 2);
-
-        for (size_t j = 0; j < degree; j++) {
-            TV v1 = info->getTessellation()->x.segment<2>(cell.edges[j].startNode * 2);
-            TV v2 = info->getTessellation()->x.segment<2>(cell.edges[cell.edges[j].nextEdge].startNode * 2);
-
-            face0.push_back(v0);
-            face1.push_back(v1);
-            face2.push_back(v2);
-
-            areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
-        }
+        CellFunctionArea areaFunc;
+        info->getTessellation()->addSingleCellFunctionValue(i, areaFunc, areas(i), nullptr);
     }
 
-    V.resize(face0.size() * 3, 3);
+    auto cells = info->getTessellation()->cells;
+    auto nodes = info->getTessellation()->x;
+
+    int numEdges = 0;
+    for (Cell cell: cells) {
+        numEdges += cell.edges.size();
+    }
+
+    V.resize(numEdges, 3);
     V.setZero();
-    E.resize(face0.size(), 2);
+    E.resize(numEdges, 2);
     E.setZero();
-    F.resize(face0.size(), 3);
+    F.resize(numEdges, 3);
     F.setZero();
-    Fc.resize(face0.size(), 3);
+    Fc.resize(numEdges, 3);
     Fc.setZero();
 
-    int currentCell = 0;
-    int currentIdxInCell = 0;
+    int currNumEdges = 0;
+    int currNumFaces = 0;
+    for (int i = 0; i < n_cells; i++) {
+        MatrixXT Ptri;
+        Ptri.resize(cells[i].edges.size(), 2);
+        MatrixXi Etri;
+        Etri.resize(cells[i].edges.size(), 2);
+        for (int j = 0; j < cells[i].edges.size(); j++) {
+            Ptri.row(j) = nodes.segment<2>(cells[i].edges[j].startNode * 2);
+            Etri.row(j) = IV(j, cells[i].edges[j].nextEdge);
+        }
 
-    for (int i = 0; i < face0.size(); i++) {
-        TV v0 = face0[i];
-        TV v1 = face1[i];
-        TV v2 = face2[i];
+        MatrixXT hole;
+        if (!cells[i].holes.empty()) {
+            hole = cells[i].holes[0];
+        }
 
-        V.row(i * 3 + 0).segment<2>(0) = v0;
-        V.row(i * 3 + 1).segment<2>(0) = v1;
-        V.row(i * 3 + 2).segment<2>(0) = v2;
+        MatrixXT Vtri;
+        MatrixXi Ftri;
+        igl::triangle::triangulate(Ptri,
+                                   Etri,
+                                   hole,
+                                   "Q",
+                                   Vtri, Ftri);
 
-        E.row(i) = IV(i * 3 + 1, i * 3 + 2);
-        F.row(i) = IV3(i * 3 + 0, i * 3 + 1, i * 3 + 2);
+//        for (int k = 0; k < Ftri.rows(); k++) {
+//            std::cout << "F " << Ftri(k, 0) << " " << Ftri(k, 1) << " " << Ftri(k, 2) << std::endl;
+//        }
+//        std::cout << std::endl;
+//        for (int k = 0; k < Ptri.rows(); k++) {
+//            std::cout << "P " << Ptri(k, 0) << " " << Ptri(k, 1) << std::endl;
+//        }
+//        std::cout << std::endl;
+//        for (int k = 0; k < Etri.rows(); k++) {
+//            std::cout << "E " << Etri(k, 0) << " " << Etri(k, 1) << std::endl;
+//        }
+//        std::cout << std::endl;
+//        for (int k = 0; k < Vtri.rows(); k++) {
+//            std::cout << "V " << Vtri(k, 0) << " " << Vtri(k, 1) << std::endl;
+//        }
+//        std::cout << std::endl;
 
+        V.block(currNumEdges, 0, Ptri.rows(), 2) = Ptri;
+        E.block(currNumEdges, 0, Etri.rows(), 2) = Etri + currNumEdges * MatrixXi::Ones(Etri.rows(), 2);
+        F.block(currNumFaces, 0, Ftri.rows(), 3) = Ftri + currNumEdges * MatrixXi::Ones(Ftri.rows(), 3);
+
+        TV3 color;
         if (colormode == 0) {
-            Fc.row(i) = (currentCell == info->selected ? TV3(0.4, 0.4, 0.4) : getColor(areas(currentCell),
-                                                                                       info->energy_area_targets(
-                                                                                               currentCell)));
+            color = (i == info->selected ? TV3(0.4, 0.4, 0.4) : getColor(areas(i),
+                                                                         info->energy_area_targets(
+                                                                                 i)));
         } else {
-            Fc.row(i) = currentCell % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
+            color = i % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
         }
+        Fc.block(currNumFaces, 0, Ftri.rows(), 3) = color.transpose().replicate(Ftri.rows(), 1);
 
-//        double cc = currentCell * 1.0 / info->n_free;
-//        Fc.row(i) = TV3(cc, cc, cc);
-
-        currentIdxInCell++;
-        if (currentIdxInCell == info->getTessellation()->cells[currentCell].edges.size()) {
-            currentIdxInCell = 0;
-            currentCell++;
-        }
+        currNumEdges += Ptri.rows();
+        currNumFaces += Ftri.rows();
     }
+    V.conservativeResize(currNumEdges, 3);
+    E.conservativeResize(currNumEdges, 2);
+    F.conservativeResize(currNumFaces, 3);
+    Fc.conservativeResize(currNumFaces, 3);
 
     X = V;
     S.col(2).setConstant(2e-6);

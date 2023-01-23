@@ -99,10 +99,6 @@ bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<Bo
                 intersections.push_back(intersect);
             }
         }
-        std::sort(intersections.begin(), intersections.end(),
-                  [](const BoundaryIntersection &a, const BoundaryIntersection &b) {
-                      return std::pair<int, double>(a.i_cell, a.t_cell) < std::pair<int, double>(b.i_cell, b.t_cell);
-                  });
     }
 
     std::sort(intersections.begin(), intersections.end(),
@@ -110,51 +106,13 @@ bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<Bo
                   return std::pair<int, double>(a.i_cell, a.t_cell) < std::pair<int, double>(b.i_cell, b.t_cell);
               });
 
-    bool inPoly = pointInBounds(nodes[0]);
-    if (!inPoly) {
-        intersections.push_back(intersections[0]);
-        intersections.erase(intersections.begin());
+    if (!intersections.empty()) {
+        bool inPoly = pointInBounds(nodes[0]);
+        if (inPoly) {
+            intersections.push_back(intersections[0]);
+            intersections.erase(intersections.begin());
+        }
     }
-
-//    for (int i = 0; i < intersections.size(); i++) {
-//        if (!inPoly) {
-//            inPoly = true;
-//            continue;
-//        }
-//
-//        BoundaryIntersection intersect0 = intersections[i];
-//        BoundaryIntersection intersect1 = intersections[(i + 1) % intersections.size()];
-//
-//        VectorXi segmentDists = -1 * VectorXi::Ones(n_bdy);
-//        int curr = intersect0.i_bdry;
-//        int segmentDist = 0;
-//        do {
-//            segmentDists(curr) = segmentDist;
-//            curr = next(curr);
-//            segmentDist++;
-//        } while (curr != intersect0.i_bdry);
-//
-//        // Find next intersection along boundary from intersect0.
-//        double minDist = 1e10;
-//        int minIdx = -1;
-//        for (int j = 0; j < intersections.size(); j++) {
-//            if (j == i) continue;
-//
-//            BoundaryIntersection intersectCurr = intersections[j];
-//            if (segmentDists(intersectCurr.i_bdry) == -1) continue;
-//
-//            double dist = segmentDists(intersectCurr.i_bdry) + intersectCurr.t_bdry - intersect0.t_bdry;
-//            if (dist < 0) dist += n_bdy;
-//
-//            if (dist < minDist) {
-//                minDist = dist;
-//                minIdx = j;
-//            }
-//        }
-//        if (minIdx != (i + 1) % intersections.size()) return false;
-//
-//        inPoly = false;
-//    }
 
     return true;
 }
