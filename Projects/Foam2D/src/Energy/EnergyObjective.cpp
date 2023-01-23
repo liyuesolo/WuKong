@@ -18,7 +18,7 @@ static void printVectorXi(std::string name, const VectorXi &x, int start = 0, in
 }
 
 void EnergyObjective::check_gradients(const VectorXd &y) const {
-    double eps = 1e-4;
+    double eps = 1e-7;
 
     VectorXd x = y;
 
@@ -83,11 +83,12 @@ void EnergyObjective::preProcess(const VectorXd &y, std::vector<CellInfo> &cellI
         cellInfos[info->selected].target_position = info->selected_target_pos;
     }
     for (int i = 0; i < info->n_free; i++) {
-        std::vector<int> neighborhood = info->getTessellation()->neighborhoods[i];
-        cellInfos[i].neighbor_affinity = VectorXT::Zero(neighborhood.size());
-        for (int j = 0; j < neighborhood.size(); j++) {
-            cellInfos[i].neighbor_affinity(j) = (neighborhood[j] >= info->n_free || neighborhood[j] % 2 == i % 2 ? 0
-                                                                                                                 : 1);
+        Cell cell = info->getTessellation()->cells[i];
+        cellInfos[i].neighbor_affinity = VectorXT::Zero(cell.edges.size());
+        for (int j = 0; j < cell.edges.size(); j++) {
+            cellInfos[i].neighbor_affinity(j) = (cell.edges[j].neighbor >= info->n_free ||
+                                                 cell.edges[j].neighbor % 2 == i % 2 ? 0
+                                                                                     : 1);
         }
     }
 }

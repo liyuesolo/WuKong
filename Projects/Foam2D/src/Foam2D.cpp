@@ -66,7 +66,7 @@ void Foam2D::initBasicTestCase() {
     info->n_fixed = 8;
 
     vertices.resize((info->n_free + info->n_fixed) * 2);
-    vertices << -0.5, 0, 0.5, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
+    vertices << -0.6, 0, 0.6, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
 
     info->boundary = new SimpleBoundary({}, {});
 
@@ -645,14 +645,14 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        VectorXi nodeIndices = info->getTessellation()->cells[i];
-        size_t degree = nodeIndices.size();
+        Cell cell = info->getTessellation()->cells[i];
+        size_t degree = cell.edges.size();
 
         TV v0 = vertices.segment<2>(i * 2);
 
         for (size_t j = 0; j < degree; j++) {
-            TV v1 = info->getTessellation()->x.segment<2>(nodeIndices[j] * 2);
-            TV v2 = info->getTessellation()->x.segment<2>(nodeIndices[(j + 1) % degree] * 2);
+            TV v1 = info->getTessellation()->x.segment<2>(cell.edges[j].startNode * 2);
+            TV v2 = info->getTessellation()->x.segment<2>(cell.edges[cell.edges[j].nextEdge].startNode * 2);
 
             face0.push_back(v0);
             face1.push_back(v1);
@@ -698,7 +698,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 //        Fc.row(i) = TV3(cc, cc, cc);
 
         currentIdxInCell++;
-        if (currentIdxInCell == info->getTessellation()->cells[currentCell].size()) {
+        if (currentIdxInCell == info->getTessellation()->cells[currentCell].edges.size()) {
             currentIdxInCell = 0;
             currentCell++;
         }
@@ -796,14 +796,14 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        VectorXi nodeIndices = info->getTessellation()->cells[i];
-        size_t degree = nodeIndices.size();
+        Cell cell = info->getTessellation()->cells[i];
+        size_t degree = cell.edges.size();
 
         TV v0 = vertices.segment<2>(i * 2);
 
         for (size_t j = 0; j < degree; j++) {
-            TV v1 = info->getTessellation()->x.segment<2>(nodeIndices[j] * 2);
-            TV v2 = info->getTessellation()->x.segment<2>(nodeIndices[(j + 1) % degree] * 2);
+            TV v1 = info->getTessellation()->x.segment<2>(cell.edges[j].startNode * 2);
+            TV v2 = info->getTessellation()->x.segment<2>(cell.edges[cell.edges[j].nextEdge].startNode * 2);
 
             areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
         }

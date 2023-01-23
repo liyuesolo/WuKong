@@ -29,12 +29,15 @@ struct CellInfo {
 class CellFunction {
 public:
     virtual void
-    addValue(const VectorXT &site, const VectorXT &nodes, double &value, const CellInfo *cellInfo) const = 0;
+    addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+             const CellInfo *cellInfo) const = 0;
 
     virtual void
-    addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c, VectorXT &gradient_x,
+    addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, VectorXT &gradient_c,
+                VectorXT &gradient_x,
                 const CellInfo *cellInfo) const = 0;
 
     virtual void
-    addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian, const CellInfo *cellInfo) const = 0;
+    addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+               const CellInfo *cellInfo) const = 0;
 };

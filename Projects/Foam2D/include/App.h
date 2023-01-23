@@ -24,7 +24,7 @@ public:
 
     int colormode = 0;
 
-    int generate_scenario_type = 2;
+    int generate_scenario_type = 0;
     int generate_scenario_free_sites = 40;
     int generate_scenario_fixed_sites = 40;
 

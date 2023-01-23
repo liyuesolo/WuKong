@@ -1,49 +1,52 @@
 #include "../../include/ImageMatch/CellFunctionImageMatch2AreaScaled.h"
 #include <iostream>
 
-void CellFunctionImageMatch2AreaScaled::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
-                                          const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2AreaScaled::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                 double &value,
+                                                 const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double image_match = 0;
-    image_match_function.addValue(site, nodes, image_match, cellInfo);
+    image_match_function.addValue(site, nodes, next, image_match, cellInfo);
 
     value += image_match / area;
 }
 
-void CellFunctionImageMatch2AreaScaled::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                             VectorXT &gradient_x, const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2AreaScaled::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                    VectorXT &gradient_c,
+                                                    VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double image_match = 0;
-    image_match_function.addValue(site, nodes, image_match, cellInfo);
+    image_match_function.addValue(site, nodes, next, image_match, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient = VectorXT::Zero(gradient_x.rows());
-    area_function.addGradient(site, nodes, temp, area_gradient, cellInfo);
+    area_function.addGradient(site, nodes, next, temp, area_gradient, cellInfo);
     VectorXT image_match_gradient = VectorXT::Zero(nodes.rows());
-    image_match_function.addGradient(site, nodes, temp, image_match_gradient, cellInfo);
+    image_match_function.addGradient(site, nodes, next, temp, image_match_gradient, cellInfo);
 
     gradient_x += image_match_gradient / area - image_match * area_gradient / pow(area, 2);
 }
 
-void CellFunctionImageMatch2AreaScaled::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                            const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2AreaScaled::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                   MatrixXT &hessian,
+                                                   const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double image_match = 0;
-    image_match_function.addValue(site, nodes, image_match, cellInfo);
+    image_match_function.addValue(site, nodes, next, image_match, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient = VectorXT::Zero(nodes.rows());
-    area_function.addGradient(site, nodes, temp, area_gradient, cellInfo);
+    area_function.addGradient(site, nodes, next, temp, area_gradient, cellInfo);
     VectorXT image_match_gradient = VectorXT::Zero(nodes.rows());
-    image_match_function.addGradient(site, nodes, temp, image_match_gradient, cellInfo);
+    image_match_function.addGradient(site, nodes, next, temp, image_match_gradient, cellInfo);
 
     MatrixXT area_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    area_function.addHessian(site, nodes, area_hessian, cellInfo);
+    area_function.addHessian(site, nodes, next, area_hessian, cellInfo);
     MatrixXT image_match_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    image_match_function.addHessian(site, nodes, image_match_hessian, cellInfo);
+    image_match_function.addHessian(site, nodes, next, image_match_hessian, cellInfo);
 
     Eigen::Ref<MatrixXT> area_hess = area_hessian.bottomRightCorner(nodes.rows(), nodes.rows());
     Eigen::Ref<MatrixXT> image_match_hess = image_match_hessian.bottomRightCorner(nodes.rows(), nodes.rows());

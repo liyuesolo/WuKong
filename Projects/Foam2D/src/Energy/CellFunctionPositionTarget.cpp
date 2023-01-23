@@ -1,15 +1,17 @@
 #include "../../include/Energy/CellFunctionPositionTarget.h"
 #include <iostream>
 
-void CellFunctionPositionTarget::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
-                                          const CellInfo *cellInfo) const {
+void
+CellFunctionPositionTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+                                     const CellInfo *cellInfo) const {
     if (cellInfo->agent) {
         TV target_position = cellInfo->target_position;
         value += pow(site(0) - target_position(0), 2.0) + pow(site(1) - target_position(1), 2.0);
     }
 }
 
-void CellFunctionPositionTarget::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionPositionTarget::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                             VectorXT &gradient_c,
                                              VectorXT &gradient_x, const CellInfo *cellInfo) const {
     if (cellInfo->agent) {
         TV target_position = cellInfo->target_position;
@@ -18,7 +20,8 @@ void CellFunctionPositionTarget::addGradient(const VectorXT &site, const VectorX
     }
 }
 
-void CellFunctionPositionTarget::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+void CellFunctionPositionTarget::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                            MatrixXT &hessian,
                                             const CellInfo *cellInfo) const {
     if (cellInfo->agent) {
         hessian(0, 0) += 2;

@@ -1,7 +1,7 @@
 #include "../../include/Energy/CellFunctionPerimeter.h"
 #include <iostream>
 
-void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                                      const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
@@ -10,8 +10,8 @@ void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -22,7 +22,8 @@ void CellFunctionPerimeter::addValue(const VectorXT &site, const VectorXT &nodes
     }
 }
 
-void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                        VectorXT &gradient_c,
                                         VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
@@ -32,8 +33,8 @@ void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &no
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -54,8 +55,9 @@ void CellFunctionPerimeter::addGradient(const VectorXT &site, const VectorXT &no
     }
 }
 
-void CellFunctionPerimeter::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                       const CellInfo *cellInfo) const {
+void
+CellFunctionPerimeter::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+                                  const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
@@ -66,8 +68,8 @@ void CellFunctionPerimeter::addHessian(const VectorXT &site, const VectorXT &nod
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);

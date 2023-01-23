@@ -1,8 +1,8 @@
 #include "../../include/ImageMatch/CellFunctionImageMatch1.h"
 #include <iostream>
 
-void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
-                                          const CellInfo *cellInfo) const {
+void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+                                       const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -16,21 +16,24 @@ void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nod
         for (int i = 0; i < n_nodes; i++) {
             x0i = i * 2 + 0;
             y0i = i * 2 + 1;
-            x1i = ((i + 1) % n_nodes) * 2 + 0;
-            y1i = ((i + 1) % n_nodes) * 2 + 1;
+            x1i = next(i) * 2 + 0;
+            y1i = next(i) * 2 + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);
             x1 = nodes(x1i);
             y1 = nodes(y1i);
 
-            value += 0.1e1 / beta * log(0.1e1 + exp(-beta * ((x1 - x0) * (yp - y0) - (xp - x0) * (y1 - y0)) * pow(pow(x1 - x0, 0.2e1) + pow(y1 - y0, 0.2e1) + epsilon, -0.1e1 / 0.2e1)));
+            value += 0.1e1 / beta * log(0.1e1 + exp(-beta * ((x1 - x0) * (yp - y0) - (xp - x0) * (y1 - y0)) *
+                                                    pow(pow(x1 - x0, 0.2e1) + pow(y1 - y0, 0.2e1) + epsilon,
+                                                        -0.1e1 / 0.2e1)));
         }
     }
 }
 
-void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                             VectorXT &gradient_x, const CellInfo *cellInfo) const {
+void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                          VectorXT &gradient_c,
+                                          VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -45,8 +48,8 @@ void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &
         for (int i = 0; i < n_nodes; i++) {
             x0i = i * 2 + 0;
             y0i = i * 2 + 1;
-            x1i = ((i + 1) % n_nodes) * 2 + 0;
-            y1i = ((i + 1) % n_nodes) * 2 + 1;
+            x1i = next(i) * 2 + 0;
+            y1i = next(i) * 2 + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);
@@ -76,8 +79,9 @@ void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &
     }
 }
 
-void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                            const CellInfo *cellInfo) const {
+void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                         MatrixXT &hessian,
+                                         const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -94,8 +98,8 @@ void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &n
         for (int i = 0; i < n_nodes; i++) {
             x0i = i * 2 + 0;
             y0i = i * 2 + 1;
-            x1i = ((i + 1) % n_nodes) * 2 + 0;
-            y1i = ((i + 1) % n_nodes) * 2 + 1;
+            x1i = next(i) * 2 + 0;
+            y1i = next(i) * 2 + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);
@@ -148,22 +152,22 @@ void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &n
             t6 = t21 * (t28 * t19 * t16 + beta * (t8 * (t23 + t9) + t6) - t27);
             t4 = t21 * (t28 * t18 * t16 - t26 * t4 + t25 * (t3 * (t10 + t22) + t13));
             t9 = t21 * (t19 * t18 * t16 + t25 * (t15 + t9) - t27);
-            hess_xx(x0i,x0i) += -t21 * (t17 * pow(t20, 0.2e1) - beta * (0.2e1 * t1 * t8 * t2 + t14));
-            hess_xx(x0i,y0i) += -t29;
-            hess_xx(x0i,x1i) += -t5;
-            hess_xx(x0i,y1i) += t24;
-            hess_xx(y0i,x0i) += -t29;
-            hess_xx(y0i,y0i) += -t21 * (t17 * pow(t28, 0.2e1) - beta * (0.2e1 * t22 * t8 * t3 + t7));
-            hess_xx(y0i,x1i) += t6;
-            hess_xx(y0i,y1i) += -t4;
-            hess_xx(x1i,x0i) += -t5;
-            hess_xx(x1i,y0i) += t6;
-            hess_xx(x1i,x1i) += -t21 * (t17 * pow(t19, 0.2e1) - beta * (0.2e1 * t11 * t8 + t14));
-            hess_xx(x1i,y1i) += -t9;
-            hess_xx(y1i,x0i) += t24;
-            hess_xx(y1i,y0i) += -t4;
-            hess_xx(y1i,x1i) += -t9;
-            hess_xx(y1i,y1i) += t21 * (t16 * pow(t18, 0.2e1) + beta * (0.2e1 * t12 * t8 + t7));
+            hess_xx(x0i, x0i) += -t21 * (t17 * pow(t20, 0.2e1) - beta * (0.2e1 * t1 * t8 * t2 + t14));
+            hess_xx(x0i, y0i) += -t29;
+            hess_xx(x0i, x1i) += -t5;
+            hess_xx(x0i, y1i) += t24;
+            hess_xx(y0i, x0i) += -t29;
+            hess_xx(y0i, y0i) += -t21 * (t17 * pow(t28, 0.2e1) - beta * (0.2e1 * t22 * t8 * t3 + t7));
+            hess_xx(y0i, x1i) += t6;
+            hess_xx(y0i, y1i) += -t4;
+            hess_xx(x1i, x0i) += -t5;
+            hess_xx(x1i, y0i) += t6;
+            hess_xx(x1i, x1i) += -t21 * (t17 * pow(t19, 0.2e1) - beta * (0.2e1 * t11 * t8 + t14));
+            hess_xx(x1i, y1i) += -t9;
+            hess_xx(y1i, x0i) += t24;
+            hess_xx(y1i, y0i) += -t4;
+            hess_xx(y1i, x1i) += -t9;
+            hess_xx(y1i, y1i) += t21 * (t16 * pow(t18, 0.2e1) + beta * (0.2e1 * t12 * t8 + t7));
         }
     }
 }

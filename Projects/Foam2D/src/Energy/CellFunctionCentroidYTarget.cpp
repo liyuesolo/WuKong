@@ -1,29 +1,31 @@
 #include "../../include/Energy/CellFunctionCentroidYTarget.h"
 #include <iostream>
 
-void CellFunctionCentroidYTarget::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
-                                           const CellInfo *cellInfo) const {
+void
+CellFunctionCentroidYTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+                                      const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double centroid = 0;
-    centroid_function.addValue(site, nodes, centroid, cellInfo);
+    centroid_function.addValue(site, nodes, next, centroid, cellInfo);
 
     double multiplier = cellInfo->agent ? 20 : 1;
     value += multiplier * pow(site(1) - centroid / area, 2.0);
 }
 
-void CellFunctionCentroidYTarget::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionCentroidYTarget::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                              VectorXT &gradient_c,
                                               VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double centroid = 0;
-    centroid_function.addValue(site, nodes, centroid, cellInfo);
+    centroid_function.addValue(site, nodes, next, centroid, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(gradient_x.rows());
-    area_function.addGradient(site, nodes, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
     VectorXT centroid_gradient_x = VectorXT::Zero(nodes.rows());
-    centroid_function.addGradient(site, nodes, temp, centroid_gradient_x, cellInfo);
+    centroid_function.addGradient(site, nodes, next, temp, centroid_gradient_x, cellInfo);
 
     double multiplier = cellInfo->agent ? 20 : 1;
     gradient_c(1) += multiplier * 2 * (site(1) - centroid / area);
@@ -55,18 +57,19 @@ void CellFunctionCentroidYTarget::addGradient(const VectorXT &site, const Vector
 //    }
 }
 
-void CellFunctionCentroidYTarget::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
+void CellFunctionCentroidYTarget::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                             MatrixXT &hessian,
                                              const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, area, cellInfo);
+    area_function.addValue(site, nodes, next, area, cellInfo);
     double centroid = 0;
-    centroid_function.addValue(site, nodes, centroid, cellInfo);
+    centroid_function.addValue(site, nodes, next, centroid, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
-    area_function.addGradient(site, nodes, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
     VectorXT centroid_gradient_x = VectorXT::Zero(nodes.rows());
-    centroid_function.addGradient(site, nodes, temp, centroid_gradient_x, cellInfo);
+    centroid_function.addGradient(site, nodes, next, temp, centroid_gradient_x, cellInfo);
 
     VectorXT area_gradient = VectorXT::Zero(site.rows() + nodes.rows());
     area_gradient.segment(site.rows(), nodes.rows()) = area_gradient_x;
@@ -76,9 +79,9 @@ void CellFunctionCentroidYTarget::addHessian(const VectorXT &site, const VectorX
     siteY_gradient(1) = 1.0;
 
     MatrixXT area_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    area_function.addHessian(site, nodes, area_hessian, cellInfo);
+    area_function.addHessian(site, nodes, next, area_hessian, cellInfo);
     MatrixXT centroid_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    centroid_function.addHessian(site, nodes, centroid_hessian, cellInfo);
+    centroid_function.addHessian(site, nodes, next, centroid_hessian, cellInfo);
 
     double multiplier = cellInfo->agent ? 20 : 1;
     VectorXT aaa = siteY_gradient - centroid_gradient / area + centroid * area_gradient / pow(area, 2.0);

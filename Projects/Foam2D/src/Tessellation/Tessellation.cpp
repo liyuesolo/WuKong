@@ -8,16 +8,19 @@ bool
 Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &params, const VectorXi &dual, int n_cells) {
     int n_vtx = vertices.rows() / 2, n_bdy = bdry->v.rows() / 2;
 
+    cells.resize(n_cells);
+
     std::vector<std::vector<int>> neighborsRaw = getNeighbors(vertices, dual, n_cells);
     if (n_bdy == 0) {
-        neighborhoods = neighborsRaw;
+        for (int i = 0; i < n_cells; i++) {
+            cells[i].edges.resize(neighborsRaw[i].size());
+            for (int j = 0; j < cells[i].edges.size(); j++) {
+                cells[i].edges[j].neighbor = neighborsRaw[i][j];
+                cells[i].edges[j].nextEdge = (j + 1) % cells[i].edges.size();
+            }
+        }
         return true;
     };
-
-    neighborhoods.clear();
-    neighborhoods.resize(n_cells);
-    neighborhoodFlags.clear();
-    neighborhoodFlags.resize(n_cells);
 
     VectorXT c = combineVerticesParams(vertices, params);
     int dims = 2 + getNumVertexParams();
@@ -45,43 +48,96 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
         if (!bdry->getCellIntersections(nodes, intersections)) {
             return false;
         }
+        if (intersections.empty()) {
+            cells[i].edges.resize(neighborsRaw[i].size());
+            for (int j = 0; j < cells[i].edges.size(); j++) {
+                cells[i].edges[j].neighbor = neighborsRaw[i][j];
+                cells[i].edges[j].nextEdge = (j + 1) % neighborsRaw[i].size();
+            }
+            continue;
+        }
 
         bool inPoly = bdry->pointInBounds(nodes[0]);
-        int intersectIdx = 0;
-        for (size_t j = 0; j < degree; j++) {
-            if (inPoly) {
-                neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
-            }
-            while (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
-                inPoly = !inPoly;
+        while (!intersections.empty()) {
+            BoundaryIntersection intersect0 = intersections[0];
 
-                neighborhoods[i].push_back(n_vtx + intersections[intersectIdx].i_bdry);
-                if (inPoly) {
-                    neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
-                }
+            VectorXi segmentDists = -1 * VectorXi::Ones(n_bdy);
+            int curr = intersect0.i_bdry;
+            int segmentDist = 0;
+            do {
+                segmentDists(curr) = segmentDist;
+                curr = bdry->next(curr);
+                segmentDist++;
+            } while (curr != intersect0.i_bdry);
 
-                intersectIdx++;
-            }
-        }
+            // Find next intersection along boundary.
+            double minDist = 1e10;
+            int minIdx = -1;
+            for (int j = 0; j < intersections.size(); j++) {
+                if (j == i) continue;
 
-        size_t clippedDegree = neighborhoods[i].size();
-        for (int j = 0; j < clippedDegree; j++) {
-            int n1 = neighborhoods[i][j];
-            int n2 = neighborhoods[i][(j + 1) % clippedDegree];
+                BoundaryIntersection intersectCurr = intersections[j];
+                if (segmentDists(intersectCurr.i_bdry) == -1) continue;
 
-            if (n1 >= n_vtx && n2 >= n_vtx) {
-                if (n1 == n2) {
-                    neighborhoods[i].erase(neighborhoods[i].begin() + j);
-                    clippedDegree--;
-                    j--;
-                } else if (bdry->next(n1 - n_vtx) == n2 - n_vtx) {
-                    // Do nothing
-                } else {
-                    neighborhoods[i].insert(neighborhoods[i].begin() + j + 1, bdry->next(n1 - n_vtx) + n_vtx);
-                    clippedDegree++;
+                double dist = segmentDists(intersectCurr.i_bdry) + intersectCurr.t_bdry - intersect0.t_bdry;
+                if (dist < 0) dist += n_bdy;
+
+                if (dist < minDist) {
+                    minDist = dist;
+                    minIdx = j;
                 }
             }
+
+            BoundaryIntersection intersect1 = intersections[minIdx];
+
+            int i_bdry = intersect0.i_bdry;
+            do {
+
+            } while (i_bdry != intersect1.i_bdry);
         }
+
+        // TODO: DO THISSSS
+//
+//        int intersectIdx = 0;
+//        for (size_t j = 0; j < degree; j++) {
+//            if (inPoly) {
+//                neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
+//            }
+//
+//            if (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
+//
+//            }
+//
+//            while (intersectIdx < intersections.size() && intersections[intersectIdx].i_cell == j) {
+//                inPoly = !inPoly;
+//
+//                neighborhoods[i].push_back(n_vtx + intersections[intersectIdx].i_bdry);
+//                if (inPoly) {
+//                    neighborhoods[i].push_back(neighbors[(j + 1) % degree]);
+//                }
+//
+//                intersectIdx++;
+//            }
+//        }
+//
+//        size_t clippedDegree = neighborhoods[i].size();
+//        for (int j = 0; j < clippedDegree; j++) {
+//            int n1 = neighborhoods[i][j];
+//            int n2 = neighborhoods[i][(j + 1) % clippedDegree];
+//
+//            if (n1 >= n_vtx && n2 >= n_vtx) {
+//                if (n1 == n2) {
+//                    neighborhoods[i].erase(neighborhoods[i].begin() + j);
+//                    clippedDegree--;
+//                    j--;
+//                } else if (bdry->next(n1 - n_vtx) == n2 - n_vtx) {
+//                    // Do nothing
+//                } else {
+//                    neighborhoods[i].insert(neighborhoods[i].begin() + j + 1, bdry->next(n1 - n_vtx) + n_vtx);
+//                    clippedDegree++;
+//                }
+//            }
+//        }
     }
 
     return true;
@@ -237,24 +293,27 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, TV &node, VectorXT &gradX, 
 }
 
 void
-Tessellation::addSingleCellFunctionValue(int cell, const CellFunction &function, double &value,
+Tessellation::addSingleCellFunctionValue(int cellIndex, const CellFunction &function, double &value,
                                          const CellInfo *cellInfo) {
-    VectorXi nodeIndices = cells[cell];
-
-    VectorXT site(2);
-    VectorXT nodes(nodeIndices.rows() * 2);
-
     int dims = 2 + getNumVertexParams();
-    site = c.segment<2>(cell * dims);
-    for (int i = 0; i < nodeIndices.rows(); i++) {
-        nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+
+    Cell cell = cells[cellIndex];
+
+    VectorXT site(dims);
+    VectorXT nodes(cell.edges.size() * 2);
+    VectorXi next(cell.edges.size());
+
+    site = c.segment(cellIndex * dims, dims);
+    for (int i = 0; i < cell.edges.size(); i++) {
+        nodes.segment<2>(i * 2) = x.segment<2>(cell.edges[i].startNode * 2);
+        next(i) = cell.edges[i].nextEdge;
     }
 
-    function.addValue(site, nodes, value, cellInfo);
+    function.addValue(site, nodes, next, value, cellInfo);
 }
 
 void
-Tessellation::addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient,
+Tessellation::addSingleCellFunctionGradient(int cellIndex, const CellFunction &function, VectorXT &gradient,
                                             const CellInfo *cellInfo) {
     int dims = 2 + getNumVertexParams();
     int n_cells = cells.size();
@@ -262,23 +321,25 @@ Tessellation::addSingleCellFunctionGradient(int cell, const CellFunction &functi
     VectorXT dOdc = VectorXT::Zero(dims * n_cells);
     VectorXT dOdx = VectorXT::Zero(x.rows());
 
-    VectorXi nodeIndices = cells[cell];
+    Cell cell = cells[cellIndex];
 
-    VectorXT site(2);
-    VectorXT nodes(nodeIndices.rows() * 2);
+    VectorXT site(dims);
+    VectorXT nodes(cell.edges.size() * 2);
+    VectorXi next(cell.edges.size());
 
-    site = c.segment<2>(cell * dims);
-    for (int i = 0; i < nodeIndices.rows(); i++) {
-        nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+    site = c.segment(cellIndex * dims, dims);
+    for (int i = 0; i < cell.edges.size(); i++) {
+        nodes.segment<2>(i * 2) = x.segment<2>(cell.edges[i].startNode * 2);
+        next(i) = cell.edges[i].nextEdge;
     }
 
     VectorXT gradient_c = VectorXT::Zero(site.rows());
     VectorXT gradient_x = VectorXT::Zero(nodes.rows());
-    function.addGradient(site, nodes, gradient_c, gradient_x, cellInfo);
+    function.addGradient(site, nodes, next, gradient_c, gradient_x, cellInfo);
 
-    dOdc.segment<2>(cell * dims) += gradient_c;
-    for (int i = 0; i < nodeIndices.rows(); i++) {
-        dOdx.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
+    dOdc.segment(cellIndex * dims, dims) += gradient_c;
+    for (int i = 0; i < cell.edges.size(); i++) {
+        dOdx.segment<2>(cell.edges[i].startNode * 2) += gradient_x.segment<2>(i * 2);
     }
 
     gradient += dxdc.transpose() * dOdx + dOdc;
@@ -288,18 +349,20 @@ void
 Tessellation::addFunctionValue(const CellFunction &function, double &value,
                                const std::vector<CellInfo> cellInfos) {
     int dims = 2 + getNumVertexParams();
-    for (int cell = 0; cell < cells.size(); cell++) {
-        VectorXi nodeIndices = cells[cell];
+    for (int cellIndex = 0; cellIndex < cells.size(); cellIndex++) {
+        Cell cell = cells[cellIndex];
 
         VectorXT site(dims);
-        VectorXT nodes(nodeIndices.rows() * 2);
+        VectorXT nodes(cell.edges.size() * 2);
+        VectorXi next(cell.edges.size());
 
-        site = c.segment(cell * dims, dims);
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+        site = c.segment(cellIndex * dims, dims);
+        for (int i = 0; i < cell.edges.size(); i++) {
+            nodes.segment<2>(i * 2) = x.segment<2>(cell.edges[i].startNode * 2);
+            next(i) = cell.edges[i].nextEdge;
         }
 
-        function.addValue(site, nodes, value, &cellInfos[cell]);
+        function.addValue(site, nodes, next, value, &cellInfos[cellIndex]);
     }
 }
 
@@ -311,24 +374,26 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
     VectorXT partial_c = VectorXT::Zero(dims * n_cells);
     VectorXT partial_x = VectorXT::Zero(x.rows());
 
-    for (int cell = 0; cell < n_cells; cell++) {
-        VectorXi nodeIndices = cells[cell];
+    for (int cellIndex = 0; cellIndex < n_cells; cellIndex++) {
+        Cell cell = cells[cellIndex];
 
         VectorXT site(dims);
-        VectorXT nodes(nodeIndices.rows() * 2);
+        VectorXT nodes(cell.edges.size() * 2);
+        VectorXi next(cell.edges.size());
 
-        site = c.segment(cell * dims, dims);
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+        site = c.segment(cellIndex * dims, dims);
+        for (int i = 0; i < cell.edges.size(); i++) {
+            nodes.segment<2>(i * 2) = x.segment<2>(cell.edges[i].startNode * 2);
+            next(i) = cell.edges[i].nextEdge;
         }
 
         VectorXT gradient_c = VectorXT::Zero(site.rows());
         VectorXT gradient_x = VectorXT::Zero(nodes.rows());
-        function.addGradient(site, nodes, gradient_c, gradient_x, &cellInfos[cell]);
+        function.addGradient(site, nodes, next, gradient_c, gradient_x, &cellInfos[cellIndex]);
 
-        partial_c.segment(cell * dims, dims) += gradient_c;
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            partial_x.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
+        partial_c.segment(cellIndex * dims, dims) += gradient_c;
+        for (int i = 0; i < cell.edges.size(); i++) {
+            partial_x.segment<2>(cell.edges[i].startNode * 2) += gradient_x.segment<2>(i * 2);
         }
     }
 
@@ -351,39 +416,43 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
     MatrixXT partial_xx = MatrixXT::Zero(x.rows(), x.rows());
     VectorXT partial_x = VectorXT::Zero(x.rows());
 
-    for (int cell = 0; cell < n_cells; cell++) {
-        VectorXi nodeIndices = cells[cell];
+    for (int cellIndex = 0; cellIndex < n_cells; cellIndex++) {
+        Cell cell = cells[cellIndex];
 
         VectorXT site(dims);
-        VectorXT nodes(nodeIndices.rows() * 2);
+        VectorXT nodes(cell.edges.size() * 2);
+        VectorXi next(cell.edges.size());
 
-        site = c.segment(cell * dims, dims);
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            nodes.segment<2>(i * 2) = x.segment<2>(nodeIndices(i) * 2);
+        site = c.segment(cellIndex * dims, dims);
+        for (int i = 0; i < cell.edges.size(); i++) {
+            nodes.segment<2>(i * 2) = x.segment<2>(cell.edges[i].startNode * 2);
+            next(i) = cell.edges[i].nextEdge;
         }
 
         VectorXT gradient_c = VectorXT::Zero(site.rows());
         VectorXT gradient_x = VectorXT::Zero(nodes.rows());
-        function.addGradient(site, nodes, gradient_c, gradient_x, &cellInfos[cell]);
+        function.addGradient(site, nodes, next, gradient_c, gradient_x, &cellInfos[cellIndex]);
 
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            partial_x.segment<2>(nodeIndices(i) * 2) += gradient_x.segment<2>(i * 2);
+        for (int i = 0; i < cell.edges.size(); i++) {
+            partial_x.segment<2>(cell.edges[i].startNode * 2) += gradient_x.segment<2>(i * 2);
         }
 
         MatrixXT hessian_local = MatrixXT::Zero(site.rows() + nodes.rows(), site.rows() + nodes.rows());
-        function.addHessian(site, nodes, hessian_local, &cellInfos[cell]);
+        function.addHessian(site, nodes, next, hessian_local, &cellInfos[cellIndex]);
 
         Eigen::Ref<MatrixXT> hessian_local_cc = hessian_local.block(0, 0, site.rows(), site.rows());
         Eigen::Ref<MatrixXT> hessian_local_cx = hessian_local.block(0, site.rows(), site.rows(), nodes.rows());
         Eigen::Ref<MatrixXT> hessian_local_xx = hessian_local.block(site.rows(), site.rows(), nodes.rows(),
                                                                     nodes.rows());
 
-        partial_cc.block(cell * dims, cell * dims, dims, dims) += hessian_local_cc;
-        for (int i = 0; i < nodeIndices.rows(); i++) {
-            partial_cx.block<2, 2>(cell * dims, nodeIndices(i) * 2) += hessian_local_cx.block<2, 2>(0, i * 2);
-            for (int j = 0; j < nodeIndices.rows(); j++) {
-                partial_xx.block<2, 2>(nodeIndices(i) * 2, nodeIndices(j) * 2) += hessian_local_xx.block<2, 2>(i * 2,
-                                                                                                               j * 2);
+        partial_cc.block(cellIndex * dims, cellIndex * dims, dims, dims) += hessian_local_cc;
+        for (int i = 0; i < cell.edges.size(); i++) {
+            partial_cx.block(cellIndex * dims, cell.edges[i].startNode * 2, dims, 2) += hessian_local_cx.block(0, i * 2,
+                                                                                                               dims, 2);
+            for (int j = 0; j < cell.edges.size(); j++) {
+                partial_xx.block<2, 2>(cell.edges[i].startNode * 2,
+                                       cell.edges[j].startNode * 2) += hessian_local_xx.block<2, 2>(i * 2,
+                                                                                                    j * 2);
             }
         }
     }
@@ -493,10 +562,10 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     std::set<IV4, decltype(cmp)> triplets(cmp);
 
     for (int i = 0; i < n_free; i++) {
-        std::vector<int> cell = neighborhoods[i];
-        for (int j = 0; j < cell.size(); j++) {
-            int n1 = cell[j];
-            int n2 = cell[(j + 1) % cell.size()];
+        Cell cell = cells[i];
+        for (int j = 0; j < cell.edges.size(); j++) {
+            int n1 = cell.edges[j].neighbor;
+            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
 
             IV4 triplet(i, n1, n2, 0);
             std::sort(triplet.data(), triplet.data() + 3);
@@ -506,25 +575,21 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     }
     std::vector<IV4> faces(triplets.begin(), triplets.end());
 
-    cells.resize(n_free);
     for (int i = 0; i < n_free; i++) {
-        std::vector<int> neighborhood = neighborhoods[i];
-        VectorXi cell(neighborhood.size());
-
-        for (int j = 0; j < neighborhood.size(); j++) {
-            int n1 = neighborhood[j];
-            int n2 = neighborhood[(j + 1) % neighborhood.size()];
+        Cell cell = cells[i];
+        for (int j = 0; j < cell.edges.size(); j++) {
+            int n1 = cell.edges[j].neighbor;
+            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
 
             IV4 triplet(i, n1, n2, 0);
             std::sort(triplet.data(), triplet.data() + 3);
 
             auto lower = std::lower_bound(faces.begin(), faces.end(), triplet, cmp);
-            assert (lower != faces.end() && *lower == triplet);
+            assert(lower != faces.end() && *lower == triplet);
 
-            cell(j) = std::distance(faces.begin(), lower);
+            // Node between current and next edge is startNode of NEXT edge, not current.
+            cells[i].edges[cell.edges[j].nextEdge].startNode = std::distance(faces.begin(), lower);
         }
-
-        cells[i] = cell;
     }
 
     dual.resize(faces.size() * 4);
@@ -597,7 +662,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     dxdv = dxdv_dense.sparseView();
 
     for (int i = 0; i < n_free; i++) {
-        if (cells[i].rows() < 3) {
+        if (cells[i].edges.size() < 3) {
             isValid = false;
             return;
         }

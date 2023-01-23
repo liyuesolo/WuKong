@@ -1,7 +1,7 @@
 #include "../../include/Energy/CellFunctionZPenalty.h"
 #include <iostream>
 
-void CellFunctionZPenalty::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionZPenalty::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                                     const CellInfo *cellInfo) const {
     int dims = site.rows();
     if (dims > 2) {
@@ -9,7 +9,8 @@ void CellFunctionZPenalty::addValue(const VectorXT &site, const VectorXT &nodes,
     }
 }
 
-void CellFunctionZPenalty::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionZPenalty::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                       VectorXT &gradient_c,
                                        VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int dims = site.rows();
     for (int i = 2; i < dims; i++) {
@@ -17,8 +18,9 @@ void CellFunctionZPenalty::addGradient(const VectorXT &site, const VectorXT &nod
     }
 }
 
-void CellFunctionZPenalty::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                      const CellInfo *cellInfo) const {
+void
+CellFunctionZPenalty::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+                                 const CellInfo *cellInfo) const {
     int dims = site.rows();
     for (int i = 2; i < dims; i++) {
         hessian(i, i) += 2;

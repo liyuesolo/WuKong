@@ -30,14 +30,26 @@ class CellInfo;
 
 class Boundary;
 
+struct CellEdge {
+    int startNode;
+    int neighbor;
+    int flag;
+    int nextEdge;
+};
+
+struct Cell {
+    std::vector<CellEdge> edges;
+};
+
 class Tessellation {
 
 public:
     VectorXi dual;
-    std::vector<VectorXi> cells;
-    std::vector<std::vector<int>> neighborhoods;
-    std::vector<std::vector<int>> neighborhoodFlags;
-    std::vector<VectorXi> segment;
+    std::vector<Cell> cells;
+//    std::vector<VectorXi> cells;
+//    std::vector<std::vector<int>> neighborhoods;
+//    std::vector<std::vector<int>> neighborhoodFlags;
+//    std::vector<VectorXi> segment;
     VectorXT c;
     VectorXT x;
 
@@ -83,10 +95,12 @@ public:
     // Returns the dual graph of the tesselation. For standard Voronoi tessellation, this is the Delaunay triangulation.
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params) = 0;
 
-    void addSingleCellFunctionValue(int cell, const CellFunction &function, double &value, const CellInfo *cellInfo);
+    void
+    addSingleCellFunctionValue(int cellIndex, const CellFunction &function, double &value, const CellInfo *cellInfo);
 
     void
-    addSingleCellFunctionGradient(int cell, const CellFunction &function, VectorXT &gradient, const CellInfo *cellInfo);
+    addSingleCellFunctionGradient(int cellIndex, const CellFunction &function, VectorXT &gradient,
+                                  const CellInfo *cellInfo);
 
     void addFunctionValue(const CellFunction &function, double &value, std::vector<CellInfo> cellInfos);
 

@@ -1,19 +1,19 @@
 #include "../../include/Energy/CellFunctionAdhesion.h"
 #include <iostream>
 
-void CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
+void CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                                     const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     double x0, y0, x1, y1;
     int x0i, y0i, x1i, y1i;
     for (int i = 0; i < n_nodes; i++) {
-        double a = cellInfo->neighbor_affinity((i + 1) % n_nodes);
+        double a = cellInfo->neighbor_affinity(i);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -24,7 +24,8 @@ void CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes,
     }
 }
 
-void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
+void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                       VectorXT &gradient_c,
                                        VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
@@ -32,12 +33,12 @@ void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nod
     int x0i, y0i, x1i, y1i;
     double t1, t2, t3;
     for (int i = 0; i < n_nodes; i++) {
-        double a = cellInfo->neighbor_affinity((i + 1) % n_nodes);
+        double a = cellInfo->neighbor_affinity(i);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -55,8 +56,9 @@ void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nod
     }
 }
 
-void CellFunctionAdhesion::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                      const CellInfo *cellInfo) const {
+void
+CellFunctionAdhesion::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+                                 const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 2;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
@@ -65,12 +67,12 @@ void CellFunctionAdhesion::addHessian(const VectorXT &site, const VectorXT &node
     int x0i, y0i, x1i, y1i;
     double t1, t2, t3, t4, t5, t6;
     for (int i = 0; i < n_nodes; i++) {
-        double a = cellInfo->neighbor_affinity((i + 1) % n_nodes);
+        double a = cellInfo->neighbor_affinity(i);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);

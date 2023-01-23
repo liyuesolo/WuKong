@@ -1,7 +1,9 @@
 #include "../../include/ImageMatch/CellFunctionImageMatch2.h"
 #include <iostream>
 
-static void get_closest_idx(const double &xp, const double &yp, const VectorXT &nodes, int &closest_idx, bool &is_edge) {
+static void
+get_closest_idx(const double &xp, const double &yp, const VectorXT &nodes, const VectorXi &next, int &closest_idx,
+                bool &is_edge) {
     int n_nodes = nodes.rows() / 2;
 
     double mindistsq = 1e10;
@@ -11,8 +13,8 @@ static void get_closest_idx(const double &xp, const double &yp, const VectorXT &
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -26,12 +28,10 @@ static void get_closest_idx(const double &xp, const double &yp, const VectorXT &
         double distsq;
         if (r < 0) {
             distsq = (xp - x0) * (xp - x0) + (yp - y0) * (yp - y0);
-        }
-        else if (r > 1) {
+        } else if (r > 1) {
             distsq = (xp - x1) * (xp - x1) + (yp - y1) * (yp - y1);
-        }
-        else {
-            distsq = pow((xp - x0) * (y1 - y0) - (x1 - x0) * (yp - y0) ,2) / dsq;
+        } else {
+            distsq = pow((xp - x0) * (y1 - y0) - (x1 - x0) * (yp - y0), 2) / dsq;
         }
 
         if (distsq < mindistsq) {
@@ -39,12 +39,10 @@ static void get_closest_idx(const double &xp, const double &yp, const VectorXT &
             if (r < 0) {
                 closest_idx = i;
                 is_edge = false;
-            }
-            else if (r > 1) {
-                closest_idx = (i + 1) % n_nodes;
+            } else if (r > 1) {
+                closest_idx = next(i);
                 is_edge = false;
-            }
-            else {
+            } else {
                 closest_idx = i;
                 is_edge = true;
             }
@@ -52,8 +50,8 @@ static void get_closest_idx(const double &xp, const double &yp, const VectorXT &
     }
 }
 
-void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nodes, double &value,
-                                          const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+                                       const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -66,12 +64,12 @@ void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nod
 
         int i;
         bool is_edge;
-        get_closest_idx(xp, yp, nodes, i, is_edge);
+        get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -81,16 +79,17 @@ void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nod
         if (!is_edge) {
             // Squared distance to point
             value += (xp - x0) * (xp - x0) + (yp - y0) * (yp - y0);
-        }
-        else {
+        } else {
             // Squared distance to edge
-            value += pow((xp - x0) * (y1 - y0) - (x1 - x0) * (yp - y0) ,2) / ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+            value += pow((xp - x0) * (y1 - y0) - (x1 - x0) * (yp - y0), 2) /
+                     ((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
         }
     }
 }
 
-void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &nodes, VectorXT &gradient_c,
-                                             VectorXT &gradient_x, const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                          VectorXT &gradient_c,
+                                          VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -104,12 +103,12 @@ void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &
 
         int i;
         bool is_edge;
-        get_closest_idx(xp, yp, nodes, i, is_edge);
+        get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -121,8 +120,7 @@ void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &
             gradient_x(x0i) += t1 * (xp - x0);
             gradient_x(y0i) += t1 * (yp - y0);
 
-        }
-        else {
+        } else {
             t1 = xp - x0;
             t2 = -y1 + y0;
             t3 = -x1 + x0;
@@ -140,8 +138,9 @@ void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &
     }
 }
 
-void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &nodes, MatrixXT &hessian,
-                                            const CellInfo *cellInfo) const {
+void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                         MatrixXT &hessian,
+                                         const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / 2;
 
@@ -157,12 +156,12 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
 
         int i;
         bool is_edge;
-        get_closest_idx(xp, yp, nodes, i, is_edge);
+        get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
         x0i = i * 2 + 0;
         y0i = i * 2 + 1;
-        x1i = ((i + 1) % n_nodes) * 2 + 0;
-        y1i = ((i + 1) % n_nodes) * 2 + 1;
+        x1i = next(i) * 2 + 0;
+        y1i = next(i) * 2 + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -183,12 +182,11 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
             t5 = t5 * t8;
             t10 = xp - x1;
             t6 = t4 * (0.8e1 * t2 * t3 * t6 * t8 - 0.2e1 * t1 * t10) + 0.4e1 * t5 * (t1 * t3 - t10 * t2);
-            hess_xx(x0i,x0i) += 0.2e1 * t4 * (pow(t1, 0.2e1) - t7) + 0.8e1 * t5 * t2 * (t9 * t2 + t1);
-            hess_xx(x0i,y0i) += t6;
-            hess_xx(y0i,x0i) += t6;
-            hess_xx(y0i,y0i) += -0.2e1 * t4 * (-pow(t10, 0.2e1) + t7) - 0.8e1 * t5 * t3 * (-t9 * t3 + t10);
-        }
-        else {
+            hess_xx(x0i, x0i) += 0.2e1 * t4 * (pow(t1, 0.2e1) - t7) + 0.8e1 * t5 * t2 * (t9 * t2 + t1);
+            hess_xx(x0i, y0i) += t6;
+            hess_xx(y0i, x0i) += t6;
+            hess_xx(y0i, y0i) += -0.2e1 * t4 * (-pow(t10, 0.2e1) + t7) - 0.8e1 * t5 * t3 * (-t9 * t3 + t10);
+        } else {
             t1 = -y1 + yp;
             t2 = -x1 + x0;
             t3 = -y1 + y0;
@@ -225,22 +223,22 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
             t9 = t21 * t14 * (-t3 + t20) - t11 - 0.2e1 * t6 * (-t18 * t8 + t9);
             t4 = t21 * t22 * (t7 + t18) - 0.2e1 * t6 * (t18 * t7 - t17) - t16 * t4;
             t2 = -t21 * t14 * (-t3 + t2) + t6 * (-0.2e1 * t7 * t8 + t10);
-            hess_xx(x0i,x0i) += 0.8e1 * t15 * (t13 + t1) + 0.2e1 * t6 * (pow(t1, 0.2e1) - t17);
-            hess_xx(x0i,y0i) += t23;
-            hess_xx(x0i,x1i) += t5;
-            hess_xx(x0i,y1i) += t19;
-            hess_xx(y0i,x0i) += t23;
-            hess_xx(y0i,y0i) += 0.2e1 * t6 * (pow(t18, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t18);
-            hess_xx(y0i,x1i) += t9;
-            hess_xx(y0i,y1i) += t4;
-            hess_xx(x1i,x0i) += t5;
-            hess_xx(x1i,y0i) += t9;
-            hess_xx(x1i,x1i) += 0.2e1 * t6 * (pow(t8, 0.2e1) - t17) + 0.8e1 * t15 * (t13 + t8);
-            hess_xx(x1i,y1i) += t2;
-            hess_xx(y1i,x0i) += t19;
-            hess_xx(y1i,y0i) += t4;
-            hess_xx(y1i,x1i) += t2;
-            hess_xx(y1i,y1i) += 0.2e1 * t6 * (pow(t7, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t7);
+            hess_xx(x0i, x0i) += 0.8e1 * t15 * (t13 + t1) + 0.2e1 * t6 * (pow(t1, 0.2e1) - t17);
+            hess_xx(x0i, y0i) += t23;
+            hess_xx(x0i, x1i) += t5;
+            hess_xx(x0i, y1i) += t19;
+            hess_xx(y0i, x0i) += t23;
+            hess_xx(y0i, y0i) += 0.2e1 * t6 * (pow(t18, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t18);
+            hess_xx(y0i, x1i) += t9;
+            hess_xx(y0i, y1i) += t4;
+            hess_xx(x1i, x0i) += t5;
+            hess_xx(x1i, y0i) += t9;
+            hess_xx(x1i, x1i) += 0.2e1 * t6 * (pow(t8, 0.2e1) - t17) + 0.8e1 * t15 * (t13 + t8);
+            hess_xx(x1i, y1i) += t2;
+            hess_xx(y1i, x0i) += t19;
+            hess_xx(y1i, y0i) += t4;
+            hess_xx(y1i, x1i) += t2;
+            hess_xx(y1i, y1i) += 0.2e1 * t6 * (pow(t7, 0.2e1) - t17) + 0.8e1 * t22 * (t12 - t7);
         }
     }
 }
