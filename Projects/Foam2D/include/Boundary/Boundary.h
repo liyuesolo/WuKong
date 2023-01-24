@@ -43,6 +43,8 @@ public:
 
     VectorXi next;
 
+    MatrixXT holes;
+
 private:
 
     virtual void computeVertices() = 0;

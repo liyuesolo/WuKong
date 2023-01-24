@@ -169,8 +169,6 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                         b2 = bdry->next(b2);
                     } while (b2 != b);
                     cells[i].edges.back().nextEdge = startEdge;
-
-                    cells[i].holes.push_back(bdry->p.segment<2>(0));
                 }
             }
         }

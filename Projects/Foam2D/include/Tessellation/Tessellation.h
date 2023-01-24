@@ -39,7 +39,6 @@ struct CellEdge {
 
 struct Cell {
     std::vector<CellEdge> edges;
-    std::vector<TV> holes;
 };
 
 class Tessellation {

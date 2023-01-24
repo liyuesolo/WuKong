@@ -80,7 +80,7 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     info->n_fixed = 8;
 
     VectorXT inf_points(info->n_fixed * 2);
-    double inf = 100;
+    double inf = 1000;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double dx = 0.75;
@@ -643,7 +643,6 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        Cell cell = info->getTessellation()->cells[i];
         CellFunctionArea areaFunc;
         info->getTessellation()->addSingleCellFunctionValue(i, areaFunc, areas(i), nullptr);
     }
@@ -677,16 +676,11 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             Etri.row(j) = IV(j, cells[i].edges[j].nextEdge);
         }
 
-        MatrixXT hole;
-        if (!cells[i].holes.empty()) {
-            hole = cells[i].holes[0].transpose();
-        }
-
         MatrixXT Vtri;
         MatrixXi Ftri;
         igl::triangle::triangulate(Ptri,
                                    Etri,
-                                   hole,
+                                   info->boundary->holes,
                                    "Q",
                                    Vtri, Ftri);
 
@@ -821,17 +815,8 @@ void Foam2D::getPlotAreaHistogram(VectorXT &areas) {
     int dims = 2 + info->getTessellation()->getNumVertexParams();
 
     for (int i = 0; i < n_cells; i++) {
-        Cell cell = info->getTessellation()->cells[i];
-        size_t degree = cell.edges.size();
-
-        TV v0 = vertices.segment<2>(i * 2);
-
-        for (size_t j = 0; j < degree; j++) {
-            TV v1 = info->getTessellation()->x.segment<2>(cell.edges[j].startNode * 2);
-            TV v2 = info->getTessellation()->x.segment<2>(cell.edges[cell.edges[j].nextEdge].startNode * 2);
-
-            areas(i) += 0.5 * ((v1(0) - v0(0)) * (v2(1) - v0(1)) - (v2(0) - v0(0)) * (v1(1) - v0(1)));
-        }
+        CellFunctionArea areaFunc;
+        info->getTessellation()->addSingleCellFunctionValue(i, areaFunc, areas(i), nullptr);
     }
 
     for (int i = 0; i < areas.rows(); i++) {

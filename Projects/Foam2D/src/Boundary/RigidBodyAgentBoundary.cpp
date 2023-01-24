@@ -25,6 +25,9 @@ void RigidBodyAgentBoundary::computeVertices() {
     int n_vtx = v.rows() / 2;
     next.resize(n_vtx);
     next << Eigen::VectorXi::LinSpaced(3, 1, 3), 0, Eigen::VectorXi::LinSpaced(nsides - 1, 5, nsides - 1 + 4), 4;
+
+    holes.resize(1, 2);
+    holes.row(0) = TV(dx, dy);
 }
 
 void RigidBodyAgentBoundary::computeGradient() {
