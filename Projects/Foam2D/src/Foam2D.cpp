@@ -679,7 +679,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
         MatrixXT hole;
         if (!cells[i].holes.empty()) {
-            hole = cells[i].holes[0];
+            hole = cells[i].holes[0].transpose();
         }
 
         MatrixXT Vtri;
