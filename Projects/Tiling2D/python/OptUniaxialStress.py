@@ -31,6 +31,7 @@ from scipy.linalg import lu_factor, lu_solve
 from scipy.optimize import NonlinearConstraint
 from scipy.optimize import LinearConstraint
 
+import time
 from Derivatives import *
 from Optimization import *
 
@@ -1037,14 +1038,17 @@ def plotNNFDCurves():
 
     strain_points = strain_samples[sample_idx]
     stress_targets = [-0.00598749,  0.00477436,  0.04006726]
-    plt.plot(strain_samples, obj_init, label="initial guess", linewidth=3.0, zorder=0)
-    plt.plot(strain_samples, obj_FD_GD, label="FD-PGD", linewidth=3.0, zorder=0)
-    plt.plot(strain_samples, obj_FD_MMA, label="FD-MMA", linewidth=3.0, zorder=0)
-    plt.plot(strain_samples, obj_FD_LBFGS, label="FD-LBFGS-B", linewidth=3.0, zorder=0)
-    plt.plot(strain_samples, obj_NN_LBFGS, "purple",label="NN-LBFGS-B", linewidth=3.0, zorder=0)
-    plt.scatter(strain_points, stress_targets, marker='+', s=200.0, c="red", zorder=5)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.plot(strain_samples, obj_init, label="initial guess", linewidth=2.0, zorder=0)
+    plt.plot(strain_samples, obj_FD_GD, label="FD-PGD", linewidth=2.0, zorder=0, color = "#00ABBD")
+    plt.plot(strain_samples, obj_FD_MMA, label="FD-MMA", linewidth=2.0, zorder=0, color = "#48D1CC")
+    plt.plot(strain_samples, obj_FD_LBFGS, label="FD-LBFGS-B", linewidth=2.0, zorder=0, color = "#026E81")
+    plt.plot(strain_samples, obj_NN_LBFGS, label="NN-LBFGS-B", linewidth=2.0, zorder=0, color = "#FF9933")
+    plt.scatter(strain_points, stress_targets, marker='+', s=200.0, zorder=5, color = "red", label = "targets")
     plt.legend(loc="upper left")
     plt.savefig("NN_FD_comparison.png", dpi=300)
+    os.system("convert NN_FD_comparison.png -trim NN_FD_comparison.png")
     plt.close()
 
 def optimizeUniaxialStressSA():
@@ -1054,67 +1058,107 @@ def optimizeUniaxialStressSA():
     plot_GT = False
     theta = 0.0
 
+    strain_range = [-0.1, 0.0]
+    n_sp_strain = 30
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+    # strain_samples = np.arange(strain_range[0], strain_range[1], 0.01)
+    for i in range(len(strain_samples)):
+        strain = strain_samples[i]
+        # if strain < 0:
+        #     strain_samples[i] = strain - 0.5 * strain * strain
+        # else:
+        #     strain_samples[i] = strain + 0.5 * strain * strain
+
     if IH == 21:
         n_tiling_params = 2
         bounds.append([0.105, 0.195])
         bounds.append([0.505, 0.795])
-        # ti0 = np.array([0.106, 0.65])
-        ti0 = np.array([0.115, 0.765])
+        ti0 = np.array([0.106, 0.65])
+        # ti0 = np.array([0.115, 0.765])
+        # ti0 = np.array([0.2, 0.7])
         sample_idx = [2, 7, -1]
         theta = 0.0
     elif IH == 50:
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
         bounds.append([0.25, 0.75])
-        ti0 = np.array([0.2308, 0.5])
+        # ti0 = np.array([0.2308, 0.5])
         # ti0 = np.array([0.2903, 0.6714])
+        ti0 = np.array([0.23, 0.57])
         sample_idx = [2, 7, -1]
     elif IH == 67:
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
         bounds.append([0.6, 1.1])
-        ti0 = np.array([0.2308, 0.8969])
-        # ti0 = np.array([0.1775, 0.704])
+        # ti0 = np.array([0.2308, 0.8969])
+        ti0 = np.array([0.2131, 0.9464])
         sample_idx = [2, 7, -1]
         theta = 0.5 * np.pi
     elif IH == 28:
         n_tiling_params = 2
         bounds.append([0.005, 0.8])
         bounds.append([0.005, 1.0])
-        ti0 = np.array([0.4528, 0.5])
+        # ti0 = np.array([0.4528, 0.5])
         # ti0 = np.array([0.4, 0.8])
         sample_idx = [2, 7, -1]
         theta = 0.1 * np.pi
+        ti0 = np.array([0.3, 0.5])
+        ti0 = np.array([0.03411184, 0.37176683])
+        # ti_target = np.array([0.2205, 0.6016])
+        sample_idx = np.arange(0, n_sp_strain, 6)
+        theta = 0.5 * np.pi
+    elif IH == 1:
+        n_tiling_params = 4
+        bounds.append([0.05, 0.3])
+        bounds.append([0.25, 0.75])
+        bounds.append([0.05, 0.15])
+        bounds.append([0.4, 0.8])
+        # ti0 = np.array([0.1224, 0.5, 0.1434, 0.625])
+        # ti0 = np.array([0.1, 0.5, 0.13, 0.45])
+        ti0 = np.array([0.11437572, 0.3939947,  0.06671481, 0.45272221])
+        # ti_target = np.array([0.18, 0.5, 0.07, 0.59])
+        # ti0 = np.array([ 0.12, 0.504, 0.1, 0.625])
+        # sample_idx = [2, 8, -3]
+        sample_idx = np.arange(0, n_sp_strain, 4)
+        theta = 0.5 * np.pi
+
+    # sample_idx = np.arange(0, n_sp_strain, 4)
+    # theta = 0.5 * np.pi
     
-    save_path = os.path.join(current_dir, 'Models/IH' + str(IH) + "/")
+    model_name = str(IH)
+    if IH < 10:
+        model_name = "0" + str(IH)
+    else:
+        model_name = str(IH)
+
+    save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH"+str(IH) + '.tf')
+    model.load_weights(save_path + "IH" + model_name + '.tf')
 
     
-    strain_range = [-0.05, 0.1]
-    n_sp_strain = 10
-    # strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
-    strain_samples = np.arange(strain_range[0], strain_range[1], 0.01)
-    for i in range(len(strain_samples)):
-        strain = strain_samples[i]
-        if strain < 0:
-            strain_samples[i] = strain - 0.5 * strain * strain
-        else:
-            strain_samples[i] = strain + 0.5 * strain * strain
-    print(strain_samples)
     # uniaxial_strain = []
     # for strain in strain_samples:
     #     uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, ti0, False)
     #     uniaxial_strain.append(uni_strain)
-    uniaxial_strain = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
-                                theta, strain_samples, 
-                                ti0, model)
-    ti_TF = tf.convert_to_tensor(ti0)
-    uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
-    obj_init, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
-    obj_init = obj_init.numpy()
+
+    def computeTarget(ti):
+        uniaxial_strain = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+                                    theta, strain_samples, 
+                                    ti, model)
+        ti_TF = tf.convert_to_tensor(ti)
+        uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+        obj, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+        obj = obj.numpy()
+        return obj
+
+    obj_init = computeTarget(ti0)
+    # obj_target = computeTarget(ti_target)
+
     if plot_GT:
-        print(obj_init[sample_idx])
+        info = ""
+        for data in obj_init[sample_idx]:
+            info += str(data) + ", "
+        print(info)
         # exit(0)
     # stress_targets = [obj[2], obj[5], obj[-1]]
     if IH == 21:
@@ -1126,8 +1170,14 @@ def optimizeUniaxialStressSA():
         stress_targets = [-0.00661061,  0.00590675,  0.01050055]
     elif IH == 28:
         stress_targets = [-0.00287036,  0.00225446,  0.01827932]
-
-
+    # elif IH == 1:
+    #     # stress_targets = [-0.12621401, -0.12035293, -0.11669242, -0.09796586, -0.01525695]
+    #     stress_targets = obj_target[sample_idx]
+    
+    # stress_targets = obj_init[sample_idx]
+    # stress_targets = [-0.265, -0.26, -0.25, -0.24, -0.21, -0.16,-0.1, -0.039]#IH01
+    # stress_targets = [-0.309, -0.288, -0.258, -0.235, -0.222, -0.205, -0.148, -0.0532]#IH01
+    # stress_targets = [-0.239, -0.23, -0.218, -0.209, -0.193, -0.147, -0.08714, -0.02885] #IH28
     def objAndGradient(x):
         uniaxial_strain = []
         dqdp = []
@@ -1175,9 +1225,11 @@ def optimizeUniaxialStressSA():
     # fdGradient(ti0)
     # exit(0)
     if not plot_GT:
-        result = minimize(objAndGradient, ti0, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
-        # result = minimize(objAndGradient, ti0, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
-
+        # result = minimize(objAndGradient, ti0, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
+        tic = time.perf_counter()
+        result = minimize(objAndGradient, ti0, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+        toc = time.perf_counter()
+        print(f"Optimization takes {toc - tic:0.6f} seconds")
         # uniaxial_strain_opt = []
         # for strain in strain_samples:
         #     uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, result.x, False)
@@ -1196,7 +1248,7 @@ def optimizeUniaxialStressSA():
     plt.plot(strain_samples, obj_init, label="stress initial", linewidth=3.0, zorder=0)
     if not plot_GT:
         plt.plot(strain_samples, obj_opt, label = "stress optimized", linewidth=3.0, zorder=0)
-    plt.scatter(strain_points, stress_targets, marker='+', s=200.0, c="red", zorder=5)
+    plt.scatter(strain_points, stress_targets, marker='+', s=200.0, label = "targets", c="red", zorder=5)
     plt.legend(loc="upper left")
     # plt.xlabel("strain")
     # plt.ylabel("stress")
@@ -1582,7 +1634,8 @@ def optimizeUniaxialStressConstraints():
 def plotEnergyAlongDirection():
     n_tiling_params = 2
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    save_path = os.path.join(current_dir, 'Models/' + str(334) + "/")
+    # save_path = os.path.join(current_dir, 'Models/' + str(334) + "/")
+    save_path = os.path.join(current_dir, 'Models/IH21/')
     # model = loadSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH21" + '.tf')
@@ -1594,10 +1647,12 @@ def plotEnergyAlongDirection():
             strain_samples.append(strain - 0.5 * strain* strain)
         else:
             strain_samples.append(strain + 0.5 * strain* strain)
+        
     
     # strain_samples = [-0.025, 0.025, 0.085]
     theta = 0.0
-    ti = np.array([0.148, 0.55])
+    # ti = np.array([0.139, 0.55]) # good
+    ti = np.array([0.15, 0.55]) # good
     # uniaxial_strain_batch = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
     #                             theta, strain_samples, 
     #                             ti, model)
@@ -1651,9 +1706,244 @@ def plotEnergyAlongDirection():
     plt.savefig("energy_NN_large.png", dpi=300)
     
 
+def loadModel(IH):
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    bounds = []
+
+    if IH == 21:
+        n_tiling_params = 2
+        bounds.append([0.105, 0.195])
+        bounds.append([0.505, 0.795])
+        ti_default = np.array([0.1045, 0.65])
+    elif IH == 22:
+        n_tiling_params = 3
+        # bounds.append([0.105, 0.195])
+        # bounds.append([0.505, 0.795])
+        bounds = [[0.1,0.3], [0.3, 0.7], [0.0, 0.3]]
+        ti_default = np.array([0.2308, 0.5, 2253])
+    elif IH == 29:
+        n_tiling_params = 1
+        bounds.append([0.005, 1.0])
+        ti_default = np.array([0.3669])
+    elif IH == 50:
+        n_tiling_params = 2
+        bounds.append([0.1, 0.3])
+        bounds.append([0.25, 0.75])
+        ti_default = np.array([0.2308, 0.5])
+    elif IH == 67:
+        n_tiling_params = 2
+        bounds.append([0.1, 0.3])
+        bounds.append([0.6, 1.1]) 
+        ti_default = np.array([0.2308, 0.8696])
+    elif IH == 28:
+        n_tiling_params = 2
+        bounds.append([0.005, 0.8])
+        bounds.append([0.005, 1.0])
+        ti_default = np.array([0.4528, 0.5])
+    elif IH == 1:
+        n_tiling_params = 4
+        bounds.append([0.05, 0.3])
+        bounds.append([0.25, 0.75])
+        bounds.append([0.05, 0.15])
+        bounds.append([0.4, 0.8])
+        ti_default = np.array([0.1224, 0.5, 0.1434, 0.625])
+    
+    model_name = str(IH)
+    if IH < 10:
+        model_name = "0" + str(IH)
+    else:
+        model_name = str(IH)
+
+    save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
+    model.load_weights(save_path + "IH" + model_name + '.tf')
+
+    return model, n_tiling_params, ti_default, bounds
+
+def computeStressCurve(IH, ti):
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    strain_range = [-0.1, 0.0]
+    n_sp_strain = 30
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+
+    
+    theta = 0.5 * np.pi
+    uniaxial_strain = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+                                theta, strain_samples, 
+                                ti, model)
+    ti_TF = tf.convert_to_tensor(ti)
+    uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+    obj, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+    obj = obj.numpy()
+    return obj
+
+def teaserPlot():
+    strain_range = [-0.1, 0.0]
+    n_sp_strain = 30
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+    sample_idx = np.arange(0, n_sp_strain, 4)
+
+    # good
+    stress_init = computeStressCurve(1, np.array([0.1224, 0.5, 0.1434, 0.625]))
+    stress_opt1 = computeStressCurve(28, np.array([0.00930862, 0.67854564]))
+
+    # good
+    # stress_init = computeStressCurve(1, np.array([0.1224, 0.5, 0.1434, 0.625]))
+    stress_opt2 = computeStressCurve(1, np.array([0.0667531,  0.65467978, 0.11134775, 0.65909504]))
+
+    # good
+    # stress_init = computeStressCurve(1, np.array([0.1224, 0.5, 0.1434, 0.625]))
+    stress_opt3 = computeStressCurve(1, np.array([0.17194996, 0.42948579, 0.05507779, 0.66815703]))
+    strain_samples =  strain_samples * 100.0
+    plt.figure(figsize=(7, 5))
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.plot(strain_samples, stress_init, label="stress initial", linewidth=3.0, zorder=0, color= "#A1C7E0")
+    plt.plot(strain_samples, stress_opt1, label = "stress optimized part1", linewidth=3.0, zorder=0, color= "#00ABBD")
+    plt.plot(strain_samples, stress_opt3, label = "stress optimized part2", linewidth=3.0, zorder=0, color= "#0099DD")
+    plt.plot(strain_samples, stress_opt2, label = "stress optimized part3", linewidth=3.0, zorder=0, color= "#026B81")
+
+    strain_points = strain_samples[sample_idx]
+    # good for 1
+    stress_targets1 = np.array([-0.09, -0.082, -0.074, -0.065, -0.055, -0.045, -0.03, -0.005])
+    # good for 2
+    stress_targets2 = [-0.265, -0.26, -0.255, -0.24, -0.21, -0.16,-0.1, -0.039]
+    # good for 3
+    stress_targets3 = np.array([-0.17, -0.162, -0.15, -0.134, -0.11, -0.083, -0.058, -0.03])
+    
+    plt.scatter(strain_points, stress_targets1, marker='+', s=100.0, c="#FF9933", zorder=5)
+    plt.scatter(strain_points, stress_targets3, marker='+', s=100.0, c="#FF9933", zorder=5)
+    plt.scatter(strain_points, stress_targets2, marker='+', label = "targets", s=100.0, c="#FF9933", zorder=5)
+
+    # plt.scatter(strain_points, stress_targets1, marker='+', label = "targets part1", s=100.0, c="#00ABBD", zorder=5)
+    # plt.scatter(strain_points, stress_targets3, marker='+', label = "targets part2", s=100.0, c="#0099DD", zorder=5)
+    # plt.scatter(strain_points, stress_targets2, marker='+', label = "targets part3", s=100.0, c="#026B81", zorder=5)
+    # plt.legend(loc="upper left")
+    plt.legend()
+    # plt.xlabel("strain")
+    # plt.ylabel("stress")
+    # axes = plt.axes()
+    # axes.set_ylim([-0.3, 0])
+    plt.savefig("uniaxial_stress_teaser.png", dpi=300)
+    os.system("convert uniaxial_stress_teaser.png -trim uniaxial_stress_teaser.png")
+    plt.close()
+
+    targets = []
+    # 0.11162167 0.52156324 IH28
+
+def optimizeFromInitialGuess(model, ti, bounds, n_tiling_params, stress_targets):
+    strain_range = [-0.1, 0.0]
+    n_sp_strain = 30
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+    sample_idx = np.arange(0, n_sp_strain, 4)
+    theta = 0.5 * np.pi
+
+    def objAndGradient(x):
+        uniaxial_strain = []
+        dqdp = []
+        for strain in strain_samples[sample_idx]:
+            uni_strain, dqidpi = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, x, False)
+            uniaxial_strain.append(uni_strain)
+            dqdp.append(dqidpi)
+        ti_TF = tf.convert_to_tensor(x)
+        uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+        stress_d, stress_d_grad, dOdE = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+        
+        stress_d = stress_d.numpy()
+        stress_d_grad = stress_d_grad.numpy()
+        dOdE = dOdE.numpy()
+        
+        # stress_current = stress_d[sample_idx]#np.array([stress_d[2], stress_d[5], stress_d[-1]])
+        stress_current = stress_d
+        obj = (np.dot(stress_current - stress_targets, np.transpose(stress_current - stress_targets)) * 0.5).flatten() 
+        grad = np.zeros((n_tiling_params))
+        
+        for i in range(len(sample_idx)):
+            grad += (stress_current[i] - stress_targets[i]) * stress_d_grad[i].flatten() + \
+                (stress_current[i] - stress_targets[i]) * np.dot(dOdE[i][i], dqdp[i][:3, :]).flatten()
+        
+        print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+
+    result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+  
+    return result.fun, result.x
+
+def generateSamples(bounds, n_samples):
+    n_tiling_params = len(bounds)
+    random_samples = np.random.random_sample(n_samples * n_tiling_params)
+    samples = []
+    for i in range(n_samples):
+        sample = np.zeros(n_tiling_params)
+        for j in range(n_tiling_params):
+            sample[j] = bounds[j][0] + (bounds[j][1] - bounds[j][0]) * random_samples[i * n_tiling_params + j]
+        samples.append(sample)  
+    return samples
+
+
+def searchBestFitDifferentInitialGuess(IH):
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    samples = generateSamples(bounds, 20)
+    objectives = []
+    # stress_targets = [-0.265, -0.26, -0.25, -0.24, -0.21, -0.16,-0.1, -0.039]
+    # stress_targets = np.array([-0.17, -0.162, -0.15, -0.134, -0.11, -0.083, -0.058, -0.03])
+    # stress_targets = [-0.309, -0.288, -0.258, -0.235, -0.222, -0.205, -0.148, -0.0532]
+    stress_targets = [-0.265, -0.26, -0.255, -0.24, -0.21, -0.16,-0.1, -0.039]
+    # stress_targets = np.array([-0.09, -0.082, -0.074, -0.065, -0.055, -0.045, -0.03, -0.005])
+    results = []
+    for sample in samples:  
+        val, sol = optimizeFromInitialGuess(model, sample, bounds, n_tiling_params, stress_targets)
+        objectives.append(val)
+        results.append(sol)
+    
+    objectives = np.squeeze(np.array(objectives))
+
+    min_value = 1e10
+    min_idx = -1
+    for i in range(len(objectives)):
+        if objectives[i] < min_value:
+            min_value = objectives[i]
+            min_idx = i
+
+    print(results[min_idx], objectives[min_idx], samples[min_idx])
+def plotBatch():
+    IH = 67
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    samples = generateSamples(bounds, 10)
+    samples.append(np.array([0.15, 0.84]))
+    strain_range = [-0.1, 0.0]
+    n_sp_strain = 30
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+    sample_idx = np.arange(0, n_sp_strain, 4)
+    theta = 0.5 * np.pi
+
+    def computeTarget(ti):
+        uniaxial_strain = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
+                                    theta, strain_samples, 
+                                    ti, model)
+        ti_TF = tf.convert_to_tensor(ti)
+        uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
+        obj, _ , _ = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
+        obj = obj.numpy()
+        return obj
+    stresses = []
+    cnt = 0
+    for sample in samples:  
+        stress = computeTarget(sample)
+        stresses.append(stress)
+        plt.plot(strain_samples, stress, label = str(cnt), linewidth=3.0, zorder=0)
+        cnt += 1
+    plt.legend()
+    plt.savefig("batch.png", dpi=300)
+    for i in range(len(samples)):
+        print(i, samples[i])
+
 
 if __name__ == "__main__":
     # optimizeUniaxialStressConstraints()
     # optimizeUniaxialStressSA()
     # plotEnergyAlongDirection()
     plotNNFDCurves()
+    # teaserPlot()
+    # searchBestFitDifferentInitialGuess(1)
+    # plotBatch()

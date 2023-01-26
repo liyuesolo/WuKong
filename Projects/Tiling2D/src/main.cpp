@@ -38,14 +38,23 @@ int main(int argc, char** argv)
         FEMSolver fem_solver;
         int IH = std::stoi(argv[1]);
         std::string result_folder = argv[2];
-        int n_params = std::stoi(argv[3]);
-        std::vector<T> params(n_params);
-        for (int i = 0; i < n_params; i++)
+        if (IH == -1)
         {
-            params[i] = std::stod(argv[4+i]);
+            T pi = std::stod(argv[3]);
+            std::vector<T> params = {pi};
+            tiling.generateGreenStrainSecondPKPairsServerToyExample(params, result_folder);
         }
-        int resume_start = std::stoi(argv[4 + n_params]);
-        tiling.generateGreenStrainSecondPKPairsServer(params, IH, "", result_folder, resume_start);
+        else
+        {
+            int n_params = std::stoi(argv[3]);
+            std::vector<T> params(n_params);
+            for (int i = 0; i < n_params; i++)
+            {
+                params[i] = std::stod(argv[4+i]);
+            }
+            int resume_start = std::stoi(argv[4 + n_params]);
+            tiling.generateGreenStrainSecondPKPairsServer(params, IH, "", result_folder, resume_start);
+        }
         
     }
     else
@@ -161,9 +170,9 @@ int main(int argc, char** argv)
             // std::cout << ti_obj.generateSingleTarget(ti) << std::endl;
             // sa.optimizeMMA();
             // sa.optimizeLBFGSB();
-            sa.optimizeGradientDescent();
+            // sa.optimizeGradientDescent();
             //-0.00700946   0.0239969   0.0720543
-            // sa.sampleGradientDirection();
+            sa.sampleGradientDirection();
 
         };
 
@@ -177,12 +186,16 @@ int main(int argc, char** argv)
             // Vector<T, 4> min_corner; min_corner << 0.05, 0.2, 0.08, 0.4;
             // Vector<T, 4> max_corner; max_corner << 0.5, 0.8, 0.5, 0.8;
             // IH 21
-            Vector<T, 2> min_corner; min_corner << 0.05, 0.3;
-            Vector<T, 2> max_corner; max_corner << 0.3, 0.9;
+            // Vector<T, 2> min_corner; min_corner << 0.05, 0.3;
+            // Vector<T, 2> max_corner; max_corner << 0.3, 0.9;
+            // IH 28
+            Vector<T, 2> min_corner; min_corner << 0.005, 0.005;
+            Vector<T, 2> max_corner; max_corner << 0.8, 1.0;
 
             VectorXT samples;
-            pd.sampleNDBox<2>(min_corner, max_corner, 400, samples);
-            std::ofstream out("PD_IH21.txt");
+            pd.sampleNDBox<2>(min_corner, max_corner, 100, samples);
+            // return;
+            std::ofstream out("PD_IH28_100.txt");
             out << "[ ";
             int n_tiling_paras = 2;
             for (int i = 0; i < 400; i++)
@@ -232,6 +245,46 @@ int main(int argc, char** argv)
             }
         };
 
+        auto renderToyExample = [&]()
+        {
+            igl::opengl::glfw::Viewer viewer;
+            igl::opengl::glfw::imgui::ImGuiMenu menu;
+
+            viewer.plugins.push_back(&menu);
+            SimulationApp app(tiling);
+            
+            app.setViewer(viewer, menu);
+            std::string folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerToy/";
+            int width = 3000, height = 3000;
+            CMat R(width,height), G(width,height), B(width,height), A(width,height);
+            viewer.core().background_color.setOnes();
+            viewer.data().set_face_based(true);
+            viewer.data().shininess = 1.0;
+            viewer.data().point_size = 10.0;
+            viewer.core().camera_zoom *= 1.4;
+            viewer.launch_init();
+            tiling.initializeSimulationDataFromFiles(folder + "0/structure.vtk", PBC_XY);
+            app.thicken_edges = true;
+            app.updateScreen(viewer);
+            viewer.core().align_camera_center(app.V);
+            for (int i = 0; i < 400; i++)
+            {
+                tiling.initializeSimulationDataFromFiles(folder + std::to_string(i) + "/structure.vtk", PBC_XY);
+                app.updateScreen(viewer);
+                // viewer.core().align_camera_center(app.V);
+                    
+                viewer.data().clear();
+                viewer.data().set_mesh(app.V, app.F);
+                app.C.resize(app.F.rows(), 3);
+                app.C.col(0).setConstant(0.0); app.C.col(1).setConstant(0.3); app.C.col(2).setConstant(1.0);
+                viewer.data().set_colors(app.C);
+                // viewer.core().align_camera_center(app.V);
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
+            }
+        };
+
         auto save3DMesh = [&]()
         {
             // tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".txt", 
@@ -246,12 +299,14 @@ int main(int argc, char** argv)
         // run3DSim();
         // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
         // tiling.sampleDirectionWithUniaxialStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/", 50, TV(0, M_PI), 1.05);
-        // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/Server/", 50, TV(0.95, 1.1), 0.);
+        // tiling.sampleUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/StableStructure/", 50, TV(0.75, 1.7), 0.);
+        // tiling.runSimUniAxialStrainAlongDirection("/home/yueli/Documents/ETH/SandwichStructure/StableStructure/", 0, 50, TV(1.05, 1.1), 0.0, {0.1224,  0.5254, 0.1433, 0.49});
         // tiling.generatseGreenStrainSecondPKPairs("/home/yueli/Documents/ETH/SandwichStructure/TrainingData/WithEnergy/");
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
         runSimApp();
+        // renderToyExample();
         // tiling.sampleSingleStructurePoissonDisk("/home/yueli/Documents/ETH/SandwichStructure/IH21_PoissonDisk/", TV(0.7, 1.5), TV(0.9, 1.2), TV(0, M_PI), 100, 19);
         // generatePoisonDiskSample();
         // tiling.generateTenPointUniaxialStrainData("/home/yueli/Documents/ETH/NCM/PaperData/StrainStress/IH21/",

@@ -473,7 +473,7 @@ bool FEMSolver::staticSolveStep(int step)
             computeHomogenizationData(secondPK_stress, Green_strain, psi);
             std::cout << "strain " << Green_strain << std::endl << std::endl;
             std::cout << "stress " << secondPK_stress << std::endl << std::endl;
-            std::cout << "energy density " << psi << std::endl;
+            std::cout << std::setprecision(16) << "energy density " << psi << std::endl;
         }
         return true;
     }

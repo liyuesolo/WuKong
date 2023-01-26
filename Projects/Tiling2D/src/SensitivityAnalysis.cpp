@@ -89,7 +89,7 @@ void SensitivityAnalysis::optimizeGradientDescent()
 
 void SensitivityAnalysis::sampleGradientDirection()
 {
-    TV ti = TV(0.148, 0.55);
+    TV ti = TV(0.15, 0.55);
     objective.n_dof_design = ti.rows();
     design_parameters = ti;
     n_dof_design = objective.n_dof_design; 

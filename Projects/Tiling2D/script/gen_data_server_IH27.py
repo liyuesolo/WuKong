@@ -2,12 +2,12 @@ import os
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed, parallel_backend
 def process(i, data):
-    IH = 20
+    IH = 25
     params = data[i]
     # result_folder = "/home/DockerMountFolder/SandwichStructure/TrainingData/" + str(i) + "/"
     # exe_file = "/home/DockerMountFolder/WuKong/build/Projects/Tiling2D/Tiling2D"
     exe_file = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/Tiling2D"
-    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH22/" + str(i) + "/"
+    result_folder = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH27/" + str(i) + "/"
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
     os.environ['OMP_THREAD_LIMIT'] = '1'
@@ -17,7 +17,7 @@ def process(i, data):
 
 
 param_list = []
-params_range = [[0.1,0.3], [0.3, 0.7], [0.0, 0.3]]
+params_range = [[0.08,0.25], [0.45, 0.55], [0.45, 0.65]]
 n_sp_params = 10
 
 
@@ -25,7 +25,7 @@ for i in range(n_sp_params):
     pi = params_range[0][0] + (float(i)/float(n_sp_params))*(params_range[0][1] - params_range[0][0])
     for j in range(n_sp_params):
         pj = params_range[1][0] + (float(j)/float(n_sp_params))*(params_range[1][1] - params_range[1][0])
-        for k in range(n_sp_params):
+        for k in range(n_sp_params + 1):
             pk = params_range[2][0] + (float(k)/float(n_sp_params))*(params_range[2][1] - params_range[2][0])
             param_list.append([pi, pj, pk])
                 

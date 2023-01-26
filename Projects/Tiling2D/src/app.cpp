@@ -1,3 +1,4 @@
+#include <igl/boundary_loop.h>
 #include "../include/app.h"
 
 void App::appendCylindersToEdges(const std::vector<std::pair<TV3, TV3>>& edge_pairs, 
@@ -82,7 +83,7 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         tiling.tilingMeshInX(V, F, C);
 
     if (tile_XY)
-        tiling.tileUnitCell(V, F, C, 2);
+        tiling.tileUnitCell(V, F, C, 9);
 
 
     if (connect_pbc_pairs)
@@ -102,7 +103,11 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         MatrixXi edges;
         igl::edges(F, edges);
         // std::cout << edges.rows() << std::endl;
-        T ref_dis = (V.row(edges(0, 1)) - V.row(edges(0, 0))).norm();
+
+        T ref_dis = 0.0;
+        for (int i = 0; i< edges.rows(); i++)
+            ref_dis += (V.row(edges(i, 1)) - V.row(edges(i, 0))).norm();
+        ref_dis /= T(edges.rows());
         end_points.resize(edges.rows());
         tbb::parallel_for(0, (int)edges.rows(), [&](int i){
            end_points[i] = std::make_pair(V.row(edges(i, 1)),  V.row(edges(i, 0)));
@@ -121,8 +126,71 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     igl::opengl::glfw::imgui::ImGuiMenu& menu)
 {
+    
+
     menu.callback_draw_viewer_menu = [&]()
     {
+        auto extrude = [&]()
+        {
+            std::vector<std::vector<int>> boundary_vertices;
+            igl::boundary_loop(F, boundary_vertices);
+
+            int sub_div = 50;
+
+            MatrixXT V3D(V.rows() * (1 + sub_div), 3);
+            int bnd_face_cnt = 0;
+            for (auto vtx_list : boundary_vertices)
+                bnd_face_cnt += vtx_list.size();
+            
+            MatrixXi F3D(F.rows() * 2 + bnd_face_cnt * 2 * sub_div, 3);
+            F3D.setZero();
+            for (int i = 0; i < 1 + sub_div; i++)
+                V3D.block(i * V.rows(), 0, V.rows(), 3) = V;
+            
+            TV min_corner, max_corner;
+            tiling.solver.computeBoundingBox(min_corner, max_corner);
+            T dx = max_corner[0] - min_corner[0];
+            T depth = 0.5 * dx;
+            T d_depth = depth / T(sub_div);
+            for (int i = 1; i < 1 + sub_div; i++)
+                V3D.col(2).segment(i * V.rows(), V.rows()).array() -= T(i) * d_depth;
+            
+
+            int n_v = V.rows();
+            MatrixXi offset = F;
+            offset.setConstant(n_v * (sub_div));
+            F3D.block(0, 0, F.rows(), 3) = F;
+            F3D.block(F.rows(), 0, F.rows(), 3) = F + offset;
+            VectorXi tmp = F3D.block(F.rows(), 0, F.rows(), 1);
+            F3D.block(F.rows(), 0, F.rows(), 1) = F3D.block(F.rows(), 2, F.rows(), 1);
+            F3D.block(F.rows(), 2, F.rows(), 1) = tmp;
+        
+            
+            int face_shift = 0;
+            for (auto vtx_list : boundary_vertices)
+            {
+                for (int sub = 0; sub < sub_div; sub++)
+                {
+                    for (int i = 0; i < vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % vtx_list.size();
+                        F3D.row(F.rows() * 2 + face_shift + i * 2 + 0) = 
+                            IV3(vtx_list[j] + n_v * sub, vtx_list[i] + n_v * sub, vtx_list[j] + n_v * (sub + 1));
+                        F3D.row(F.rows() * 2 + face_shift + i * 2 + 1) = 
+                            IV3(vtx_list[j] +  + n_v * (sub + 1), vtx_list[i] + n_v * sub, vtx_list[i] + n_v * (sub + 1));
+                    }
+                    face_shift += vtx_list.size() * 2;
+                }
+                // face_shift += vtx_list.size() * 2 * sub_div;
+            } 
+
+            V = V3D;
+            F = F3D;
+            MatrixXT C3D(F3D.rows(), 3);
+            C3D.col(0).setConstant(0.0); C3D.col(1).setConstant(0.3); C3D.col(2).setConstant(1.0);
+            C = C3D;
+        };
+
         if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::Checkbox("ShowStrain", &show_PKstress))
@@ -158,12 +226,19 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 
             }
         }
+        // if (ImGui::Button("GenerateOne", ImVec2(-1,0)))
+        // {
+        //     tiling.generateOneStructure();
+        //     updateScreen(viewer);
+        //     viewer.core().align_camera_center(V);
+        // }
         if (ImGui::Button("GenerateOne", ImVec2(-1,0)))
         {
-            tiling.generateOneStructure();
+            tiling.generateToyExample(1e-4);
             updateScreen(viewer);
             viewer.core().align_camera_center(V);
         }
+        
         if (ImGui::Button("GeneratePeriodicUnit", ImVec2(-1,0)))
         {
             tiling.generateOnePerodicUnit();
@@ -172,20 +247,39 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("GenerateNonPeriodicPatch", ImVec2(-1,0)))
         {
-            // tiling.generateOneStructureSquarePatch(46, {0.2308, 0.5});
-            // tiling.generateOneStructureSquarePatch(19, {0.15, 0.5});
-            tiling.generateOneStructureSquarePatch(0, {0.25779952, 0.49775489, 0.05995358, 0.74613666});
+            // tiling.generateOneStructureSquarePatch(46, {0.19606062, 0.35272865});
+            // tiling.generateOneStructureSquarePatch(19, {0.115, 0.765});
+            tiling.generateOneStructureSquarePatch(19, {0.195,     0.6403507});
+            // tiling.generateOneStructureSquarePatch(1, {0.1224, 0.5525, 0.3282, 0.1706});
+            // tiling.generateOneStructureSquarePatch(4, {0.1224, 0.5, 0.0373, 0.3767, 0.5});
+            // tiling.generateOneStructureSquarePatch(0, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
+            // tiling.generateOneStructureSquarePatch(0, {0.17290776, 0.50585887, 0.1029633,  0.64167318});
+            // tiling.generateOneStructureSquarePatch(46, {0.23, 0.32});
+            // 0.28787868 0.33627991
+            // tiling.generateOneStructureSquarePatch(60, {0.2308, 0.8969});
+            // tiling.generateOneStructureSquarePatch(28, {0.2308});
+            // tiling.generateOneStructureSquarePatch(26, {0.55, 0.7});
+            // tiling.generateOneStructureSquarePatch(26, {0.39184731, 0.66088703});
+            
             updateScreen(viewer);
             viewer.core().align_camera_center(V);
             viewer.core().viewport(2) = 2000; viewer.core().viewport(3) = 1600;
-            viewer.core().camera_zoom *= 8.0;
+            viewer.core().camera_zoom *= 8.0; //IH01
+            // viewer.core().camera_zoom *= 6.0;
+            
             
         }
-        if (ImGui::Button("GenerateWithRotation", ImVec2(-1,0)))
+        if (ImGui::Button("MeshBoolean", ImVec2(-1,0)))
         {
-            tiling.generateOneStructureWithRotation();
-            updateScreen(viewer);
+            meshBooleanTest(V, F);
+            C.resize(F.rows(), 3);
+            C.col(0).setConstant(0.0); C.col(1).setConstant(0.3); C.col(2).setConstant(1.0);
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);
+            viewer.data().set_colors(C);
             viewer.core().align_camera_center(V);
+            // updateScreen(viewer);
+            // viewer.core().align_camera_center(V);
         }
         if (ImGui::Button("GenerateNonPeriodic", ImVec2(-1,0)))
         {
@@ -216,7 +310,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             {
                 bool valid_structure = tiling.initializeSimulationDataFromFiles(fname, PBC_XY);
                 if (valid_structure)
+                {
                     updateScreen(viewer);
+                    viewer.core().align_camera_center(V);
+                }
+                
             }
         }
         if (ImGui::Button("LoadMesh", ImVec2(-1,0)))
@@ -230,11 +328,77 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("ExtrudeTo3D", ImVec2(-1,0)))
         {
+            // std::vector<std::vector<int>> boundary_vertices;
+            // igl::boundary_loop(F, boundary_vertices);
+
+            // int sub_div = 50;
+
+            // MatrixXT V3D(V.rows() * (1 + sub_div), 3);
+            // int bnd_face_cnt = 0;
+            // for (auto vtx_list : boundary_vertices)
+            //     bnd_face_cnt += vtx_list.size();
+            
+            // MatrixXi F3D(F.rows() * 2 + bnd_face_cnt * 2 * sub_div, 3);
+            // F3D.setZero();
+            // for (int i = 0; i < 1 + sub_div; i++)
+            //     V3D.block(i * V.rows(), 0, V.rows(), 3) = V;
+            
+            // TV min_corner, max_corner;
+            // tiling.solver.computeBoundingBox(min_corner, max_corner);
+            // T dx = max_corner[0] - min_corner[0];
+            // T depth = 0.5 * dx;
+            // T d_depth = depth / T(sub_div);
+            // for (int i = 1; i < 1 + sub_div; i++)
+            //     V3D.col(2).segment(i * V.rows(), V.rows()).array() -= T(i) * d_depth;
+            
+
+            // int n_v = V.rows();
+            // MatrixXi offset = F;
+            // offset.setConstant(n_v * (sub_div));
+            // F3D.block(0, 0, F.rows(), 3) = F;
+            // F3D.block(F.rows(), 0, F.rows(), 3) = F + offset;
+            // VectorXi tmp = F3D.block(F.rows(), 0, F.rows(), 1);
+            // F3D.block(F.rows(), 0, F.rows(), 1) = F3D.block(F.rows(), 2, F.rows(), 1);
+            // F3D.block(F.rows(), 2, F.rows(), 1) = tmp;
+        
+            
+            // int face_shift = 0;
+            // for (auto vtx_list : boundary_vertices)
+            // {
+            //     for (int sub = 0; sub < sub_div; sub++)
+            //     {
+            //         for (int i = 0; i < vtx_list.size(); i++)
+            //         {
+            //             int j = (i + 1) % vtx_list.size();
+            //             F3D.row(F.rows() * 2 + face_shift + i * 2 + 0) = 
+            //                 IV3(vtx_list[j] + n_v * sub, vtx_list[i] + n_v * sub, vtx_list[j] + n_v * (sub + 1));
+            //             F3D.row(F.rows() * 2 + face_shift + i * 2 + 1) = 
+            //                 IV3(vtx_list[j] +  + n_v * (sub + 1), vtx_list[i] + n_v * sub, vtx_list[i] + n_v * (sub + 1));
+            //         }
+            //         face_shift += vtx_list.size() * 2;
+            //     }
+            //     // face_shift += vtx_list.size() * 2 * sub_div;
+            // } 
+
+            // V = V3D;
+            // F = F3D;
+            // MatrixXT C3D(F3D.rows(), 3);
+            // C3D.col(0).setConstant(0.0); C3D.col(1).setConstant(0.3); C3D.col(2).setConstant(1.0);
+            // C = C3D;
+            // std::cout << "C3D" << std::endl;
+            extrude();
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);
+            viewer.data().set_colors(C);
+            viewer.core().align_camera_center(V);
+        }
+        if (ImGui::Button("Generate3DMesh", ImVec2(-1,0)))
+        {
             std::vector<std::vector<TV>> polygons;
             std::vector<TV> pbc_corners; 
             // int tiling_idx = 21;
-            // int tiling_idx = 19;
-            int tiling_idx = 46;
+            int tiling_idx = 26;
+            // int tiling_idx = 46;
             std::string data_folder = "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/";
             csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
             int num_params = a_tiling.numParameters();
@@ -244,14 +408,15 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             for (int j = 0; j < num_params;j ++)
                 params[j] = new_params[j];
             // params[0] = 0.3; params[1] = 0.25226267;
+            params = {0.0153, 0.7551};
             Vector<T, 4> cubic_weights;
             cubic_weights << 0.25, 0., 0.75, 0.;
-            tiling.fetchUnitCellFromOneFamily(tiling_idx, 6, polygons, pbc_corners, params, 
-                cubic_weights, data_folder + "a_structure.txt");
+            tiling.fetchUnitCellFromOneFamily(tiling_idx, 4, polygons, pbc_corners, params, 
+                cubic_weights, data_folder + "a_structure.txt", 1.0 *  M_PI / 4.0);
             
             // tiling.generatePeriodicMesh(polygons, pbc_corners, true, data_folder + "a_structure");
             tiling.extrudeToMesh(data_folder + "a_structure.txt", 
-                data_folder + "a_structure_3d.vtk", 6);
+                data_folder + "a_structure_3d.vtk", 4);
             Eigen::MatrixXi tets;
             loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/a_structure_3d.vtk", V, F, tets);
             viewer.data().clear();
@@ -276,10 +441,14 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("LoadRemeshingData", ImVec2(-1,0)))
         {
-            std::string base_folder = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/";
-            std::string mesh0_file = base_folder + "tmp/0.148000_0.550000_0_rest.obj";
-            std::string mesh1_file = base_folder + "tmp/0.148001_0.550000_0_rest.obj";
-            std::string mesh2_file = base_folder + "tmp/0.148002_0.550000_0_rest.obj";
+            // std::string base_folder = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/";
+            // std::string mesh0_file = base_folder + "tmp/0.148000_0.550000_0_rest.obj";
+            // std::string mesh1_file = base_folder + "tmp/0.148001_0.550000_0_rest.obj";
+            // std::string mesh2_file = base_folder + "tmp/0.148002_0.550000_0_rest.obj";
+            std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/remeshing/";
+            std::string mesh0_file = base_folder + "0.obj";
+            std::string mesh1_file = base_folder + "1.obj";
+            std::string mesh2_file = base_folder + "2.obj";
             igl::readOBJ(mesh0_file, V, F);
             MatrixXT step1_V, step2_V;
             MatrixXi step1_F, step2_F;
@@ -289,26 +458,115 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             C.resize(F.rows(), F.cols());
             C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
 
+            std::vector<std::vector<int>> boundary_vertices;
+            igl::boundary_loop(F, boundary_vertices);
+
+            int sub_div = 20;
+
+            MatrixXT V3D(V.rows() * (1 + sub_div), 3);
+            int bnd_face_cnt = 0;
+            for (auto vtx_list : boundary_vertices)
+                bnd_face_cnt += vtx_list.size();
+            
+            MatrixXi F3D(F.rows() * 2 + bnd_face_cnt * 2 * sub_div, 3);
+            F3D.setZero();
+            for (int i = 0; i < 1 + sub_div; i++)
+                V3D.block(i * V.rows(), 0, V.rows(), 3) = V;
+            
+            TV min_corner, max_corner;
+            min_corner.setConstant(1e6);
+            max_corner.setConstant(-1e6);
+
+            for (int i = 0; i < V.rows(); i++)
+            {
+                for (int d = 0; d < 2; d++)
+                {
+                    max_corner[d] = std::max(max_corner[d], V(i, 0));
+                    min_corner[d] = std::min(min_corner[d], V(i, 1));
+                }
+            }
+
+            T dx = max_corner[0] - min_corner[0];
+            T depth = 2.0 * dx;
+            T d_depth = depth / T(sub_div);
+            for (int i = 1; i < 1 + sub_div; i++)
+                V3D.col(2).segment(i * V.rows(), V.rows()).array() -= T(i) * d_depth;
+            
+
+            int n_v = V.rows();
+            MatrixXi offset = F;
+            offset.setConstant(n_v * (sub_div));
+            F3D.block(0, 0, F.rows(), 3) = F;
+            F3D.block(F.rows(), 0, F.rows(), 3) = F + offset;
+            VectorXi tmp = F3D.block(F.rows(), 0, F.rows(), 1);
+            F3D.block(F.rows(), 0, F.rows(), 1) = F3D.block(F.rows(), 2, F.rows(), 1);
+            F3D.block(F.rows(), 2, F.rows(), 1) = tmp;
+        
+            
+            int face_shift = 0;
+            for (auto vtx_list : boundary_vertices)
+            {
+                for (int sub = 0; sub < sub_div; sub++)
+                {
+                    for (int i = 0; i < vtx_list.size(); i++)
+                    {
+                        int j = (i + 1) % vtx_list.size();
+                        F3D.row(F.rows() * 2 + face_shift + i * 2 + 0) = 
+                            IV3(vtx_list[j] + n_v * sub, vtx_list[i] + n_v * sub, vtx_list[j] + n_v * (sub + 1));
+                        F3D.row(F.rows() * 2 + face_shift + i * 2 + 1) = 
+                            IV3(vtx_list[j] +  + n_v * (sub + 1), vtx_list[i] + n_v * sub, vtx_list[i] + n_v * (sub + 1));
+                    }
+                    face_shift += vtx_list.size() * 2;
+                }
+                // face_shift += vtx_list.size() * 2 * sub_div;
+            } 
+            MatrixXT V_tmp = V;
+            MatrixXi F_tmp = F;
+            V = V3D;
+            F = F3D;
+            MatrixXT C3D(F3D.rows(), 3);
+            C3D.col(0).setConstant(0.0); C3D.col(1).setConstant(0.3); C3D.col(2).setConstant(1.0);
+            C = C3D;
+
             MatrixXi edges0, edges1, edges2;
             std::vector<std::pair<TV3, TV3>> end_points;
-            igl::edges(F, edges0); igl::edges(step1_F, edges1); igl::edges(step2_F, edges2);
+            igl::edges(F_tmp, edges0); igl::edges(step1_F, edges1); igl::edges(step2_F, edges2);
             // std::cout << edges.rows() << std::endl;
-            T ref_dis = (V.row(edges0(0, 1)) - V.row(edges0(0, 0))).norm();
-            end_points.resize(edges0.rows() * 3);
+            T ref_dis = (V_tmp.row(edges0(0, 1)) - V_tmp.row(edges0(0, 0))).norm();
+            // end_points.resize(edges0.rows() * 3);
+            // tbb::parallel_for(0, (int)edges0.rows(), [&](int i){
+            //     end_points[i] = std::make_pair(V_tmp.row(edges0(i, 1)),  V_tmp.row(edges0(i, 0)));
+            //     end_points[i + edges0.rows()] = std::make_pair(step1_V.row(edges1(i, 1)),  step1_V.row(edges1(i, 0)));
+            //     end_points[i + edges0.rows() * 2] = std::make_pair(step2_V.row(edges2(i, 1)),  step2_V.row(edges2(i, 0)));
+            // });
+            // std::vector<TV3> colors(end_points.size());
+            // for (int i = 0; i < edges0.rows(); i++)
+            // {
+            //     colors[i] = TV3(0.0, 0.0, 0.0);
+            //     colors[i + edges0.rows()] = TV3(1.0, 0.0, 0.0);
+            //     colors[i + edges0.rows() * 2] = TV3(255.0, 204.0, 1.0) / 255.0;
+            //     // colors[i + edges0.rows() * 2] = TV3(1.0, 1.0, 1.0);
+            // }
+
+            V.resize(0, 0);
+            F.resize(0, 0);
+            C.resize(0, 0);
+            end_points.resize(edges0.rows() * 1);
             tbb::parallel_for(0, (int)edges0.rows(), [&](int i){
-                end_points[i] = std::make_pair(V.row(edges0(i, 1)),  V.row(edges0(i, 0)));
-                end_points[i + edges0.rows()] = std::make_pair(step1_V.row(edges1(i, 1)),  step1_V.row(edges1(i, 0)));
-                end_points[i + edges0.rows() * 2] = std::make_pair(step2_V.row(edges2(i, 1)),  step2_V.row(edges2(i, 0)));
+                // end_points[i] = std::make_pair(V_tmp.row(edges0(i, 1)),  V_tmp.row(edges0(i, 0)));
+                // end_points[i] = std::make_pair(step1_V.row(edges1(i, 1)),  step1_V.row(edges1(i, 0)));
+                end_points[i] = std::make_pair(step2_V.row(edges2(i, 1)),  step2_V.row(edges2(i, 0)));
             });
             std::vector<TV3> colors(end_points.size());
             for (int i = 0; i < edges0.rows(); i++)
             {
                 colors[i] = TV3(0.0, 0.0, 0.0);
-                colors[i + edges0.rows()] = TV3(1.0, 0.0, 0.0);
-                colors[i + edges0.rows() * 2] = TV3(255.0, 204.0, 1.0) / 255.0;
+                // colors[i + edges0.rows()] = TV3(1.0, 0.0, 0.0);
+                // colors[i + edges0.rows() * 2] = TV3(255.0, 204.0, 1.0) / 255.0;
                 // colors[i + edges0.rows() * 2] = TV3(1.0, 1.0, 1.0);
             }
-            appendCylindersToEdges(end_points, colors, 0.04 * ref_dis, V, F, C);
+            appendCylindersToEdges(end_points, colors, 0.08 * ref_dis, V, F, C);
+
             viewer.data().clear();
             viewer.data().set_mesh(V, F);        
             viewer.data().set_colors(C);

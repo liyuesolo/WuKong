@@ -233,6 +233,27 @@ def buildSingleFamilyModelSeparateTilingParamsSwish(num_params, data_type=tf.flo
     model = Model(inputS, output)
     return model
 
+def buildSingleFamilyModelSeparateTilingParamsSwishSmall(num_params, data_type=tf.float32):
+    
+    inputS = Input(shape=(3 + num_params,),dtype=data_type, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 3)(inputS)
+    num_hidden = 64
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(tiling_params)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(strain)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
+    model = Model(inputS, output)
+    return model
+
 def buildSingleFamilyModelSeparateTilingParamsSoftplus(num_params, data_type=tf.float32):
     
     inputS = Input(shape=(3 + num_params,),dtype=data_type, name="inputS")

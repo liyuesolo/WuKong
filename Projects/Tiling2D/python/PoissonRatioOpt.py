@@ -24,63 +24,16 @@ import scipy
 from scipy.optimize import check_grad
 from tactile import IsohedralTiling, tiling_types, EdgeShape, mul, Point
 import dearpygui.dearpygui as dpg
-
+import time
 from Derivatives import *
 from Optimization import *
+from Samples import*
+from PropertyModifier import *
 
-@tf.function
-def testStep(n_tiling_params, lambdas, model):
-    with tf.GradientTape() as tape_outer:
-        tape_outer.watch(lambdas)
-        with tf.GradientTape() as tape:
-            tape.watch(lambdas)
-            
-            elastic_potential = model(lambdas, training=False)
-            dedlambda = tape.gradient(elastic_potential, lambdas)
-            batch_dim = elastic_potential.shape[0]
-            stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
-            de_dp = tf.slice(dedlambda, [0, 0], [batch_dim, n_tiling_params])
-    dstress_dp = tape_outer.batch_jacobian(stress, lambdas)[:, :, 0:n_tiling_params]
-    del tape
-    del tape_outer
-    return dstress_dp, stress, de_dp, elastic_potential
-
-@tf.function
-def testStepd2edp2(n_tiling_params, lambdas, model):
-    with tf.GradientTape() as tape_outer:
-        tape_outer.watch(lambdas)
-        with tf.GradientTape() as tape:
-            tape.watch(lambdas)
-            elastic_potential = model(lambdas, training=False)
-            dedlambda = tape.gradient(elastic_potential, lambdas)
-            batch_dim = elastic_potential.shape[0]
-            de_dp = tf.slice(dedlambda, [0, 0], [batch_dim, n_tiling_params])
-    d2edp2 = tape_outer.batch_jacobian(de_dp, lambdas)[:, :, 0:n_tiling_params]
-    del tape
-    del tape_outer
-    return d2edp2, de_dp, elastic_potential
-
-
-@tf.function
-def valueGradHessian(n_tiling_params, inputs, model):
-    batch_dim = inputs.shape[0]
-    with tf.GradientTape() as tape_outer:
-        tape_outer.watch(inputs)
-        with tf.GradientTape() as tape:
-            tape.watch(inputs)
-            psi = model(inputs, training=False)
-            dedlambda = tape.gradient(psi, inputs)
-            
-            stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
-            
-    C = tape_outer.batch_jacobian(stress, inputs)[:, :, n_tiling_params:]
-    del tape
-    del tape_outer
-    return psi, stress, C
 
 @tf.function
 def computeDirectionalPoissonRatio(n_tiling_params, inputs, thetas, model):
-    batch_dim = inputs.shape[0]
+    
     thetas = tf.expand_dims(thetas, axis=1)
     
     d_voigt = tf.concat((tf.math.cos(thetas) * tf.math.cos(thetas), 
@@ -94,218 +47,55 @@ def computeDirectionalPoissonRatio(n_tiling_params, inputs, thetas, model):
 
     psi, stress, C = valueGradHessian(n_tiling_params, inputs, model)
     
-    Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
-    Sn = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), n_voigt[0, :])
+    C_inv = tf.linalg.inv(C[0, :, :])
+    Sd = tf.linalg.matvec(C_inv, d_voigt[0, :])
+    Sn = tf.linalg.matvec(C_inv, n_voigt[0, :])
     dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
     dTSn = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sn, 1), axis=0)
     nu = -tf.divide(dTSn, dTSd)
     
     for i in range(1, C.shape[0]):
-        Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
-        Sn = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), n_voigt[i, :])
+        C_inv = tf.linalg.inv(C[i, :, :])
+        Sd = tf.linalg.matvec(C_inv, d_voigt[i, :])
+        Sn = tf.linalg.matvec(C_inv, n_voigt[i, :])
         
-        nu = tf.concat((tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0), nu), 0)
+        nu = tf.concat((nu, tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0)), 0)
     return tf.squeeze(nu)
 
-def computeUniaxialStrainThetaBatch(n_tiling_params, strain, 
-    thetas, model, tiling_params, verbose = True):
 
-    
-    strain_init = []
-    for theta in thetas:
-        d = np.array([np.cos(theta), np.sin(theta)])
-        strain_tensor_init = np.outer(d, d) * strain
-        strain_init.append(np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]]))
-
-    strain_init = np.array(strain_init).flatten()
-    
-    m = len(strain_init) // 3
-    n = len(strain_init)
-    A = np.zeros((m, n))
-    lb = []
-    ub = []
-
-    for i in range(m):
-        d = np.array([np.cos(thetas[i]), np.sin(thetas[i])])
-        A[i, i * 3:i * 3 + 3] = computedCdE(d)
-        lb.append(strain)
-        ub.append(strain)
-
-    uniaxial_strain_constraint = LinearConstraint(A, lb, ub)
-
-    def hessian(x):
-        
-        H = hessPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
-            tf.convert_to_tensor(tiling_params), model)
-        H = H.numpy()
-        return H
-
-    def objAndEnergy(x):
-        obj, grad = objGradPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
-            tf.convert_to_tensor(tiling_params), model)
-        
-        obj = obj.numpy()
-        grad = grad.numpy().flatten()
-        return obj, grad
-
-    if verbose:
-        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
-            constraints=[uniaxial_strain_constraint],
-            options={'disp' : True})
-    else:
-        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, 
-            hess=hessian,
-            constraints= [uniaxial_strain_constraint],
-            options={'disp' : False})
-    
-    return np.reshape(result.x, (m, 3))
-
-
-
-def optimizeUniaxialStrain():
-    filename = "/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/sample_theta_1.050000.txt"
-    all_data = []
-    all_label = [] 
-    n_tiling_params = 2
-    thetas = []
-    for line in open(filename).readlines():
-        item = [float(i) for i in line.strip().split(" ")]
-    
-        data = item[0:n_tiling_params]
-        for i in range(2):
-            data.append(item[n_tiling_params+i])
-        data.append(2.0 * item[n_tiling_params+2])
-        thetas.append(item[-4])
-
-        label = item[n_tiling_params+3:n_tiling_params+7]
-        
-        
-        all_data.append(data)
-        all_label.append(label)
-    
-    thetas = np.array(thetas[0:]).astype(np.float32)
-    all_data = np.array(all_data[0:]).astype(np.float32)
-    all_label = np.array(all_label[0:]).astype(np.float32) 
-
-    n_tiling_params = 2
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    # save_path = os.path.join(current_dir, 'Models/' + str(221) + "/")
-    # model = buildSingleFamilyModel3Strain(n_tiling_params)
-    save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH21" + '.tf')
-    theta = 0.0
-    strain_eng = 0.05
-    strain_green = strain_eng + 0.5 * np.power(strain_eng, 2.0)
-
-    tiling_params = np.array([0.104512, 0.65])
-    
-    strain_nn_opt = []
-    thetas = np.arange(0.0, np.pi, np.pi/float(50.0))
-    for theta in thetas:
-        strain_nn_opt.append(optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain_green, tiling_params))
-        # strain_nn_opt.append([0, 0, 0])
-    error = []
-    for i in range(len(strain_nn_opt)):
-        error.append(np.linalg.norm(strain_nn_opt[i] - all_data[i][2:5]) / np.linalg.norm(all_data[i][2:5]) * 100.0)
-    
-    for i in range(len(strain_nn_opt)):
-        thetas = np.append(thetas, thetas[i] - np.pi)
-        error = np.append(error, error[i])
-
-    thetas = np.append(thetas, thetas[0])
-    error = np.append(error, error[0])
-    print("max error: {}".format(np.max(error)))
-    plt.polar(thetas, error, linewidth=3.0)
-    # plt.show()
-    plt.savefig(save_path + "error.png", dpi=300)
-
-
-def toPolarData(half):
-    full = half
-    n_sp_theta = len(half)
-    for i in range(n_sp_theta):
-        full = np.append(full, full[i])
-    full = np.append(full, full[0])
-    return full
 
 
 def loadModel(IH):
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    if IH == 50:
-        save_path = os.path.join(current_dir, 'Models/' + str(332) + "/")
-        n_tiling_params = 2
-    elif IH == 21:
-        save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
-        n_tiling_params = 2
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH" + str(IH) + '.tf')
-    return model
-
-def computePoissonRatio():
     bounds = []
-    IH = 1
-    n_sp_theta = 50
-    thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta))
-    strain = 0.01
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    idx = np.arange(0, len(thetas), 5)
-
     if IH == 21:
-        strain = 0.02
-        green = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.105, 0.195])
         bounds.append([0.505, 0.795])
-        ti = np.array([0.18, 0.7])
-        ti_target = np.array([0.1045, 0.65])
-        sample_idx = [2, 7, -1]
-        theta = 0.0
+        ti_default = np.array([0.1045, 0.65])
     elif IH == 50:
-        n_sp_theta = 100
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
         bounds.append([0.25, 0.75])
-        # ti = np.array([0.2308, 0.5])
-        ti = np.array([0.2903, 0.6714])
-        sample_idx = [2, 7, -1]
+        ti_default = np.array([0.2308, 0.5])
     elif IH == 67:
-        # n_sp_theta = 100
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
-        bounds.append([0.6, 1.1])
-        # ti = np.array([0.18, 0.68])
-        ti = np.array([0.25, 0.85])
-        idx = np.arange(0, len(thetas), 5)
-        
+        bounds.append([0.6, 1.1]) 
+        ti_default = np.array([0.2308, 0.8696])
     elif IH == 28:
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.005, 0.8])
         bounds.append([0.005, 1.0])
-        ti = np.array([0.6, 0.6])
-        ti_target = np.array([0.4, 0.8])
-        # ti_target = np.array([0.6, 0.6])
-        idx = np.arange(0, len(thetas), 5)
+        ti_default = np.array([0.4528, 0.5])
     elif IH == 1:
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
         n_tiling_params = 4
         bounds.append([0.05, 0.3])
         bounds.append([0.25, 0.75])
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
-        ti = np.array([0.1224, 0.5, 0.1434, 0.625])
-        # ti = np.array([0.1224, 0.6, 0.13, 0.625])
-        # ti_target = np.array([0.6, 0.6])
-        idx = np.arange(0, len(thetas), 5)
-
-    # strain = -0.12
-    # strain = strain - 0.5 * strain * strain
-
+        ti_default = np.array([0.1224, 0.5, 0.1434, 0.625])
+    
     model_name = str(IH)
     if IH < 10:
         model_name = "0" + str(IH)
@@ -316,121 +106,71 @@ def computePoissonRatio():
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH" + model_name + '.tf')
 
+    return model, n_tiling_params, ti_default, bounds
+
+def computePoissonRatio():
+    bounds = []
+    IH = 21
+    n_sp_theta = 50
+    dtheta = np.pi/float(n_sp_theta)
+    thetas = np.arange(0.0, np.pi, dtheta)
+    strain = 0.02
+    if strain < 0:
+        strain = strain - 0.5 * strain * strain
+    else:
+        strain = strain + 0.5 * strain * strain
+
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    
+    # ti = np.array([0.165, 0.72])
+    # ti = np.array([0.25, 0.8])
+    # ti = np.array([0.0153, 0.7551])
+    # ti = ti_default
+    # ti = np.array([0.17, 0.51])
+    # ti = np.array([0.17, 0.51])
+    # ti = np.array([0.18, 0.7])
+    ti = np.array([0.175, 0.52])
     uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
-    # print(uniaxial_strain)
-    # stiffness = generateStiffnessDataThetas(thetas, n_tiling_params, strain, ti, model)
+    
 
     batch_dim = len(thetas)
     ti_batch = np.tile(ti, (batch_dim, 1))
-    # uniaxial_strain = np.reshape(uniaxial_strain, (batch_dim, 3))
     nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
     nu = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
-                
-    # stiffness = stiffness.numpy()
+    nu = nu.numpy()
     for i in range(n_sp_theta):
-        thetas= np.append(thetas, thetas[i] - np.pi)
+        thetas= np.append(thetas, thetas[i] + np.pi)
         nu = np.append(nu, nu[i])
     thetas = np.append(thetas, thetas[0])
     nu = np.append(nu, nu[0])
     plt.polar(thetas, nu, label = "tensor", linewidth=3.0)
-    plt.savefig("poisson_ratio.png", dpi=300)
+    plt.savefig("images/poisson_ratio.png", dpi=300)
     plt.close()
 
-def computeStiffnessBatch():
-    n_tiling_params = 2
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    # save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
-    save_path = os.path.join(current_dir, 'Models/' + str(332) + "/")
-    img_folder = save_path + "/stiffness/"
-    if not os.path.exists(img_folder):
-        os.mkdir(img_folder)
+def getDirectionPoissonRatio(ti, n_tiling_params, model, strain_cauchy, n_sp_theta = 20, sym=True):
+    if strain_cauchy <  0:
+        strain = strain_cauchy - 0.5 * strain_cauchy  * strain_cauchy
+    else:
+        strain = strain_cauchy + 0.5 * strain_cauchy  * strain_cauchy
     
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    # model.load_weights(save_path + "IH21" + '.tf')
-    model.load_weights(save_path + "IH50" + '.tf')
-
-    n_sp_theta = 50
-    ti = [0.15, 0.65]
-    n_sp_strain = 50
-    n_sp_tiling = 10
-    strain_range = [0.001, 0.2]
-    dstrain = (strain_range[1] - strain_range[0]) / float(n_sp_strain)
-    t1_range = [0.105, 0.295]
-    # t2_range = [0.505, 0.795]
-    t2_range = [0.255, 0.745]
-    dt1 = (t1_range[1] - t1_range[0]) / float(n_sp_strain)
-    dt2 = (t2_range[1] - t2_range[0]) / float(n_sp_strain)
-
-    ti_cnt = 0
-    for t1_iter in range(n_sp_tiling):
-        t1 = t1_range[0] + dt1 * float(t1_iter)
-        for t2_iter in range(n_sp_tiling):
-            t2 = t2_range[0] + dt2 * float(t2_iter)
-            os.mkdir(img_folder + str(ti_cnt))
-            f = open(img_folder +  str(ti_cnt) + "/tiling_params.txt", "w+")
-            f.write(str(t1) + " " + str(t2))
-            
-            for strain in [0.001, 0.01, 0.025, 0.05, 0.075, 0.1]:
-            
-                thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float32)
-
-                strain_green = strain #+ 0.5 * np.power(strain, 2.0)
-                uniaxial_strain = []
-                error = []
-                for theta in thetas:
-                    uni_strain, err = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain_green, ti)
-                    uniaxial_strain.append(uni_strain)
-                    error.append(err)
-                f.write(str(np.max(error)) + " " + str(np.min(error)) + " " + str(np.mean(error)) + "\n")
-                ti_tile = np.tile([t1, t2], (len(thetas), 1))
-                nn_inputs = np.hstack((ti_tile, uniaxial_strain))
-                stiffness, _= computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(nn_inputs), 
+    thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta))
+    uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
+    
+    batch_dim = len(thetas)
+    ti_batch = np.tile(ti, (batch_dim, 1))
+    nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
+    poisson_ratio = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
                     tf.convert_to_tensor(thetas), model)
-                
-                for i in range(n_sp_theta):
-                    thetas= np.append(thetas, thetas[i] - np.pi)
-                    stiffness = np.append(stiffness, stiffness[i])
-                
-                thetas = np.append(thetas, thetas[0])
-                stiffness = np.append(stiffness, stiffness[0])
-                plt.polar(thetas, stiffness, label = "stiffness_NN", linewidth=3.0)
-                # plt.legend(loc="upper left")
-                # plt.show()
-                
-                plt.savefig(img_folder + str(ti_cnt) + "/stiffness_strain_"+str(strain)+".png", dpi=300)
-                
-                plt.close()
-            f.close()
-            # for i in range(n_sp_strain):
-            #     strain = strain_range[0] + float(i) * dstrain
-                
-            #     # strain = 0.5
-            #     thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float32)
+    poisson_ratio = poisson_ratio.numpy()
+    if sym:
+        for i in range(n_sp_theta):
+            thetas= np.append(thetas, thetas[i] + np.pi)
+            poisson_ratio = np.append(poisson_ratio, poisson_ratio[i])
+        thetas= np.append(thetas, 2*np.pi)
+        poisson_ratio = np.append(poisson_ratio, poisson_ratio[0])
+    return thetas, poisson_ratio
 
-            #     strain_green = strain + 0.5 * np.power(strain, 2.0)
-            #     uniaxial_strain = []
-            #     for theta in thetas:
-            #         uniaxial_strain.append(optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain_green, ti))
-                
-            #     ti_tile = np.tile([t1, t2], (len(thetas), 1))
-            #     nn_inputs = np.hstack((ti_tile, uniaxial_strain))
-            #     stiffness, _= computeDirectionalStiffness(n_tiling_params, tf.convert_to_tensor(nn_inputs), 
-            #         tf.convert_to_tensor(thetas), model)
-                
-            #     for i in range(n_sp_theta):
-            #         thetas= np.append(thetas, thetas[i] - np.pi)
-            #         stiffness = np.append(stiffness, stiffness[i])
-                
-            #     thetas = np.append(thetas, thetas[0])
-            #     stiffness = np.append(stiffness, stiffness[0])
-            #     plt.polar(thetas, stiffness, label = "stiffness_NN", linewidth=3.0)
-            #     # plt.legend(loc="upper left")
-            #     # plt.show()
-                
-            #     plt.savefig(img_folder + str(ti_cnt) + "/stiffness_strain_"+str(strain)+".png", dpi=300)
-            #     plt.close()
-            ti_cnt += 1
 
 def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, 
     theta, strain, tiling_params, verbose = True):
@@ -527,17 +267,18 @@ def objGradPoissonRatio(ti, uniaxial_strain, thetas, model):
         C = tape_outer.batch_jacobian(stress, uniaxial_strain)
         
         
-        Sd = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), d_voigt[0, :])
+        C_inv = tf.linalg.inv(C[0, :, :])
+        Sd = tf.linalg.matvec(C_inv, d_voigt[0, :])
+        Sn = tf.linalg.matvec(C_inv, n_voigt[0, :])
         dTSd = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sd, 1), axis=0)
-        Sn = tf.linalg.matvec(tf.linalg.inv(C[0, :, :]), n_voigt[0, :])
         dTSn = tf.expand_dims(tf.tensordot(d_voigt[0, :], Sn, 1), axis=0)
         nu = -tf.divide(dTSn, dTSd)
         for i in range(1, C.shape[0]):
-            
-            Sd = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), d_voigt[i, :])
-            Sn = tf.linalg.matvec(tf.linalg.inv(C[i, :, :]), n_voigt[i, :])
+            C_inv = tf.linalg.inv(C[i, :, :])
+            Sd = tf.linalg.matvec(C_inv, d_voigt[i, :])
+            Sn = tf.linalg.matvec(C_inv, n_voigt[i, :])
         
-            nu = tf.concat((tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0), nu), 0)
+            nu = tf.concat((nu, tf.expand_dims(-tf.divide(tf.tensordot(d_voigt[i, :], Sn, 1), tf.tensordot(d_voigt[i, :], Sd, 1)), axis=0)), 0)
     
     
     grad = tape_outer_outer.jacobian(nu, ti)
@@ -566,7 +307,7 @@ def generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti, model):
 def poissonRatioSA():
     plot_GT = False
     bounds = []
-    IH = 1
+    IH = 50
     n_sp_theta = 50
     thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta))
     strain = 0.01
@@ -575,45 +316,44 @@ def poissonRatioSA():
 
     if IH == 21:
         strain = 0.02
-        green = strain + 0.5 * strain * strain
+        strain = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.105, 0.195])
         bounds.append([0.505, 0.795])
-        ti = np.array([0.18, 0.7])
-        ti_target = np.array([0.1045, 0.65])
-        sample_idx = [2, 7, -1]
-        theta = 0.0
+        ti = np.array([0.165, 0.72])
+        ti_target = np.array([0.175, 0.52])
+
     elif IH == 50:
-        n_sp_theta = 100
+        n_sp_theta = 50
         n_tiling_params = 2
+        strain = 0.02
+        strain = strain + 0.5 * strain * strain
         bounds.append([0.1, 0.3])
         bounds.append([0.25, 0.75])
-        ti = np.array([0.2308, 0.5])
-        ti_target = np.array([0.2903, 0.6714])
-        sample_idx = [2, 7, -1]
+        ti = np.array([0.25, 0.52])
+        ti_target = np.array([0.25, 0.64])
+        
     elif IH == 67:
         # n_sp_theta = 100
-        strain = 0.05
+        strain = 0.01
         strain = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.1, 0.3])
         bounds.append([0.6, 1.1])
-        ti = np.array([0.18, 0.68])
-        ti_target = np.array([0.25, 0.85])
-        idx = np.arange(0, len(thetas), 5)
+        ti = np.array([0.18, 0.7])
+        ti_target = np.array([0.25, 0.8])
         
     elif IH == 28:
-        strain = 0.05
+        strain = 0.02
         strain = strain + 0.5 * strain * strain
         n_tiling_params = 2
         bounds.append([0.005, 0.8])
         bounds.append([0.005, 1.0])
-        ti = np.array([0.6, 0.6])
+        # ti = np.array([0.6, 0.6])
+        ti = np.array([0.55, 0.7])
         ti_target = np.array([0.4, 0.8])
-        # ti_target = np.array([0.6, 0.6])
-        idx = np.arange(0, len(thetas), 5)
     elif IH == 1:
-        strain = 0.05
+        strain = 0.02
         strain = strain + 0.5 * strain * strain
         n_tiling_params = 4
         bounds.append([0.05, 0.3])
@@ -621,29 +361,29 @@ def poissonRatioSA():
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
         # test 1
-        ti = np.array([0.1224, 0.5, 0.12, 0.625])
-        ti_target = np.array([0.1224, 0.5, 0.07, 0.625])
+        # ti = np.array([0.13, 0.55, 0.13, 0.625])
+        # ti_target = np.array([0.1224, 0.6, 0.09, 0.6])
         # test 2
-        # ti = np.array([0.1224, 0.6, 0.13, 0.625])
-        # ti_target = np.array([0.13, 0.4998, 0.0721, 0.6114])
+        # ti = np.array([0.1224, 0.6, 0.09, 0.6])
+        # ti_target = np.array([0.13, 0.5, 0.08, 0.62])
         # test 3
-        # ti = np.array([0.13, 0.4998, 0.0721, 0.6114])
-        # ti_target = np.array([0.1224, 0.5, 0.1087, 0.5541])
+        # ti = np.array([0.13, 0.5, 0.08, 0.62])
+        # ti_target = np.array([0.2, 0.5, 0.1087, 0.55])
         # test 4
-        # ti = np.array([0.1224, 0.5, 0.1087, 0.5541])
-        # ti_target = np.array([0.1224, 0.5, 0.1434, 0.625])
+        # ti = np.array([0.2, 0.5, 0.1087, 0.55])
+        # ti_target = np.array([0.13, 0.55, 0.13, 0.625])
         # test 5
-        # ti = np.array([0.1692, 0.4223, 0.0635, 0.6888])
-        # ti_target = np.array([0.1224, 0.4724, 0.1406, 0.625])
+        # ti = np.array([0.15, 0.6, 0.13, 0.6])
+        # ti_target = np.array([0.12, 0.45, 0.1, 0.7])
         # test 6
-        # ti = np.array([0.1224, 0.4724, 0.1406, 0.625])
-        # ti_target = np.array([0.17, 0.5, 0.12, 0.5])
+        # ti = np.array([0.10279905, 0.45325127, 0.09960801, 0.70605258])
+        # ti_target = np.array([0.18, 0.52, 0.08, 0.55])
         # test 7
-        # ti = np.array([0.17, 0.5, 0.12, 0.5])
-        # ti_target = np.array([0.22, 0.6, 0.08, 0.52])
+        # ti = np.array([0.18605106, 0.51947694, 0.08046355, 0.55166683])
+        # ti_target = np.array([0.16, 0.58, 0.08, 0.6])
         # test 8
-        # ti = np.array([0.22, 0.6, 0.08, 0.52])
-        # ti_target = np.array([0.1692, 0.4223, 0.0635, 0.6888])
+        ti = np.array([0.16, 0.58, 0.08, 0.6])
+        ti_target = np.array([0.15, 0.6, 0.13, 0.6])
         
         idx = np.arange(0, len(thetas), 5)
 
@@ -657,15 +397,14 @@ def poissonRatioSA():
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
     model.load_weights(save_path + "IH" + model_name + '.tf')
 
-    # uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
-    # print(uniaxial_strain)
     poisson_ratio = generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti, model)
-    # idx = [0, 23, 49]
-    # idx = [0, 5, 9]
-        
     # if IH == 50:
         # poisson_ratio_targets = np.array([0.005357881231762475, 0.0053454764198269345, 0.005323076289713101, 0.005291569037720618, 0.0052522045380705784, 0.005206538985992594, 0.005156317853195587, 0.005103432053036575, 0.005049849140188627, 0.004997588281309535, 0.004948602172962785, 0.004904843012360457, 0.004868177620772044, 0.004840440651345217, 0.004823469064749871, 0.004818991757038235, 0.004828978362628706, 0.004855306346270269, 0.0049001325792824854, 0.004965911886655767, 0.005055390854282705, 0.005171798842058322, 0.005319091992881996, 0.005502027464332436, 0.005726526451276003, 0.005999929516542937, 0.006331583277052967, 0.006733359841493947, 0.00722057834175154, 0.007813154325618703, 0.008537263976337377, 0.009427641766171856, 0.010530831464126878, 0.011909725278378426, 0.013649730833703747, 0.01586677564177888, 0.01871692802717734, 0.022404009565604288, 0.027175282123162885, 0.03327769337046987, 0.04081423136805599, 0.04941796486384382, 0.057890418607245774, 0.06158122654443698, 0.07910000717017367, 0.13009581614825785, 0.25367472705223826, 0.47512731203807107, 1.0204514711708237, 1.545156515315592, 1.0226177560044938, 0.4913970812878216, 0.2565621974977346, 0.12514883705159502, 0.07314831557558382, 0.06008642835986133, 0.058832596963625514, 0.051370760458955285, 0.042733790125287746, 0.034839734366138145, 0.028359992691892176, 0.023279511280816297, 0.019359764740570815, 0.016339754532924845, 0.013999665661286846, 0.012170135164418353, 0.010725453771437422, 0.009573281821056216, 0.008646021656700155, 0.007893658420805588, 0.007279120731033306, 0.006774575043915245, 0.006358884296229148, 0.006015915518370427, 0.005733149845429153, 0.005500786642791992, 0.00531114293624395, 0.005158074949472558, 0.00503659274805049, 0.004942658655271803, 0.004872921834920428, 0.0048245386709542, 0.004795009654030171, 0.004782296786893437, 0.0047844060613056825, 0.00479953607388955, 0.0048257329785549715, 0.004861502134963473, 0.004904820697292641, 0.004954039892769007, 0.005007261039364209, 0.005062564561422771, 0.0051179933806987125, 0.005171611640220892, 0.00522150913946486, 0.005265892870544442, 0.005303134799640369, 0.005331845089384196, 0.005350952647260489, 0.005359393895734639])
     poisson_ratio_targets = generatePoissonRatioDataThetas(thetas, n_tiling_params, strain, ti_target, model)
+    if IH == 28:
+        # poisson_ratio_targets = np.array([1.0305514815075005, 1.012669063448301, 0.9983653930424908, 0.9760854620854097, 0.9469135772911499, 0.9241089858867978, 0.9075302386032793, 0.8972305565527231, 0.8946428027428622, 0.9032537427846475, 0.9267134745911274, 0.9609406400002467, 0.995953056791863, 1.0254782490131515, 1.0470921348157982, 1.0609124576398712, 1.0692259484473527, 1.0750174828160362, 1.0793007918371773, 1.0814428541143122, 1.0799421896850456, 1.0744988899662153, 1.066936858268616, 1.0579452995439098, 1.046264882997938, 1.0309136269602002, 1.0159667567873247, 1.0020042802152218, 0.9855796493607557, 0.9612629744106376, 0.9352652334312358, 0.9139078823741412, 0.8992576412621971, 0.8937920240121994, 0.9013168597102745, 0.9233982121181953, 0.9550951896943425, 0.9872101422046681, 1.0145031876079933, 1.0373101721007572, 1.05660738455303, 1.0713664168056236, 1.0804882453694686, 1.0851594166118306, 1.0869486772361947, 1.0853637130052902, 1.0793267573511756, 1.0708610354670605, 1.0608193315501948, 1.0474468729103958])
+        poisson_ratio_targets = np.array([1.0561218321318777, 1.0568443148288544, 1.0574062514622313, 1.055391055536777, 1.049284559766551, 1.0392282181694394, 1.023629980537073, 1.0008446760815706, 0.9728138043603514, 0.9401623204825427, 0.8753084542414213, 0.835619060017621, 0.8089700079630953, 0.791978438726686, 0.7839494395204849, 0.7858520337612478, 0.8006975275390967, 0.832084446388504, 0.8873764831223246, 0.9728263163634734, 1.00703511686131, 1.0194615352674514, 1.0303504405788015, 1.0414715408930273, 1.0514742448035446, 1.0574788991428457, 1.0563811499189961, 1.0507596184540926, 1.0465168154140558, 1.0432899332334102, 1.033105802074758, 1.0170972871271278, 0.9840532240784822, 0.9081628278596467, 0.8667907403499018, 0.8367096178588956, 0.8141035289237027, 0.7977289510478281, 0.78703782722618, 0.7819611161199933, 0.7830033301730911, 0.7914192495436153, 0.808596680642313, 0.8368403931662699, 0.8800483971013053, 0.9378137687220685, 0.9822083655465698, 1.0092538712670118, 1.0288486377603403, 1.0445670596501868])
+
     if IH == 21:
         mean = np.mean(poisson_ratio_targets)
         poisson_ratio_targets = np.full((len(poisson_ratio_targets), ), mean)
@@ -707,7 +446,10 @@ def poissonRatioSA():
 
     if not plot_GT:
         # result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
+        tic = time.perf_counter()
         result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+        toc = time.perf_counter()
+        print(f"Optimization takes {toc - tic:0.6f} seconds")
         uniaxial_strain_opt = []
         for theta in thetas:
             uni_strain, _ = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, result.x, False)
@@ -737,6 +479,9 @@ def poissonRatioSA():
     # fdGradient(ti)
     # exit(0)
 
+    if IH == 50:
+        thetas += np.pi * 0.5
+
     for i in range(n_sp_theta):
         thetas= np.append(thetas, thetas[i] - np.pi)
         poisson_ratio = np.append(poisson_ratio, poisson_ratio[i])
@@ -746,17 +491,29 @@ def poissonRatioSA():
     thetas = np.append(thetas, thetas[0])
     poisson_ratio = np.append(poisson_ratio, poisson_ratio[0])
     poisson_ratio_targets = np.append(poisson_ratio_targets, poisson_ratio_targets[0])
+    min_target, max_target = np.min(poisson_ratio_targets), np.max(poisson_ratio_targets)
+    min_init, max_init = np.min(poisson_ratio), np.max(poisson_ratio)
     if not plot_GT:
         poisson_ratio_opt = np.append(poisson_ratio_opt, poisson_ratio_opt[0])
     
+        min_opt, max_opt = np.min(poisson_ratio_opt), np.max(poisson_ratio_opt)
+        max_pr = np.max([max_init, max_opt, max_target])
+        min_pr = np.min([min_init, min_opt, min_target])
+
+    else:
+        max_pr = np.max([max_init, max_target])
+        min_pr = np.min([min_init, min_target])
+
+    dpr = max_pr - min_pr
+
     fig1 = plt.figure()
     ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
-    # if IH == 21:
-    #     ax1.set_ylim(0.05, 0.35)
-    # elif IH == 1:
-    #     ax1.set_ylim(0, 5.5)
-    ax1.plot(thetas,poisson_ratio,lw=2.5, label = "poisson_ratio initial")
-    ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson_ratio target", linestyle = "dashed")
+    
+    ax1.set_ylim(min_pr - 0.1 * dpr, max_pr + 0.1 * max_pr)
+    
+    # ax1.set_ylim(-1.0, 3.5)
+    ax1.plot(thetas,poisson_ratio,lw=2.5, label = "poisson ratio initial")
+    ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson ratio target", linestyle = "dashed")
     # plt.polar(thetas, poisson_ratio, label = "poisson_ratio initial", linewidth=3.0, zorder=0)
     # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
     plt.legend(loc='upper left')
@@ -766,15 +523,139 @@ def poissonRatioSA():
     if not plot_GT:
         fig1 = plt.figure()
         ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
+        ax1.set_ylim(min_pr - 0.1 * dpr, max_pr + 0.1 * max_pr)
+        # ax1.set_ylim(-0.5, 3.0)
         # plt.polar(thetas, poisson_ratio_opt, label = "poisson_ratio optimized", linewidth=3.0, zorder=0)
         # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
-        ax1.plot(thetas,poisson_ratio_opt,lw=2.5, label = "poisson_ratio optimized")
-        ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson_ratio target", linestyle = "dashed")
+        ax1.plot(thetas,poisson_ratio_opt,lw=2.5, label = "poisson ratio optimized")
+        ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson ratio target", linestyle = "dashed")
         plt.legend(loc='upper left')
         plt.savefig("poisson_ratio_optimization_IH"+str(IH)+"_optimized.png", dpi=300)
         plt.close()
         os.system("convert poisson_ratio_optimization_IH"+str(IH)+"_optimized.png -trim poisson_ratio_optimization_IH" + str(IH) + "_optimized.png")
 
+
+def findNegativePoissonRatioStructure(save_data = False):
+    IH = 21
+    n_sp_theta = 50
+    thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta))
+
+    strain = 0.1
+    strain = strain + 0.5 * strain * strain
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    candidates = []
+    cnt = 0
+    indices = []
+    if IH == 1:
+        sample_data = IH01_samples
+    elif IH == 21:
+        sample_data = IH21_samples
+        folder_name = "IH21"
+    elif IH == 28:
+        sample_data = IH28_samples
+        folder_name = "IH28"
+    for ti in sample_data:
+        # print(ti)
+        uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
+
+        batch_dim = len(thetas)
+        ti_batch = np.tile(ti, (batch_dim, 1))
+        nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
+        poisson_ratio = computeDirectionalPoissonRatio(n_tiling_params, nn_inputs, 
+                        tf.convert_to_tensor(thetas), model)
+        poisson_ratio = poisson_ratio.numpy()
+        cnt += 1
+
+        for nu in poisson_ratio:
+            if nu < 0.0:
+                indices.append(cnt)
+                candidates.append(ti)
+                if save_data:
+                    thetas_plot = thetas.copy()
+                    poisson_ratio_plot = poisson_ratio.copy()
+                    for i in range(n_sp_theta):
+                        thetas_plot= np.append(thetas_plot, thetas_plot[i] - np.pi)
+                        poisson_ratio_plot = np.append(poisson_ratio_plot, poisson_ratio_plot[i])
+                    thetas_plot = np.append(thetas_plot, thetas_plot[0])
+                    poisson_ratio_plot = np.append(poisson_ratio_plot, poisson_ratio_plot[0])
+                    plt.polar(thetas_plot, poisson_ratio_plot, label = "tensor", linewidth=3.0)
+                    plt.savefig("images/poisson_ratio/"+folder_name+"/poisson_ratio_"+str(cnt)+"_.png", dpi=300)
+                    # plt.savefig("images/poisson_ratio/"+folder_name+"/poisson_ratio_"+str(cnt)+"_"+str(ti[0])+","+str(ti[1])+","+str(ti[2])+","+str(ti[3])+"_.png", dpi=300)
+                    plt.close()
+                break
+    if save_data:
+        f = open("images/poisson_ratio/"+folder_name+"/negative.txt", "w+")
+        f.write("np.array([")
+        for j in range(len(candidates) - 1):
+            candidate = candidates[j]
+            f.write("[")
+            for i in range(n_tiling_params - 1):
+                f.write(str(candidate[i])+", ")
+            f.write(str(candidate[n_tiling_params - 1])+"], ")
+        f.write("[")
+        if len(candidates):
+            candidate = candidates[len(candidates) - 1]
+        for i in range(n_tiling_params - 1):
+            f.write(str(candidate[i])+", ")
+        f.write(str(candidate[n_tiling_params - 1])+"]])\n")
+        for candidate in candidates:
+            for i in range(n_tiling_params - 1):
+                f.write(str(candidate[i])+", ")
+            f.write(str(candidate[n_tiling_params - 1])+"\n")
+        f.close()
+    print("{}/{}".format(len(candidates), len(sample_data)))
+
+
+def fillPolarData(thetas, poisson_ratio):
+    n_sp_theta = len(thetas)
+    for i in range(n_sp_theta):
+        thetas= np.append(thetas, thetas[i] + np.pi)
+        poisson_ratio = np.append(poisson_ratio, poisson_ratio[i])
+    return thetas, poisson_ratio
+
+
+def poissonRatioModifyUI():
+    IH = 28
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    # ti = np.array([0.1224, 0.6, 0.13, 0.625])
+    ti = np.array([0.55, 0.7])
+    # ti = np.array([0.6, 0.6])
+    # ti = ti_default
+    thetas_nn = np.arange(0.0, np.pi, np.pi/float(50))
+    thetas = np.arange(0.0, np.pi, np.pi/float(50))
+    
+    thetas, poisson_ratio = getDirectionPoissonRatio(ti, n_tiling_params, model, 0.02, 20, False)
+
+    thetas_full, poisson_ratio_full = fillPolarData(thetas, poisson_ratio)
+
+    # x, y = pol2cart(poisson_ratio_full, thetas_full)
+    x, y = thetas_full, poisson_ratio_full
+
+    min_x, min_y, max_x, max_y = np.min(x), np.min(y), np.max(x), np.max(y)
+    dx, dy = max_x - min_x, max_y - min_y
+
+    poly = Polygon(np.column_stack([x, y]), animated=True, visible = False)
+
+
+    # fig, ax = plt.subplots()
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='polar')
+    fig.set_size_inches(20, 20)
+    ax.add_patch(poly)
+    p = MacroPropertyModifier(ax, poly, thetas_full, thetas_nn)
+    # ax.set_title('Move control points in Cartesian space')
+    # ax.set_xlim((min_x - 0.2 * dx, max_x + 0.2 * dx))
+    # ax.set_ylim((min_y - 0.2 * dy, max_y + 0.2 * dy))    
+    ax.set_ylim((min_y - 0.1 * dy, max_y + 0.1 * dy))    
+    # ax.set_ylim(0, 5.5)
+    ax.grid(linewidth=3)
+
+    # plt.axis('off')
+    # plt.polar([], [])
+    plt.show()
+
 if __name__ == "__main__":
     # computePoissonRatio()
     poissonRatioSA()
+    # poissonRatioModifyUI()
+    # findNegativePoissonRatioStructure(True)

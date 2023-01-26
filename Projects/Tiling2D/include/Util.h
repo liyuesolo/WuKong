@@ -28,4 +28,6 @@ void loadPBCDataFromMSHFile(const std::string& filename,
 Matrix<T, 2, 2> rotMat(T angle);
 
 T angleToXaxis(Vector<T, 2>& vec);
+
+void meshBooleanTest(Eigen::MatrixXd& V, Eigen::MatrixXi& F);
 #endif

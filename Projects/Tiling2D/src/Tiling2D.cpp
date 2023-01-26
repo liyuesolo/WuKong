@@ -126,9 +126,11 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             if (!valid_structure)
                 return false;
             solver.add_pbc_strain = true;
-            solver.strain_theta = 1.0/4.0 * M_PI;
-            solver.uniaxial_strain = 1.1;
-            solver.uniaxial_strain_ortho = 0.9;
+            solver.strain_theta = M_PI * 0.25;
+            solver.uniaxial_strain = 1.2;
+            // solver.strain_theta = 0.5 * M_PI;
+            // solver.uniaxial_strain = 1.2;
+            // solver.uniaxial_strain_ortho = 0.9;
             solver.biaxial = false;
             solver.pbc_strain_w = 1e6;
             solver.pbc_w = 1e6;
@@ -207,7 +209,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     }
 
     solver.project_block_PD = false;
-    solver.verbose = true;
+    solver.verbose = false;
     solver.max_newton_iter = 500;
     return true;
 }
@@ -418,9 +420,10 @@ void Tiling2D::generateForceDisplacementCurve(const std::string& result_folder)
 
 void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit)
 {
-    Eigen::MatrixXd V_tile(V.rows() * 9, 3);
-    Eigen::MatrixXi F_tile(F.rows() * 9, 3);
-    Eigen::MatrixXd C_tile(F.rows() * 9, 3);
+
+    Eigen::MatrixXd V_tile(V.rows() * n_unit, 3);
+    Eigen::MatrixXi F_tile(F.rows() * n_unit, 3);
+    Eigen::MatrixXd C_tile(F.rows() * n_unit, 3);
 
     TV left0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][0] * 2);
     TV right0 = solver.deformed.segment<2>(solver.pbc_pairs[0][0][1] * 2);
@@ -429,31 +432,46 @@ void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Matri
     TV dx = (right0 - left0);
     TV dy = (top0 - bottom0);
 
+    int n_unit_dir = std::sqrt(n_unit);
+
     int n_face = F.rows(), n_vtx = V.rows();
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < n_unit; i++)
         V_tile.block(i * n_vtx, 0, n_vtx, 3) = V;
     
-    tbb::parallel_for(0, n_vtx, [&](int i){
-        V_tile.row(n_vtx + i).head<2>() += dx;
-        V_tile.row(3 * n_vtx + i).head<2>() += dx;
-        V_tile.row(2 * n_vtx + i).head<2>() += dy;
-        V_tile.row(3 * n_vtx + i).head<2>() += dy;
-        V_tile.row(4 * n_vtx + i).head<2>() += dx;
-        V_tile.row(4 * n_vtx + i).head<2>() -= dy;
-        V_tile.row(5 * n_vtx + i).head<2>() -= dx;
-        V_tile.row(5 * n_vtx + i).head<2>() -= dy;
-        V_tile.row(6 * n_vtx + i).head<2>() -= dx;
-        V_tile.row(7 * n_vtx + i).head<2>() -= dy;
-        V_tile.row(8 * n_vtx + i).head<2>() -= dx;
-        V_tile.row(8 * n_vtx + i).head<2>() += dy;
-    });
+    int start = (n_unit_dir - 1) / 2;
+    int cnt = 0;
+    for (int left = -start; left < start + 1; left++)
+    {
+        for (int bottom = -start; bottom < start + 1; bottom++)
+        {
+            tbb::parallel_for(0, n_vtx, [&](int i){
+                V_tile.row(cnt * n_vtx + i).head<2>() += T(left) * dx + T(bottom) * dy;
+            });
+            cnt++;
+        }
+    }
+
+    // tbb::parallel_for(0, n_vtx, [&](int i){
+    //     V_tile.row(n_vtx + i).head<2>() += dx;
+    //     V_tile.row(3 * n_vtx + i).head<2>() += dx;
+    //     V_tile.row(2 * n_vtx + i).head<2>() += dy;
+    //     V_tile.row(3 * n_vtx + i).head<2>() += dy;
+    //     V_tile.row(4 * n_vtx + i).head<2>() += dx;
+    //     V_tile.row(4 * n_vtx + i).head<2>() -= dy;
+    //     V_tile.row(5 * n_vtx + i).head<2>() -= dx;
+    //     V_tile.row(5 * n_vtx + i).head<2>() -= dy;
+    //     V_tile.row(6 * n_vtx + i).head<2>() -= dx;
+    //     V_tile.row(7 * n_vtx + i).head<2>() -= dy;
+    //     V_tile.row(8 * n_vtx + i).head<2>() -= dx;
+    //     V_tile.row(8 * n_vtx + i).head<2>() += dy;
+    // });
     
 
     V = V_tile;
     Eigen::MatrixXi offset(n_face, 3);
     offset.setConstant(n_vtx);
 
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < n_unit; i++)
         F_tile.block(i * n_face, 0, n_face, 3) = F + i * offset;
     
     F = F_tile;
@@ -461,7 +479,7 @@ void Tiling2D::tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::Matri
     Eigen::MatrixXd C_unit = C;
     C_unit.col(2).setConstant(0.3); C_unit.col(1).setConstant(1.0);
     C_tile.block(0, 0, n_face, 3) = C;
-    for (int i = 1; i < 9; i++)
+    for (int i = 1; i < n_unit; i++)
         C_tile.block(i * n_face, 0, n_face, 3) = C;
     C = C_tile;
 
@@ -759,6 +777,74 @@ void Tiling2D::generateTenPointUniaxialStrainData(const std::string& result_fold
     out.close();
 }
 
+void Tiling2D::runSimUniAxialStrainAlongDirection(const std::string& result_folder,
+        int IH, int n_sample, const TV& strain_range, T theta, const std::vector<T>& params)
+{
+    std::ofstream out(result_folder + "strain_stress.txt");
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0, 0.75, 0;
+    fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt");
+    
+    generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
+    
+    solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    solver.verbose = false;
+    solver.prescribe_strain_tensor = false;
+    solver.biaxial = false;
+    int zero_strain_idx = 0;
+    std::vector<T> strain_samples;
+    // T strain_delta = (strain_range[1] - strain_range[0]) / T(n_sample);
+    T strain_delta = 0.01;
+    for (T strain = strain_range[0]; strain < strain_range[1]; strain += strain_delta)
+    {
+        strain_samples.push_back(strain);
+        if ((strain - 1.0) > 1e-6)
+            continue;
+        zero_strain_idx++;       
+    }
+    std::cout << "zero strain index " << zero_strain_idx << std::endl;
+
+    auto runSim = [&](T theta, T strain, T strain_ortho, int idx)
+    {
+        bool solve_succeed = solver.staticSolve();
+        solver.saveToOBJ(result_folder + std::to_string(idx)+"_"+std::to_string(strain_samples[idx])+".obj");
+        VectorXT residual(solver.num_nodes * 2); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        for (int m = 0; m < params.size(); m++)
+        {
+            out << params[m] << " ";
+        }
+        out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << " " << strain_ortho << " "
+            << residual.norm() << std::endl;
+    };
+
+    for (int i = zero_strain_idx; i < strain_samples.size(); i++)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        runSim(theta, strain_samples[i], 0.0, i);
+    }
+    solver.reset();
+    for (int i = zero_strain_idx; i > -1; i--)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        runSim(theta, strain_samples[i], 0.0, i);
+    }
+    out.close();
+}
+
 void Tiling2D::sampleUniAxialStrainAlongDirection(const std::string& result_folder,
         int n_sample, const TV& strain_range, T theta)
 {
@@ -791,8 +877,6 @@ void Tiling2D::sampleUniAxialStrainAlongDirection(const std::string& result_fold
 
     auto runSim = [&](T theta, T strain, T strain_ortho)
     {
-        
-
         bool solve_succeed = solver.staticSolve();
 
         VectorXT residual(solver.num_nodes * 2); residual.setZero();
@@ -1138,6 +1222,124 @@ void Tiling2D::sampleSingleStructurePoissonDisk(const std::string& result_folder
     }
 }
 
+void Tiling2D::generateGreenStrainSecondPKPairsServerToyExample(const std::vector<T>& params,
+        const std::string& result_folder)
+{
+    std::ofstream out;
+    out.open(result_folder + "data.txt");
+    TV range_strain(0.7, 1.5);
+    TV range_strain_biaixial(0.9, 1.2);
+	TV range_theta(0.0, M_PI);
+    
+    int n_sp_params = 10;
+    int n_sp_strain = 50;
+    int n_sp_strain_bi = 10;
+    int n_sp_theta = 15;
+
+    T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
+    T delta_strain_bi = (range_strain_biaixial[1] - range_strain_biaixial[0]) / T(n_sp_strain_bi);
+
+    auto runSim = [&](int& sim_cnt, T theta, T strain, T strain_ortho)
+    {
+        sim_cnt++;
+            
+        bool solve_succeed = solver.staticSolve();
+
+        VectorXT residual(solver.num_nodes * 2); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+        for (int m = 0; m < params.size(); m++)
+        {
+            out << params[m] << " ";
+        }
+        out << std::setprecision(16) << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
+            << " " << strain_ortho << " "
+            << residual.norm() << std::endl;
+        if (!solve_succeed)
+        {
+            solver.reset();
+            solver.saveToOBJ(result_folder + "_failure_theta_" + std::to_string(theta)
+                +"_strain_" + std::to_string(strain) + "_strain_ortho_" + std::to_string(strain_ortho)+".obj");
+        }
+    };
+
+    generateToyExampleStructure(params, result_folder);
+    return;
+    // solver.pbc_translation_file = result_folder + "structure_translation.txt";
+    
+    bool valid_structure = initializeSimulationDataFromFiles(result_folder + "structure.vtk", PBC_XY);
+    if (!valid_structure)
+        return;
+    solver.verbose = false;
+    int cnt = 0;
+    for(int l = 0; l < n_sp_theta; l++)
+    {
+        solver.biaxial = false;
+        T theta = range_theta[0] + ((double)l/(double)n_sp_theta)*(range_theta[1] - range_theta[0]);
+        // uniaxial tension
+        solver.strain_theta = theta;
+        solver.reset();
+        for (T strain = 1.001; strain < range_strain[1]; strain += delta_strain)
+        {    
+            solver.uniaxial_strain = strain;
+            runSim(cnt, theta, strain, 0.0);
+        }
+        // uniaxial compression
+        solver.reset();
+        for (T strain = 0.999; strain > range_strain[0]; strain -= delta_strain)
+        {    
+            solver.uniaxial_strain = strain;
+            runSim(cnt, theta, strain, 0.0);
+        }
+        // biaxial tension
+        // break;
+        // solver.reset();
+        solver.biaxial = true;
+        for (T strain = 1.001; strain < range_strain_biaixial[1]; strain += delta_strain_bi)
+        {   
+            solver.reset(); 
+            solver.uniaxial_strain = strain;
+            for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(cnt, theta, strain, strain_ortho);
+            }
+            solver.reset();
+            for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(cnt, theta, strain, strain_ortho);
+            }
+        }
+        // solver.reset();
+        for (T strain = 0.999; strain > range_strain_biaixial[0]; strain -= delta_strain_bi)
+        {   
+            solver.reset(); 
+            solver.uniaxial_strain = strain;
+            for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(cnt, theta, strain, strain_ortho);
+            }
+            solver.reset();
+            for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            {
+                solver.uniaxial_strain_ortho = strain_ortho;
+                runSim(cnt, theta, strain, strain_ortho);
+            }
+        }
+        solver.biaxial = false;
+    }
+    
+    out.close();
+
+}
+    
+
 void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& params, 
     int IH, const std::string& prefix,
     const std::string& result_folder, int resume_start)
@@ -1153,9 +1355,9 @@ void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& para
 	TV range_theta(0.0, M_PI);
     
     int n_sp_params = 10;
-    int n_sp_strain = 20;
+    int n_sp_strain = 50;
     int n_sp_strain_bi = 10;
-    int n_sp_theta = 10;
+    int n_sp_theta = 15;
 
     T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
     T delta_strain_bi = (range_strain_biaixial[1] - range_strain_biaixial[0]) / T(n_sp_strain_bi);
@@ -1179,7 +1381,7 @@ void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& para
         {
             out << params[m] << " ";
         }
-        out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+        out << std::setprecision(16) << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
             << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
             << secondPK_stress(1, 0) << " " << psi << " " << theta << " " << strain 
             << " " << strain_ortho << " "
@@ -1207,7 +1409,7 @@ void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& para
     if (!valid_structure)
         return;
     solver.verbose = false;
-    int sim_cnt = 0;
+    int cnt = 0;
     for(int l = 0; l < n_sp_theta; l++)
     {
         solver.biaxial = false;
@@ -1215,53 +1417,53 @@ void Tiling2D::generateGreenStrainSecondPKPairsServer(const std::vector<T>& para
         // uniaxial tension
         solver.strain_theta = theta;
         solver.reset();
-        for (T strain = 1.0; strain < range_strain[1]; strain += delta_strain)
+        for (T strain = 1.001; strain < range_strain[1]; strain += delta_strain)
         {    
             solver.uniaxial_strain = strain;
-            runSim(sim_cnt, theta, strain, 0.0);
+            runSim(cnt, theta, strain, 0.0);
         }
         // uniaxial compression
         solver.reset();
-        for (T strain = 1.0; strain > range_strain[0]; strain -= delta_strain)
+        for (T strain = 0.999; strain > range_strain[0]; strain -= delta_strain)
         {    
             solver.uniaxial_strain = strain;
-            runSim(sim_cnt, theta, strain, 0.0);
+            runSim(cnt, theta, strain, 0.0);
         }
         // biaxial tension
         // break;
         // solver.reset();
         solver.biaxial = true;
-        for (T strain = 1.0; strain < range_strain_biaixial[1]; strain += delta_strain_bi)
+        for (T strain = 1.001; strain < range_strain_biaixial[1]; strain += delta_strain_bi)
         {   
             solver.reset(); 
             solver.uniaxial_strain = strain;
-            for (T strain_ortho = 1.0; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
             {
                 solver.uniaxial_strain_ortho = strain_ortho;
-                runSim(sim_cnt, theta, strain, strain_ortho);
+                runSim(cnt, theta, strain, strain_ortho);
             }
             solver.reset();
-            for (T strain_ortho = 1.0; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
             {
                 solver.uniaxial_strain_ortho = strain_ortho;
-                runSim(sim_cnt, theta, strain, strain_ortho);
+                runSim(cnt, theta, strain, strain_ortho);
             }
         }
         // solver.reset();
-        for (T strain = 1.0; strain > range_strain_biaixial[0]; strain -= delta_strain_bi)
+        for (T strain = 0.999; strain > range_strain_biaixial[0]; strain -= delta_strain_bi)
         {   
             solver.reset(); 
             solver.uniaxial_strain = strain;
-            for (T strain_ortho = 1.0; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+            for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
             {
                 solver.uniaxial_strain_ortho = strain_ortho;
-                runSim(sim_cnt, theta, strain, strain_ortho);
+                runSim(cnt, theta, strain, strain_ortho);
             }
             solver.reset();
-            for (T strain_ortho = 1.0; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+            for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
             {
                 solver.uniaxial_strain_ortho = strain_ortho;
-                runSim(sim_cnt, theta, strain, strain_ortho);
+                runSim(cnt, theta, strain, strain_ortho);
             }
         }
         solver.biaxial = false;

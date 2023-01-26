@@ -1,5 +1,37 @@
+#include <igl/readOBJ.h>
+#include <igl/copyleft/cgal/mesh_boolean.h>
 #include <unordered_set>
 #include "../include/Util.h"
+
+void meshBooleanTest(Eigen::MatrixXd& V, 
+    Eigen::MatrixXi& F)
+{
+    using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+    using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
+    std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/teaser/";
+
+    std::string source_file = base_folder + "infill01_s.obj";
+    std::string target_file = base_folder + "part1.obj";
+    // std::string source_file = base_folder + "shoe_cut_latest.obj";
+    // std::string target_file = base_folder + "shoe_initial_infill_design.obj";
+    MatrixXT V_src, V_dst;
+    MatrixXi F_src, F_dst;
+    igl::readOBJ(source_file, V_src, F_src);
+    igl::readOBJ(target_file, V_dst, F_dst);
+
+    // MESH_BOOLEAN_TYPE_UNION = 0,
+    // MESH_BOOLEAN_TYPE_INTERSECT = 1,
+    // MESH_BOOLEAN_TYPE_MINUS = 2,
+    // MESH_BOOLEAN_TYPE_XOR = 3,
+    // MESH_BOOLEAN_TYPE_RESOLVE = 4,
+    // NUM_MESH_BOOLEAN_TYPES = 5
+
+    bool succeed = igl::copyleft::cgal::mesh_boolean(V_src, F_src, V_dst, F_dst, igl::MESH_BOOLEAN_TYPE_INTERSECT, V, F);
+    // bool succeed = igl::copyleft::cgal::mesh_boolean(V_src, F_src, V_dst, F_dst, igl::MESH_BOOLEAN_TYPE_UNION, V, F);
+    std::cout << "SUCCEED " << succeed << std::endl;
+
+}
+
 void loadQuadraticTriangleMeshFromVTKFile(const std::string& filename, Eigen::MatrixXd& V, 
     Eigen::MatrixXi& F, Eigen::MatrixXi& V_quad)
 {

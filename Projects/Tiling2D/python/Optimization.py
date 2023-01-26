@@ -169,7 +169,7 @@ def valueGradHessian(n_tiling_params, inputs, model):
 
 @tf.function
 def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
-    batch_dim = inputs.shape[0]
+    
     thetas = tf.expand_dims(thetas, axis=1)
     
     d_voigt = tf.concat((tf.math.cos(thetas) * tf.math.cos(thetas), 

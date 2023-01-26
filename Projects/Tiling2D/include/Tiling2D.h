@@ -77,17 +77,18 @@ public:
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, 
         Eigen::MatrixXd& C, bool show_train = false);
 
-
     void tilingMeshInX(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
     void tileUnitCell(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, int n_unit = 2);
 
     void generateForceDisplacementPolarCurve(const std::string& result_folder);
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
-
+    
     // ################ Generate Result ###############
     void generateTenPointUniaxialStrainData(const std::string& result_folder,
         int IH, T theta, const TV& strain_range, T strain_delta, const std::vector<T>& params);
+    void runSimUniAxialStrainAlongDirection(const std::string& result_folder,
+        int IH, int n_sample, const TV& strain_range, T theta, const std::vector<T>& params);
 
     // ################ Generate Training Data ###############
     void generateNHHomogenousData(const std::string& result_folder);
@@ -113,6 +114,8 @@ public:
     void generateGreenStrainSecondPKPairsServer(const std::vector<T>& params, 
         int IH, const std::string& prefix,
         const std::string& result_folder, int resume_start = 0);
+    void generateGreenStrainSecondPKPairsServerToyExample(const std::vector<T>& params,
+        const std::string& result_folder);
     void sampleStrain(const std::string& result_folder);
     void sampleTilingParamsAlongStrain(const std::string& result_folder);
 
@@ -121,6 +124,10 @@ public:
     // ########################## UnitPatch.cpp ########################## 
     // generate periodic mesh
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, 
+        std::vector<TV2>& pbc_corners, bool save_to_file = false, 
+        std::string prefix = "");
+    
+    void generatePeriodicMeshHardCodeResolution(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, 
         std::string prefix = "");
     
@@ -137,6 +144,9 @@ public:
     void generateSandwichMeshNonPeridoic(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
 
+    void generateToyExample(T param);
+    void generateToyExampleStructure(const std::vector<T>& params,
+        const std::string& result_folder);
     void generateSandwichStructureBatch();
     void generateSandwichBatchChangingTilingParams();
     void generateOneStructure();
@@ -157,7 +167,8 @@ public:
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, 
         const std::vector<T>& params,
-        const Vector<T, 4>& eij, const std::string& filename);
+        const Vector<T, 4>& eij, const std::string& filename, T angle = 0.0);
+    
         
 private:
     void generate3DSandwichMesh(std::vector<std::vector<TV2>>& polygons, 

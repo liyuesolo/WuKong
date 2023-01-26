@@ -14,7 +14,7 @@ import keras.backend as K
 from Summary import *
 import tensorflow_probability as tfp
 import scipy
-
+tf.keras.backend.set_floatx('float64')
 n_input = 3
 
 def relativeL2(y_true, y_pred):
@@ -25,7 +25,7 @@ def relativeL2(y_true, y_pred):
         y_pred_normalized = tf.divide(y_pred, norm)
         return K.mean(K.square(y_true_normalized - y_pred_normalized))
     else:
-        y_true_normalized = tf.ones(y_true.shape, tf.float32)
+        y_true_normalized = tf.ones(y_true.shape, tf.float64)
         y_pred_normalized = tf.divide(y_pred + K.epsilon(), y_true + K.epsilon())
         return K.mean(K.square(y_true_normalized - y_pred_normalized))
         
@@ -34,7 +34,9 @@ def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconver
     all_label = [] 
     
     for line in open(filename).readlines():
+        # item = [np.around(float(i), decimals=6) for i in line.strip().split(" ")[:]]
         item = [float(i) for i in line.strip().split(" ")[:]]
+        item[0] = np.round(item[0], 8)
         if (ignore_unconverging_result):
             if (item[-1] > 1e-6 or math.isnan(item[-1])):
                 continue
@@ -58,11 +60,11 @@ def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconver
     # exit(0)
     start = 0
     end = -1
-    all_data = np.array(all_data[start:]).astype(np.float32)
-    all_label = np.array(all_label[start:]).astype(np.float32) 
+    all_data = np.array(all_data[start:]).astype(np.float64)
+    all_label = np.array(all_label[start:]).astype(np.float64) 
     
-    # all_data = np.array(all_data).astype(np.float32)
-    # all_label = np.array(all_label).astype(np.float32)
+    # all_data = np.array(all_data).astype(np.float64)
+    # all_label = np.array(all_label).astype(np.float64)
     
     indices = np.arange(all_data.shape[0])
     if (shuffle):
@@ -78,8 +80,8 @@ loss_l2 = tf.keras.losses.MeanSquaredError()
 loss_logl2 = tf.keras.losses.MeanSquaredLogarithmicError()
 # loss_function = relativeL2
 
-w_grad = tf.constant(1.0, dtype=tf.float32)
-w_e = tf.constant(1.0, dtype=tf.float32)
+w_grad = tf.constant(1.0, dtype=tf.float64)
+w_e = tf.constant(1.0, dtype=tf.float64)
 
 def generator(train_data, train_label):    
     indices = np.arange(train_data.shape[0])
@@ -433,7 +435,7 @@ def trainSumGrad(n_tiling_params, model_name, train_data, train_label, validatio
 
 
 def train(n_tiling_params, model_name, train_data, train_label, validation_data, validation_label):
-    batch_size = np.minimum(50000, len(train_data))
+    batch_size = np.minimum(30000, len(train_data))
     print("batch size: {}".format(batch_size))
     # model = buildSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
@@ -448,7 +450,7 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
 
     losses = [[], []]
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    # model.load_weights("/home/yueli/Documents/ETH/WuKong/Projects/Tilisng2D/python/Models/67/" + model_name + '.tf')
+    model.load_weights("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/Models/Toy/" + model_name + '.tf')
     count = 0
     with open('counter.txt', 'r') as f:
         count = int(f.read().splitlines()[-1])
@@ -497,7 +499,7 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
                          validation_loss_grad, validation_loss_e, \
                         g_norm_sum, g_norm0))
         summary.saveToTensorboard(train_loss_grad, train_loss_e, validation_loss_grad, validation_loss_e, iteration)
-        if iteration % 10000 ==0:
+        if iteration % 500 ==0:
             model.save_weights(save_path + model_name + '.tf')
 
     
@@ -528,21 +530,26 @@ def test(n_tiling_params, model_name, test_data, test_label):
     
     
 if __name__ == "__main__":
-    n_tiling_params = 2
+    n_tiling_params = 1
     
-    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH21/all_data_IH21_shuffled.txt"  
+    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerToy/all_data_toy_shuffled.txt"  
     # full_data = "/home/yueli/Documents/ETH/SandwichStructure/Server/all_data_IH50_shuffled.txt"
     # full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerIH01/all_data_IH01_shuffled.txt"
     # full_data = "./stvk_gt.txt"  
     
     data_all, label_all = loadDataSplitTest(n_tiling_params, full_data, False, True)
+    # x=np.arange(0, len(data_all))
+    # plt.scatter(data_all[:, 0], label_all[:, -1])
+    # plt.savefig("data.png", dpi = 300)
+    # plt.close()
+    # exit(0)
     
 
     five_percent = int(len(data_all) * 0.05)
     # five_percent = int(len(data_all) * 0.2)
     
-    train_data =  data_all[:-five_percent]
-    train_label =  label_all[:-five_percent]
+    train_data =  data_all#[:-five_percent]
+    train_label =  label_all#[:-five_percent]
 
     validation_data = data_all[-five_percent:]
     validation_label = label_all[-five_percent:]
@@ -551,7 +558,7 @@ if __name__ == "__main__":
     # train_label = label_all
     # validation_label = label_all
 
-    model_name = "IH21"
+    model_name = "Toy"
         
     train(n_tiling_params, model_name, 
         train_data, train_label, validation_data, validation_label)
