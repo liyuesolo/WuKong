@@ -4,17 +4,17 @@
 static void
 get_closest_idx(const double &xp, const double &yp, const VectorXT &nodes, const VectorXi &next, int &closest_idx,
                 bool &is_edge) {
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / CellFunction::nx;
 
     double mindistsq = 1e10;
 
     double x0, y0, x1, y1;
     int x0i, y0i, x1i, y1i;
     for (int i = 0; i < n_nodes; i++) {
-        x0i = i * 2 + 0;
-        y0i = i * 2 + 1;
-        x1i = next(i) * 2 + 0;
-        y1i = next(i) * 2 + 1;
+        x0i = i * CellFunction::nx + 0;
+        y0i = i * CellFunction::nx + 1;
+        x1i = next(i) * CellFunction::nx + 0;
+        y1i = next(i) * CellFunction::nx + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -53,7 +53,7 @@ get_closest_idx(const double &xp, const double &yp, const VectorXT &nodes, const
 void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                                        const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     double xp, yp;
     int x0i, y0i, x1i, y1i;
@@ -66,10 +66,10 @@ void CellFunctionImageMatch2::addValue(const VectorXT &site, const VectorXT &nod
         bool is_edge;
         get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
-        x0i = i * 2 + 0;
-        y0i = i * 2 + 1;
-        x1i = next(i) * 2 + 0;
-        y1i = next(i) * 2 + 1;
+        x0i = i * nx + 0;
+        y0i = i * nx + 1;
+        x1i = next(i) * nx + 0;
+        y1i = next(i) * nx + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -91,7 +91,7 @@ void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &
                                           VectorXT &gradient_c,
                                           VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     double xp, yp;
     int x0i, y0i, x1i, y1i;
@@ -105,10 +105,10 @@ void CellFunctionImageMatch2::addGradient(const VectorXT &site, const VectorXT &
         bool is_edge;
         get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
-        x0i = i * 2 + 0;
-        y0i = i * 2 + 1;
-        x1i = next(i) * 2 + 0;
-        y1i = next(i) * 2 + 1;
+        x0i = i * nx + 0;
+        y0i = i * nx + 1;
+        x1i = next(i) * nx + 0;
+        y1i = next(i) * nx + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
@@ -142,7 +142,7 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
                                          MatrixXT &hessian,
                                          const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
 
@@ -158,10 +158,10 @@ void CellFunctionImageMatch2::addHessian(const VectorXT &site, const VectorXT &n
         bool is_edge;
         get_closest_idx(xp, yp, nodes, next, i, is_edge);
 
-        x0i = i * 2 + 0;
-        y0i = i * 2 + 1;
-        x1i = next(i) * 2 + 0;
-        y1i = next(i) * 2 + 1;
+        x0i = i * nx + 0;
+        y0i = i * nx + 1;
+        x1i = next(i) * nx + 0;
+        y1i = next(i) * nx + 1;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);

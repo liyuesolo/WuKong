@@ -4,7 +4,7 @@
 void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                                        const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     double xp, yp;
     int x0i, y0i, x1i, y1i;
@@ -14,10 +14,10 @@ void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nod
         yp = cellInfo->border_pix(p * 2 + 1);
 
         for (int i = 0; i < n_nodes; i++) {
-            x0i = i * 2 + 0;
-            y0i = i * 2 + 1;
-            x1i = next(i) * 2 + 0;
-            y1i = next(i) * 2 + 1;
+            x0i = i * nx + 0;
+            y0i = i * nx + 1;
+            x1i = next(i) * nx + 0;
+            y1i = next(i) * nx + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);
@@ -35,7 +35,7 @@ void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &
                                           VectorXT &gradient_c,
                                           VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     double xp, yp;
     int x0i, y0i, x1i, y1i;
@@ -46,10 +46,10 @@ void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &
         yp = cellInfo->border_pix(p * 2 + 1);
 
         for (int i = 0; i < n_nodes; i++) {
-            x0i = i * 2 + 0;
-            y0i = i * 2 + 1;
-            x1i = next(i) * 2 + 0;
-            y1i = next(i) * 2 + 1;
+            x0i = i * nx + 0;
+            y0i = i * nx + 1;
+            x1i = next(i) * nx + 0;
+            y1i = next(i) * nx + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);
@@ -83,7 +83,7 @@ void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &n
                                          MatrixXT &hessian,
                                          const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
-    int n_nodes = nodes.rows() / 2;
+    int n_nodes = nodes.rows() / nx;
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
 
@@ -96,10 +96,10 @@ void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &n
         yp = cellInfo->border_pix(p * 2 + 1);
 
         for (int i = 0; i < n_nodes; i++) {
-            x0i = i * 2 + 0;
-            y0i = i * 2 + 1;
-            x1i = next(i) * 2 + 0;
-            y1i = next(i) * 2 + 1;
+            x0i = i * nx + 0;
+            y0i = i * nx + 1;
+            x1i = next(i) * nx + 0;
+            y1i = next(i) * nx + 1;
 
             x0 = nodes(x0i);
             y0 = nodes(y0i);

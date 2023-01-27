@@ -2,9 +2,10 @@
 
 #include "Boundary.h"
 
-class CircleBoundary : public Boundary {
+class RegularPolygonBoundary : public Boundary {
 
 public:
+    int nsides;
 
 private:
 
@@ -15,7 +16,7 @@ private:
     virtual void computeHessian();
 
 public:
-    CircleBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
+    RegularPolygonBoundary(const VectorXT &p_, const VectorXi &free_, const int n) : Boundary(p_, free_), nsides(n) {
         computeVertices();
         computeGradient();
         computeHessian();

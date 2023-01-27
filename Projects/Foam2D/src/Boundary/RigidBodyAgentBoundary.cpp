@@ -5,6 +5,11 @@ void RigidBodyAgentBoundary::computeVertices() {
     VectorXT box(4 * 2);
     box << -bx, -by, bx, -by, bx, by, -bx, by;
 
+    VectorXi r_box = -1 * VectorXi::Ones(4);
+    VectorXi r_agent = r_map;
+    r_map.resize(r_agent.rows() + r_box.rows());
+    r_map << r_agent, r_box;
+
     double dx = p(0);
     double dy = p(1);
     double t = p(2);
@@ -19,12 +24,13 @@ void RigidBodyAgentBoundary::computeVertices() {
         agent(i * 2 + 1) = (x0 * sin(t) + y0 * cos(t)) + dy;
     }
 
-    v.resize(box.rows() + agent.rows());
-    v << box, agent;
+    v.resize(agent.rows() + box.rows());
+    v << agent, box;
 
     int n_vtx = v.rows() / 2;
     next.resize(n_vtx);
-    next << Eigen::VectorXi::LinSpaced(3, 1, 3), 0, Eigen::VectorXi::LinSpaced(nsides - 1, 5, nsides - 1 + 4), 4;
+    next << Eigen::VectorXi::LinSpaced(nsides - 1, 1, nsides - 1), 0, Eigen::VectorXi::LinSpaced(3, nsides + 1,
+                                                                                                 nsides + 3), nsides;
 
     holes.resize(1, 2);
     holes.row(0) = TV(dx, dy);
@@ -41,13 +47,13 @@ void RigidBodyAgentBoundary::computeGradient() {
         double x0 = agentShape(i * 2 + 0);
         double y0 = agentShape(i * 2 + 1);
 
-        setGradientEntry(8 + i * 2 + 0, 0, 1);
-        setGradientEntry(8 + i * 2 + 0, 1, 0);
-        setGradientEntry(8 + i * 2 + 0, 2, -x0 * sin(t) - y0 * cos(t));
+        setGradientEntry(i * 2 + 0, 0, 1);
+        setGradientEntry(i * 2 + 0, 1, 0);
+        setGradientEntry(i * 2 + 0, 2, -x0 * sin(t) - y0 * cos(t));
 
-        setGradientEntry(8 + i * 2 + 1, 0, 0);
-        setGradientEntry(8 + i * 2 + 1, 1, 1);
-        setGradientEntry(8 + i * 2 + 1, 2, x0 * cos(t) - y0 * sin(t));
+        setGradientEntry(i * 2 + 1, 0, 0);
+        setGradientEntry(i * 2 + 1, 1, 1);
+        setGradientEntry(i * 2 + 1, 2, x0 * cos(t) - y0 * sin(t));
     }
 }
 
@@ -57,19 +63,19 @@ void RigidBodyAgentBoundary::computeHessian() {
     double t = p(2);
 
     d2vdp2.resize(v.rows());
-    for (int i = 0; i < 8; i++) {
-        d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
-    }
     int nsides = agentShape.rows() / 2;
     for (int i = 0; i < nsides; i++) {
         double x0 = agentShape(i * 2 + 0);
         double y0 = agentShape(i * 2 + 1);
 
-        d2vdp2[8 + i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
-        d2vdp2[8 + i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
+        d2vdp2[i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
+        d2vdp2[i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
 
-        setHessianEntry(8 + i * 2 + 0, 2, 2, -x0 * cos(t) + y0 * sin(t));
-        setHessianEntry(8 + i * 2 + 1, 2, 2, -x0 * sin(t) - y0 * cos(t));
+        setHessianEntry(i * 2 + 0, 2, 2, -x0 * cos(t) + y0 * sin(t));
+        setHessianEntry(i * 2 + 1, 2, 2, -x0 * sin(t) - y0 * cos(t));
+    }
+    for (int i = 0; i < 8; i++) {
+        d2vdp2[nsides * 2 + i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

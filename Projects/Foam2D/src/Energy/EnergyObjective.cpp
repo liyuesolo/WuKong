@@ -50,6 +50,7 @@ void EnergyObjective::check_gradients(const VectorXd &y) const {
         VectorXd gradm2 = get_dOdc(xp);
 
         for (int j = 0; j < grad.rows(); j++) {
+            if (fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-4) continue;
             std::cout << "check hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " " << hess(j, i)
                       << std::endl;
             double a = (gradp[j] - gradm[j]) - (2 * eps) * hess(j, i);

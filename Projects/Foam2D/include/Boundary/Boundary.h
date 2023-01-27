@@ -42,6 +42,11 @@ public:
     std::vector<MatrixXT> d2vdp2;
 
     VectorXi next;
+    VectorXi r_map;
+
+    VectorXT radii;
+    MatrixXT drdp;
+    std::vector<MatrixXT> d2rdp2;
 
     MatrixXT holes;
 
@@ -52,6 +57,12 @@ private:
     virtual void computeGradient() = 0;
 
     virtual void computeHessian() = 0;
+
+    bool straightBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect);
+
+    void
+    curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0, BoundaryIntersection &intersect0,
+                               bool &isInt1, BoundaryIntersection &intersect1);
 
 public:
     virtual bool checkValid() { return true; };
@@ -75,6 +86,18 @@ protected:
         }
     }
 
+    inline void setRGradientEntry(int ir, int ip, double value) {
+        if (free_map(ip) >= 0) {
+            drdp(ir, free_map(ip)) = value;
+        }
+    }
+
+    inline void setRHessianEntry(int ir, int ip0, int ip1, double value) {
+        if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
+            d2rdp2[ir](free_map(ip0), free_map(ip1)) = value;
+        }
+    }
+
 public:
     Boundary(const VectorXT &p_, const VectorXi &free_);
 
@@ -83,8 +106,6 @@ public:
     VectorXT get_p_free();
 
     bool pointInBounds(const TV &point);
-
-    bool boundarySegmentIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect);
 
     bool getCellIntersections(const std::vector<TV> &nodes, std::vector<BoundaryIntersection> &intersections);
 };

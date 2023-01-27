@@ -3,15 +3,13 @@
 
 void CircleBoundary::computeVertices() {
     double r = p(0);
-    double t0 = p(1);
 
-    v.resize(nsides * 2);
-    for (int i = 0; i < nsides; i++) {
-        double t = t0 + i * M_PI * 2.0 / nsides;
+    v.resize(4 * 2);
+    v << r, 0, 0, r, -r, 0, 0, -r;
+    r_map = VectorXi::Zero(4);
 
-        v(i * 2 + 0) = r * cos(t);
-        v(i * 2 + 1) = r * sin(t);
-    }
+    radii.resize(1);
+    radii(0) = r;
 
     int n_vtx = v.rows() / 2;
     next.resize(n_vtx);
@@ -19,41 +17,24 @@ void CircleBoundary::computeVertices() {
 }
 
 void CircleBoundary::computeGradient() {
-    double r = p(0);
-    double t0 = p(1);
-
     dvdp = MatrixXT::Zero(v.rows(), nfree);
-    for (int i = 0; i < nsides; i++) {
-        double t = t0 + i * M_PI * 2.0 / nsides;
+    setGradientEntry(0, 0, 1);
+    setGradientEntry(3, 0, 1);
+    setGradientEntry(4, 0, -1);
+    setGradientEntry(7, 0, -1);
 
-        setGradientEntry(i * 2 + 0, 0, cos(t));
-        setGradientEntry(i * 2 + 0, 1, -r * sin(t));
-
-        setGradientEntry(i * 2 + 1, 0, sin(t));
-        setGradientEntry(i * 2 + 1, 1, r * cos(t));
-    }
+    drdp = MatrixXT::Zero(radii.rows(), nfree);
+    setRGradientEntry(0, 0, 1);
 }
 
 void CircleBoundary::computeHessian() {
-    double r = p(0);
-    double t0 = p(1);
-
     d2vdp2.resize(v.rows());
-    for (int i = 0; i < nsides; i++) {
-        d2vdp2[i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
-        d2vdp2[i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
-
-        double t = t0 + i * M_PI * 2.0 / nsides;
-
-        setHessianEntry(i * 2 + 0, 0, 0, 0);
-        setHessianEntry(i * 2 + 0, 0, 1, -sin(t));
-        setHessianEntry(i * 2 + 0, 1, 0, -sin(t));
-        setHessianEntry(i * 2 + 0, 1, 1, -r * cos(t));
-
-        setHessianEntry(i * 2 + 1, 0, 0, 0);
-        setHessianEntry(i * 2 + 1, 0, 1, cos(t));
-        setHessianEntry(i * 2 + 1, 1, 0, cos(t));
-        setHessianEntry(i * 2 + 1, 1, 1, -r * sin(t));
+    for (int i = 0; i < v.rows(); i++) {
+        d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
+    }
+    d2rdp2.resize(radii.rows());
+    for (int i = 0; i < radii.rows(); i++) {
+        d2rdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

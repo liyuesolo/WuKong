@@ -28,6 +28,9 @@ struct CellInfo {
 
 class CellFunction {
 public:
+    const static int nx = 3;
+
+public:
     virtual void
     addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
              const CellInfo *cellInfo) const = 0;

@@ -13,6 +13,7 @@
 #include "../src/optLib/ParallelLineSearchMinimizers.h"
 
 #include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
+#include "Projects/Foam2D/include/Boundary/RegularPolygonBoundary.h"
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 
@@ -80,7 +81,7 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
     info->n_fixed = 8;
 
     VectorXT inf_points(info->n_fixed * 2);
-    double inf = 1000;
+    double inf = 100;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double dx = 0.75;
@@ -119,7 +120,34 @@ void Foam2D::initDynamicBox(int n_free_in) {
 
     TV p(0.75 * sqrt(2.0), M_PI_4);
     IV free_idx(0, 1);
-    info->boundary = new CircleBoundary(p, free_idx, 4);
+    info->boundary = new RegularPolygonBoundary(p, free_idx, 4);
+
+    resetVertexParams();
+}
+
+void Foam2D::initDynamicCircle(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r = 0.75;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-r / 2, r / 2);
+
+    vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    VectorXT p(1);
+    p(0) = r;
+    VectorXi free_idx(1);
+    free_idx(0) = 0;
+//    VectorXi free_idx = {};
+    info->boundary = new CircleBoundary(p, free_idx);
 
     resetVertexParams();
 }
@@ -144,6 +172,15 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
         agent(i * 2 + 0) = a * cos(-i * 2 * M_PI / nsides);
         agent(i * 2 + 1) = b * sin(-i * 2 * M_PI / nsides);
     }
+    VectorXT r = {};
+    VectorXi r_map = -1 * VectorXi::Ones(nsides);
+
+//    VectorXT agent(4 * 2);
+//    double a = 0.15;
+//    agent << a, 0, 0, -a, -a, 0, 0, a;
+//    VectorXT r(1);
+//    r(0) = -a;
+//    VectorXi r_map = VectorXi::Zero(4);
 
     double dx = 0.75;
     std::random_device rd;
@@ -166,7 +203,7 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    VectorXi free_idx(1);
 //    free_idx(0) = 2;
     IV3 free_idx(0, 1, 2);
-    info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent);
+    info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent, r, r_map);
 
     resetVertexParams();
 }
@@ -353,6 +390,10 @@ void Foam2D::optimize(int mode) {
         case 2:
             if (info->boundary->nfree > 0) {
                 std::cout << "WARNING: Image match with free boundaries not supported!" << std::endl;
+                assert(0);
+            }
+            if (info->boundary->radii.rows() > 0) {
+                std::cout << "WARNING: Image match with curved boundaries not supported!" << std::endl;
                 assert(0);
             }
 
@@ -624,6 +665,32 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
     }
 }
 
+static int getNumPointsSubdivide(TV p0, TV p1, double r) {
+    return 10;
+}
+
+static MatrixXT getPointsSubdivide(TV p0, TV p1, double r) {
+    double x0 = p0.x(), y0 = p0.y(), x1 = p1.x(), y1 = p1.y();
+
+    double a = (p1 - p0).norm();
+    double d = r / 2 * sqrt(4 - pow(a / r, 2));
+    double theta = atan2(-(x1 - x0), (y1 - y0));
+    double xc = (x0 + x1) / 2 - d * cos(theta);
+    double yc = (y0 + y1) / 2 - d * sin(theta);
+    double t0 = atan2(y0 - yc, x0 - xc);
+    double t1 = atan2(y1 - yc, x1 - xc);
+    if (t1 < t0) t1 += 2 * M_PI;
+
+    int numPoints = getNumPointsSubdivide(p0, p1, r);
+    VectorXT t = VectorXT::LinSpaced(numPoints - 1, t0 + (t1 - t0) / numPoints, t1 - (t1 - t0) / numPoints);
+
+    MatrixXT points(numPoints - 1, 2);
+    points.col(0) = xc + r * t.array().cos();
+    points.col(1) = yc + r * t.array().sin();
+
+    return points;
+}
+
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
                                        MatrixXi &F, MatrixXT &Fc, int colormode = 0) {
     info->getTessellation()->tessellate(vertices, params, info->boundary, info->n_free);
@@ -652,7 +719,17 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
     int numEdges = 0;
     for (Cell cell: cells) {
-        numEdges += cell.edges.size();
+        for (CellEdge edge: cell.edges) {
+            if (edge.r_idx >= 0) {
+                TV p0 = nodes.segment<2>(edge.startNode * 2);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
+                double r = info->boundary->radii(edge.r_idx);
+                numEdges += getNumPointsSubdivide(p0, p1, r);
+            } else {
+                numEdges += 1;
+            }
+        }
+        numEdges += 4;
     }
 
     V.resize(numEdges, 3);
@@ -664,46 +741,95 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     Fc.resize(numEdges, 3);
     Fc.setZero();
 
-    int currNumEdges = 0;
-    int currNumFaces = 0;
+    int currTotalEdges = 0;
+    int currTotalFaces = 0;
     for (int i = 0; i < n_cells; i++) {
-        MatrixXT Ptri;
-        Ptri.resize(cells[i].edges.size(), 2);
-        MatrixXi Etri;
-        Etri.resize(cells[i].edges.size(), 2);
-        for (int j = 0; j < cells[i].edges.size(); j++) {
-            Ptri.row(j) = nodes.segment<2>(cells[i].edges[j].startNode * 2);
-            Etri.row(j) = IV(j, cells[i].edges[j].nextEdge);
+        Cell cell = cells[i];
+
+        int thisTotalNumEdges = 4;
+        for (CellEdge edge: cell.edges) {
+            if (edge.r_idx >= 0) {
+                TV p0 = nodes.segment<2>(edge.startNode * 2);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
+                double r = info->boundary->radii(edge.r_idx);
+                thisTotalNumEdges += getNumPointsSubdivide(p0, p1, r);
+            } else {
+                thisTotalNumEdges += 1;
+            }
         }
+        int thisNumEdges = cell.edges.size();
+
+        MatrixXT Ptri;
+        Ptri.resize(thisTotalNumEdges, 2);
+        MatrixXi Etri;
+        Etri.resize(thisTotalNumEdges, 2);
+        for (int j = 0; j < cell.edges.size(); j++) {
+            CellEdge edge = cell.edges[j];
+            Ptri.row(j) = nodes.segment<2>(edge.startNode * 2);
+            if (edge.r_idx >= 0) {
+                TV p0 = nodes.segment<2>(edge.startNode * 2);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
+                double r = info->boundary->radii(edge.r_idx);
+
+                MatrixXT pointsSubdivide = getPointsSubdivide(p0, p1, r);
+                Ptri.block(thisNumEdges, 0, pointsSubdivide.rows(), 2) = pointsSubdivide;
+
+                Etri.row(j) = IV(j, thisNumEdges);
+                for (int k = 0; k < pointsSubdivide.rows() - 1; k++) {
+                    Etri.row(thisNumEdges + k) = IV(thisNumEdges + k, thisNumEdges + k + 1);
+                }
+                Etri.row(thisNumEdges + pointsSubdivide.rows() - 1) = IV(thisNumEdges + pointsSubdivide.rows() - 1,
+                                                                         edge.nextEdge);
+
+                thisNumEdges += pointsSubdivide.rows();
+            } else {
+                Etri.row(j) = IV(j, edge.nextEdge);
+            }
+        }
+
+        double inf = 100;
+        MatrixXT Pbb(4, 2);
+        Pbb << -inf, -inf, inf, -inf, inf, inf, -inf, inf;
+        MatrixXi Ebb(4, 2);
+        Ebb << 0, 1, 1, 2, 2, 3, 3, 0;
+        Ptri.block(thisTotalNumEdges - 4, 0, 4, 2) = Pbb;
+        Etri.block(thisTotalNumEdges - 4, 0, 4, 2) = Ebb + (thisTotalNumEdges - 4) * MatrixXi::Ones(4, 2);
+        MatrixXT holes(info->boundary->holes.rows() + 1, 2);
+        if (info->boundary->holes.rows() > 0) {
+            holes.block(0, 0, info->boundary->holes.rows(), 2) = info->boundary->holes;
+        }
+        holes.row(info->boundary->holes.rows()) = TV(inf / 2, inf / 2);
 
         MatrixXT Vtri;
         MatrixXi Ftri;
         igl::triangle::triangulate(Ptri,
                                    Etri,
-                                   info->boundary->holes,
+                                   holes,
                                    "Q",
                                    Vtri, Ftri);
 
-//        for (int k = 0; k < Ftri.rows(); k++) {
-//            std::cout << "F " << Ftri(k, 0) << " " << Ftri(k, 1) << " " << Ftri(k, 2) << std::endl;
+//        if (Ftri.rows() >= Ptri.rows() || Vtri.rows() != Ptri.rows()) {
+//            for (int k = 0; k < Ftri.rows(); k++) {
+//                std::cout << "F " << Ftri(k, 0) << " " << Ftri(k, 1) << " " << Ftri(k, 2) << std::endl;
+//            }
+//            std::cout << std::endl;
+//            for (int k = 0; k < Ptri.rows(); k++) {
+//                std::cout << "P " << Ptri(k, 0) << " " << Ptri(k, 1) << std::endl;
+//            }
+//            std::cout << std::endl;
+//            for (int k = 0; k < Etri.rows(); k++) {
+//                std::cout << "E " << Etri(k, 0) << " " << Etri(k, 1) << std::endl;
+//            }
+//            std::cout << std::endl;
+//            for (int k = 0; k < Vtri.rows(); k++) {
+//                std::cout << "V " << Vtri(k, 0) << " " << Vtri(k, 1) << std::endl;
+//            }
+//            std::cout << std::endl;
 //        }
-//        std::cout << std::endl;
-//        for (int k = 0; k < Ptri.rows(); k++) {
-//            std::cout << "P " << Ptri(k, 0) << " " << Ptri(k, 1) << std::endl;
-//        }
-//        std::cout << std::endl;
-//        for (int k = 0; k < Etri.rows(); k++) {
-//            std::cout << "E " << Etri(k, 0) << " " << Etri(k, 1) << std::endl;
-//        }
-//        std::cout << std::endl;
-//        for (int k = 0; k < Vtri.rows(); k++) {
-//            std::cout << "V " << Vtri(k, 0) << " " << Vtri(k, 1) << std::endl;
-//        }
-//        std::cout << std::endl;
 
-        V.block(currNumEdges, 0, Ptri.rows(), 2) = Ptri;
-        E.block(currNumEdges, 0, Etri.rows(), 2) = Etri + currNumEdges * MatrixXi::Ones(Etri.rows(), 2);
-        F.block(currNumFaces, 0, Ftri.rows(), 3) = Ftri + currNumEdges * MatrixXi::Ones(Ftri.rows(), 3);
+        V.block(currTotalEdges, 0, Ptri.rows(), 2) = Ptri;
+        E.block(currTotalEdges, 0, Etri.rows(), 2) = Etri + currTotalEdges * MatrixXi::Ones(Etri.rows(), 2);
+        F.block(currTotalFaces, 0, Ftri.rows(), 3) = Ftri + currTotalEdges * MatrixXi::Ones(Ftri.rows(), 3);
 
         TV3 color;
         if (colormode == 0) {
@@ -713,15 +839,15 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         } else {
             color = i % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
         }
-        Fc.block(currNumFaces, 0, Ftri.rows(), 3) = color.transpose().replicate(Ftri.rows(), 1);
+        Fc.block(currTotalFaces, 0, Ftri.rows(), 3) = color.transpose().replicate(Ftri.rows(), 1);
 
-        currNumEdges += Ptri.rows();
-        currNumFaces += Ftri.rows();
+        currTotalEdges += Ptri.rows();
+        currTotalFaces += Ftri.rows();
     }
-    V.conservativeResize(currNumEdges, 3);
-    E.conservativeResize(currNumEdges, 2);
-    F.conservativeResize(currNumFaces, 3);
-    Fc.conservativeResize(currNumFaces, 3);
+    V.conservativeResize(currTotalEdges, 3);
+    E.conservativeResize(currTotalEdges, 2);
+    F.conservativeResize(currTotalFaces, 3);
+    Fc.conservativeResize(currTotalFaces, 3);
 
     X = V;
     S.col(2).setConstant(2e-6);

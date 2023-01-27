@@ -8,6 +8,8 @@ void SimpleBoundary::computeVertices() {
     if (n_vtx > 0) {
         next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
     }
+
+    r_map = -1 * VectorXi::Ones(n_vtx);
 }
 
 void SimpleBoundary::computeGradient() {

@@ -28,8 +28,12 @@ public:
     virtual MatrixXT computeEnergyHessian();
 
 public:
-    RigidBodyAgentBoundary(const VectorXT &p_, const VectorXi &free_, VectorXT agentShape_) : Boundary(p_, free_),
-                                                                                              agentShape(agentShape_) {
+    RigidBodyAgentBoundary(const VectorXT &p_, const VectorXi &free_, VectorXT agentShape_, VectorXT r_,
+                           VectorXi r_map_) : Boundary(p_, free_),
+                                              agentShape(agentShape_) {
+        radii = r_;
+        r_map = r_map_;
+
         computeVertices();
         computeGradient();
         computeHessian();
