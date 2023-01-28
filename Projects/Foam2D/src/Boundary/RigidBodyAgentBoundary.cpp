@@ -55,6 +55,8 @@ void RigidBodyAgentBoundary::computeGradient() {
         setGradientEntry(i * 2 + 1, 1, 1);
         setGradientEntry(i * 2 + 1, 2, x0 * cos(t) - y0 * sin(t));
     }
+
+    drdp = MatrixXT::Zero(radii.rows(), nfree);
 }
 
 void RigidBodyAgentBoundary::computeHessian() {
@@ -76,6 +78,11 @@ void RigidBodyAgentBoundary::computeHessian() {
     }
     for (int i = 0; i < 8; i++) {
         d2vdp2[nsides * 2 + i] = MatrixXT::Zero(nfree, nfree);
+    }
+
+    d2rdp2.resize(radii.rows());
+    for (int i = 0; i < radii.rows(); i++) {
+        d2rdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

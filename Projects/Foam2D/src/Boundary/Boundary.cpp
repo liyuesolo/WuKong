@@ -48,11 +48,14 @@ bool Boundary::pointInBounds(const TV &point) {
 
         if (r_map(i) >= 0) {
             double r = radii(r_map(i));
-            double d = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-            double xc = (x1 + x2) / 2 - (y2 - y1) * r / d * sqrt(1 - pow(d / (2 * r), 2));
-            double yc = (y1 + y2) / 2 + (x2 - x1) * r / d * sqrt(1 - pow(d / (2 * r), 2));
 
-            if (a > 0 && r < 0 && (point - TV(xc, yc)).norm() < r) {
+            double q = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+            double d = r / 2 * sqrt(4 - pow(q / r, 2));
+            double theta = atan2(-(x2 - x1), (y2 - y1));
+            double xc = (x1 + x2) / 2 - d * cos(theta);
+            double yc = (y1 + y2) / 2 - d * sin(theta);
+
+            if (a > 0 && r < 0 && (point - TV(xc, yc)).norm() < fabs(r)) {
                 a -= 2 * M_PI;
             }
             if (a < 0 && r > 0 && (point - TV(xc, yc)).norm() < r) {
@@ -198,7 +201,8 @@ void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx,
         double t0 = (int0 - p0).dot(p1 - p0) / (p1 - p0).squaredNorm();
         double s0 = (int0 - p2).dot(p3 - p2) / (p3 - p2).squaredNorm();
         double e0 = (int0 - p2).x() * (p3 - p2).y() - (p3 - p2).x() * (int0 - p2).y();
-        if (e0 > 0 && t0 > 0 && t0 < 1 && s0 > 0 && s0 < 1) {
+        if (e0 * r > 0 && t0 > 0 && t0 < 1 && s0 > 0 && s0 < 1) {
+//            std::cout << "int0 " << int0.x() << " " << int0.y() << std::endl;
             isInt0 = true;
             intersect0.t_cell = t0;
             intersect0.t_bdry = s0;
@@ -212,7 +216,8 @@ void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx,
         double t1 = (int1 - p0).dot(p1 - p0) / (p1 - p0).squaredNorm();
         double s1 = (int1 - p2).dot(p3 - p2) / (p3 - p2).squaredNorm();
         double e1 = (int1 - p2).x() * (p3 - p2).y() - (p3 - p2).x() * (int1 - p2).y();
-        if (e1 > 0 && t1 > 0 && t1 < 1 && s1 > 0 && s1 < 1) {
+        if (e1 * r > 0 && t1 > 0 && t1 < 1 && s1 > 0 && s1 < 1) {
+//            std::cout << "int1 " << int1.x() << " " << int1.y() << std::endl;
             isInt1 = true;
             intersect1.t_cell = t1;
             intersect1.t_bdry = s1;

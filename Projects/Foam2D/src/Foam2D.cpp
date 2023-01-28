@@ -134,20 +134,27 @@ void Foam2D::initDynamicCircle(int n_free_in) {
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double r = 0.75;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> dis(-r / 2, r / 2);
-
-    vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
-    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
-
     VectorXT p(1);
     p(0) = r;
     VectorXi free_idx(1);
     free_idx(0) = 0;
 //    VectorXi free_idx = {};
     info->boundary = new CircleBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-r, r);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
 
     resetVertexParams();
 }
@@ -164,23 +171,23 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    double a = 0.15;
 //    agent << -a, -a, -a, a, a, a, a, -a;
 
-    int nsides = 100;
-    VectorXT agent(nsides * 2);
-    double a = 0.2;
-    double b = 0.1;
-    for (int i = 0; i < nsides; i++) {
-        agent(i * 2 + 0) = a * cos(-i * 2 * M_PI / nsides);
-        agent(i * 2 + 1) = b * sin(-i * 2 * M_PI / nsides);
-    }
-    VectorXT r = {};
-    VectorXi r_map = -1 * VectorXi::Ones(nsides);
+//    int nsides = 100;
+//    VectorXT agent(nsides * 2);
+//    double a = 0.2;
+//    double b = 0.1;
+//    for (int i = 0; i < nsides; i++) {
+//        agent(i * 2 + 0) = a * cos(-i * 2 * M_PI / nsides);
+//        agent(i * 2 + 1) = b * sin(-i * 2 * M_PI / nsides);
+//    }
+//    VectorXT r = {};
+//    VectorXi r_map = -1 * VectorXi::Ones(nsides);
 
-//    VectorXT agent(4 * 2);
-//    double a = 0.15;
-//    agent << a, 0, 0, -a, -a, 0, 0, a;
-//    VectorXT r(1);
-//    r(0) = -a;
-//    VectorXi r_map = VectorXi::Zero(4);
+    VectorXT agent(4 * 2);
+    double a = 0.15;
+    agent << a, 0, 0, -a, -a, 0, 0, a;
+    VectorXT r(1);
+    r(0) = -a;
+    VectorXi r_map = VectorXi::Zero(4);
 
     double dx = 0.75;
     std::random_device rd;
@@ -203,6 +210,8 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    VectorXi free_idx(1);
 //    free_idx(0) = 2;
     IV3 free_idx(0, 1, 2);
+//    IV free_idx(0, 1);
+//    VectorXi free_idx = {};
     info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent, r, r_map);
 
     resetVertexParams();
@@ -666,7 +675,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 }
 
 static int getNumPointsSubdivide(TV p0, TV p1, double r) {
-    return 10;
+    return 5;
 }
 
 static MatrixXT getPointsSubdivide(TV p0, TV p1, double r) {
@@ -679,14 +688,19 @@ static MatrixXT getPointsSubdivide(TV p0, TV p1, double r) {
     double yc = (y0 + y1) / 2 - d * sin(theta);
     double t0 = atan2(y0 - yc, x0 - xc);
     double t1 = atan2(y1 - yc, x1 - xc);
-    if (t1 < t0) t1 += 2 * M_PI;
+    if (t1 < t0 && r > 0) t1 += 2 * M_PI;
+    if (t1 > t0 && r < 0) t1 -= 2 * M_PI;
+
+    if (std::isnan(t0) || std::isnan(t1)) {
+        std::cout << "nan" << std::endl;
+    }
 
     int numPoints = getNumPointsSubdivide(p0, p1, r);
     VectorXT t = VectorXT::LinSpaced(numPoints - 1, t0 + (t1 - t0) / numPoints, t1 - (t1 - t0) / numPoints);
 
     MatrixXT points(numPoints - 1, 2);
-    points.col(0) = xc + r * t.array().cos();
-    points.col(1) = yc + r * t.array().sin();
+    points.col(0) = xc + fabs(r) * t.array().cos();
+    points.col(1) = yc + fabs(r) * t.array().sin();
 
     return points;
 }
@@ -787,7 +801,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             }
         }
 
-        double inf = 100;
+        double inf = 2;
         MatrixXT Pbb(4, 2);
         Pbb << -inf, -inf, inf, -inf, inf, inf, -inf, inf;
         MatrixXi Ebb(4, 2);

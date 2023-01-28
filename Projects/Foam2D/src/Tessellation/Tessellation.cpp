@@ -96,6 +96,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 BoundaryIntersection intersectNext = intersections[minIdx];
                 int i_bdry = intersect1.i_bdry;
                 int flag = intersect1.flag;
+                bool bad1 = (intersectNext.i_bdry == intersect1.i_bdry && intersectNext.t_bdry < intersect1.t_bdry);
                 while (true) {
                     cells[i].edges.emplace_back();
                     cells[i].edges.back().neighbor = n_vtx + i_bdry;
@@ -103,7 +104,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                     cells[i].edges.back().r_idx = bdry->r_map(cells[i].edges.back().neighbor - n_vtx);
                     cells[i].edges.back().flag = flag;
                     flag = 0;
-                    if (i_bdry == intersectNext.i_bdry) break;
+                    if (i_bdry == intersectNext.i_bdry && !bad1) break;
+                    bad1 = false;
                     i_bdry = bdry->next(i_bdry);
                 }
 
@@ -111,7 +113,7 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                 BoundaryIntersection intersectNext2 = (minIdx == 0 ? loopStartIntersection : intersections[minIdx + 1]);
                 int i_cell = intersectNext.i_cell;
                 flag = intersectNext.flag;
-                bool bad = (minIdx == 0 && isLoopStart && intersectNext.t_cell > intersect1.t_cell);
+                bool bad2 = (minIdx == 0 && isLoopStart && intersectNext.t_cell > intersect1.t_cell);
                 while (true) {
                     cells[i].edges.emplace_back();
                     cells[i].edges.back().neighbor = neighbors[i_cell];
@@ -119,8 +121,8 @@ Tessellation::getNeighborsClipped(const VectorXT &vertices, const VectorXT &para
                     cells[i].edges.back().r_idx = -1;
                     cells[i].edges.back().flag = flag;
                     flag = 0;
-                    if (i_cell == intersectNext2.i_cell && !bad) break;
-                    bad = false;
+                    if (i_cell == intersectNext2.i_cell && !bad2) break;
+                    bad2 = false;
                     i_cell = (i_cell + 1) % degree;
                 }
 
@@ -327,6 +329,56 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, TV &node, VectorX
         gradY.resize(dims * 2 + 5);
         getArcBoundaryNodeGradient(v0, v1, b0, b1, r, flag, gradX, gradY);
 
+//        double eps = 1e-7;
+//        for (int i = 0; i < 11; i++) {
+//            TV3 dv0 = TV3::Zero();
+//            TV3 dv1 = TV3::Zero();
+//            TV db0 = TV::Zero();
+//            TV db1 = TV::Zero();
+//            double dr = 0;
+//
+//            switch (i) {
+//                case 0:
+//                    dv0(0) = eps;
+//                    break;
+//                case 1:
+//                    dv0(1) = eps;
+//                    break;
+//                case 2:
+//                    dv0(2) = eps;
+//                    break;
+//                case 3:
+//                    dv1(0) = eps;
+//                    break;
+//                case 4:
+//                    dv1(1) = eps;
+//                    break;
+//                case 5:
+//                    dv1(2) = eps;
+//                    break;
+//                case 6:
+//                    db0(0) = eps;
+//                    break;
+//                case 7:
+//                    db0(1) = eps;
+//                    break;
+//                case 8:
+//                    db1(0) = eps;
+//                    break;
+//                case 9:
+//                    db1(1) = eps;
+//                    break;
+//                case 10:
+//                    dr = eps;
+//                    break;
+//            }
+//
+//            TV nodep;
+//            getArcBoundaryNode(v0 + dv0, v1 + dv1, b0 + db0, b1 + db1, r + dr, flag, nodep);
+//            std::cout << "grad " << i << " x " << gradX(i) << " " << (nodep(0) - node(0)) / eps << std::endl;
+//            std::cout << "grad " << i << " y " << gradY(i) << " " << (nodep(1) - node(1)) / eps << std::endl;
+//        }
+
         hessX.resize(dims * 2 + 5, dims * 2 + 5);
         hessY.resize(dims * 2 + 5, dims * 2 + 5);
         getArcBoundaryNodeHessian(v0, v1, b0, b1, r, flag, hessX, hessY);
@@ -382,8 +434,10 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, TV &node, VectorX
 ////            hessY(i, i) = (gradYp(i) - gradY(i)) / eps;
 //
 //            for (int j = 0; j < 11; j++) {
-//                std::cout << i << " " << j << " x " << hessX(j, i) << " " << (gradXp(j) - gradX(j)) / eps << std::endl;
-//                std::cout << i << " " << j << " y " << hessY(j, i) << " " << (gradYp(j) - gradY(j)) / eps << std::endl;
+//                std::cout << "hess " << i << " " << j << " x " << hessX(j, i) << " " << (gradXp(j) - gradX(j)) / eps
+//                          << std::endl;
+//                std::cout << "hess " << i << " " << j << " y " << hessY(j, i) << " " << (gradYp(j) - gradY(j)) / eps
+//                          << std::endl;
 //            }
 //        }
     } else {
@@ -898,7 +952,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     dxdr = dxdr_dense.sparseView();
 
     for (int i = 0; i < n_free; i++) {
-        if (cells[i].edges.size() < 3) {
+        if (cells[i].edges.size() < 2) {
             isValid = false;
             return;
         }
