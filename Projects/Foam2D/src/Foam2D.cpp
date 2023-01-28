@@ -159,6 +159,49 @@ void Foam2D::initDynamicCircle(int n_free_in) {
     resetVertexParams();
 }
 
+static void generateSmoothShape(VectorXT topNodes, double r0, VectorXT &agent, VectorXT &radii, VectorXi &r_map) {
+    int numTopNodes = topNodes.rows() / 2;
+
+    agent.resize(numTopNodes * 4);
+    radii.resize(numTopNodes + 1);
+    r_map.resize(numTopNodes * 2);
+    for (int i = 0; i < numTopNodes; i++) {
+        agent.segment<2>(i * 2) = topNodes.segment<2>(i * 2);
+        agent.segment<2>(agent.rows() - (i + 1) * 2 + 0) = topNodes.segment<2>(i * 2);
+        agent(agent.rows() - (i + 1) * 2 + 1) *= -1;
+
+        r_map(i) = 1 + i;
+        r_map(numTopNodes + i) = numTopNodes - (1 + i);
+    }
+
+    radii(0) = r0;
+    for (int i = 0; i < numTopNodes; i++) {
+        double x0 = agent((i * 2 - 2 + agent.rows()) % agent.rows());
+        double y0 = agent((i * 2 - 1 + agent.rows()) % agent.rows());
+        double x1 = agent(i * 2 + 0);
+        double y1 = agent(i * 2 + 1);
+        double x2 = agent(i * 2 + 2);
+        double y2 = agent(i * 2 + 3);
+        double r = radii(i);
+
+        radii(i + 1) = r * (x1 * x1 - 0.2e1 * x1 * x2 + x2 * x2 + pow(-y2 + y1, 0.2e1)) *
+                       sqrt(x0 * x0 - 0.2e1 * x1 * x0 + x1 * x1 + pow(y0 - y1, 0.2e1)) /
+                       ((x1 * x1 + (-x0 - x2) * x1 + x0 * x2 - (-y2 + y1) * (y0 - y1)) *
+                        sqrt(x0 * x0 - 0.2e1 * x1 * x0 + x1 * x1 + pow(y0 - y1, 0.2e1)) +
+                        r * ((-y0 + y2) * x1 + (-y2 + y1) * x0 + x2 * (y0 - y1)) *
+                        sqrt((0.4e1 * r * r - x0 * x0 + 0.2e1 * x1 * x0 - x1 * x1 - y0 * y0 + 0.2e1 * y1 * y0 -
+                              y1 * y1) *
+                             pow(r, -0.2e1)));
+    }
+
+    for (int i = 0; i < numTopNodes * 2; i++) {
+        agent(i * 2 + 1) *= -1;
+    }
+    for (int i = 0; i < radii.rows(); i++) {
+        radii(i) *= -1;
+    }
+}
+
 void Foam2D::initRigidBodyAgent(int n_free_in) {
     info->n_free = n_free_in;
     info->n_fixed = 8;
@@ -182,29 +225,19 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    VectorXT r = {};
 //    VectorXi r_map = -1 * VectorXi::Ones(nsides);
 
-    VectorXT agent(4 * 2);
-    double a = 0.15;
-    agent << a, 0, 0, -a, -a, 0, 0, a;
-    VectorXT r(1);
-    r(0) = -a;
-    VectorXi r_map = VectorXi::Zero(4);
+//    VectorXT agent(4 * 2);
+//    double a = 0.15;
+//    agent << a, 0, 0, -a, -a, 0, 0, a;
+//    VectorXT r(1);
+//    r(0) = -a;
+//    VectorXi r_map = VectorXi::Zero(4);
 
-    double dx = 0.75;
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<double> dis(-dx, dx);
-    vertices.resize((info->n_free + info->n_fixed) * 2);
-    for (int i = 0; i < info->n_free; i++) {
-        double x = dis(gen), y = dis(gen);
-        while (fabs(x) < a && fabs(y) < a) {
-            x = dis(gen);
-            y = dis(gen);
-        }
-        vertices(i * 2 + 0) = x;
-        vertices(i * 2 + 1) = y;
-    }
-
-    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+    VectorXT agent, r;
+    VectorXi r_map;
+    VectorXT topNodes(8);
+    double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
+    topNodes << p1, q1, p2, q2, -p2, q2, -p1, q1;
+    generateSmoothShape(topNodes, r0, agent, r, r_map);
 
     TV3 p(0, 0, 0);
 //    VectorXi free_idx(1);
@@ -213,6 +246,21 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    IV free_idx(0, 1);
 //    VectorXi free_idx = {};
     info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent, r, r_map);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-1, 1);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
 
     resetVertexParams();
 }
@@ -675,7 +723,7 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
 }
 
 static int getNumPointsSubdivide(TV p0, TV p1, double r) {
-    return 5;
+    return 10;
 }
 
 static MatrixXT getPointsSubdivide(TV p0, TV p1, double r) {

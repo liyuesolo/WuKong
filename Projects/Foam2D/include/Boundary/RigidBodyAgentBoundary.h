@@ -9,6 +9,7 @@ public:
     double bx = 0.75;
     double by = 0.75;
     double epsilon = 1e-5;
+    double tmul = 10;
 
 private:
 

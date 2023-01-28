@@ -12,7 +12,7 @@ void RigidBodyAgentBoundary::computeVertices() {
 
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
+    double t = tmul * p(2);
 
     VectorXT agent(agentShape.rows());
     int nsides = agentShape.rows() / 2;
@@ -39,7 +39,7 @@ void RigidBodyAgentBoundary::computeVertices() {
 void RigidBodyAgentBoundary::computeGradient() {
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
+    double t = tmul * p(2);
 
     dvdp = MatrixXT::Zero(v.rows(), nfree);
     int nsides = agentShape.rows() / 2;
@@ -49,11 +49,11 @@ void RigidBodyAgentBoundary::computeGradient() {
 
         setGradientEntry(i * 2 + 0, 0, 1);
         setGradientEntry(i * 2 + 0, 1, 0);
-        setGradientEntry(i * 2 + 0, 2, -x0 * sin(t) - y0 * cos(t));
+        setGradientEntry(i * 2 + 0, 2, tmul * (-x0 * sin(t) - y0 * cos(t)));
 
         setGradientEntry(i * 2 + 1, 0, 0);
         setGradientEntry(i * 2 + 1, 1, 1);
-        setGradientEntry(i * 2 + 1, 2, x0 * cos(t) - y0 * sin(t));
+        setGradientEntry(i * 2 + 1, 2, tmul * (x0 * cos(t) - y0 * sin(t)));
     }
 
     drdp = MatrixXT::Zero(radii.rows(), nfree);
@@ -62,7 +62,7 @@ void RigidBodyAgentBoundary::computeGradient() {
 void RigidBodyAgentBoundary::computeHessian() {
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
+    double t = tmul * p(2);
 
     d2vdp2.resize(v.rows());
     int nsides = agentShape.rows() / 2;
@@ -73,8 +73,8 @@ void RigidBodyAgentBoundary::computeHessian() {
         d2vdp2[i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
         d2vdp2[i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
 
-        setHessianEntry(i * 2 + 0, 2, 2, -x0 * cos(t) + y0 * sin(t));
-        setHessianEntry(i * 2 + 1, 2, 2, -x0 * sin(t) - y0 * cos(t));
+        setHessianEntry(i * 2 + 0, 2, 2, tmul * tmul * (-x0 * cos(t) + y0 * sin(t)));
+        setHessianEntry(i * 2 + 1, 2, 2, tmul * tmul * (-x0 * sin(t) - y0 * cos(t)));
     }
     for (int i = 0; i < 8; i++) {
         d2vdp2[nsides * 2 + i] = MatrixXT::Zero(nfree, nfree);
@@ -109,7 +109,6 @@ bool RigidBodyAgentBoundary::checkValid() {
 double RigidBodyAgentBoundary::computeEnergy() {
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
 
     int nsides = agentShape.rows() / 2;
     double dmax = 0;
@@ -134,7 +133,6 @@ double RigidBodyAgentBoundary::computeEnergy() {
 VectorXT RigidBodyAgentBoundary::computeEnergyGradient() {
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
 
     int nsides = agentShape.rows() / 2;
     double dmax = 0;
@@ -173,7 +171,6 @@ VectorXT RigidBodyAgentBoundary::computeEnergyGradient() {
 MatrixXT RigidBodyAgentBoundary::computeEnergyHessian() {
     double dx = p(0);
     double dy = p(1);
-    double t = p(2);
 
     int nsides = agentShape.rows() / 2;
     double dmax = 0;
