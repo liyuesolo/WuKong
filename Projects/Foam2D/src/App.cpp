@@ -127,6 +127,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Dynamic Box");
         scenarios.push_back("Dynamic Circle");
         scenarios.push_back("Rigid Body Agent");
+        scenarios.push_back("Hardware 0");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = false;
@@ -179,6 +180,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 6) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 7) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -383,6 +388,9 @@ void Foam2DApp::generateScenario() {
             break;
         case 6:
             foam.initRigidBodyAgent(generate_scenario_free_sites);
+            break;
+        case 7:
+            foam.initHardwareScenario0(generate_scenario_free_sites);
             break;
         default:
             std::cout << "Error: scenario not implemented!";

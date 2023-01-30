@@ -86,7 +86,6 @@ void RigidBodyAgentBoundary::computeHessian() {
     }
 }
 
-// Prevent floating rigid body from going through walls. TODO: Log barriers using energy function?
 bool RigidBodyAgentBoundary::checkValid() {
     double dx = p(0);
     double dy = p(1);

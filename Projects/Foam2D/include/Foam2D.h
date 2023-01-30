@@ -68,6 +68,8 @@ public:
 
     void initRigidBodyAgent(int n_free_in);
 
+    void initHardwareScenario0(int n_free_in);
+
     void initImageMatch(MatrixXi &markers);
 
     void dynamicsInit();

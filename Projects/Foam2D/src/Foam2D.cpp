@@ -16,6 +16,7 @@
 #include "Projects/Foam2D/include/Boundary/RegularPolygonBoundary.h"
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
+#include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
 
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
@@ -236,7 +237,7 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
     VectorXi r_map;
     VectorXT topNodes(8);
     double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
-    topNodes << p1, q1, p2, q2, -p2, q2, -p1, q1;
+    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
     generateSmoothShape(topNodes, r0, agent, r, r_map);
 
     TV3 p(0, 0, 0);
@@ -246,6 +247,36 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    IV free_idx(0, 1);
 //    VectorXi free_idx = {};
     info->boundary = new RigidBodyAgentBoundary(p, free_idx, agent, r, r_map);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-1, 1);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initHardwareScenario0(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    TV p(0.1, 0.1);
+    IV free_idx(0, 1);
+    info->boundary = new HardwareBoundary0(p, free_idx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
