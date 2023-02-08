@@ -96,6 +96,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::InputDouble("Drag Target Weight", &foam.info->energy_drag_target_weight, 0.01f, 0.01f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Adhesion Weight", &foam.info->energy_adhesion_weight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Deformation Weight", &foam.info->energy_deformation_weight, 0.001f, 0.001f, "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();

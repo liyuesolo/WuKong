@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../../include/Energy/CellFunctionArea.h"
-#include "../../include/Energy/CellFunctionCentroidY.h"
+#include "../../include/Energy/CellFunctionWeightedMeanY.h"
 
 class CellFunctionCentroidYTarget : public CellFunction {
 public:
     CellFunctionArea area_function;
-    CellFunctionCentroidY centroid_function;
+    CellFunctionWeightedMeanY weighted_mean_function;
 
 public:
     virtual void addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,

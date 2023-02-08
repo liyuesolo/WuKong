@@ -1,12 +1,8 @@
 #pragma once
 
-#include "../../include/Energy/CellFunctionWeightedMeanX.h"
-#include "../../include/Energy/CellFunctionArea.h"
+#include "../../include/Tessellation/CellFunction.h"
 
-class CellFunctionCentroidX : public CellFunction {
-    CellFunctionArea area_function;
-    CellFunctionWeightedMeanX weighted_mean_function;
-
+class CellFunctionWeightedMeanX : public CellFunction {
 public:
     virtual void addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
                           const CellInfo *cellInfo) const;

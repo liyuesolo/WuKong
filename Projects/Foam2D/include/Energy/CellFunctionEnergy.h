@@ -9,6 +9,7 @@
 #include "../../include/Energy/CellFunctionCentroidXTarget.h"
 #include "../../include/Energy/CellFunctionCentroidYTarget.h"
 #include "../../include/Energy/CellFunctionPositionTarget.h"
+#include "../../include/Energy/CellFunctionDeformationCentroid.h"
 #include "../../include/Energy/CellFunctionZPenalty.h"
 #include "../../include/Energy/CellFunctionAdhesion.h"
 
@@ -20,6 +21,7 @@ public:
     CellFunctionCentroidXTarget centroid_x_function;
     CellFunctionCentroidYTarget centroid_y_function;
     CellFunctionPositionTarget position_target_function;
+    CellFunctionDeformationCentroid deformation_function;
     CellFunctionZPenalty z_penalty_function;
     CellFunctionAdhesion adhesion_function;
 public:
@@ -38,6 +40,9 @@ public:
 
         functions.push_back(&position_target_function);
         weights.push_back(info->energy_drag_target_weight);
+
+        functions.push_back(&deformation_function);
+        weights.push_back(info->energy_deformation_weight);
 
         functions.push_back(&area_barrier_function);
         weights.push_back(1.0);

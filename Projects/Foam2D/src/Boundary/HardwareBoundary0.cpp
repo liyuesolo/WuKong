@@ -5,9 +5,11 @@ void HardwareBoundary0::computeVertices() {
     double dx = p(0);
     double dy = p(1);
 
-    int n_vtx = 7;
+    int n_vtx = 9;
     v.resize(n_vtx * 2);
-    v << -channel_width, -channel_width,
+    v << -channel_width, 0,
+            -channel_width, -channel_width,
+            0, -channel_width,
             dx + corner_radius, -channel_width,
             dx + corner_radius, 0,
             corner_radius, 0,
@@ -16,9 +18,11 @@ void HardwareBoundary0::computeVertices() {
             -channel_width, dy + corner_radius;
 
     r_map = -1 * VectorXi::Ones(n_vtx);
-    r_map(3) = 0;
-    radii.resize(1);
+    r_map(5) = 0;
+//    r_map(0) = 1;
+    radii.resize(2);
     radii(0) = -corner_radius;
+    radii(1) = channel_width;
 
     next.resize(n_vtx);
     next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
@@ -27,10 +31,10 @@ void HardwareBoundary0::computeVertices() {
 void HardwareBoundary0::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
 
-    setGradientEntry(1 * 2 + 0, 0, 1);
-    setGradientEntry(2 * 2 + 0, 0, 1);
-    setGradientEntry(5 * 2 + 1, 1, 1);
-    setGradientEntry(6 * 2 + 1, 1, 1);
+    setGradientEntry(3 * 2 + 0, 0, 1);
+    setGradientEntry(4 * 2 + 0, 0, 1);
+    setGradientEntry(7 * 2 + 1, 1, 1);
+    setGradientEntry(8 * 2 + 1, 1, 1);
 
     drdp = MatrixXT::Zero(radii.rows(), nfree);
 }
