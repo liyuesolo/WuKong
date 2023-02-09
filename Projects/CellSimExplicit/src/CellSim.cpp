@@ -18,20 +18,20 @@ bool CellSim::advanceOneStep(int step)
     VectorXT residual(deformed.rows());
     residual.setZero();
     
-    // if (cells.use_ipc_contact)
-    // {
-    //     cells.updateBarrierInfo(step == 0);
-    //     cells.updateIPCVertices(u);
-    // }
+    if (use_ipc)
+    {
+        updateBarrierInfo(step == 0);
+        updateIPCVertices(u);
+    }
 
     T residual_norm = computeResidual(u, residual);
     std::cout << "[Newton] computeResidual takes " << step_timer.elapsed_sec() << "s" << std::endl;
     step_timer.restart();
     // if (save_mesh)
-    //     cells.saveCellMesh(step);
+    //     saveCellMesh(step);
     // std::cout << "[Newton] saveCellMesh takes " << step_timer.elapsed_sec() << "s" << std::endl;
-    if (verbose)
-        std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
+    // if (verbose)
+    std::cout << "[Newton] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual.norm() << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol)
         return true;
@@ -46,6 +46,47 @@ bool CellSim::advanceOneStep(int step)
         return true;
     
     return false; 
+}
+
+T CellSim::computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du)
+{
+    if (verbose)
+        std::cout << "** step size **" << std::endl;
+    T step_size = 1.0;
+    if (use_ipc)
+    {
+        T ipc_step_size = computeCollisionFreeStepsize(_u, du);
+        step_size = std::min(step_size, ipc_step_size);
+        if (verbose)
+            std::cout << "after ipc step size: " << step_size << std::endl;
+    }
+
+    // if (use_sphere_radius_bound && !sphere_bound_penalty && !use_sdf_boundary)
+    // {
+    //     T inside_membrane_step_size = computeInsideMembraneStepSize(_u, du);
+    //     step_size = std::min(step_size, inside_membrane_step_size);
+    //     if (verbose)
+    //         std::cout << "after inside membrane step size: " << step_size << std::endl;
+    // }
+
+    // if (add_tet_vol_barrier)
+    // {
+    //     T inversion_free_step_size = computeInversionFreeStepSize(_u, du);
+    //     // std::cout << "cell tet inversion free step size: " << inversion_free_step_size << std::endl;
+    //     step_size = std::min(step_size, inversion_free_step_size);
+    //     if (verbose)
+    //         std::cout << "after tet inverison step size: " << step_size << std::endl;
+    // }
+
+    // if (add_yolk_tet_barrier)
+    // {
+    //     T inversion_free_step_size = computeYolkInversionFreeStepSize(_u, du);
+    //     // std::cout << "yolk inversion free step size: " << inversion_free_step_size << std::endl;
+    //     step_size = std::min(step_size, inversion_free_step_size);
+    // }
+    if (verbose)
+        std::cout << "**       **" << std::endl;
+    return step_size;
 }
 
 bool CellSim::solveWoodburyCholmod(StiffnessMatrix& K, MatrixXT& UV,
@@ -192,6 +233,9 @@ void CellSim::buildSystemMatrixWoodbury(const VectorXT& _u, StiffnessMatrix& K, 
     if (add_yolk_volume)
         addYolkVolumePreservationHessianEntries(entries, UV, project_block_hessian_PD);
 
+    if (use_ipc)
+        addIPCHessianEntries(entries, project_block_hessian_PD);
+
     K.resize(num_nodes * 3, num_nodes * 3);
     K.reserve(0.5 * entries.size());
     K.setFromTriplets(entries.begin(), entries.end());
@@ -245,8 +289,19 @@ T CellSim::computeTotalEnergy(const VectorXT& _u, bool add_to_deform)
         if (verbose)
             std::cout << "\tE_yolk_vol " << yolk_volume_term << std::endl;
     }
-
     energy += yolk_volume_term;
+
+    T contact_energy = 0.0;
+
+    if (use_ipc)
+    {
+        addIPCEnergy(contact_energy);
+        if (verbose)
+            std::cout << "\tE_contact: " << contact_energy << std::endl;
+        energy += contact_energy;
+        // std::getchar();
+    }
+
     
     return energy;
 }
@@ -285,6 +340,15 @@ T CellSim::computeResidual(const VectorXT& _u,  VectorXT& residual)
         addYolkVolumePreservationForceEntries(residual);
         if (print_force_norm)
             std::cout << "\tyolk volume preservation force norm: " << (residual - residual_temp).norm() << std::endl;
+        residual_temp = residual;
+    }
+
+    if (use_ipc)
+    {
+        addIPCForceEntries(residual);
+    
+        if(print_force_norm)
+            std::cout << "\tcontact force norm: " << (residual - residual_temp).norm() << std::endl;
         residual_temp = residual;
     }
 
@@ -328,7 +392,7 @@ T CellSim::lineSearchNewton(VectorXT& _u,  VectorXT& residual, int ls_max)
     T norm = du.norm();
 
     T E0 = computeTotalEnergy(_u);
-    T alpha = 1.0;
+    T alpha = computeLineSearchInitStepsize(_u, du);
     int cnt = 1;
     while (true)
     {
@@ -482,7 +546,7 @@ void CellSim::constructCellMeshFromFile(const std::string& filename)
 {
     Eigen::MatrixXd V, N;
     Eigen::MatrixXi F;
-    igl::readOBJ(filename, V, F);   
+    igl::readOBJ(filename, V, F);
     
     std::vector<TV> face_centroids(F.rows());
     deformed.resize(F.rows() * 3);
@@ -580,7 +644,7 @@ void CellSim::constructCellMeshFromFile(const std::string& filename)
     int node_cnt = 0;
     
     std::vector<TV> new_vertices;
-    T shrink = 0.98;
+    T shrink = 0.96;
     for (auto one_ring_face : faces)
     {
         std::vector<TV> cell_vertices;
@@ -647,13 +711,13 @@ void CellSim::constructCellMeshFromFile(const std::string& filename)
         {
             int j = (i + 1) % n_vtx_half;
             cell_edges.push_back(Edge(vtx_list[i], vtx_list[j]));
-            apical_list.push_back(j);
+            apical_list.push_back(vtx_list[i]);
         }
         for (int i = 0; i < n_vtx_half; i++)
         {
             int j = (i + 1) % n_vtx_half;
             cell_edges.push_back(Edge(vtx_list[i + n_vtx_half], vtx_list[j + n_vtx_half]));
-            basal_list.push_back(j);
+            basal_list.push_back(vtx_list[i + n_vtx_half]);
         }
         faces.push_back(apical_list);
         faces.push_back(basal_list);
@@ -675,12 +739,21 @@ void CellSim::constructCellMeshFromFile(const std::string& filename)
     u = VectorXT::Zero(num_nodes * 3);
     num_cells = cell_vtx_start.size();
 
+    
     yolk_vol_init = computeYolkVolume();
 
     computeVolumeAllCells(cell_volume_init);
 
     computeRestLength();
+    use_ipc = true;
+    if (use_ipc)
+    {
+        barrier_distance = 1e-5;
+        computeIPCRestData();
+        saveIPCData("./", 0, true);
+    }
 
-    // w_faces = 0;
+    print_force_norm = false;
+    verbose = true;    
     std::cout << "initialization done" << std::endl;
 }

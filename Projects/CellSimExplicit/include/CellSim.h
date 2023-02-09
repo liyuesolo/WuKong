@@ -75,13 +75,9 @@ public:
     int num_nodes;
     int num_cells;
 
-    std::vector<int> cell_vtx_start;
     VectorXT undeformed, deformed, u;
-    std::vector<VtxList> faces;
     TV mesh_centroid;
-    int yolk_vtx_start = 0;
 
-    std::vector<VtxList> yolk_cells;
     std::unordered_map<int, T> dirichlet_data;
 
     // simulation 
@@ -93,11 +89,15 @@ public:
     bool lower_triangular = false;
 
     // yolk
+    int yolk_vtx_start = 0;
+    std::vector<VtxList> yolk_cells;
     T yolk_vol_init= 0.0;
     bool add_yolk_volume = true;
     T By = 1e4;
 
     // cells
+    std::vector<int> cell_vtx_start;
+    std::vector<VtxList> faces;
     VectorXT cell_volume_init;
     T B = 1e4;
 
@@ -108,6 +108,16 @@ public:
 
     // faces
     T w_faces = 0.1;
+
+    // IPC
+    bool use_ipc = true;
+    T ipc_min_dis = 1.0;
+    T max_barrier_weight = 1e8;
+    T barrier_distance = 1e-4;
+    T barrier_weight = 1e6;
+    MatrixXT ipc_vertices;
+    MatrixXi ipc_edges;
+    MatrixXi ipc_faces;
 
     // printouts
     bool print_force_norm = true;
@@ -137,6 +147,18 @@ public:
         for (int i = 0; i < faces.size(); i++)
         {
             f(faces[i], i);
+        }
+    }
+    template <typename OP>
+    void iterateYolkAndCellFaceSerial(const OP& f)
+    {
+        for (int i = 0; i < faces.size(); i++)
+        {
+            f(faces[i], i);
+        }
+        for (int i = 0; i < yolk_cells.size(); i++)
+        {
+            f(yolk_cells[i], i);
         }
     }
 
@@ -376,6 +398,7 @@ public:
          VectorXT& residual, VectorXT& du);
     void projectDirichletDoFMatrix(StiffnessMatrix& A, 
         const std::unordered_map<int, T>& data);
+    T computeLineSearchInitStepsize(const VectorXT& _u, const VectorXT& du);
 
 // Potentials
 
@@ -405,6 +428,17 @@ public:
     void addEdgeForceEntries(Region region, T w, VectorXT& residual);
     void addEdgeHessianEntries(Region region, T w, 
         std::vector<Entry>& entries, bool projectPD = false);
+
+    // IPC.cpp
+    void saveIPCData(const std::string& folder, int iter, bool save_edges = false);
+    void updateBarrierInfo(bool first_step);
+    T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
+    void computeIPCRestData();
+    void updateIPCVertices(const VectorXT& _u);
+    void addIPCEnergy(T& energy);
+    void addIPCForceEntries(VectorXT& residual);
+    void addIPCHessianEntries(std::vector<Entry>& entries,
+        bool projectPD = false);
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb = true);

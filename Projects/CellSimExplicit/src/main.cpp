@@ -24,9 +24,9 @@ int main(int argc, char** argv)
 
     // Eigen::Matrix2d X, x, F;
     // X << 4, 0, 0, 4;
-    // x << 2, 0, 0, -2;
+    // x << 2, 0, 0, -3;
     // F = x * X.inverse();
-    // F << 0.4, 0.6, 1.2, -0.2;
+    // // F << 0.4, 0.6, 1.2, -0.2;
     // std::cout << F << std::endl;
     // std::cout << 0.5 * (F.transpose() * F - Eigen::Matrix2d::Identity()) << std::endl;
     return 0; 
