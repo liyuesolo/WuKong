@@ -755,5 +755,6 @@ void CellSim::constructCellMeshFromFile(const std::string& filename)
 
     print_force_norm = false;
     verbose = true;    
+    max_newton_iter = 500;
     std::cout << "initialization done" << std::endl;
 }
