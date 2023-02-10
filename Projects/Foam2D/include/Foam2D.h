@@ -66,6 +66,8 @@ public:
 
     void initDynamicCircle(int n_free_in);
 
+    void initDynamicBiArcCircle(int n_free_in);
+
     void initRigidBodyAgent(int n_free_in);
 
     void initHardwareScenario0(int n_free_in);

@@ -128,6 +128,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Image Match");
         scenarios.push_back("Dynamic Box");
         scenarios.push_back("Dynamic Circle");
+        scenarios.push_back("Dynamic BiArc Circle");
         scenarios.push_back("Rigid Body Agent");
         scenarios.push_back("Hardware 0");
 
@@ -186,6 +187,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 7) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 8) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -389,9 +394,12 @@ void Foam2DApp::generateScenario() {
             foam.initDynamicCircle(generate_scenario_free_sites);
             break;
         case 6:
-            foam.initRigidBodyAgent(generate_scenario_free_sites);
+            foam.initDynamicBiArcCircle(generate_scenario_free_sites);
             break;
         case 7:
+            foam.initRigidBodyAgent(generate_scenario_free_sites);
+            break;
+        case 8:
             foam.initHardwareScenario0(generate_scenario_free_sites);
             break;
         default:

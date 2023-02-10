@@ -15,6 +15,7 @@
 #include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RegularPolygonBoundary.h"
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
+#include "Projects/Foam2D/include/Boundary/BiArcBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 #include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
 
@@ -141,6 +142,39 @@ void Foam2D::initDynamicCircle(int n_free_in) {
     free_idx(0) = 0;
 //    VectorXi free_idx = {};
     info->boundary = new CircleBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-r, r);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initDynamicBiArcCircle(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r = 0.75;
+    VectorXT p(12);
+    p << r, 0, M_PI_2, 0, r, M_PI, -r, 0, -M_PI_2, 0, -r, 0;
+    VectorXi free_idx(9);
+    free_idx << 3, 4, 5, 6, 7, 8, 9, 10, 11;
+    info->boundary = new BiArcBoundary(p, free_idx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
