@@ -27,6 +27,13 @@ struct BoundaryIntersection {
     int flag;
 };
 
+struct BoundaryEdge {
+    int nextEdge;
+
+    int btype; // 0 = straight, 1 = arc, 2 = quadratic bezier.
+    int q_idx;
+};
+
 class Boundary {
 
 public:
@@ -41,12 +48,11 @@ public:
     MatrixXT dvdp;
     std::vector<MatrixXT> d2vdp2;
 
-    VectorXi next;
-    VectorXi r_map;
+    std::vector<BoundaryEdge> edges;
 
-    VectorXT radii;
-    MatrixXT drdp;
-    std::vector<MatrixXT> d2rdp2;
+    VectorXT q; // Curve parameter - radius for circular arcs, tangent at start vertex for quadratic bezier.
+    MatrixXT dqdp;
+    std::vector<MatrixXT> d2qdp2;
 
     MatrixXT holes;
 
@@ -88,13 +94,13 @@ protected:
 
     inline void setRGradientEntry(int ir, int ip, double value) {
         if (free_map(ip) >= 0) {
-            drdp(ir, free_map(ip)) = value;
+            dqdp(ir, free_map(ip)) = value;
         }
     }
 
     inline void setRHessianEntry(int ir, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            d2rdp2[ir](free_map(ip0), free_map(ip1)) = value;
+            d2qdp2[ir](free_map(ip0), free_map(ip1)) = value;
         }
     }
 

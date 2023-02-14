@@ -4,12 +4,12 @@ void SimpleBoundary::computeVertices() {
     v = p;
 
     int n_vtx = v.rows() / 2;
-    next.resize(n_vtx);
-    if (n_vtx > 0) {
-        next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
+    edges.resize(n_vtx);
+    for (int i = 0; i < n_vtx; i++) {
+        edges[i].nextEdge = (i + 1) % n_vtx;
+        edges[i].btype = 0;
+        edges[i].q_idx = -1;
     }
-
-    r_map = -1 * VectorXi::Ones(n_vtx);
 }
 
 void SimpleBoundary::computeGradient() {

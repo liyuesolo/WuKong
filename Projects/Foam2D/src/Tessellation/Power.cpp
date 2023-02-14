@@ -1,6 +1,7 @@
 #include <igl/triangle/triangulate.h>
 // libigl libirary must be included first
 #include "Projects/Foam2D/include/Tessellation/Power.h"
+#include "Projects/Foam2D/include/Tessellation/CellFunction.h"
 #include <iostream>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -9,7 +10,7 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Regular_triangulation_2<K> Regular_triangulation;
 
-void Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, TV &node) {
+void Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &node) {
     assert(v1.rows() == 3 && v2.rows() == 3 && v3.rows() == 3);
 
     double x1 = v1(0);
@@ -46,13 +47,11 @@ void Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, 
     xn = ((-y3 + y2) * y1 * y1 + (-y2 * y2 + y3 * y3 + (-z2 + z3) * zmul - x2 * x2 + x3 * x3) * y1 + y2 * y2 * y3 + (-y3 * y3 + zmul * (-z3 + z1) + x1 * x1 - x3 * x3) * y2 - y3 * (zmul * (-z2 + z1) + x1 * x1 - x2 * x2)) / ((-0.2e1 * x2 + 0.2e1 * x3) * y1 + (0.2e1 * x1 - 0.2e1 * x3) * y2 + (-0.2e1 * x1 + 0.2e1 * x2) * y3);
     yn = ((x3 - x2) * x1 * x1 + (x2 * x2 - x3 * x3 + (-z3 + z2) * zmul + y2 * y2 - y3 * y3) * x1 - x3 * x2 * x2 + (x3 * x3 + (z3 - z1) * zmul - y1 * y1 + y3 * y3) * x2 + x3 * (zmul * (-z2 + z1) + y1 * y1 - y2 * y2)) / ((0.2e1 * y2 - 0.2e1 * y3) * x1 + (-0.2e1 * y1 + 0.2e1 * y3) * x2 + (0.2e1 * y1 - 0.2e1 * y2) * x3);
     // @formatter:on
-    node = {xn, yn};
+    node = TV3(xn, yn, 0);
 }
 
 void
-Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &gradX, VectorXT &gradY) {
-    assert(v1.rows() == 3 && v2.rows() == 3 && v3.rows() == 3 && gradX.rows() == 9 && gradY.rows() == 9);
-
+Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
     double x1 = v1(0);
     double y1 = v1(1);
     double z1 = v1(2);
@@ -62,6 +61,9 @@ Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v
     double x3 = v3(0);
     double y3 = v3(1);
     double z3 = v3(2);
+
+    int n = 9;
+    double gradX[n], gradY[n];
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -142,13 +144,14 @@ Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v
     gradY[7] = t11 * (-t16 * t19 - y3 * t19);
     gradY[8] = -zmul * t19 * t11 / 0.2e1;
     // @formatter:on
+
+    nodeGrad = MatrixXT::Zero(CellFunction::nx, n);
+    nodeGrad.row(0) = Eigen::Map<VectorXT>(gradX, n);
+    nodeGrad.row(1) = Eigen::Map<VectorXT>(gradY, n);
 }
 
 void
-Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &hessX, MatrixXT &hessY) {
-    assert(v1.rows() == 3 && v2.rows() == 3 && v3.rows() == 3 && hessX.rows() == 9 && hessX.cols() == 9 &&
-           hessY.rows() == 9 && hessY.cols() == 9);
-
+Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, std::vector<MatrixXT> &nodeHess) {
     double x1 = v1(0);
     double y1 = v1(1);
     double z1 = v1(2);
@@ -161,6 +164,8 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
 
     int n = 9;
     double unknown[n][n];
+    nodeHess.resize(CellFunction::nx);
+    nodeHess[2] = Eigen::MatrixXd::Zero(0, 0);
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -348,7 +353,7 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
     unknown[8][7] = -t243;
     unknown[8][8] = 0.0e0;
 
-    hessX = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
+    nodeHess[0] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
 
     t1 = x3 - x2;
     t2 = 0.2e1 * y2;
@@ -520,11 +525,11 @@ Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
     unknown[8][7] = -t243;
     unknown[8][8] = 0.0e0;
 
-    hessY = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
+    nodeHess[1] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, n);
     // @formatter:on
 }
 
-void Power::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, TV &node) {
+void Power::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, VectorXT &node) {
     assert(v1.rows() == 3 && v2.rows() == 3);
 
 //    double rsq = (v2(0) - v1(0)) * (v2(0) - v1(0)) + (v2(1) - v1(1)) * (v2(1) - v1(1));
@@ -560,11 +565,11 @@ void Power::getBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0
     xn = ((0.5e0 * v1y * v1y - 0.1e1 * v1y * y4 - 0.5e0 * v2y * v2y + v2y * y4 + (-0.5e0 * v2z + 0.5e0 * v1z) * zmul + 0.5e0 * v1x * v1x - 0.5e0 * v2x * v2x) * x3 + (-0.5e0 * v1y * v1y + v1y * y3 + 0.5e0 * v2y * v2y - 0.1e1 * v2y * y3 + (0.5e0 * v2z - 0.5e0 * v1z) * zmul - 0.5e0 * v1x * v1x + 0.5e0 * v2x * v2x) * x4) / ((v1x - v2x) * x3 + (v2x - v1x) * x4 + (-v2y + v1y) * (-y4 + y3));
     yn = ((0.5e0 * v1x * v1x - 0.1e1 * x4 * v1x - 0.5e0 * v2x * v2x + x4 * v2x + (-0.5e0 * v2z + 0.5e0 * v1z) * zmul - 0.5e0 * v2y * v2y + 0.5e0 * v1y * v1y) * y3 + (-0.5e0 * v1x * v1x + x3 * v1x + 0.5e0 * v2x * v2x - 0.1e1 * x3 * v2x + (0.5e0 * v2z - 0.5e0 * v1z) * zmul + 0.5e0 * v2y * v2y - 0.5e0 * v1y * v1y) * y4) / ((-v2y + v1y) * y3 + (v2y - v1y) * y4 + (v1x - v2x) * (-x4 + x3));
     // @formatter:on
-    node = {xn, yn};
+    node = TV3(xn, yn, 0);
 }
 
-void Power::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, VectorXT &gradX,
-                                    VectorXT &gradY) {
+void
+Power::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, MatrixXT &nodeGrad) {
     assert(v1.rows() == 3 && v2.rows() == 3);
 
     double v1x = v1(0);
@@ -577,6 +582,9 @@ void Power::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, cons
     double y3 = b0(1);
     double x4 = b1(0);
     double y4 = b1(1);
+
+    int n = 10;
+    double gradX[n], gradY[n];
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -648,10 +656,14 @@ void Power::getBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, cons
     gradY[8] = -t2 * (t9 + y3);
     gradY[9] = -t5 * (t7 + t1);
     // @formatter:on
+
+    nodeGrad = MatrixXT::Zero(CellFunction::nx, n);
+    nodeGrad.row(0) = Eigen::Map<VectorXT>(gradX, n);
+    nodeGrad.row(1) = Eigen::Map<VectorXT>(gradY, n);
 }
 
-void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, MatrixXT &hessX,
-                                   MatrixXT &hessY) {
+void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1,
+                                   std::vector<MatrixXT> &nodeHess) {
     assert(v1.rows() == 3 && v2.rows() == 3);
 
     double v1x = v1(0);
@@ -668,6 +680,9 @@ void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
     int n = 10;
     double hessX_c[n][n];
     double hessY_c[n][n];
+
+    nodeHess.resize(CellFunction::nx);
+    nodeHess[2] = Eigen::MatrixXd::Zero(0, 0);
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -1072,8 +1087,8 @@ void Power::getBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
     hessY_c[9][9] = -0.2e1 * t13 * (t43 + t10);
     // @formatter:on
 
-    hessX = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
-    hessY = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
+    nodeHess[0] = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
+    nodeHess[1] = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
 }
 
 int idxClosest(const TV &p, const VectorXT &vertices3d) {

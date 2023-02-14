@@ -5,11 +5,6 @@ void RigidBodyAgentBoundary::computeVertices() {
     VectorXT box(4 * 2);
     box << -bx, -by, bx, -by, bx, by, -bx, by;
 
-    VectorXi r_box = -1 * VectorXi::Ones(4);
-    VectorXi r_agent = r_map;
-    r_map.resize(r_agent.rows() + r_box.rows());
-    r_map << r_agent, r_box;
-
     double dx = p(0);
     double dy = p(1);
     double t = tmul * p(2);
@@ -23,14 +18,22 @@ void RigidBodyAgentBoundary::computeVertices() {
         agent(i * 2 + 0) = (x0 * cos(t) - y0 * sin(t)) + dx;
         agent(i * 2 + 1) = (x0 * sin(t) + y0 * cos(t)) + dy;
     }
-
     v.resize(agent.rows() + box.rows());
     v << agent, box;
 
-    int n_vtx = v.rows() / 2;
-    next.resize(n_vtx);
-    next << Eigen::VectorXi::LinSpaced(nsides - 1, 1, nsides - 1), 0, Eigen::VectorXi::LinSpaced(3, nsides + 1,
-                                                                                                 nsides + 3), nsides;
+    int n_agent = agent.rows() / 2;
+    int n_box = 4;
+    edges.resize(v.rows() / 2);
+    for (int i = 0; i < n_agent; i++) {
+        edges[i].nextEdge = (i + 1) % n_agent;
+        edges[i].btype = 1;
+        edges[i].q_idx = q_map(i);
+    }
+    for (int i = 0; i < n_box; i++) {
+        edges[i + n_agent].nextEdge = n_agent + (i + 1) % n_box;
+        edges[i + n_agent].btype = 0;
+        edges[i + n_agent].q_idx = -1;
+    }
 
     holes.resize(1, 2);
     holes.row(0) = TV(dx, dy);
@@ -56,7 +59,7 @@ void RigidBodyAgentBoundary::computeGradient() {
         setGradientEntry(i * 2 + 1, 2, tmul * (x0 * cos(t) - y0 * sin(t)));
     }
 
-    drdp = MatrixXT::Zero(radii.rows(), nfree);
+    dqdp = MatrixXT::Zero(q.rows(), nfree);
 }
 
 void RigidBodyAgentBoundary::computeHessian() {
@@ -80,9 +83,9 @@ void RigidBodyAgentBoundary::computeHessian() {
         d2vdp2[nsides * 2 + i] = MatrixXT::Zero(nfree, nfree);
     }
 
-    d2rdp2.resize(radii.rows());
-    for (int i = 0; i < radii.rows(); i++) {
-        d2rdp2[i] = MatrixXT::Zero(nfree, nfree);
+    d2qdp2.resize(q.rows());
+    for (int i = 0; i < q.rows(); i++) {
+        d2qdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

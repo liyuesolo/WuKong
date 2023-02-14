@@ -72,6 +72,8 @@ public:
 
     void initHardwareScenario0(int n_free_in);
 
+    void initGastrulation(int n_free_in);
+
     void initImageMatch(MatrixXi &markers);
 
     void dynamicsInit();

@@ -587,6 +587,14 @@ void CellFunctionDeformationCentroid::addValueArc(int i, const VectorXT &nodes, 
     double t55 = t1 * t1;
     double t66 = pow(t19 - t20 + t22 - t23 - t24 + t26 - t27, 0.2e1);
     value += (0.4e1 * t8 * t4 * t3 + 0.4e1 * t7 * r * (t15 * t14 * t13 / 0.2e1 + t29) + 0.4e1 * t15 * t28 * t34 - 0.4e1 * t40 * t4 * t3 - 0.4e1 * t39 * r * (-t44 * t14 * t13 / 0.2e1 + t29) + 0.4e1 * t44 * t28 * t34 + phi * (t55 + t1 * (-0.2e1 * t19 + 0.4e1 * t20 - 0.8e1 * t21 + 0.4e1 * t23 + 0.4e1 * t24 - 0.8e1 * t25 + 0.4e1 * t27) + t66)) * r;
+
+    double bbb = (0.4e1 * t8 * t4 * t3 + 0.4e1 * t7 * r * (t15 * t14 * t13 / 0.2e1 + t29) + 0.4e1 * t15 * t28 * t34 - 0.4e1 * t40 * t4 * t3 - 0.4e1 * t39 * r * (-t44 * t14 * t13 / 0.2e1 + t29) + 0.4e1 * t44 * t28 * t34 + phi * (t55 + t1 * (-0.2e1 * t19 + 0.4e1 * t20 - 0.8e1 * t21 + 0.4e1 * t23 + 0.4e1 * t24 - 0.8e1 * t25 + 0.4e1 * t27) + t66)) * r;
+    if (bbb < 0) {
+        std::cout << "Obj val: " << bbb << std::endl;
+        std::cout << "Arc: " << x0 << " " << y0 << " " << x1 << " " << y1 << " " << r << std::endl;
+        std::cout << "P: " << xrc << " " << yrc << " " << theta << " " << phi << std::endl;
+        std::cout << "Centroid: " << xc << " " << yc << std::endl;
+    }
     // @formatter:on
 }
 

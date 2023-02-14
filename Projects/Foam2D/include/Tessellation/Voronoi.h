@@ -12,37 +12,36 @@ public:
 
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 
-    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, TV &node);
+    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node);
 
     virtual void
-    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &gradX, VectorXT &gradY);
+    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad);
 
     virtual void
-    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &hessX, MatrixXT &hessY);
-
-    virtual void getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, TV &node);
-
-    virtual void
-    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &gradX,
-                            VectorXT &gradY);
+    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
+                   std::vector<MatrixXT> &nodeHess);
 
     virtual void
-    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &hessX,
-                           MatrixXT &hessY);
+    getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node);
+
+    virtual void
+    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &nodeGrad);
+
+    virtual void
+    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1,
+                           std::vector<MatrixXT> &nodeHess);
 
     virtual void
     getArcBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                       TV &node);
+                       VectorXT &node);
 
     virtual void
     getArcBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                               VectorXT &gradX,
-                               VectorXT &gradY);
+                               MatrixXT &nodeGrad);
 
     virtual void
     getArcBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                              MatrixXT &hessX,
-                              MatrixXT &hessY);
+                              std::vector<MatrixXT> &nodeHess);
 
     virtual int getNumVertexParams() { return 0; }
 

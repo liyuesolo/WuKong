@@ -6,14 +6,19 @@ void CircleBoundary::computeVertices() {
 
     v.resize(4 * 2);
     v << r, 0, 0, r, -r, 0, 0, -r;
-    r_map = VectorXi::Zero(4);
 
-    radii.resize(1);
-    radii(0) = r;
+    q.resize(2);
+    q(0) = r;
+    q(1) = -r;
 
     int n_vtx = v.rows() / 2;
-    next.resize(n_vtx);
-    next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
+    edges.resize(n_vtx);
+    for (int i = 0; i < n_vtx; i++) {
+        edges[i].nextEdge = (i + 1) % n_vtx;
+        edges[i].btype = 1;
+        edges[i].q_idx = 0;
+    }
+    edges[0].q_idx = 0; // Change if you want to invert one edge.
 }
 
 void CircleBoundary::computeGradient() {
@@ -23,8 +28,9 @@ void CircleBoundary::computeGradient() {
     setGradientEntry(4, 0, -1);
     setGradientEntry(7, 0, -1);
 
-    drdp = MatrixXT::Zero(radii.rows(), nfree);
+    dqdp = MatrixXT::Zero(q.rows(), nfree);
     setRGradientEntry(0, 0, 1);
+    setRGradientEntry(1, 0, -1);
 }
 
 void CircleBoundary::computeHessian() {
@@ -32,9 +38,9 @@ void CircleBoundary::computeHessian() {
     for (int i = 0; i < v.rows(); i++) {
         d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
-    d2rdp2.resize(radii.rows());
-    for (int i = 0; i < radii.rows(); i++) {
-        d2rdp2[i] = MatrixXT::Zero(nfree, nfree);
+    d2qdp2.resize(q.rows());
+    for (int i = 0; i < q.rows(); i++) {
+        d2qdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

@@ -1,12 +1,11 @@
 #include <igl/triangle/triangulate.h>
 // libigl libirary must be included first
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
+#include "Projects/Foam2D/include/Tessellation/CellFunction.h"
 #include <iostream>
 
 void Voronoi::getArcBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                                 const int flag, TV &node) {
-    assert(v1.rows() == 2 && v2.rows() == 2);
-
+                                 const int flag, VectorXT &node) {
 //    double x1 = (v1(0) + v2(0)) / 2;
 //    double y1 = (v1(1) + v2(1)) / 2;
 //    double x2 = x1 + (v2(1) - v1(1));
@@ -34,15 +33,12 @@ void Voronoi::getArcBoundaryNode(const VectorXT &v1, const VectorXT &v2, const T
     xn = 0.5e0 * v1x + 0.5e0 * v2x + ((x4 - x3) * (-y3 + 0.5e0 * v1y + 0.5e0 * v2y) - (y4 - y3) * (-x3 + 0.5e0 * v1x + 0.5e0 * v2x)) / (-(x4 - x3) * (-v2x + v1x) + (v2y - v1y) * (y4 - y3)) * (v2y - v1y);
     yn = 0.5e0 * v1y + 0.5e0 * v2y + ((x4 - x3) * (-y3 + 0.5e0 * v1y + 0.5e0 * v2y) - (y4 - y3) * (-x3 + 0.5e0 * v1x + 0.5e0 * v2x)) / (-(x4 - x3) * (-v2x + v1x) + (v2y - v1y) * (y4 - y3)) * (-v2x + v1x);
     // @formatter:on
-    node = {xn, yn};
+    node = TV3(xn, yn, 0);
 }
 
 void
 Voronoi::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                                 const int flag, VectorXT &gradX,
-                                 VectorXT &gradY) {
-    assert(v1.rows() == 2 && v2.rows() == 2);
-
+                                    const int flag, MatrixXT &nodeGrad) {
     double v1x = v1(0);
     double v1y = v1(1);
     double v2x = v2(0);
@@ -51,6 +47,9 @@ Voronoi::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, cons
     double y3 = b0(1);
     double x4 = b1(0);
     double y4 = b1(1);
+
+    int n = 8;
+    double gradX[n], gradY[n];
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -119,14 +118,15 @@ Voronoi::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, cons
     gradY[6] = t3 * (t5 - t9);
     gradY[7] = t3 * (t4 + t11);
     // @formatter:on
+
+    nodeGrad = MatrixXT::Zero(CellFunction::nx, 6);
+    nodeGrad.row(0) = Eigen::Map<VectorXT>(gradX, 6);
+    nodeGrad.row(1) = Eigen::Map<VectorXT>(gradY, 6);
 }
 
 void
 Voronoi::getArcBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                                const int flag, MatrixXT &hessX,
-                                MatrixXT &hessY) {
-    assert(v1.rows() == 2 && v2.rows() == 2);
-
+                                   const int flag, std::vector<MatrixXT> &nodeHess) {
     double v1x = v1(0);
     double v1y = v1(1);
     double v2x = v2(0);
@@ -462,6 +462,8 @@ Voronoi::getArcBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const
     hessY_c[7][7] = -0.2e1 * t48 * (t11 + t33);
     // @formatter:on
 
-    hessX = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
-    hessY = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
+    nodeHess.resize(CellFunction::nx);
+    nodeHess[0] = Eigen::Map<Eigen::MatrixXd>(&hessX_c[0][0], n, n);
+    nodeHess[1] = Eigen::Map<Eigen::MatrixXd>(&hessY_c[0][0], n, n);
+    nodeHess[2] = Eigen::MatrixXd::Zero(0, 0);
 }

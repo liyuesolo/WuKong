@@ -35,8 +35,8 @@ bool Boundary::pointInBounds(const TV &point) {
     int np = v.rows() / 2;
 
     double w = 0; // Winding number
-    for (int i = 0; i < np; i++) {
-        int j = next(i);
+    for (int i = 0; i < edges.size(); i++) {
+        int j = edges[i].nextEdge;
         double x1 = v(2 * i + 0);
         double y1 = v(2 * i + 1);
         double x2 = v(2 * j + 0);
@@ -46,8 +46,8 @@ bool Boundary::pointInBounds(const TV &point) {
         if (a > M_PI) a -= 2 * M_PI;
         if (a < -M_PI) a += 2 * M_PI;
 
-        if (r_map(i) >= 0) {
-            double r = radii(r_map(i));
+        if (edges[i].btype == 1) {
+            double r = q(edges[i].q_idx);
 
             double q = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
             double d = r / 2 * sqrt(4 - pow(q / r, 2));
@@ -71,7 +71,7 @@ bool Boundary::pointInBounds(const TV &point) {
 
 bool Boundary::straightBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect) {
     TV p2 = v.segment<2>(v_idx * 2);
-    TV p3 = v.segment<2>(next(v_idx) * 2);
+    TV p3 = v.segment<2>(edges[v_idx].nextEdge * 2);
 
     if (std::min(p0.x(), p1.x()) > std::max(p2.x(), p3.x()) ||
         std::max(p0.x(), p1.x()) < std::min(p2.x(), p3.x()) ||
@@ -105,7 +105,7 @@ void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx,
                                           BoundaryIntersection &intersect0, bool &isInt1,
                                           BoundaryIntersection &intersect1) {
     TV p2 = v.segment<2>(v_idx * 2);
-    TV p3 = v.segment<2>(next(v_idx) * 2);
+    TV p3 = v.segment<2>(edges[v_idx].nextEdge * 2);
 
     double x0 = p0.x();
     double y0 = p0.y();
@@ -115,7 +115,7 @@ void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx,
     double y2 = p2.y();
     double x3 = p3.x();
     double y3 = p3.y();
-    double r = radii(r_map(v_idx));
+    double r = q(edges[v_idx].q_idx);
 
     TV int0, int1;
 
@@ -237,14 +237,14 @@ bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<Bo
         TV v1 = nodes[(i + 1) % degree];
 
         for (size_t k = 0; k < n_bdy; k++) {
-            if (r_map(k) < 0) {
+            if (edges[k].btype == 0) {
                 BoundaryIntersection intersect;
                 intersect.i_cell = i;
                 intersect.i_bdry = k;
                 if (straightBoundaryIntersection(v0, v1, k, intersect)) {
                     intersections.push_back(intersect);
                 }
-            } else {
+            } else if (edges[k].btype == 1) {
                 BoundaryIntersection intersect0;
                 intersect0.i_cell = i;
                 intersect0.i_bdry = k;

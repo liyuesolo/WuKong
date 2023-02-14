@@ -17,15 +17,18 @@ void HardwareBoundary0::computeVertices() {
             0, dy + corner_radius,
             -channel_width, dy + corner_radius;
 
-    r_map = -1 * VectorXi::Ones(n_vtx);
-    r_map(5) = 0;
-//    r_map(0) = 1;
-    radii.resize(2);
-    radii(0) = -corner_radius;
-    radii(1) = channel_width;
+    q.resize(2);
+    q(0) = -corner_radius;
+    q(1) = channel_width;
 
-    next.resize(n_vtx);
-    next << Eigen::VectorXi::LinSpaced(n_vtx - 1, 1, n_vtx - 1), 0;
+    edges.resize(n_vtx);
+    for (int i = 0; i < n_vtx; i++) {
+        edges[i].nextEdge = (i + 1) % n_vtx;
+        edges[i].btype = 0;
+        edges[i].q_idx = -1;
+    }
+    edges[5].btype = 1;
+    edges[5].q_idx = 0;
 }
 
 void HardwareBoundary0::computeGradient() {
@@ -36,7 +39,7 @@ void HardwareBoundary0::computeGradient() {
     setGradientEntry(7 * 2 + 1, 1, 1);
     setGradientEntry(8 * 2 + 1, 1, 1);
 
-    drdp = MatrixXT::Zero(radii.rows(), nfree);
+    dqdp = MatrixXT::Zero(q.rows(), nfree);
 }
 
 void HardwareBoundary0::computeHessian() {
@@ -44,9 +47,9 @@ void HardwareBoundary0::computeHessian() {
     for (int i = 0; i < v.rows(); i++) {
         d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
-    d2rdp2.resize(radii.rows());
-    for (int i = 0; i < radii.rows(); i++) {
-        d2rdp2[i] = MatrixXT::Zero(nfree, nfree);
+    d2qdp2.resize(q.rows());
+    for (int i = 0; i < q.rows(); i++) {
+        d2qdp2[i] = MatrixXT::Zero(nfree, nfree);
     }
 }
 

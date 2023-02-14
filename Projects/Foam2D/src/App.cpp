@@ -131,6 +131,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Dynamic BiArc Circle");
         scenarios.push_back("Rigid Body Agent");
         scenarios.push_back("Hardware 0");
+        scenarios.push_back("Gastrulation");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = false;
@@ -191,6 +192,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 8) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 9) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -401,6 +406,9 @@ void Foam2DApp::generateScenario() {
             break;
         case 8:
             foam.initHardwareScenario0(generate_scenario_free_sites);
+            break;
+        case 9:
+            foam.initGastrulation(generate_scenario_free_sites);
             break;
         default:
             std::cout << "Error: scenario not implemented!";

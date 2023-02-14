@@ -30,12 +30,13 @@ class CellInfo;
 
 class Boundary;
 
+class BoundaryEdge;
+
 struct CellEdge {
     int startNode;
     int neighbor;
     int flag;
     int nextEdge;
-    int r_idx;
 };
 
 struct Cell {
@@ -62,49 +63,48 @@ private:
 //    MatrixXT dxdc;
     Eigen::SparseMatrix<double> dxdc;
     Eigen::SparseMatrix<double> dxdv;
-    Eigen::SparseMatrix<double> dxdr;
+    Eigen::SparseMatrix<double> dxdq;
     std::vector<MatrixXT> d2xdy2;
 
     // Computes list of indices of neighboring sites, ordered counterclockwise.
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
 
     // Get the tessellation node at the intersection of three cells.
-    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, TV &node) = 0;
+    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node) = 0;
 
     virtual void
-    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &gradX, VectorXT &gradY) = 0;
+    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad) = 0;
 
     virtual void
-    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &hessX, MatrixXT &hessY) = 0;
+    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
+                   std::vector<MatrixXT> &nodeHess) = 0;
 
-    void getNodeWrapper(int i0, int i1, int i2, int flag, TV &node, VectorXT &gradX, VectorXT &gradY, MatrixXT &hessX,
-                        MatrixXT &hessY, int &mode);
+    void getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, MatrixXT &nodeGrad,
+                        std::vector<MatrixXT> &nodeHess, int &mode);
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
-    virtual void getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, TV &node) = 0;
+    virtual void
+    getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node) = 0;
 
     virtual void
-    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &gradX,
-                            VectorXT &gradY) = 0;
+    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &nodeGrad) = 0;
 
     virtual void
-    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &hessX,
-                           MatrixXT &hessY) = 0;
+    getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1,
+                           std::vector<MatrixXT> &nodeHess) = 0;
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void
     getArcBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                       TV &node) = 0;
+                       VectorXT &node) = 0;
 
     virtual void
     getArcBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                               VectorXT &gradX,
-                               VectorXT &gradY) = 0;
+                               MatrixXT &nodeGrad) = 0;
 
     virtual void
     getArcBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                              MatrixXT &hessX,
-                              MatrixXT &hessY) = 0;
+                              std::vector<MatrixXT> &nodeHess) = 0;
 
 public:
     Tessellation() {}

@@ -1,12 +1,11 @@
 #include <igl/triangle/triangulate.h>
 // libigl libirary must be included first
 #include "Projects/Foam2D/include/Tessellation/Power.h"
+#include "Projects/Foam2D/include/Tessellation/CellFunction.h"
 #include <iostream>
 
 void Power::getArcBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                               const int flag, TV &node) {
-    assert(v1.rows() == 3 && v2.rows() == 3);
-
+                               const int flag, VectorXT &node) {
     double v0x = v1(0);
     double v0y = v1(1);
     double v0z = v1(2);
@@ -201,15 +200,12 @@ void Power::getArcBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV 
         yn = t28 * (-0.2e1 * sqrt(t5) - 0.2e1 * t32 * t7 * t19 + t19 * (t30 * t7 + v0y * (t20 - t6 + t12 + t10 - t11 + t8) + (t1 * v1y - t10 + t11 - t12 - t20 + t6 - t8) * v1y) - t35 * (-t1 * t3 + t2 * t4) * t18 * t25) * t41 * t9;
     }
     // @formatter:on
-    node = {xn, yn};
+    node = TV3(xn, yn, 0);
 }
 
 void
 Power::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                                  const int flag, VectorXT &gradX,
-                                  VectorXT &gradY) {
-    assert(v1.rows() == 3 && v2.rows() == 3);
-
+                                  const int flag, MatrixXT &nodeGrad) {
     double v0x = v1(0);
     double v0y = v1(1);
     double v0z = v1(2);
@@ -220,6 +216,9 @@ Power::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const 
     double y2 = b0(1);
     double x3 = b1(0);
     double y3 = b1(1);
+
+    int n = 11;
+    double gradX[n], gradY[n];
 
     // @formatter:off
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -1002,14 +1001,16 @@ Power::getArcBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, const 
         gradY[10] = t7;
     }
     // @formatter:on
+
+    nodeGrad = MatrixXT::Zero(CellFunction::nx, n);
+    nodeGrad.row(0) = Eigen::Map<VectorXT>(gradX, n);
+    nodeGrad.row(1) = Eigen::Map<VectorXT>(gradY, n);
+    nodeGrad(2, n - 1) = 1;
 }
 
 void
 Power::getArcBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const TV &b0, const TV &b1, const double r,
-                                 const int flag, MatrixXT &hessX,
-                                 MatrixXT &hessY) {
-    assert(v1.rows() == 3 && v2.rows() == 3);
-
+                                 const int flag, std::vector<MatrixXT> &nodeHess) {
     double v0x = v1(0);
     double v0y = v1(1);
     double v0z = v1(2);
@@ -1023,6 +1024,9 @@ Power::getArcBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const T
 
     int n = 11;
     double unknown[2][n][n];
+
+    nodeHess.resize(CellFunction::nx);
+    nodeHess[2] = Eigen::MatrixXd::Zero(0, 0);
 
     // @formatter:off
     double t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
@@ -8279,6 +8283,6 @@ Power::getArcBoundaryNodeHessian(const VectorXT &v1, const VectorXT &v2, const T
     }
     // @formatter:on
 
-    hessX = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0][0], n, n);
-    hessY = Eigen::Map<Eigen::MatrixXd>(&unknown[1][0][0], n, n);
+    nodeHess[0] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0][0], n, n);
+    nodeHess[1] = Eigen::Map<Eigen::MatrixXd>(&unknown[1][0][0], n, n);
 }

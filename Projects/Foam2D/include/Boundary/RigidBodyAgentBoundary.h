@@ -11,6 +11,8 @@ public:
     double epsilon = 1e-5;
     double tmul = 10;
 
+    VectorXi q_map;
+
 private:
 
     virtual void computeVertices();
@@ -29,11 +31,11 @@ public:
     virtual MatrixXT computeEnergyHessian();
 
 public:
-    RigidBodyAgentBoundary(const VectorXT &p_, const VectorXi &free_, VectorXT agentShape_, VectorXT r_,
-                           VectorXi r_map_) : Boundary(p_, free_),
+    RigidBodyAgentBoundary(const VectorXT &p_, const VectorXi &free_, VectorXT agentShape_, VectorXT q_,
+                           VectorXi q_map_) : Boundary(p_, free_),
                                               agentShape(agentShape_) {
-        radii = r_;
-        r_map = r_map_;
+        q = q_;
+        q_map = q_map_;
 
         computeVertices();
         computeGradient();

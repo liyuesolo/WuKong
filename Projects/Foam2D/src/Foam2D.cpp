@@ -18,6 +18,7 @@
 #include "Projects/Foam2D/include/Boundary/BiArcBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 #include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
+#include "Projects/Foam2D/include/Boundary/GastrulationBoundary.h"
 
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
@@ -170,10 +171,16 @@ void Foam2D::initDynamicBiArcCircle(int n_free_in) {
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double r = 0.75;
-    VectorXT p(12);
-    p << r, 0, M_PI_2, 0, r, M_PI, -r, 0, -M_PI_2, 0, -r, 0;
-    VectorXi free_idx(9);
-    free_idx << 3, 4, 5, 6, 7, 8, 9, 10, 11;
+    int ncp = 4;
+    VectorXT p(ncp * 3);
+    for (int i = 0; i < ncp; i++) {
+        double theta = i * M_PI * 2.0 / ncp;
+        p(i * 3 + 0) = r * cos(theta);
+        p(i * 3 + 1) = r * sin(theta);
+        p(i * 3 + 2) = theta + M_PI_2;
+    }
+    VectorXi free_idx = Eigen::VectorXi::LinSpaced(p.rows() - 3, 3, p.rows() - 1);
+//    IV3 free_idx(0, 1, 2);
     info->boundary = new BiArcBoundary(p, free_idx);
 
     std::random_device rd;
@@ -324,6 +331,57 @@ void Foam2D::initHardwareScenario0(int n_free_in) {
         }
         vertices(i * 2 + 0) = x;
         vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initGastrulation(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r_out = 0.75;
+    double r_in = 0.5;
+    double r_cells = (r_out + r_in) / 2;
+    int ncp = 8;
+    VectorXT p(ncp * 2 * 3);
+    for (int i = 0; i < ncp; i++) {
+        double theta = i * M_PI * 2.0 / ncp;
+        p(i * 3 + 0) = r_out * cos(theta);
+        p(i * 3 + 1) = r_out * sin(theta);
+        p(i * 3 + 2) = theta + M_PI_2;
+    }
+    for (int i = 0; i < ncp; i++) {
+        double theta = -i * M_PI * 2.0 / ncp;
+        p((ncp + i) * 3 + 0) = r_in * cos(theta);
+        p((ncp + i) * 3 + 1) = r_in * sin(theta);
+        p((ncp + i) * 3 + 2) = theta - M_PI_2;
+    }
+
+//    IV3 free_idx(0, 1, 2);
+//    VectorXi free_idx((ncp - 1) * 2 * 3);
+//    free_idx << Eigen::VectorXi::LinSpaced(ncp * 3 - 3, 3, ncp * 3 - 1), Eigen::VectorXi::LinSpaced(ncp * 3 - 3,
+//                                                                                                    ncp * 3 + 3,
+//                                                                                                    ncp * 2 * 3 - 1);
+    VectorXi free_idx(6);
+    IV3 linsp(0, 1, 2);
+    free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
+    info->boundary = new GastrulationBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    double noise = 1e-3;
+    std::uniform_real_distribution<double> dis(-noise, noise);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double theta = i * M_PI * 2.0 / info->n_free;
+        vertices(i * 2 + 0) = r_cells * cos(theta) + dis(gen);
+        vertices(i * 2 + 1) = r_cells * sin(theta) + dis(gen);
     }
     vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
 
@@ -514,7 +572,7 @@ void Foam2D::optimize(int mode) {
                 std::cout << "WARNING: Image match with free boundaries not supported!" << std::endl;
                 assert(0);
             }
-            if (info->boundary->radii.rows() > 0) {
+            if (info->boundary->q.rows() > 0) {
                 std::cout << "WARNING: Image match with curved boundaries not supported!" << std::endl;
                 assert(0);
             }
@@ -847,10 +905,10 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int numEdges = 0;
     for (Cell cell: cells) {
         for (CellEdge edge: cell.edges) {
-            if (edge.r_idx >= 0) {
-                TV p0 = nodes.segment<2>(edge.startNode * 2);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
-                double r = info->boundary->radii(edge.r_idx);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
+                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
                 numEdges += getNumPointsSubdivide(p0, p1, r);
             } else {
                 numEdges += 1;
@@ -875,10 +933,10 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
         int thisTotalNumEdges = 4;
         for (CellEdge edge: cell.edges) {
-            if (edge.r_idx >= 0) {
-                TV p0 = nodes.segment<2>(edge.startNode * 2);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
-                double r = info->boundary->radii(edge.r_idx);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
+                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
                 thisTotalNumEdges += getNumPointsSubdivide(p0, p1, r);
             } else {
                 thisTotalNumEdges += 1;
@@ -892,11 +950,11 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         Etri.resize(thisTotalNumEdges, 2);
         for (int j = 0; j < cell.edges.size(); j++) {
             CellEdge edge = cell.edges[j];
-            Ptri.row(j) = nodes.segment<2>(edge.startNode * 2);
-            if (edge.r_idx >= 0) {
-                TV p0 = nodes.segment<2>(edge.startNode * 2);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * 2);
-                double r = info->boundary->radii(edge.r_idx);
+            Ptri.row(j) = nodes.segment<2>(edge.startNode * CellFunction::nx);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
+                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
+                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
 
                 MatrixXT pointsSubdivide = getPointsSubdivide(p0, p1, r);
                 Ptri.block(thisNumEdges, 0, pointsSubdivide.rows(), 2) = pointsSubdivide;
@@ -914,7 +972,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             }
         }
 
-        double inf = 2;
+        double inf = 100;
         MatrixXT Pbb(4, 2);
         Pbb << -inf, -inf, inf, -inf, inf, inf, -inf, inf;
         MatrixXi Ebb(4, 2);

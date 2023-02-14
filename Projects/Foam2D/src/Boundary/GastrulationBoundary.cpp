@@ -1,18 +1,25 @@
-#include "../../include/Boundary/BiArcBoundary.h"
+#include "../../include/Boundary/GastrulationBoundary.h"
 #include "../../include/Boundary/BiArc.h"
 
-void BiArcBoundary::computeVertices() {
+void GastrulationBoundary::computeVertices() {
     int ncp = p.rows() / 3;
     v.resize(ncp * 4);
     q.resize(ncp * 2);
 
     int n_vtx = v.rows() / 2;
+    int n_vtx_2 = n_vtx / 2;
     edges.resize(n_vtx);
-    for (int i = 0; i < n_vtx; i++) {
-        edges[i].nextEdge = (i + 1) % n_vtx;
+    for (int i = 0; i < n_vtx_2; i++) {
+        edges[i].nextEdge = (i + 1) % n_vtx_2;
         edges[i].btype = 1;
         edges[i].q_idx = i;
     }
+    for (int i = 0; i < n_vtx_2; i++) {
+        edges[i + n_vtx_2].nextEdge = n_vtx_2 + (i + 1) % n_vtx_2;
+        edges[i + n_vtx_2].btype = 1;
+        edges[i + n_vtx_2].q_idx = i + n_vtx_2;
+    }
+
 
     for (int i = 0; i < ncp; i++) {
         int j = edges[edges[2 * i].nextEdge].nextEdge / 2;
@@ -28,7 +35,7 @@ void BiArcBoundary::computeVertices() {
     }
 }
 
-void BiArcBoundary::computeGradient() {
+void GastrulationBoundary::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
     dqdp = MatrixXT::Zero(q.rows(), nfree);
 
@@ -55,7 +62,7 @@ void BiArcBoundary::computeGradient() {
     }
 }
 
-void BiArcBoundary::computeHessian() {
+void GastrulationBoundary::computeHessian() {
     d2vdp2.resize(v.rows());
     for (int i = 0; i < v.rows(); i++) {
         d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
@@ -110,7 +117,7 @@ void BiArcBoundary::computeHessian() {
     }
 }
 
-bool BiArcBoundary::checkValid() {
+bool GastrulationBoundary::checkValid() {
     int n_vtx = v.rows() / 2;
     for (int i = 0; i < n_vtx; i++) {
         for (int j = i + 1; j < n_vtx; j++) {
@@ -181,7 +188,7 @@ bool BiArcBoundary::checkValid() {
     return true;
 }
 
-double BiArcBoundary::computeEnergy() {
+double GastrulationBoundary::computeEnergy() {
     double energy = 0;
     for (int i = 0; i < q.rows(); i++) {
         energy += epsilon / pow(q(i), 2);
@@ -189,7 +196,7 @@ double BiArcBoundary::computeEnergy() {
     return energy;
 }
 
-VectorXT BiArcBoundary::computeEnergyGradient() {
+VectorXT GastrulationBoundary::computeEnergyGradient() {
     VectorXT dEdr = VectorXT::Zero(q.rows());
     for (int i = 0; i < q.rows(); i++) {
         dEdr(i) = -2 * epsilon / pow(q(i), 3);
@@ -197,7 +204,7 @@ VectorXT BiArcBoundary::computeEnergyGradient() {
     return dEdr.transpose() * dqdp;
 }
 
-MatrixXT BiArcBoundary::computeEnergyHessian() {
+MatrixXT GastrulationBoundary::computeEnergyHessian() {
     VectorXT dEdr = VectorXT::Zero(q.rows());
     VectorXT d2Edr2 = VectorXT::Zero(q.rows());
     for (int i = 0; i < q.rows(); i++) {
