@@ -2,38 +2,41 @@
 #include <iostream>
 
 void CellFunctionAreaBarrierExponent::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                               const VectorXi &btype,
                                                double &value,
                                                const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
     value += epsilon * pow(area, exponent);
 }
 
 void CellFunctionAreaBarrierExponent::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                  const VectorXi &btype,
                                                   VectorXT &gradient_c,
                                                   VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(gradient_x.rows());
-    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, btype, temp, area_gradient_x, cellInfo);
 
     gradient_x += epsilon * (exponent * pow(area, exponent - 1.0) * area_gradient_x);
 }
 
 void CellFunctionAreaBarrierExponent::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                 const VectorXi &btype,
                                                  MatrixXT &hessian,
                                                  const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
-    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, btype, temp, area_gradient_x, cellInfo);
 
     MatrixXT area_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    area_function.addHessian(site, nodes, next, area_hessian, cellInfo);
+    area_function.addHessian(site, nodes, next, btype, area_hessian, cellInfo);
 
     Eigen::Ref<MatrixXT> area_hess = area_hessian.bottomRightCorner(nodes.rows(), nodes.rows());
     Eigen::Ref<MatrixXT> hess = hessian.bottomRightCorner(nodes.rows(), nodes.rows());

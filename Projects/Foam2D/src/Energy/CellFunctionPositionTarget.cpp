@@ -2,7 +2,8 @@
 #include <iostream>
 
 void
-CellFunctionPositionTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+CellFunctionPositionTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                     const VectorXi &btype, double &value,
                                      const CellInfo *cellInfo) const {
     if (cellInfo->agent) {
         TV target_position = cellInfo->target_position;
@@ -11,6 +12,7 @@ CellFunctionPositionTarget::addValue(const VectorXT &site, const VectorXT &nodes
 }
 
 void CellFunctionPositionTarget::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                             const VectorXi &btype,
                                              VectorXT &gradient_c,
                                              VectorXT &gradient_x, const CellInfo *cellInfo) const {
     if (cellInfo->agent) {
@@ -21,6 +23,7 @@ void CellFunctionPositionTarget::addGradient(const VectorXT &site, const VectorX
 }
 
 void CellFunctionPositionTarget::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                            const VectorXi &btype,
                                             MatrixXT &hessian,
                                             const CellInfo *cellInfo) const {
     if (cellInfo->agent) {

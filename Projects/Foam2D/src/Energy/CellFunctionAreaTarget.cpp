@@ -2,40 +2,43 @@
 #include <iostream>
 
 void
-CellFunctionAreaTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+CellFunctionAreaTarget::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                 const VectorXi &btype, double &value,
                                  const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
     double target_reciprocal = 1.0 / cellInfo->target_area;
     value += ((area * target_reciprocal - 1) * (area * target_reciprocal - 1));
 }
 
 void CellFunctionAreaTarget::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                         const VectorXi &btype,
                                          VectorXT &gradient_c,
                                          VectorXT &gradient_x, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(gradient_x.rows());
-    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, btype, temp, area_gradient_x, cellInfo);
 
     double target_reciprocal = 1.0 / cellInfo->target_area;
     gradient_x += (2 * (area * target_reciprocal - 1) * target_reciprocal * area_gradient_x);
 }
 
 void
-CellFunctionAreaTarget::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+CellFunctionAreaTarget::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                   const VectorXi &btype, MatrixXT &hessian,
                                    const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
-    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, btype, temp, area_gradient_x, cellInfo);
 
     MatrixXT area_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    area_function.addHessian(site, nodes, next, area_hessian, cellInfo);
+    area_function.addHessian(site, nodes, next, btype, area_hessian, cellInfo);
 
     Eigen::Ref<MatrixXT> area_hess = area_hessian.bottomRightCorner(nodes.rows(), nodes.rows());
     Eigen::Ref<MatrixXT> hess = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
@@ -59,23 +62,25 @@ CellFunctionAreaTarget::addHessian(const VectorXT &site, const VectorXT &nodes, 
 }
 
 void CellFunctionAreaTarget::addGradient_tau(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                             const VectorXi &btype,
                                              double &gradient_tau, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     double tau = 1.0 / cellInfo->target_area;
     gradient_tau += 2 * area * (area * tau - 1);
 }
 
 void CellFunctionAreaTarget::addHessian_tau(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                            const VectorXi &btype,
                                             double &hessian_tau_tau,
                                             VectorXT &hessian_tau_x, const CellInfo *cellInfo) const {
     double area = 0;
-    area_function.addValue(site, nodes, next, area, cellInfo);
+    area_function.addValue(site, nodes, next, btype, area, cellInfo);
 
     VectorXT temp;
     VectorXT area_gradient_x = VectorXT::Zero(nodes.rows());
-    area_function.addGradient(site, nodes, next, temp, area_gradient_x, cellInfo);
+    area_function.addGradient(site, nodes, next, btype, temp, area_gradient_x, cellInfo);
 
     double tau = 1.0 / cellInfo->target_area;
     hessian_tau_tau += 2 * area * area;

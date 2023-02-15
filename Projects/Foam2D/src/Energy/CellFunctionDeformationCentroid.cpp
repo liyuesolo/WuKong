@@ -3,32 +3,35 @@
 
 void
 CellFunctionDeformationCentroid::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                          const VectorXi &btype,
                                           double &value,
                                           const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
 
     double xc = 0;
-    xc_function.addValue(site, nodes, next, xc, cellInfo);
+    xc_function.addValue(site, nodes, next, btype, xc, cellInfo);
     double yc = 0;
-    yc_function.addValue(site, nodes, next, yc, cellInfo);
+    yc_function.addValue(site, nodes, next, btype, yc, cellInfo);
 
     double a = sqrt(cellInfo->target_area / M_PI);
-    double x0, y0, x1, y1, r;
-    int x0i, y0i, x1i, y1i, ri;
+    double x0, y0, q0, x1, y1, q1;
+    int x0i, y0i, q0i, x1i, y1i, q1i;
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * nx + 0;
         y0i = i * nx + 1;
+        q0i = i * nx + 2;
         x1i = next(i) * nx + 0;
         y1i = next(i) * nx + 1;
-        ri = i * nx + 2;
+        q1i = next(i) * nx + 2;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
+        q0 = nodes(q0i);
         x1 = nodes(x1i);
         y1 = nodes(y1i);
-        r = nodes(ri);
+        q1 = nodes(q1i);
 
-        if (fabs(r) > 1e-10) {
+        if (btype(i) == 1) {
             addValueArc(i, nodes, next, value, cellInfo, xc, yc);
         } else {
             // @formatter:off
@@ -39,25 +42,26 @@ CellFunctionDeformationCentroid::addValue(const VectorXT &site, const VectorXT &
 }
 
 void CellFunctionDeformationCentroid::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                  const VectorXi &btype,
                                                   VectorXT &gradient_c,
                                                   VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
     VectorXT gradient_centroid = VectorXT::Zero(2);
 
     double xc = 0;
-    xc_function.addValue(site, nodes, next, xc, cellInfo);
+    xc_function.addValue(site, nodes, next, btype, xc, cellInfo);
     double yc = 0;
-    yc_function.addValue(site, nodes, next, yc, cellInfo);
+    yc_function.addValue(site, nodes, next, btype, yc, cellInfo);
 
     VectorXT temp;
     VectorXT xc_grad = VectorXT::Zero(nodes.rows());
-    xc_function.addGradient(site, nodes, next, temp, xc_grad, cellInfo);
+    xc_function.addGradient(site, nodes, next, btype, temp, xc_grad, cellInfo);
     VectorXT yc_grad = VectorXT::Zero(nodes.rows());
-    yc_function.addGradient(site, nodes, next, temp, yc_grad, cellInfo);
+    yc_function.addGradient(site, nodes, next, btype, temp, yc_grad, cellInfo);
 
     double a = sqrt(cellInfo->target_area / M_PI);
-    double x0, y0, x1, y1, r;
-    int x0i, y0i, x1i, y1i, ri;
+    double x0, y0, q0, x1, y1, q1;
+    int x0i, y0i, q0i, x1i, y1i, q1i;
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
             t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
             t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60,
@@ -65,17 +69,19 @@ void CellFunctionDeformationCentroid::addGradient(const VectorXT &site, const Ve
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * nx + 0;
         y0i = i * nx + 1;
+        q0i = i * nx + 2;
         x1i = next(i) * nx + 0;
         y1i = next(i) * nx + 1;
-        ri = i * nx + 2;
+        q1i = next(i) * nx + 2;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
+        q0 = nodes(q0i);
         x1 = nodes(x1i);
         y1 = nodes(y1i);
-        r = nodes(ri);
+        q1 = nodes(q1i);
 
-        if (fabs(r) > 1e-10) {
+        if (btype(i) == 1) {
             addGradientArc(i, nodes, next, gradient_x, gradient_centroid, cellInfo, xc, yc);
         } else {
             // @formatter:off
@@ -167,6 +173,7 @@ void CellFunctionDeformationCentroid::addGradient(const VectorXT &site, const Ve
 }
 
 void CellFunctionDeformationCentroid::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                                 const VectorXi &btype,
                                                  MatrixXT &hessian,
                                                  const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
@@ -177,24 +184,24 @@ void CellFunctionDeformationCentroid::addHessian(const VectorXT &site, const Vec
     MatrixXT hess_CC = MatrixXT::Zero(2, 2);
 
     double xc = 0;
-    xc_function.addValue(site, nodes, next, xc, cellInfo);
+    xc_function.addValue(site, nodes, next, btype, xc, cellInfo);
     double yc = 0;
-    yc_function.addValue(site, nodes, next, yc, cellInfo);
+    yc_function.addValue(site, nodes, next, btype, yc, cellInfo);
 
     VectorXT temp;
     VectorXT xc_grad = VectorXT::Zero(nodes.rows());
-    xc_function.addGradient(site, nodes, next, temp, xc_grad, cellInfo);
+    xc_function.addGradient(site, nodes, next, btype, temp, xc_grad, cellInfo);
     VectorXT yc_grad = VectorXT::Zero(nodes.rows());
-    yc_function.addGradient(site, nodes, next, temp, yc_grad, cellInfo);
+    yc_function.addGradient(site, nodes, next, btype, temp, yc_grad, cellInfo);
 
     MatrixXT xc_hess = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    xc_function.addHessian(site, nodes, next, xc_hess, cellInfo);
+    xc_function.addHessian(site, nodes, next, btype, xc_hess, cellInfo);
     MatrixXT yc_hess = MatrixXT::Zero(hessian.rows(), hessian.cols());
-    yc_function.addHessian(site, nodes, next, yc_hess, cellInfo);
+    yc_function.addHessian(site, nodes, next, btype, yc_hess, cellInfo);
 
     double a = sqrt(cellInfo->target_area / M_PI);
-    double x0, y0, x1, y1, r;
-    int x0i, y0i, x1i, y1i, ri;
+    double x0, y0, q0, x1, y1, q1;
+    int x0i, y0i, q0i, x1i, y1i, q1i;
     double t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
             t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
             t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60,
@@ -273,17 +280,19 @@ void CellFunctionDeformationCentroid::addHessian(const VectorXT &site, const Vec
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * nx + 0;
         y0i = i * nx + 1;
+        q0i = i * nx + 2;
         x1i = next(i) * nx + 0;
         y1i = next(i) * nx + 1;
-        ri = i * nx + 2;
+        q1i = next(i) * nx + 2;
 
         x0 = nodes(x0i);
         y0 = nodes(y0i);
+        q0 = nodes(q0i);
         x1 = nodes(x1i);
         y1 = nodes(y1i);
-        r = nodes(ri);
+        q1 = nodes(q1i);
 
-        if (fabs(r) > 1e-10) {
+        if (btype(i) == 1) {
             addHessianArc(i, nodes, next, gradient_centroid, hess_xx, hess_Cx, hess_CC, cellInfo, xc, yc);
         } else {
             double unknown[6][6];
@@ -606,7 +615,7 @@ void CellFunctionDeformationCentroid::addHessian(const VectorXT &site, const Vec
 
 
 //    VectorXT grad = VectorXT::Zero(nodes.rows());
-//    addGradient(site, nodes, next, temp, grad, cellInfo);
+//    addGradient(site, nodes, next, btype, temp, grad, cellInfo);
 //    double eps = 1e-6;
 //    for (int i = 0; i < nodes.rows(); i++) {
 //        VectorXT xp = nodes;
@@ -621,7 +630,7 @@ void CellFunctionDeformationCentroid::addHessian(const VectorXT &site, const Vec
 
 //    VectorXT gradc = VectorXT::Zero(site.rows());
 //    VectorXT gradx = VectorXT::Zero(nodes.rows());
-//    addGradient(site, nodes, next, gradc, gradx, cellInfo);
+//    addGradient(site, nodes, next, btype, gradc, gradx, cellInfo);
 //    VectorXT grad(gradc.rows() + gradx.rows());
 //    grad << gradc, gradx;
 //    double eps = 1e-6;

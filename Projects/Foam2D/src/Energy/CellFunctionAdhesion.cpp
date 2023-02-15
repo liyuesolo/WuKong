@@ -1,8 +1,10 @@
 #include "../../include/Energy/CellFunctionAdhesion.h"
 #include <iostream>
 
-void CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
-                                    const CellInfo *cellInfo) const {
+void
+CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype,
+                               double &value,
+                               const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
 
     double x0, y0, x1, y1;
@@ -25,6 +27,7 @@ void CellFunctionAdhesion::addValue(const VectorXT &site, const VectorXT &nodes,
 }
 
 void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                       const VectorXi &btype,
                                        VectorXT &gradient_c,
                                        VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
@@ -57,7 +60,8 @@ void CellFunctionAdhesion::addGradient(const VectorXT &site, const VectorXT &nod
 }
 
 void
-CellFunctionAdhesion::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, MatrixXT &hessian,
+CellFunctionAdhesion::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                 const VectorXi &btype, MatrixXT &hessian,
                                  const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / 3;
 

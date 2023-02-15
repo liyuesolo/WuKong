@@ -1,7 +1,8 @@
 #include "../../include/ImageMatch/CellFunctionImageMatch1.h"
 #include <iostream>
 
-void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, double &value,
+void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                       const VectorXi &btype, double &value,
                                        const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
     int n_nodes = nodes.rows() / nx;
@@ -32,6 +33,7 @@ void CellFunctionImageMatch1::addValue(const VectorXT &site, const VectorXT &nod
 }
 
 void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                          const VectorXi &btype,
                                           VectorXT &gradient_c,
                                           VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;
@@ -80,6 +82,7 @@ void CellFunctionImageMatch1::addGradient(const VectorXT &site, const VectorXT &
 }
 
 void CellFunctionImageMatch1::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                         const VectorXi &btype,
                                          MatrixXT &hessian,
                                          const CellInfo *cellInfo) const {
     int n_pix = cellInfo->border_pix.rows() / 2;

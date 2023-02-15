@@ -908,7 +908,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
                 TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
                 TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
+                double r = nodes(edge.startNode * CellFunction::nx + 2);
                 numEdges += getNumPointsSubdivide(p0, p1, r);
             } else {
                 numEdges += 1;
@@ -936,7 +936,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
                 TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
                 TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
+                double r = nodes(edge.startNode * CellFunction::nx + 2);
                 thisTotalNumEdges += getNumPointsSubdivide(p0, p1, r);
             } else {
                 thisTotalNumEdges += 1;
@@ -954,7 +954,7 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
                 TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
                 TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = info->boundary->q(info->boundary->edges[edge.neighbor - n_vtx].q_idx);
+                double r = nodes(edge.startNode * CellFunction::nx + 2);
 
                 MatrixXT pointsSubdivide = getPointsSubdivide(p0, p1, r);
                 Ptri.block(thisNumEdges, 0, pointsSubdivide.rows(), 2) = pointsSubdivide;

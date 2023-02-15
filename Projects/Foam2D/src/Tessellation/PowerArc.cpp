@@ -200,7 +200,7 @@ void Power::getArcBoundaryNode(const VectorXT &v1, const VectorXT &v2, const TV 
         yn = t28 * (-0.2e1 * sqrt(t5) - 0.2e1 * t32 * t7 * t19 + t19 * (t30 * t7 + v0y * (t20 - t6 + t12 + t10 - t11 + t8) + (t1 * v1y - t10 + t11 - t12 - t20 + t6 - t8) * v1y) - t35 * (-t1 * t3 + t2 * t4) * t18 * t25) * t41 * t9;
     }
     // @formatter:on
-    node = TV3(xn, yn, 0);
+    node = TV3(xn, yn, r);
 }
 
 void
