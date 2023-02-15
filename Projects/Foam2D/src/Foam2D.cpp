@@ -15,6 +15,7 @@
 #include "Projects/Foam2D/include/Boundary/SimpleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RegularPolygonBoundary.h"
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
+#include "Projects/Foam2D/include/Boundary/BezierCircleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/BiArcBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 #include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
@@ -143,6 +144,40 @@ void Foam2D::initDynamicCircle(int n_free_in) {
     free_idx(0) = 0;
 //    VectorXi free_idx = {};
     info->boundary = new CircleBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-r, r);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initDynamicBezierCircle(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r = 0.75;
+    VectorXT p(1);
+    p(0) = r;
+    VectorXi free_idx(1);
+    free_idx(0) = 0;
+//    VectorXi free_idx = {};
+    info->boundary = new BezierCircleBoundary(p, free_idx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -845,35 +880,64 @@ void Foam2D::getTriangulationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, M
     }
 }
 
-static int getNumPointsSubdivide(TV p0, TV p1, double r) {
+static int getNumPointsSubdivide(VectorXT p0, VectorXT p1, int btype) {
     return 10;
 }
 
-static MatrixXT getPointsSubdivide(TV p0, TV p1, double r) {
-    double x0 = p0.x(), y0 = p0.y(), x1 = p1.x(), y1 = p1.y();
+static MatrixXT getPointsSubdivide(VectorXT p0, VectorXT p1, int btype) {
+    if (btype == 1) {
+        double x0 = p0(0), y0 = p0(1), x1 = p1(0), y1 = p1(1);
+        double r = p0(2);
+        double r2 = p1(2);
 
-    double a = (p1 - p0).norm();
-    double d = r / 2 * sqrt(4 - pow(a / r, 2));
-    double theta = atan2(-(x1 - x0), (y1 - y0));
-    double xc = (x0 + x1) / 2 - d * cos(theta);
-    double yc = (y0 + y1) / 2 - d * sin(theta);
-    double t0 = atan2(y0 - yc, x0 - xc);
-    double t1 = atan2(y1 - yc, x1 - xc);
-    if (t1 < t0 && r > 0) t1 += 2 * M_PI;
-    if (t1 > t0 && r < 0) t1 -= 2 * M_PI;
+        double a = (TV(x1, y1) - TV(x0, y0)).norm();
+        double d = r / 2 * sqrt(4 - pow(a / r, 2));
+        double theta = atan2(-(x1 - x0), (y1 - y0));
+        double xc = (x0 + x1) / 2 - d * cos(theta);
+        double yc = (y0 + y1) / 2 - d * sin(theta);
+        double t0 = atan2(y0 - yc, x0 - xc);
+        double t1 = atan2(y1 - yc, x1 - xc);
+        if (t1 < t0 && r > 0) t1 += 2 * M_PI;
+        if (t1 > t0 && r < 0) t1 -= 2 * M_PI;
 
-    if (std::isnan(t0) || std::isnan(t1)) {
-        std::cout << "nan" << std::endl;
+        if (std::isnan(t0) || std::isnan(t1)) {
+            std::cout << "nan" << std::endl;
+        }
+
+        int numPoints = getNumPointsSubdivide(p0, p1, btype);
+        VectorXT t = VectorXT::LinSpaced(numPoints - 1, t0 + (t1 - t0) / numPoints, t1 - (t1 - t0) / numPoints);
+
+        MatrixXT points(numPoints - 1, 2);
+        points.col(0) = xc + fabs(r) * t.array().cos();
+        points.col(1) = yc + fabs(r) * t.array().sin();
+
+        return points;
+    } else if (btype == 2) {
+        double x0 = p0(0);
+        double y0 = p0(1);
+        double q0 = p0(2);
+        double x1 = p1(0);
+        double y1 = p1(1);
+        double q1 = p1(2);
+
+        int numPoints = getNumPointsSubdivide(p0, p1, btype);
+        VectorXT t_arr = VectorXT::LinSpaced(numPoints - 1, 1.0 / numPoints, 1.0 - 1.0 / numPoints);
+        MatrixXT points(numPoints - 1, 2);
+        for (int i = 0; i < t_arr.rows(); i++) {
+            double t = t_arr(i);
+            points(i, 0) = x0 * pow(0.1e1 - t, 0.2e1) +
+                           0.2e1 * (((y0 - y1) * cos(q1) + sin(q1) * x1) * cos(q0) - sin(q0) * cos(q1) * x0) /
+                           (sin(q1) * cos(q0) - cos(q1) * sin(q0)) * t * (0.1e1 - t) + x1 * t * t;
+            points(i, 1) = y0 * pow(0.1e1 - t, 0.2e1) +
+                           0.2e1 * (((-x0 + x1) * sin(q1) - cos(q1) * y1) * sin(q0) + cos(q0) * sin(q1) * y0) /
+                           (sin(q1) * cos(q0) - cos(q1) * sin(q0)) * t * (0.1e1 - t) + y1 * t * t;
+        }
+
+        return points;
+    } else {
+        assert(0);
+        return {};
     }
-
-    int numPoints = getNumPointsSubdivide(p0, p1, r);
-    VectorXT t = VectorXT::LinSpaced(numPoints - 1, t0 + (t1 - t0) / numPoints, t1 - (t1 - t0) / numPoints);
-
-    MatrixXT points(numPoints - 1, 2);
-    points.col(0) = xc + fabs(r) * t.array().cos();
-    points.col(1) = yc + fabs(r) * t.array().sin();
-
-    return points;
 }
 
 void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, MatrixXT &Sc, MatrixXT &Ec, MatrixXT &V,
@@ -905,11 +969,11 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
     int numEdges = 0;
     for (Cell cell: cells) {
         for (CellEdge edge: cell.edges) {
-            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
-                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = nodes(edge.startNode * CellFunction::nx + 2);
-                numEdges += getNumPointsSubdivide(p0, p1, r);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype != 0) {
+                VectorXT p0 = nodes.segment<CellFunction::nx>(edge.startNode * CellFunction::nx);
+                VectorXT p1 = nodes.segment<CellFunction::nx>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                int btype = info->boundary->edges[edge.neighbor - n_vtx].btype;
+                numEdges += getNumPointsSubdivide(p0, p1, btype);
             } else {
                 numEdges += 1;
             }
@@ -933,11 +997,11 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
 
         int thisTotalNumEdges = 4;
         for (CellEdge edge: cell.edges) {
-            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
-                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = nodes(edge.startNode * CellFunction::nx + 2);
-                thisTotalNumEdges += getNumPointsSubdivide(p0, p1, r);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype != 0) {
+                VectorXT p0 = nodes.segment<CellFunction::nx>(edge.startNode * CellFunction::nx);
+                VectorXT p1 = nodes.segment<CellFunction::nx>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                int btype = info->boundary->edges[edge.neighbor - n_vtx].btype;
+                thisTotalNumEdges += getNumPointsSubdivide(p0, p1, btype);
             } else {
                 thisTotalNumEdges += 1;
             }
@@ -951,12 +1015,12 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
         for (int j = 0; j < cell.edges.size(); j++) {
             CellEdge edge = cell.edges[j];
             Ptri.row(j) = nodes.segment<2>(edge.startNode * CellFunction::nx);
-            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype == 1) {
-                TV p0 = nodes.segment<2>(edge.startNode * CellFunction::nx);
-                TV p1 = nodes.segment<2>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
-                double r = nodes(edge.startNode * CellFunction::nx + 2);
+            if (edge.neighbor >= n_vtx && info->boundary->edges[edge.neighbor - n_vtx].btype != 0) {
+                VectorXT p0 = nodes.segment<CellFunction::nx>(edge.startNode * CellFunction::nx);
+                VectorXT p1 = nodes.segment<CellFunction::nx>(cell.edges[edge.nextEdge].startNode * CellFunction::nx);
+                int btype = info->boundary->edges[edge.neighbor - n_vtx].btype;
 
-                MatrixXT pointsSubdivide = getPointsSubdivide(p0, p1, r);
+                MatrixXT pointsSubdivide = getPointsSubdivide(p0, p1, btype);
                 Ptri.block(thisNumEdges, 0, pointsSubdivide.rows(), 2) = pointsSubdivide;
 
                 Etri.row(j) = IV(j, thisNumEdges);

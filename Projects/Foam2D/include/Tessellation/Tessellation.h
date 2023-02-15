@@ -106,6 +106,23 @@ private:
     getArcBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
                               std::vector<MatrixXT> &nodeHess) = 0;
 
+    // Get the tessellation node at the intersection of two cells and a domain boundary.
+    virtual void
+    getBezierBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0, double q1,
+                          int flag,
+                          VectorXT &node) = 0;
+
+    virtual void
+    getBezierBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0,
+                                  double q1,
+                                  int flag,
+                                  MatrixXT &nodeGrad) = 0;
+
+    virtual void
+    getBezierBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0,
+                                 double q1, int flag,
+                                 std::vector<MatrixXT> &nodeHess) = 0;
+
 public:
     Tessellation() {}
 

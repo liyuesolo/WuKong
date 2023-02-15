@@ -67,7 +67,11 @@ private:
     bool straightBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect);
 
     void
-    curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0, BoundaryIntersection &intersect0,
+    arcBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0, BoundaryIntersection &intersect0,
+                            bool &isInt1, BoundaryIntersection &intersect1);
+
+    void
+    bezierBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0, BoundaryIntersection &intersect0,
                                bool &isInt1, BoundaryIntersection &intersect1);
 
 public:

@@ -128,7 +128,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Image Match");
         scenarios.push_back("Dynamic Box");
         scenarios.push_back("Dynamic Circle");
-        scenarios.push_back("Dynamic BiArc Circle");
+        scenarios.push_back("Dynamic Bezier Circle");
+        scenarios.push_back("Dynamic BiArc");
         scenarios.push_back("Rigid Body Agent");
         scenarios.push_back("Hardware 0");
         scenarios.push_back("Gastrulation");
@@ -196,6 +197,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 9) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 10) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -399,15 +404,18 @@ void Foam2DApp::generateScenario() {
             foam.initDynamicCircle(generate_scenario_free_sites);
             break;
         case 6:
-            foam.initDynamicBiArcCircle(generate_scenario_free_sites);
+            foam.initDynamicBezierCircle(generate_scenario_free_sites);
             break;
         case 7:
-            foam.initRigidBodyAgent(generate_scenario_free_sites);
+            foam.initDynamicBiArcCircle(generate_scenario_free_sites);
             break;
         case 8:
-            foam.initHardwareScenario0(generate_scenario_free_sites);
+            foam.initRigidBodyAgent(generate_scenario_free_sites);
             break;
         case 9:
+            foam.initHardwareScenario0(generate_scenario_free_sites);
+            break;
+        case 10:
             foam.initGastrulation(generate_scenario_free_sites);
             break;
         default:

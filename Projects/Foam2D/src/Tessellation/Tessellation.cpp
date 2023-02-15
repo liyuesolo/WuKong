@@ -277,7 +277,7 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
     VectorXT v0 = c.segment(i0 * dims, dims); // i0 is always a site, never a boundary edge.
     VectorXT v1, v2;
     TV b0, b1;
-    double r;
+    double r, q0, q1;
     if (i1 < n_vtx && i2 < n_vtx) {
         // Normal node.
         mode = 0;
@@ -424,10 +424,134 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
 //                          << std::endl;
 //            }
 //        }
+    } else if (i1 < n_vtx && i2 >= n_vtx && bdry->edges[i2 - n_vtx].btype == 2) {
+        // Boundary intersection node with n2 an arc boundary segment.
+        mode = 3;
+
+        v1 = c.segment(i1 * dims, dims);
+        b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
+        b1 = bdry->v.segment<2>(bdry->edges[i2 - n_vtx].nextEdge * 2);
+        q0 = bdry->q(bdry->edges[i2 - n_vtx].q_idx);
+        q1 = bdry->q(bdry->edges[bdry->edges[i2 - n_vtx].nextEdge].q_idx);
+        getBezierBoundaryNode(v0, v1, b0, b1, q0, q1, flag, node);
+
+        getBezierBoundaryNodeGradient(v0, v1, b0, b1, q0, q1, flag, nodeGrad);
+
+//        double eps = 1e-7;
+//        for (int i = 0; i < 11; i++) {
+//            TV3 dv0 = TV3::Zero();
+//            TV3 dv1 = TV3::Zero();
+//            TV db0 = TV::Zero();
+//            TV db1 = TV::Zero();
+//            double dr = 0;
+//
+//            switch (i) {
+//                case 0:
+//                    dv0(0) = eps;
+//                    break;
+//                case 1:
+//                    dv0(1) = eps;
+//                    break;
+//                case 2:
+//                    dv0(2) = eps;
+//                    break;
+//                case 3:
+//                    dv1(0) = eps;
+//                    break;
+//                case 4:
+//                    dv1(1) = eps;
+//                    break;
+//                case 5:
+//                    dv1(2) = eps;
+//                    break;
+//                case 6:
+//                    db0(0) = eps;
+//                    break;
+//                case 7:
+//                    db0(1) = eps;
+//                    break;
+//                case 8:
+//                    db1(0) = eps;
+//                    break;
+//                case 9:
+//                    db1(1) = eps;
+//                    break;
+//                case 10:
+//                    dr = eps;
+//                    break;
+//            }
+//
+//            TV nodep;
+//            getArcBoundaryNode(v0 + dv0, v1 + dv1, b0 + db0, b1 + db1, r + dr, flag, nodep);
+//            std::cout << "grad " << i << " x " << gradX(i) << " " << (nodep(0) - node(0)) / eps << " "
+//                      << nodep(0) - node(0) - eps * gradX[i] << std::endl;
+//            std::cout << "grad " << i << " y " << gradY(i) << " " << (nodep(1) - node(1)) / eps << " "
+//                      << nodep(1) - node(1) - eps * gradY[i] << std::endl;
+//        }
+
+        getBezierBoundaryNodeHessian(v0, v1, b0, b1, q0, q1, flag, nodeHess);
+
+//        double eps = 1e-7;
+//        for (int i = 0; i < 11; i++) {
+//            TV3 dv0 = TV3::Zero();
+//            TV3 dv1 = TV3::Zero();
+//            TV db0 = TV::Zero();
+//            TV db1 = TV::Zero();
+//            double dr = 0;
+//
+//            switch (i) {
+//                case 0:
+//                    dv0(0) = eps;
+//                    break;
+//                case 1:
+//                    dv0(1) = eps;
+//                    break;
+//                case 2:
+//                    dv0(2) = eps;
+//                    break;
+//                case 3:
+//                    dv1(0) = eps;
+//                    break;
+//                case 4:
+//                    dv1(1) = eps;
+//                    break;
+//                case 5:
+//                    dv1(2) = eps;
+//                    break;
+//                case 6:
+//                    db0(0) = eps;
+//                    break;
+//                case 7:
+//                    db0(1) = eps;
+//                    break;
+//                case 8:
+//                    db1(0) = eps;
+//                    break;
+//                case 9:
+//                    db1(1) = eps;
+//                    break;
+//                case 10:
+//                    dr = eps;
+//                    break;
+//            }
+//
+//            VectorXT gradXp(11), gradYp(11);
+//            getArcBoundaryNodeGradient(v0 + dv0, v1 + dv1, b0 + db0, b1 + db1, r + dr, flag, gradXp, gradYp);
+//
+////            hessX(i, i) = (gradXp(i) - gradX(i)) / eps;
+////            hessY(i, i) = (gradYp(i) - gradY(i)) / eps;
+//
+//            for (int j = 0; j < 11; j++) {
+//                std::cout << "hess " << i << " " << j << " x " << hessX(j, i) << " " << (gradXp(j) - gradX(j)) / eps
+//                          << std::endl;
+//                std::cout << "hess " << i << " " << j << " y " << hessY(j, i) << " " << (gradYp(j) - gradY(j)) / eps
+//                          << std::endl;
+//            }
+//        }
     } else {
         // Boundary vertex.
         assert(i1 >= n_vtx && i2 >= n_vtx);
-        mode = 3;
+        mode = 4;
 
         TV b1s = bdry->v.segment<2>((i1 - n_vtx) * 2);
         TV b1e = bdry->v.segment<2>(bdry->edges[i1 - n_vtx].nextEdge * 2);
@@ -736,6 +860,28 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
 
                     sum_f_vq.block(ib0, iq, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 4, 2, 1);
                     sum_f_vq.block(ib1, iq, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 4, 2, 1);
+                } else if (bdry->edges[face(2) - n_sites].btype == 2) {
+                    int iq0 = bdry->edges[face(2) - n_sites].q_idx;
+                    int iq1 = bdry->edges[bdry->edges[face(2) - n_sites].nextEdge].q_idx;
+
+                    for (int i = 0; i < 2; i++) {
+                        if (face(i) >= n_cells) continue;
+
+                        sum_f_cq.block(face(i) * dims, iq0, dims, 1) +=
+                                partial_x(ii) * hess.block(i * dims, 2 * dims + 2, dims, 1);
+                        sum_f_cq.block(face(i) * dims, iq1, dims, 1) +=
+                                partial_x(ii) * hess.block(i * dims, 2 * dims + 5, dims, 1);
+                    }
+
+                    sum_f_qq(iq0, iq0) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 2);
+                    sum_f_qq(iq0, iq1) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 5);
+                    sum_f_qq(iq1, iq0) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 2);
+                    sum_f_qq(iq1, iq1) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 5);
+
+                    sum_f_vq.block(ib0, iq0, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 2, 2, 1);
+                    sum_f_vq.block(ib1, iq0, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 2, 2, 1);
+                    sum_f_vq.block(ib0, iq1, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 5, 2, 1);
+                    sum_f_vq.block(ib1, iq1, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 5, 2, 1);
                 }
             }
         }
@@ -927,6 +1073,26 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                         nodeGrad.block(0, 2 * dims + 4, CellFunction::nx, 1);
                 break;
             case 3:
+                for (int j = 0; j < 2; j++) {
+                    if (face[j] >= n_free) {
+                        continue;
+                    }
+                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
+                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
+                }
+                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
+                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
+                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
+                                 2) =
+                        nodeGrad.block(0, 2 * dims + 3, CellFunction::nx, 2);
+
+                dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
+                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 1);
+                dxdq_dense.block(i * CellFunction::nx, bdry->edges[bdry->edges[face[2] - n_sites].nextEdge].q_idx,
+                                 CellFunction::nx, 1) =
+                        nodeGrad.block(0, 2 * dims + 5, CellFunction::nx, 1);
+                break;
+            case 4:
                 dxdv_dense.block(i * CellFunction::nx, (face[1] - n_sites) * 2, CellFunction::nx, 2) =
                         nodeGrad.block(0, 0, CellFunction::nx, 2);
                 dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =

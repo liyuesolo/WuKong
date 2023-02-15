@@ -31,44 +31,6 @@ VectorXT Boundary::get_p_free() {
     return ret;
 }
 
-bool Boundary::pointInBounds(const TV &point) {
-    int np = v.rows() / 2;
-
-    double w = 0; // Winding number
-    for (int i = 0; i < edges.size(); i++) {
-        int j = edges[i].nextEdge;
-        double x1 = v(2 * i + 0);
-        double y1 = v(2 * i + 1);
-        double x2 = v(2 * j + 0);
-        double y2 = v(2 * j + 1);
-
-        double a = atan2(y2 - point.y(), x2 - point.x()) - atan2(y1 - point.y(), x1 - point.x());
-        if (a > M_PI) a -= 2 * M_PI;
-        if (a < -M_PI) a += 2 * M_PI;
-
-        if (edges[i].btype == 1) {
-            double r = q(edges[i].q_idx);
-
-            double q = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-            double d = r / 2 * sqrt(4 - pow(q / r, 2));
-            double theta = atan2(-(x2 - x1), (y2 - y1));
-            double xc = (x1 + x2) / 2 - d * cos(theta);
-            double yc = (y1 + y2) / 2 - d * sin(theta);
-
-            if (a > 0 && r < 0 && (point - TV(xc, yc)).norm() < fabs(r)) {
-                a -= 2 * M_PI;
-            }
-            if (a < 0 && r > 0 && (point - TV(xc, yc)).norm() < r) {
-                a += 2 * M_PI;
-            }
-        }
-
-        w += a;
-    }
-
-    return w > M_PI; // w == (2 * M_PI)
-}
-
 bool Boundary::straightBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, BoundaryIntersection &intersect) {
     TV p2 = v.segment<2>(v_idx * 2);
     TV p3 = v.segment<2>(edges[v_idx].nextEdge * 2);
@@ -101,9 +63,9 @@ bool Boundary::straightBoundaryIntersection(const TV &p0, const TV &p1, int v_id
     return false; // No collision
 }
 
-void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0,
-                                          BoundaryIntersection &intersect0, bool &isInt1,
-                                          BoundaryIntersection &intersect1) {
+void Boundary::arcBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0,
+                                       BoundaryIntersection &intersect0, bool &isInt1,
+                                       BoundaryIntersection &intersect1) {
     TV p2 = v.segment<2>(v_idx * 2);
     TV p3 = v.segment<2>(edges[v_idx].nextEdge * 2);
 
@@ -228,6 +190,125 @@ void Boundary::curvedBoundaryIntersection(const TV &p0, const TV &p1, int v_idx,
     }
 }
 
+void Boundary::bezierBoundaryIntersection(const TV &p0, const TV &p1, int v_idx, bool &isInt0,
+                                          BoundaryIntersection &intersect0, bool &isInt1,
+                                          BoundaryIntersection &intersect1) {
+    TV p2 = v.segment<2>(v_idx * 2);
+    TV p3 = v.segment<2>(edges[v_idx].nextEdge * 2);
+
+    double x2 = p0.x();
+    double y2 = p0.y();
+    double x3 = p1.x();
+    double y3 = p1.y();
+    double x0 = p2.x();
+    double y0 = p2.y();
+    double q0 = q(edges[v_idx].q_idx);
+    double x1 = p3.x();
+    double y1 = p3.y();
+    double q1 = q(edges[edges[v_idx].nextEdge].q_idx);
+
+    double sol0[4], sol1[4];
+
+    // @formatter:off
+    {
+        double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
+                t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+                t41, t42, t43, t44, t45, t46, t47, t48, t49, t50;
+
+        t1 = x0 - x1;
+        t2 = x3 - x2;
+        t3 = tan(q0);
+        t4 = t2 * t3;
+        t5 = t4 - y3 + y2;
+        t6 = tan(q1);
+        t7 = y0 - y1;
+        t8 = y3 - y1;
+        t9 = y1 - y2;
+        t10 = y3 - y2;
+        t11 = -t10 * x0 + t8 * x2 + t9 * x3;
+        t12 = y3 + y2;
+        t13 = y3 - y0;
+        t14 = t10 * (-t13 * x1 + t8 * x0);
+        t15 = y0 - y2;
+        t16 = x2 * x2;
+        t17 = x3 * x3;
+        t18 = pow(t10, 0.2e1);
+        t19 = pow(t6, 0.2e1);
+        t20 = (-t15 * x1 + t9 * x0) * t10 * x3;
+        t21 = 0.2e1 * t1;
+        t22 = -t10 * x1 + t13 * x2 + t15 * x3;
+        t23 = t7 * t10;
+        t24 = 0.2e1 * t23;
+        t8 = -t24 * t22 * t6 + t18 * pow(t7, 0.2e1) + t19 * (t7 * (-t13 * t16 + t15 * t17) + (t14 + t7 * (t12 - 0.2e1 * y0) * x3) * x2 + t20 - x1 * t18 * t1) + t3 * (t3 * (-t7 * (-t16 * t8 + t17 * t9) - (t14 + t7 * (t12 - 0.2e1 * y1) * x3) * x2 - t20 + pow(t2, 0.2e1) * pow(t1, 0.2e1) * t19 + x0 * t18 * t1 + t21 * t11 * t2 * t6) - 0.2e1 * t1 * t22 * t2 * t19 + 0.4e1 * t23 * t2 * t1 * t6 + 0.2e1 * t23 * t11);
+        t8 = sqrt(t8);
+        t9 = t5 * t7;
+        t5 = t1 * t5 * t6;
+        t11 = t8 + t9 - t5;
+        t2 = -t1 * t10 - t2 * t7;
+        t2 = -t2 * t3 + t6 * (-t4 * t21 - t2) - t24;
+        t2 = 0.1e1 / t2;
+        t3 = t11 * t2;
+        t4 = 0.1e1 - t3;
+        t6 = cos(q1);
+        t10 = sin(q1);
+        t12 = cos(q0);
+        t13 = sin(q0);
+        t14 = t6 * t13;
+        t15 = t10 * t12;
+        t16 = -t14 + t15;
+        t11 = pow(t11, 0.2e1);
+        t17 = pow(t2, 0.2e1);
+        t18 = pow(t4, 0.2e1);
+        t16 = 0.1e1 / t16;
+        t7 = (-(t10 * x1 + t6 * t7) * t12 + t14 * x0) * t16;
+        t1 = (-t13 * (t1 * t10 + t6 * y1) + t15 * y0) * t16;
+        t6 = -t1 + y0;
+        t10 = t1 - y1;
+        t5 = t8 - t9 + t5;
+        t2 = t5 * t2;
+        t8 = 0.1e1 + t2;
+        t9 = pow(t8, 0.2e1);
+        t5 = pow(t5, 0.2e1);
+        sol0[0] = x1 * t11 * t17 - 0.2e1 * t3 * t7 * t4 + x0 * t18;
+        sol0[1] = 0.2e1 * t1 * t3 * t4 + y1 * t11 * t17 + t18 * y0;
+        sol0[2] = atan2(-0.2e1 * t3 * t10 - 0.2e1 * t4 * t6, 0.2e1 * t3 * x1 - 0.2e1 * t4 * x0 - 0.2e1 * t7 * (-t3 + t4));
+        sol0[3] = t3;
+        sol1[0] = x1 * t5 * t17 + 0.2e1 * t2 * t7 * t8 + t9 * x0;
+        sol1[1] = -0.2e1 * t2 * t1 * t8 + y1 * t5 * t17 + t9 * y0;
+        sol1[2] = atan2(0.2e1 * t2 * t10 - 0.2e1 * t6 * t8, -0.2e1 * t8 * (t7 + x0) - 0.2e1 * t2 * (t7 + x1));
+        sol1[3] = -t2;
+    }
+    // @formatter:on
+
+    {
+        double t0 = (TV(sol0[0], sol0[1]) - p0).dot(p1 - p0) / (p1 - p0).squaredNorm();
+        double s0 = sol0[3];
+        if (t0 > 0 && t0 < 1 && s0 > 0 && s0 < 1) {
+//            std::cout << "int0 " << sol0[0] << " " << sol0[1] << std::endl;
+            isInt0 = true;
+            intersect0.t_cell = t0;
+            intersect0.t_bdry = s0;
+            intersect0.flag = sol0[3] >= sol1[3];
+        } else {
+            isInt0 = false;
+        }
+    }
+
+    {
+        double t1 = (TV(sol1[0], sol1[1]) - p0).dot(p1 - p0) / (p1 - p0).squaredNorm();
+        double s1 = sol1[3];
+        if (t1 > 0 && t1 < 1 && s1 > 0 && s1 < 1) {
+//            std::cout << "int1 " << sol1[0] << " " << sol1[1] << std::endl;
+            isInt1 = true;
+            intersect1.t_cell = t1;
+            intersect1.t_bdry = s1;
+            intersect1.flag = sol0[3] < sol1[3];
+        } else {
+            isInt1 = false;
+        }
+    }
+}
+
 bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<BoundaryIntersection> &intersections) {
     size_t degree = nodes.size(), n_bdy = v.rows() / 2;
 
@@ -253,7 +334,23 @@ bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<Bo
                 intersect1.i_bdry = k;
 
                 bool isInt0, isInt1;
-                curvedBoundaryIntersection(v0, v1, k, isInt0, intersect0, isInt1, intersect1);
+                arcBoundaryIntersection(v0, v1, k, isInt0, intersect0, isInt1, intersect1);
+                if (isInt0) {
+                    intersections.push_back(intersect0);
+                }
+                if (isInt1) {
+                    intersections.push_back(intersect1);
+                }
+            } else if (edges[k].btype == 2) {
+                BoundaryIntersection intersect0;
+                intersect0.i_cell = i;
+                intersect0.i_bdry = k;
+                BoundaryIntersection intersect1;
+                intersect1.i_cell = i;
+                intersect1.i_bdry = k;
+
+                bool isInt0, isInt1;
+                bezierBoundaryIntersection(v0, v1, k, isInt0, intersect0, isInt1, intersect1);
                 if (isInt0) {
                     intersections.push_back(intersect0);
                 }
@@ -278,4 +375,43 @@ bool Boundary::getCellIntersections(const std::vector<TV> &nodes, std::vector<Bo
     }
 
     return true;
+}
+
+bool Boundary::pointInBounds(const TV &point) {
+    size_t n_bdy = v.rows() / 2;
+
+    TV v0 = point;
+    TV v1(100, 100 + M_PI);
+
+    int numIntersects = 0;
+    for (size_t k = 0; k < n_bdy; k++) {
+        if (edges[k].btype == 0) {
+            BoundaryIntersection intersect;
+            if (straightBoundaryIntersection(v0, v1, k, intersect)) {
+                numIntersects++;
+            }
+        } else if (edges[k].btype == 1) {
+            BoundaryIntersection intersect0, intersect1;
+            bool isInt0, isInt1;
+            arcBoundaryIntersection(v0, v1, k, isInt0, intersect0, isInt1, intersect1);
+            if (isInt0) {
+                numIntersects++;
+            }
+            if (isInt1) {
+                numIntersects++;
+            }
+        } else if (edges[k].btype == 2) {
+            BoundaryIntersection intersect0, intersect1;
+            bool isInt0, isInt1;
+            bezierBoundaryIntersection(v0, v1, k, isInt0, intersect0, isInt1, intersect1);
+            if (isInt0) {
+                numIntersects++;
+            }
+            if (isInt1) {
+                numIntersects++;
+            }
+        }
+    }
+
+    return numIntersects % 2 == 1;
 }

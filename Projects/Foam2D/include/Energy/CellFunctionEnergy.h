@@ -41,8 +41,8 @@ public:
         functions.push_back(&position_target_function);
         weights.push_back(info->energy_drag_target_weight);
 
-        functions.push_back(&deformation_function);
-        weights.push_back(info->energy_deformation_weight);
+//        functions.push_back(&deformation_function);
+//        weights.push_back(info->energy_deformation_weight);
 
         functions.push_back(&area_barrier_function);
         weights.push_back(1.0);
