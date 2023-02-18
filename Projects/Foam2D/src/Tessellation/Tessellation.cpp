@@ -497,7 +497,8 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
 //            TV3 dv1 = TV3::Zero();
 //            TV db0 = TV::Zero();
 //            TV db1 = TV::Zero();
-//            double dr = 0;
+//            double dq0 = 0;
+//            double dq1 = 0;
 //
 //            switch (i) {
 //                case 0:
@@ -525,26 +526,34 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
 //                    db0(1) = eps;
 //                    break;
 //                case 8:
-//                    db1(0) = eps;
+//                    dq0 = eps;
 //                    break;
 //                case 9:
-//                    db1(1) = eps;
+//                    db1(0) = eps;
 //                    break;
 //                case 10:
-//                    dr = eps;
+//                    db1(1) = eps;
+//                    break;
+//                case 11:
+//                    dq1 = eps;
 //                    break;
 //            }
 //
-//            VectorXT gradXp(11), gradYp(11);
-//            getArcBoundaryNodeGradient(v0 + dv0, v1 + dv1, b0 + db0, b1 + db1, r + dr, flag, gradXp, gradYp);
+//            MatrixXT gradp(3, 12);
+//            getBezierBoundaryNodeGradient(v0 + dv0, v1 + dv1, b0 + db0, b1 + db1, q0 + dq0, q1 + dq1, flag, gradp);
 //
 ////            hessX(i, i) = (gradXp(i) - gradX(i)) / eps;
 ////            hessY(i, i) = (gradYp(i) - gradY(i)) / eps;
 //
 //            for (int j = 0; j < 11; j++) {
-//                std::cout << "hess " << i << " " << j << " x " << hessX(j, i) << " " << (gradXp(j) - gradX(j)) / eps
+//                std::cout << "hess " << i << " " << j << " x " << nodeHess[0](j, i) << " "
+//                          << (gradp(0, j) - nodeGrad(0, j)) / eps
 //                          << std::endl;
-//                std::cout << "hess " << i << " " << j << " y " << hessY(j, i) << " " << (gradYp(j) - gradY(j)) / eps
+//                std::cout << "hess " << i << " " << j << " y " << nodeHess[1](j, i) << " "
+//                          << (gradp(1, j) - nodeGrad(1, j)) / eps
+//                          << std::endl;
+//                std::cout << "hess " << i << " " << j << " q " << nodeHess[2](j, i) << " "
+//                          << (gradp(2, j) - nodeGrad(2, j)) / eps
 //                          << std::endl;
 //            }
 //        }
@@ -557,7 +566,7 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
         TV b1e = bdry->v.segment<2>(bdry->edges[i1 - n_vtx].nextEdge * 2);
 
         assert(bdry->edges[i1 - n_vtx].nextEdge == i2 - n_vtx || bdry->edges[i2 - n_vtx].nextEdge == i1 - n_vtx);
-        nodeGrad = MatrixXT::Zero(CellFunction::nx, 4);
+        nodeGrad = MatrixXT::Zero(CellFunction::nx, 6);
 
         double q = 0;
         if (bdry->edges[i1 - n_vtx].nextEdge == i2 - n_vtx) {
@@ -565,8 +574,10 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
                 q = bdry->q(bdry->edges[i2 - n_vtx].q_idx);
             }
             node = TV3(b1e(0), b1e(1), q);
-            nodeGrad(0, 2) = 1;
-            nodeGrad(1, 3) = 1;
+            nodeGrad(0, 3) = 1;
+            nodeGrad(1, 4) = 1;
+            nodeGrad(2, 5) = 1;
+
         } else {
             if (bdry->edges[i1 - n_vtx].btype != 0) {
                 q = bdry->q(bdry->edges[i1 - n_vtx].q_idx);
@@ -574,6 +585,7 @@ Tessellation::getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, M
             node = TV3(b1s(0), b1s(1), q);
             nodeGrad(0, 0) = 1;
             nodeGrad(1, 1) = 1;
+            nodeGrad(2, 2) = 1;
         }
 
         nodeHess.resize(CellFunction::nx);
@@ -601,7 +613,7 @@ Tessellation::addSingleCellFunctionValue(int cellIndex, const CellFunction &func
         nodes.segment<CellFunction::nx>(i * CellFunction::nx) = x.segment<CellFunction::nx>(
                 cell.edges[i].startNode * CellFunction::nx);
         next(i) = cell.edges[i].nextEdge;
-        if (cell.edges[i].neighbor > n_vtx) {
+        if (cell.edges[i].neighbor >= n_vtx) {
             btype(i) = bdry->edges[cell.edges[i].neighbor - n_vtx].btype;
         }
     }
@@ -631,7 +643,7 @@ Tessellation::addSingleCellFunctionGradient(int cellIndex, const CellFunction &f
         nodes.segment<CellFunction::nx>(i * CellFunction::nx) = x.segment<CellFunction::nx>(
                 cell.edges[i].startNode * CellFunction::nx);
         next(i) = cell.edges[i].nextEdge;
-        if (cell.edges[i].neighbor > n_vtx) {
+        if (cell.edges[i].neighbor >= n_vtx) {
             btype(i) = bdry->edges[cell.edges[i].neighbor - n_vtx].btype;
         }
     }
@@ -656,9 +668,12 @@ Tessellation::addSingleCellFunctionGradient(int cellIndex, const CellFunction &f
     }
 }
 
+#include <fenv.h>
+
 void
 Tessellation::addFunctionValue(const CellFunction &function, double &value,
                                const std::vector<CellInfo> cellInfos) {
+//    feenableexcept(FE_INVALID);
     int dims = 2 + getNumVertexParams();
     int n_vtx = c.rows() / dims;
 
@@ -675,13 +690,14 @@ Tessellation::addFunctionValue(const CellFunction &function, double &value,
             nodes.segment<CellFunction::nx>(i * CellFunction::nx) = x.segment<CellFunction::nx>(
                     cell.edges[i].startNode * CellFunction::nx);
             next(i) = cell.edges[i].nextEdge;
-            if (cell.edges[i].neighbor > n_vtx) {
+            if (cell.edges[i].neighbor >= n_vtx) {
                 btype(i) = bdry->edges[cell.edges[i].neighbor - n_vtx].btype;
             }
         }
 
         function.addValue(site, nodes, next, btype, value, &cellInfos[cellIndex]);
     }
+//    fedisableexcept(FE_INVALID);
 }
 
 void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &gradient,
@@ -693,6 +709,7 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
     VectorXT partial_c = VectorXT::Zero(dims * n_cells);
     VectorXT partial_x = VectorXT::Zero(x.rows());
 
+    feenableexcept(FE_INVALID);
     for (int cellIndex = 0; cellIndex < n_cells; cellIndex++) {
         Cell cell = cells[cellIndex];
 
@@ -706,7 +723,7 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
             nodes.segment<CellFunction::nx>(i * CellFunction::nx) = x.segment<CellFunction::nx>(
                     cell.edges[i].startNode * CellFunction::nx);
             next(i) = cell.edges[i].nextEdge;
-            if (cell.edges[i].neighbor > n_vtx) {
+            if (cell.edges[i].neighbor >= n_vtx) {
                 btype(i) = bdry->edges[cell.edges[i].neighbor - n_vtx].btype;
             }
         }
@@ -733,6 +750,7 @@ void Tessellation::addFunctionGradient(const CellFunction &function, VectorXT &g
             gradient_p += (dxdq * bdry->dqdp).transpose() * partial_x;
         }
     }
+    fedisableexcept(FE_INVALID);
 }
 
 void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &hessian,
@@ -759,7 +777,7 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
             nodes.segment<CellFunction::nx>(i * CellFunction::nx) = x.segment<CellFunction::nx>(
                     cell.edges[i].startNode * CellFunction::nx);
             next(i) = cell.edges[i].nextEdge;
-            if (cell.edges[i].neighbor > n_vtx) {
+            if (cell.edges[i].neighbor >= n_vtx) {
                 btype(i) = bdry->edges[cell.edges[i].neighbor - n_vtx].btype;
             }
         }
@@ -831,19 +849,21 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
             int ib0 = (face(2) - n_sites) * 2;
             int ib1 = bdry->edges[face(2) - n_sites].nextEdge * 2;
 
+            int hess_ib0 = 2 * dims + 0;
+            int hess_ib1 = 2 * dims + (bdry->edges[face(2) - n_sites].btype == 2 ? 3 : 2);
             for (int i = 0; i < 2; i++) {
                 if (face(i) >= n_cells) continue;
 
                 sum_f_cv.block(face(i) * dims, ib0, dims, 2) +=
-                        partial_x(ii) * hess.block(i * dims, 2 * dims + 0, dims, 2);
+                        partial_x(ii) * hess.block(i * dims, hess_ib0, dims, 2);
                 sum_f_cv.block(face(i) * dims, ib1, dims, 2) +=
-                        partial_x(ii) * hess.block(i * dims, 2 * dims + 2, dims, 2);
+                        partial_x(ii) * hess.block(i * dims, hess_ib1, dims, 2);
             }
 
-            sum_f_vv.block(ib0, ib0, 2, 2) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 0, 2, 2);
-            sum_f_vv.block(ib0, ib1, 2, 2) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 2, 2, 2);
-            sum_f_vv.block(ib1, ib0, 2, 2) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 0, 2, 2);
-            sum_f_vv.block(ib1, ib1, 2, 2) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 2, 2, 2);
+            sum_f_vv.block(ib0, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib0, 2, 2);
+            sum_f_vv.block(ib0, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib1, 2, 2);
+            sum_f_vv.block(ib1, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib0, 2, 2);
+            sum_f_vv.block(ib1, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib1, 2, 2);
 
             if (bdry->q.rows() > 0) {
                 if (bdry->edges[face(2) - n_sites].btype == 1) {
@@ -858,8 +878,8 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
 
                     sum_f_qq.block(iq, iq, 1, 1) += partial_x(ii) * hess.block(2 * dims + 4, 2 * dims + 4, 1, 1);
 
-                    sum_f_vq.block(ib0, iq, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 4, 2, 1);
-                    sum_f_vq.block(ib1, iq, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 4, 2, 1);
+                    sum_f_vq.block(ib0, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 4, 2, 1);
+                    sum_f_vq.block(ib1, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 4, 2, 1);
                 } else if (bdry->edges[face(2) - n_sites].btype == 2) {
                     int iq0 = bdry->edges[face(2) - n_sites].q_idx;
                     int iq1 = bdry->edges[bdry->edges[face(2) - n_sites].nextEdge].q_idx;
@@ -878,10 +898,10 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
                     sum_f_qq(iq1, iq0) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 2);
                     sum_f_qq(iq1, iq1) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 5);
 
-                    sum_f_vq.block(ib0, iq0, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 2, 2, 1);
-                    sum_f_vq.block(ib1, iq0, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 2, 2, 1);
-                    sum_f_vq.block(ib0, iq1, 2, 1) += partial_x(ii) * hess.block(2 * dims + 0, 2 * dims + 5, 2, 1);
-                    sum_f_vq.block(ib1, iq1, 2, 1) += partial_x(ii) * hess.block(2 * dims + 2, 2 * dims + 5, 2, 1);
+                    sum_f_vq.block(ib0, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 2, 2, 1);
+                    sum_f_vq.block(ib1, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 2, 2, 1);
+                    sum_f_vq.block(ib0, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 5, 2, 1);
+                    sum_f_vq.block(ib1, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 5, 2, 1);
                 }
             }
         }
@@ -1096,7 +1116,16 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                 dxdv_dense.block(i * CellFunction::nx, (face[1] - n_sites) * 2, CellFunction::nx, 2) =
                         nodeGrad.block(0, 0, CellFunction::nx, 2);
                 dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
-                        nodeGrad.block(0, 2, CellFunction::nx, 2);
+                        nodeGrad.block(0, 3, CellFunction::nx, 2);
+
+                if (bdry->edges[face[1] - n_sites].q_idx >= 0) {
+                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[1] - n_sites].q_idx, CellFunction::nx, 1) =
+                            nodeGrad.block(0, 2, CellFunction::nx, 1);
+                }
+                if (bdry->edges[face[2] - n_sites].q_idx >= 0) {
+                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
+                            nodeGrad.block(0, 5, CellFunction::nx, 1);
+                }
                 break;
             default:
                 assert(0);

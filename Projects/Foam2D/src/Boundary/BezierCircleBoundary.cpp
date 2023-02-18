@@ -8,7 +8,7 @@ void BezierCircleBoundary::computeVertices() {
     v << r, 0, 0, r, -r, 0, 0, -r;
 
     q.resize(4);
-    q << M_PI_2, M_PI, 3 * M_PI_2, 0;
+    q << M_PI_2 + 0.001, M_PI + 0.001, 3 * M_PI_2 + 0.001, 0.001;
 
     int n_vtx = v.rows() / 2;
     edges.resize(n_vtx);

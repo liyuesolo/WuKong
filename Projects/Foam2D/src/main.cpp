@@ -1,5 +1,6 @@
 #include "../include/App.h"
 #include "../include/Foam2DInfo.h"
+#include <fenv.h>
 
 int main() {
     igl::opengl::glfw::Viewer viewer;
@@ -7,6 +8,7 @@ int main() {
 
     viewer.plugins.push_back(&menu);
 
+//    feenableexcept(FE_INVALID);
     Eigen::setNbThreads(1);
 
     Foam2D foam;

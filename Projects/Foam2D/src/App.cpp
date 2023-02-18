@@ -130,9 +130,11 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Dynamic Circle");
         scenarios.push_back("Dynamic Bezier Circle");
         scenarios.push_back("Dynamic BiArc");
+        scenarios.push_back("Dynamic Bezier Curve");
         scenarios.push_back("Rigid Body Agent");
         scenarios.push_back("Hardware 0");
-        scenarios.push_back("Gastrulation");
+        scenarios.push_back("Gastrulation BiArc");
+        scenarios.push_back("Gastrulation Bezier");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
             matchShowImage = false;
@@ -201,6 +203,14 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 10) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 11) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 12) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -407,16 +417,22 @@ void Foam2DApp::generateScenario() {
             foam.initDynamicBezierCircle(generate_scenario_free_sites);
             break;
         case 7:
-            foam.initDynamicBiArcCircle(generate_scenario_free_sites);
+            foam.initDynamicBiArcCurve(generate_scenario_free_sites);
             break;
         case 8:
-            foam.initRigidBodyAgent(generate_scenario_free_sites);
+            foam.initDynamicBezierCurve(generate_scenario_free_sites);
             break;
         case 9:
-            foam.initHardwareScenario0(generate_scenario_free_sites);
+            foam.initRigidBodyAgent(generate_scenario_free_sites);
             break;
         case 10:
-            foam.initGastrulation(generate_scenario_free_sites);
+            foam.initHardwareScenario0(generate_scenario_free_sites);
+            break;
+        case 11:
+            foam.initGastrulationBiArc(generate_scenario_free_sites);
+            break;
+        case 12:
+            foam.initGastrulationBezier(generate_scenario_free_sites);
             break;
         default:
             std::cout << "Error: scenario not implemented!";
@@ -481,6 +497,14 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
 //        bc.row(i) = TV3(1, 0, 0);
 //    }
 //    viewer.data(0).add_edges(b1, b2, bc);
+
+    MatrixXd Pb(foam.info->boundary->v.rows() / 2, 3);
+    MatrixXd Cb(foam.info->boundary->v.rows() / 2, 3);
+    for (int i = 0; i < foam.info->boundary->v.rows() / 2; i++) {
+        Pb.row(i) = TV3(foam.info->boundary->v(i * 2 + 0), foam.info->boundary->v(i * 2 + 1), 2e-6);
+        Cb.row(i) = TV3(0.5, 0.8, 0.2);
+    }
+    viewer.data(0).add_points(Pb, Cb);
 
     Eigen::Matrix<double, 4, 3> camera;
     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;

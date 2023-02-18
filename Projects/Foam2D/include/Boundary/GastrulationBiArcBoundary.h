@@ -2,7 +2,7 @@
 
 #include "Boundary.h"
 
-class GastrulationBoundary : public Boundary {
+class GastrulationBiArcBoundary : public Boundary {
 
 private:
     double epsilon = 1e-8;
@@ -25,7 +25,7 @@ public:
     virtual MatrixXT computeEnergyHessian();
 
 public:
-    GastrulationBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
+    GastrulationBiArcBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
         computeVertices();
         computeGradient();
         computeHessian();

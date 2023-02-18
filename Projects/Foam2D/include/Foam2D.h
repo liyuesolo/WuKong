@@ -68,13 +68,17 @@ public:
 
     void initDynamicBezierCircle(int n_free_in);
 
-    void initDynamicBiArcCircle(int n_free_in);
+    void initDynamicBiArcCurve(int n_free_in);
+
+    void initDynamicBezierCurve(int n_free_in);
 
     void initRigidBodyAgent(int n_free_in);
 
     void initHardwareScenario0(int n_free_in);
 
-    void initGastrulation(int n_free_in);
+    void initGastrulationBiArc(int n_free_in);
+
+    void initGastrulationBezier(int n_free_in);
 
     void initImageMatch(MatrixXi &markers);
 

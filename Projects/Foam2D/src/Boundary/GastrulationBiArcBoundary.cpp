@@ -1,7 +1,7 @@
-#include "../../include/Boundary/GastrulationBoundary.h"
+#include "../../include/Boundary/GastrulationBiArcBoundary.h"
 #include "../../include/Boundary/BiArc.h"
 
-void GastrulationBoundary::computeVertices() {
+void GastrulationBiArcBoundary::computeVertices() {
     int ncp = p.rows() / 3;
     v.resize(ncp * 4);
     q.resize(ncp * 2);
@@ -35,7 +35,7 @@ void GastrulationBoundary::computeVertices() {
     }
 }
 
-void GastrulationBoundary::computeGradient() {
+void GastrulationBiArcBoundary::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
     dqdp = MatrixXT::Zero(q.rows(), nfree);
 
@@ -62,7 +62,7 @@ void GastrulationBoundary::computeGradient() {
     }
 }
 
-void GastrulationBoundary::computeHessian() {
+void GastrulationBiArcBoundary::computeHessian() {
     d2vdp2.resize(v.rows());
     for (int i = 0; i < v.rows(); i++) {
         d2vdp2[i] = MatrixXT::Zero(nfree, nfree);
@@ -117,7 +117,7 @@ void GastrulationBoundary::computeHessian() {
     }
 }
 
-bool GastrulationBoundary::checkValid() {
+bool GastrulationBiArcBoundary::checkValid() {
     int n_vtx = v.rows() / 2;
     for (int i = 0; i < n_vtx; i++) {
         for (int j = i + 1; j < n_vtx; j++) {
@@ -188,7 +188,7 @@ bool GastrulationBoundary::checkValid() {
     return true;
 }
 
-double GastrulationBoundary::computeEnergy() {
+double GastrulationBiArcBoundary::computeEnergy() {
     double energy = 0;
     for (int i = 0; i < q.rows(); i++) {
         energy += epsilon / pow(q(i), 2);
@@ -196,7 +196,7 @@ double GastrulationBoundary::computeEnergy() {
     return energy;
 }
 
-VectorXT GastrulationBoundary::computeEnergyGradient() {
+VectorXT GastrulationBiArcBoundary::computeEnergyGradient() {
     VectorXT dEdr = VectorXT::Zero(q.rows());
     for (int i = 0; i < q.rows(); i++) {
         dEdr(i) = -2 * epsilon / pow(q(i), 3);
@@ -204,7 +204,7 @@ VectorXT GastrulationBoundary::computeEnergyGradient() {
     return dEdr.transpose() * dqdp;
 }
 
-MatrixXT GastrulationBoundary::computeEnergyHessian() {
+MatrixXT GastrulationBiArcBoundary::computeEnergyHessian() {
     VectorXT dEdr = VectorXT::Zero(q.rows());
     VectorXT d2Edr2 = VectorXT::Zero(q.rows());
     for (int i = 0; i < q.rows(); i++) {

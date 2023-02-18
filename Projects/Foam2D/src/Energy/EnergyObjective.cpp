@@ -129,9 +129,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
 
     CellFunctionEnergy energy(info);
     info->getTessellation()->addFunctionGradient(energy, gradient, cellInfos);
-
     gradient.bottomRows(info->boundary->nfree) += info->boundary->computeEnergyGradient();
-
     return gradient;
 }
 

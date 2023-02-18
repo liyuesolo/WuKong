@@ -17,6 +17,7 @@ public:
                 const CellInfo *cellInfo) const;
 
     virtual void
-    addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype, MatrixXT &hessian,
+    addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype,
+               MatrixXT &hessian,
                const CellInfo *cellInfo) const;
 };

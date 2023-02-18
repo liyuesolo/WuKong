@@ -16,11 +16,23 @@ CellFunctionArea::addValue(const VectorXT &site, const VectorXT &nodes, const Ve
         y1 = nodes(next(i) * nx + 1);
         q1 = nodes(next(i) * nx + 2);
 
+        bool bad = true;
+
         value += 0.5 * (x0 * y1 - x1 * y0);
         if (btype(i) == 1) {
             value += q0 * q0 * (0.2e1 * asin(sqrt(pow(y1 - y0, 0.2e1) + pow(x1 - x0, 0.2e1)) / q0 / 0.2e1) -
                                 sin(0.2e1 * asin(sqrt(pow(y1 - y0, 0.2e1) + pow(x1 - x0, 0.2e1)) / q0 / 0.2e1))) /
                      0.2e1;
+        } else if (btype(i) == 2 && !bad) {
+            value += ((-y0 + y1) * cos(q0) + sin(q0) * (x0 - x1)) * ((-y0 + y1) * cos(q1) + sin(q1) * (x0 - x1)) /
+                     (0.3e1 * sin(q1) * cos(q0) - 0.3e1 * cos(q1) * sin(q0));
+        } else if (btype(i) == 2 && bad) {
+            value -= ((-y0 + y1) * cos(q0) + sin(q0) * (x0 - x1)) * ((-y0 + y1) * cos(q1) + sin(q1) * (x0 - x1)) /
+                     (0.3e1 * sin(q1) * cos(q0) - 0.3e1 * cos(q1) * sin(q0));
+
+//            std::cout << "Area " << x0 << " " << y0 << " " << q0 << " " << x1 << " " << y1 << " " << q1 << " "
+//                      << ((-y0 + y1) * cos(q0) + sin(q0) * (x0 - x1)) * ((-y0 + y1) * cos(q1) + sin(q1) * (x0 - x1)) /
+//                         (0.3e1 * sin(q1) * cos(q0) - 0.3e1 * cos(q1) * sin(q0)) << std::endl;
         }
     }
 }
@@ -33,7 +45,7 @@ CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, const
 
     double x0, y0, q0, x1, y1, q1;
     int x0i, y0i, q0i, x1i, y1i, q1i;
-    double t1, t2, t3, t4, t5, t6, t7, t8, t9;
+    double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t26, t32, t34, t37;
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * nx + 0;
         y0i = i * nx + 1;
@@ -48,6 +60,8 @@ CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, const
         x1 = nodes(x1i);
         y1 = nodes(y1i);
         q1 = nodes(q1i);
+
+        bool bad = true;
 
         gradient_x(x0i) += 0.5 * y1;
         gradient_x(y0i) += -0.5 * x1;
@@ -75,6 +89,50 @@ CellFunctionArea::addGradient(const VectorXT &site, const VectorXT &nodes, const
             gradient_x(x1i) += -t2;
             gradient_x(y1i) += t1;
             gradient_x(q0i) += q0 * (q0 * t3 * t6 * t7 * t9 + t8 - sin(t8));
+        } else if (btype(i) == 2 && !bad) {
+            t1 = sin(q0);
+            t2 = -y0 + y1;
+            t3 = cos(q1);
+            t5 = sin(q1);
+            t6 = x0 - x1;
+            t8 = t3 * t2 + t6 * t5;
+            t10 = cos(q0);
+            t13 = -t1 * t3 + t10 * t5;
+            t14 = 0.1e1 / t13 / 0.3e1;
+            t18 = t1 * t6 + t10 * t2;
+            t21 = t14 * t8 * t1 + t14 * t5 * t18;
+            t26 = -t14 * t8 * t10 - t14 * t3 * t18;
+            t32 = t8 * t18;
+            t34 = pow(t13, -0.2e1) / 0.9e1;
+            t37 = -t1 * t5 - t10 * t3;
+            gradient_x(x0i) += t21;
+            gradient_x(y0i) += t26;
+            gradient_x(q0i) += t14 * t8 * (-t2 * t1 + t6 * t10) - 0.3e1 * t37 * t34 * t32;
+            gradient_x(x1i) += -t21;
+            gradient_x(y1i) += -t26;
+            gradient_x(q1i) += t14 * (-t5 * t2 + t6 * t3) * t18 + 0.3e1 * t37 * t34 * t32;
+        } else if (btype(i) == 2 && bad) {
+            t1 = sin(q0);
+            t2 = -y0 + y1;
+            t3 = cos(q1);
+            t5 = sin(q1);
+            t6 = x0 - x1;
+            t8 = t3 * t2 + t6 * t5;
+            t10 = cos(q0);
+            t13 = -t1 * t3 + t10 * t5;
+            t14 = 0.1e1 / t13 / 0.3e1;
+            t18 = t1 * t6 + t10 * t2;
+            t21 = t14 * t8 * t1 + t14 * t5 * t18;
+            t26 = -t14 * t8 * t10 - t14 * t3 * t18;
+            t32 = t8 * t18;
+            t34 = pow(t13, -0.2e1) / 0.9e1;
+            t37 = -t1 * t5 - t10 * t3;
+            gradient_x(x0i) -= t21;
+            gradient_x(y0i) -= t26;
+            gradient_x(q0i) -= t14 * t8 * (-t2 * t1 + t6 * t10) - 0.3e1 * t37 * t34 * t32;
+            gradient_x(x1i) -= -t21;
+            gradient_x(y1i) -= -t26;
+            gradient_x(q1i) -= t14 * (-t5 * t2 + t6 * t3) * t18 + 0.3e1 * t37 * t34 * t32;
         }
     }
 }
@@ -90,7 +148,10 @@ CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, const 
     double x0, y0, q0, x1, y1, q1;
     int x0i, y0i, q0i, x1i, y1i, q1i;
     double t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20,
-            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34;
+            t21, t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37, t38, t39, t40,
+            t41, t42, t43, t44, t45, t46, t47, t48, t49, t50, t51, t52, t53, t54, t55, t56, t57, t58, t59, t60,
+            t61, t62, t63, t64, t65, t66, t67, t68, t69, t70, t71, t72, t73, t74, t75, t76, t77, t78, t79, t80,
+            t81, t82, t83, t84, t85, t86, t87, t88, t89, t90, t91, t92, t93, t94, t95, t96, t97, t98, t99, t100;
     for (int i = 0; i < n_nodes; i++) {
         x0i = i * nx + 0;
         y0i = i * nx + 1;
@@ -106,11 +167,14 @@ CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, const 
         y1 = nodes(y1i);
         q1 = nodes(q1i);
 
+        bool bad = true;
+
         hess_xx(x0i, y1i) += 0.5;
         hess_xx(y0i, x1i) += -0.5;
         hess_xx(x1i, y0i) += -0.5;
         hess_xx(y1i, x0i) += 0.5;
 
+        // @formatter:off
         if (btype(i) == 1) {
             t1 = -y1 + y0;
             t2 = x1 - x0;
@@ -194,6 +258,161 @@ CellFunctionArea::addHessian(const VectorXT &site, const VectorXT &nodes, const 
                                                                    (-t5 * t7 * t10 * t19 + t15 * t12 * t21))) * q0 +
                                  t17 -
                                  t19;
+        } else if (btype(i) == 2 && !bad) {
+            t1 = sin(q0);
+            t2 = sin(q1);
+            t3 = t2 * t1;
+            t4 = cos(q0);
+            t5 = t4 * t2;
+            t6 = cos(q1);
+            t7 = t1 * t6;
+            t8 = t5 - t7;
+            t9 = 0.1e1 / t8 / 0.3e1;
+            t11 = 0.2e1 * t9 * t3;
+            t14 = -t9 * t5 - t9 * t7;
+            t15 = -y0 + y1;
+            t17 = x0 - x1;
+            t19 = t6 * t15 + t17 * t2;
+            t20 = t19 * t4;
+            t22 = t19 * t1;
+            t23 = 0.9e1 * t8 * t8;
+            t24 = 0.1e1 / t23;
+            t25 = t4 * t6;
+            t26 = -t3 - t25;
+            t27 = 0.3e1 * t26 * t24;
+            t31 = -t1 * t15 + t17 * t4;
+            t36 = t17 * t1 + t4 * t15;
+            t37 = t2 * t36;
+            t39 = t9 * t2 * t31 + t9 * t20 - t27 * t22 - t27 * t37;
+            t42 = -t2 * t15 + t17 * t6;
+            t45 = -0.3e1 * t26 * t24;
+            t47 = t6 * t36;
+            t50 = t9 * t42 * t1 - t45 * t22 - t45 * t37 + t9 * t47;
+            t52 = 0.2e1 * t9 * t25;
+            t58 = -t9 * t6 * t31 + t27 * t20 + t9 * t22 + t27 * t47;
+            t64 = -t9 * t42 * t4 + t45 * t20 + t9 * t37 + t45 * t47;
+            t66 = -t9 * t19 * t36;
+            t67 = t19 * t31;
+            t70 = t19 * t36;
+            t73 = 0.1e1 / t8 / t23 / 0.3e1;
+            t77 = 0.18e2 * t26 * t26 * t73 * t70;
+            t79 = -0.3e1 * t8 * t24 * t70;
+            t84 = t42 * t36;
+            t91 = -0.18e2 * t26 * t26 * t73 * t70 + t9 * t42 * t31 - t27 * t84 - t45 * t67 - t9 * t70;
+            hess_xx(x0i, x0i) += t11;
+            hess_xx(x0i, y0i) += t14;
+            hess_xx(x0i, q0i) += t39;
+            hess_xx(x0i, x1i) += -t11;
+            hess_xx(x0i, y1i) += -t14;
+            hess_xx(x0i, q1i) += t50;
+            hess_xx(y0i, x0i) += t14;
+            hess_xx(y0i, y0i) += t52;
+            hess_xx(y0i, q0i) += t58;
+            hess_xx(y0i, x1i) += -t14;
+            hess_xx(y0i, y1i) += -t52;
+            hess_xx(y0i, q1i) += t64;
+            hess_xx(q0i, x0i) += t39;
+            hess_xx(q0i, y0i) += t58;
+            hess_xx(q0i, q0i) += -0.2e1 * t27 * t67 + t66 + t77 - t79;
+            hess_xx(q0i, x1i) += -t39;
+            hess_xx(q0i, y1i) += -t58;
+            hess_xx(q0i, q1i) += t91;
+            hess_xx(x1i, x0i) += -t11;
+            hess_xx(x1i, y0i) += -t14;
+            hess_xx(x1i, q0i) += -t39;
+            hess_xx(x1i, x1i) += t11;
+            hess_xx(x1i, y1i) += t14;
+            hess_xx(x1i, q1i) += -t50;
+            hess_xx(y1i, x0i) += -t14;
+            hess_xx(y1i, y0i) += -t52;
+            hess_xx(y1i, q0i) += -t58;
+            hess_xx(y1i, x1i) += t14;
+            hess_xx(y1i, y1i) += t52;
+            hess_xx(y1i, q1i) += -t64;
+            hess_xx(q1i, x0i) += t50;
+            hess_xx(q1i, y0i) += t64;
+            hess_xx(q1i, q0i) += t91;
+            hess_xx(q1i, x1i) += -t50;
+            hess_xx(q1i, y1i) += -t64;
+            hess_xx(q1i, q1i) += -0.2e1 * t45 * t84 + t66 + t77 - t79;
+        } else if (btype(i) == 2 && bad) {
+            t1 = sin(q0);
+            t2 = sin(q1);
+            t3 = t2 * t1;
+            t4 = cos(q0);
+            t5 = t4 * t2;
+            t6 = cos(q1);
+            t7 = t1 * t6;
+            t8 = t5 - t7;
+            t9 = 0.1e1 / t8 / 0.3e1;
+            t11 = 0.2e1 * t9 * t3;
+            t14 = -t9 * t5 - t9 * t7;
+            t15 = -y0 + y1;
+            t17 = x0 - x1;
+            t19 = t6 * t15 + t17 * t2;
+            t20 = t19 * t4;
+            t22 = t19 * t1;
+            t23 = 0.9e1 * t8 * t8;
+            t24 = 0.1e1 / t23;
+            t25 = t4 * t6;
+            t26 = -t3 - t25;
+            t27 = 0.3e1 * t26 * t24;
+            t31 = -t1 * t15 + t17 * t4;
+            t36 = t17 * t1 + t4 * t15;
+            t37 = t2 * t36;
+            t39 = t9 * t2 * t31 + t9 * t20 - t27 * t22 - t27 * t37;
+            t42 = -t2 * t15 + t17 * t6;
+            t45 = -0.3e1 * t26 * t24;
+            t47 = t6 * t36;
+            t50 = t9 * t42 * t1 - t45 * t22 - t45 * t37 + t9 * t47;
+            t52 = 0.2e1 * t9 * t25;
+            t58 = -t9 * t6 * t31 + t27 * t20 + t9 * t22 + t27 * t47;
+            t64 = -t9 * t42 * t4 + t45 * t20 + t9 * t37 + t45 * t47;
+            t66 = -t9 * t19 * t36;
+            t67 = t19 * t31;
+            t70 = t19 * t36;
+            t73 = 0.1e1 / t8 / t23 / 0.3e1;
+            t77 = 0.18e2 * t26 * t26 * t73 * t70;
+            t79 = -0.3e1 * t8 * t24 * t70;
+            t84 = t42 * t36;
+            t91 = -0.18e2 * t26 * t26 * t73 * t70 + t9 * t42 * t31 - t27 * t84 - t45 * t67 - t9 * t70;
+            hess_xx(x0i, x0i) -= t11;
+            hess_xx(x0i, y0i) -= t14;
+            hess_xx(x0i, q0i) -= t39;
+            hess_xx(x0i, x1i) -= -t11;
+            hess_xx(x0i, y1i) -= -t14;
+            hess_xx(x0i, q1i) -= t50;
+            hess_xx(y0i, x0i) -= t14;
+            hess_xx(y0i, y0i) -= t52;
+            hess_xx(y0i, q0i) -= t58;
+            hess_xx(y0i, x1i) -= -t14;
+            hess_xx(y0i, y1i) -= -t52;
+            hess_xx(y0i, q1i) -= t64;
+            hess_xx(q0i, x0i) -= t39;
+            hess_xx(q0i, y0i) -= t58;
+            hess_xx(q0i, q0i) -= -0.2e1 * t27 * t67 + t66 + t77 - t79;
+            hess_xx(q0i, x1i) -= -t39;
+            hess_xx(q0i, y1i) -= -t58;
+            hess_xx(q0i, q1i) -= t91;
+            hess_xx(x1i, x0i) -= -t11;
+            hess_xx(x1i, y0i) -= -t14;
+            hess_xx(x1i, q0i) -= -t39;
+            hess_xx(x1i, x1i) -= t11;
+            hess_xx(x1i, y1i) -= t14;
+            hess_xx(x1i, q1i) -= -t50;
+            hess_xx(y1i, x0i) -= -t14;
+            hess_xx(y1i, y0i) -= -t52;
+            hess_xx(y1i, q0i) -= -t58;
+            hess_xx(y1i, x1i) -= t14;
+            hess_xx(y1i, y1i) -= t52;
+            hess_xx(y1i, q1i) -= -t64;
+            hess_xx(q1i, x0i) -= t50;
+            hess_xx(q1i, y0i) -= t64;
+            hess_xx(q1i, q0i) -= t91;
+            hess_xx(q1i, x1i) -= -t50;
+            hess_xx(q1i, y1i) -= -t64;
+            hess_xx(q1i, q1i) -= -0.2e1 * t45 * t84 + t66 + t77 - t79;
         }
+        // @formatter:on
     }
 }

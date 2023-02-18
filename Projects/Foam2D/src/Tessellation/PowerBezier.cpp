@@ -1437,7 +1437,7 @@ Power::getBezierBoundaryNodeGradient(const VectorXT &v1, const VectorXT &v2, con
     }
     // @formatter:on
 
-    nodeGrad = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], 12, 3).transpose();
+    nodeGrad = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], n, 3).transpose();
 }
 
 void

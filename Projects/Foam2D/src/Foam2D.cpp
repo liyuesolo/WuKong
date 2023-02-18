@@ -17,9 +17,11 @@
 #include "Projects/Foam2D/include/Boundary/CircleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/BezierCircleBoundary.h"
 #include "Projects/Foam2D/include/Boundary/BiArcBoundary.h"
+#include "Projects/Foam2D/include/Boundary/BezierCurveBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 #include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
-#include "Projects/Foam2D/include/Boundary/GastrulationBoundary.h"
+#include "Projects/Foam2D/include/Boundary/GastrulationBiArcBoundary.h"
+#include "Projects/Foam2D/include/Boundary/GastrulationBezierBoundary.h"
 
 Foam2D::Foam2D() {
     info = new Foam2DInfo();
@@ -197,7 +199,7 @@ void Foam2D::initDynamicBezierCircle(int n_free_in) {
     resetVertexParams();
 }
 
-void Foam2D::initDynamicBiArcCircle(int n_free_in) {
+void Foam2D::initDynamicBiArcCurve(int n_free_in) {
     info->n_free = n_free_in;
     info->n_fixed = 8;
 
@@ -217,6 +219,48 @@ void Foam2D::initDynamicBiArcCircle(int n_free_in) {
     VectorXi free_idx = Eigen::VectorXi::LinSpaced(p.rows() - 3, 3, p.rows() - 1);
 //    IV3 free_idx(0, 1, 2);
     info->boundary = new BiArcBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<double> dis(-r, r);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double x = dis(gen), y = dis(gen);
+        while (!info->boundary->pointInBounds(TV(x, y))) {
+            x = dis(gen);
+            y = dis(gen);
+        }
+        vertices(i * 2 + 0) = x;
+        vertices(i * 2 + 1) = y;
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initDynamicBezierCurve(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r = 0.75;
+    int ncp = 4;
+    VectorXT p(ncp * 2);
+    p << -r, -r, r, -r, r, r, -r, r;
+    VectorXi free_idx(6);
+    free_idx << 0, 1, 2, 3, 4, 5;
+
+    std::random_device rdp;
+    std::mt19937 genp(rdp());
+    std::uniform_real_distribution<double> disp(-1, 1);
+    for (int i = 0; i < p.rows(); i++) {
+        p(i) += 0.0001 * disp(genp);
+    }
+
+    info->boundary = new BezierCurveBoundary(p, free_idx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -372,7 +416,7 @@ void Foam2D::initHardwareScenario0(int n_free_in) {
     resetVertexParams();
 }
 
-void Foam2D::initGastrulation(int n_free_in) {
+void Foam2D::initGastrulationBiArc(int n_free_in) {
     info->n_free = n_free_in;
     info->n_fixed = 8;
 
@@ -406,7 +450,64 @@ void Foam2D::initGastrulation(int n_free_in) {
     VectorXi free_idx(6);
     IV3 linsp(0, 1, 2);
     free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
-    info->boundary = new GastrulationBoundary(p, free_idx);
+    info->boundary = new GastrulationBiArcBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    double noise = 1e-3;
+    std::uniform_real_distribution<double> dis(-noise, noise);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double theta = i * M_PI * 2.0 / info->n_free;
+        vertices(i * 2 + 0) = r_cells * cos(theta) + dis(gen);
+        vertices(i * 2 + 1) = r_cells * sin(theta) + dis(gen);
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
+void Foam2D::initGastrulationBezier(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r_out = 0.75;
+    double r_in = 0.5;
+    double r_cells = (r_out + r_in) / 2;
+    int ncp = 8;
+    VectorXT p(ncp * 2 * 2);
+    for (int i = 0; i < ncp; i++) {
+        double theta = i * M_PI * 2.0 / ncp;
+        p(i * 2 + 0) = r_out * cos(theta);
+        p(i * 2 + 1) = r_out * sin(theta);
+    }
+    for (int i = 0; i < ncp; i++) {
+        double theta = -i * M_PI * 2.0 / ncp;
+        p((ncp + i) * 2 + 0) = r_in * cos(theta);
+        p((ncp + i) * 2 + 1) = r_in * sin(theta);
+    }
+
+    std::random_device rdp;
+    std::mt19937 genp(rdp());
+    std::uniform_real_distribution<double> disp(-1, 1);
+    for (int i = 0; i < p.rows(); i++) {
+        p(i) += 0.01 * disp(genp);
+    }
+
+//    IV3 free_idx(0, 1);
+    VectorXi free_idx((ncp - 1) * 2 * 2);
+    free_idx << Eigen::VectorXi::LinSpaced(ncp * 2 - 2, 2, ncp * 2 - 1), Eigen::VectorXi::LinSpaced(ncp * 2 - 2,
+                                                                                                    ncp * 2 + 2,
+                                                                                                    ncp * 2 * 2 - 1);
+//    VectorXi free_idx(6);
+//    IV3 linsp(0, 1, 2);
+//    free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
+//    VectorXi free_idx = {};
+    info->boundary = new GastrulationBezierBoundary(p, free_idx);
 
     std::random_device rd;
     std::mt19937 gen(rd());
