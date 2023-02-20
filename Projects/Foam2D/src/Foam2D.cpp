@@ -476,9 +476,9 @@ void Foam2D::initGastrulationBezier(int n_free_in) {
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double r_out = 0.75;
-    double r_in = 0.5;
+    double r_in = 0.65;
     double r_cells = (r_out + r_in) / 2;
-    int ncp = 8;
+    int ncp = 20;
     VectorXT p(ncp * 2 * 2);
     for (int i = 0; i < ncp; i++) {
         double theta = i * M_PI * 2.0 / ncp;
@@ -500,8 +500,8 @@ void Foam2D::initGastrulationBezier(int n_free_in) {
 
 //    IV3 free_idx(0, 1);
     VectorXi free_idx((ncp - 1) * 2 * 2);
-    free_idx << Eigen::VectorXi::LinSpaced(ncp * 2 - 2, 2, ncp * 2 - 1), Eigen::VectorXi::LinSpaced(ncp * 2 - 2,
-                                                                                                    ncp * 2 + 2,
+    free_idx << Eigen::VectorXi::LinSpaced(ncp * 2 - 2, 2, ncp * 2 - 1), Eigen::VectorXi::LinSpaced(ncp * 2,
+                                                                                                    ncp * 2,
                                                                                                     ncp * 2 * 2 - 1);
 //    VectorXi free_idx(6);
 //    IV3 linsp(0, 1, 2);

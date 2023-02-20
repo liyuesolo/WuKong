@@ -5,6 +5,10 @@
 class GastrulationBezierBoundary : public Boundary {
 
 private:
+    double yolk_area = M_PI * 0.5 * 0.5;
+    double membrane_radius = 0.8;
+
+private:
 
     virtual void computeVertices();
 

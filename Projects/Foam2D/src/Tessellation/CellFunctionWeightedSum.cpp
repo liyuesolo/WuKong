@@ -5,6 +5,7 @@ void CellFunctionWeightedSum::addValue(const VectorXT &site, const VectorXT &nod
                                        const VectorXi &btype, double &value,
                                        const CellInfo *cellInfo) const {
     for (size_t i = 0; i < functions.size(); i++) {
+        if (fabs(weights[i]) < 1e-10) continue;
         double func_value = 0;
         functions[i]->addValue(site, nodes, next, btype, func_value, cellInfo);
         value += func_value * weights[i];
@@ -16,6 +17,7 @@ void CellFunctionWeightedSum::addGradient(const VectorXT &site, const VectorXT &
                                           VectorXT &gradient_c,
                                           VectorXT &gradient_x, const CellInfo *cellInfo) const {
     for (size_t i = 0; i < functions.size(); i++) {
+        if (fabs(weights[i]) < 1e-10) continue;
         VectorXT func_gradient_c = VectorXT::Zero(gradient_c.rows());
         VectorXT func_gradient_x = VectorXT::Zero(gradient_x.rows());
         functions[i]->addGradient(site, nodes, next, btype, func_gradient_c, func_gradient_x, cellInfo);
@@ -29,6 +31,7 @@ void CellFunctionWeightedSum::addHessian(const VectorXT &site, const VectorXT &n
                                          MatrixXT &hessian,
                                          const CellInfo *cellInfo) const {
     for (size_t i = 0; i < functions.size(); i++) {
+        if (fabs(weights[i]) < 1e-10) continue;
         MatrixXT func_hessian = MatrixXT::Zero(hessian.rows(), hessian.cols());
         functions[i]->addHessian(site, nodes, next, btype, func_hessian, cellInfo);
         hessian += func_hessian * weights[i];

@@ -89,9 +89,25 @@ void EnergyObjective::preProcess(const VectorXd &y, std::vector<CellInfo> &cellI
         Cell cell = info->getTessellation()->cells[i];
         cellInfos[i].neighbor_affinity = VectorXT::Zero(cell.edges.size());
         for (int j = 0; j < cell.edges.size(); j++) {
-            cellInfos[i].neighbor_affinity(j) = (cell.edges[j].neighbor >= info->n_free ||
-                                                 cell.edges[j].neighbor % 2 == i % 2 ? 0
-                                                                                     : 1);
+            int n_vtx = c.rows() / dims;
+            bool outer_boundary = (cell.edges[j].neighbor >= n_vtx &&
+                                   (cell.edges[j].neighbor - n_vtx) < info->boundary->edges.size() / 2);
+            bool inner_boundary = (cell.edges[j].neighbor >= n_vtx &&
+                                   (cell.edges[j].neighbor - n_vtx) >= info->boundary->edges.size() / 2);
+
+            double alpha = (i * 1.0 / info->n_free);
+            double mul = 5;
+            double ob_affinity = 1 + mul * exp(-100 * (alpha - 0.5) * (alpha - 0.5));
+            double ib_affinity =
+                    1 + mul * 3 * exp(-40 * (alpha - 0.5) * (alpha - 0.5)) -
+                    mul * 3 * exp(-80 * (alpha - 0.5) * (alpha - 0.5));
+            double cell_affinity = 1;
+            cellInfos[i].neighbor_affinity[j] = outer_boundary ? ob_affinity : (inner_boundary ? ib_affinity
+                                                                                               : cell_affinity);
+
+//            cellInfos[i].neighbor_affinity(j) = (cell.edges[j].neighbor >= info->n_free ||
+//                                                 cell.edges[j].neighbor % 2 == i % 2 ? 0
+//                                                                                     : 1);
         }
     }
 }
