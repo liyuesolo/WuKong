@@ -23,14 +23,14 @@ void CircleBoundary::computeVertices() {
 
 void CircleBoundary::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
-    setGradientEntry(0, 0, 1);
-    setGradientEntry(3, 0, 1);
-    setGradientEntry(4, 0, -1);
-    setGradientEntry(7, 0, -1);
+    addGradientEntry(0, 0, 1);
+    addGradientEntry(3, 0, 1);
+    addGradientEntry(4, 0, -1);
+    addGradientEntry(7, 0, -1);
 
     dqdp = MatrixXT::Zero(q.rows(), nfree);
-    setRGradientEntry(0, 0, 1);
-    setRGradientEntry(1, 0, -1);
+    addQGradientEntry(0, 0, 1);
+    addQGradientEntry(1, 0, -1);
 }
 
 void CircleBoundary::computeHessian() {

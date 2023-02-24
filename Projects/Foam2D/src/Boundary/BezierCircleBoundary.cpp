@@ -21,10 +21,10 @@ void BezierCircleBoundary::computeVertices() {
 
 void BezierCircleBoundary::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
-    setGradientEntry(0, 0, 1);
-    setGradientEntry(3, 0, 1);
-    setGradientEntry(4, 0, -1);
-    setGradientEntry(7, 0, -1);
+    addGradientEntry(0, 0, 1);
+    addGradientEntry(3, 0, 1);
+    addGradientEntry(4, 0, -1);
+    addGradientEntry(7, 0, -1);
 
     dqdp = MatrixXT::Zero(q.rows(), nfree);
 }

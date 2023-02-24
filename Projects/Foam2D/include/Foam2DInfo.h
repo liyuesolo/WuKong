@@ -29,6 +29,7 @@ public:
     double energy_drag_target_weight = 0.00;
     double energy_adhesion_weight = 0.00;
     double energy_deformation_weight = 0.00;
+    double energy_deformation_volume_weight = 0.00;
 
 //    double dynamics_m = 0.0001;
 //    double dynamics_eta = 0.1;

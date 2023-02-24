@@ -5,7 +5,7 @@
 class GastrulationBiArcBoundary : public Boundary {
 
 private:
-    double epsilon = 1e-8;
+    double epsilon = 0 * 1e-8;
 
 private:
 

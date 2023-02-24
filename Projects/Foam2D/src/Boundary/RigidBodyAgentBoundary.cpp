@@ -26,7 +26,7 @@ void RigidBodyAgentBoundary::computeVertices() {
     edges.resize(v.rows() / 2);
     for (int i = 0; i < n_agent; i++) {
         edges[i].nextEdge = (i + 1) % n_agent;
-        edges[i].btype = 1;
+        edges[i].btype = q_map(i) >= 0 ? 1 : 0;
         edges[i].q_idx = q_map(i);
     }
     for (int i = 0; i < n_box; i++) {
@@ -50,13 +50,13 @@ void RigidBodyAgentBoundary::computeGradient() {
         double x0 = agentShape(i * 2 + 0);
         double y0 = agentShape(i * 2 + 1);
 
-        setGradientEntry(i * 2 + 0, 0, 1);
-        setGradientEntry(i * 2 + 0, 1, 0);
-        setGradientEntry(i * 2 + 0, 2, tmul * (-x0 * sin(t) - y0 * cos(t)));
+        addGradientEntry(i * 2 + 0, 0, 1);
+        addGradientEntry(i * 2 + 0, 1, 0);
+        addGradientEntry(i * 2 + 0, 2, tmul * (-x0 * sin(t) - y0 * cos(t)));
 
-        setGradientEntry(i * 2 + 1, 0, 0);
-        setGradientEntry(i * 2 + 1, 1, 1);
-        setGradientEntry(i * 2 + 1, 2, tmul * (x0 * cos(t) - y0 * sin(t)));
+        addGradientEntry(i * 2 + 1, 0, 0);
+        addGradientEntry(i * 2 + 1, 1, 1);
+        addGradientEntry(i * 2 + 1, 2, tmul * (x0 * cos(t) - y0 * sin(t)));
     }
 
     dqdp = MatrixXT::Zero(q.rows(), nfree);
@@ -76,8 +76,8 @@ void RigidBodyAgentBoundary::computeHessian() {
         d2vdp2[i * 2 + 0] = MatrixXT::Zero(nfree, nfree);
         d2vdp2[i * 2 + 1] = MatrixXT::Zero(nfree, nfree);
 
-        setHessianEntry(i * 2 + 0, 2, 2, tmul * tmul * (-x0 * cos(t) + y0 * sin(t)));
-        setHessianEntry(i * 2 + 1, 2, 2, tmul * tmul * (-x0 * sin(t) - y0 * cos(t)));
+        addHessianEntry(i * 2 + 0, 2, 2, tmul * tmul * (-x0 * cos(t) + y0 * sin(t)));
+        addHessianEntry(i * 2 + 1, 2, 2, tmul * tmul * (-x0 * sin(t) - y0 * cos(t)));
     }
     for (int i = 0; i < 8; i++) {
         d2vdp2[nsides * 2 + i] = MatrixXT::Zero(nfree, nfree);

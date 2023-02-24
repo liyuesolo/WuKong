@@ -2,12 +2,12 @@
 
 #include "Boundary.h"
 
-class GastrulationBezierBoundary : public Boundary {
+class GastrulationLinearBoundary : public Boundary {
 
 private:
+    double w = 1e-4;
 
 private:
-
     virtual void computeVertices();
 
     virtual void computeGradient();
@@ -17,8 +17,14 @@ private:
 public:
     virtual bool checkValid();
 
+    virtual double computeEnergy();
+
+    virtual VectorXT computeEnergyGradient();
+
+    virtual MatrixXT computeEnergyHessian();
+
 public:
-    GastrulationBezierBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
+    GastrulationLinearBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
         computeVertices();
         computeGradient();
         computeHessian();

@@ -98,6 +98,9 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::InputDouble("Adhesion Weight", &foam.info->energy_adhesion_weight, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Deformation Weight", &foam.info->energy_deformation_weight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Deformation Volume Weight", &foam.info->energy_deformation_volume_weight, 0.001f, 0.001f,
+                           "%.4f");
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -133,6 +136,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         scenarios.push_back("Dynamic Bezier Curve");
         scenarios.push_back("Rigid Body Agent");
         scenarios.push_back("Hardware 0");
+        scenarios.push_back("Gastrulation Linear");
         scenarios.push_back("Gastrulation BiArc");
         scenarios.push_back("Gastrulation Bezier");
 
@@ -211,6 +215,10 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
         if (generate_scenario_type == 12) {
+            ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+            ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+        }
+        if (generate_scenario_type == 13) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
         }
@@ -429,9 +437,12 @@ void Foam2DApp::generateScenario() {
             foam.initHardwareScenario0(generate_scenario_free_sites);
             break;
         case 11:
-            foam.initGastrulationBiArc(generate_scenario_free_sites);
+            foam.initGastrulationLinear(generate_scenario_free_sites);
             break;
         case 12:
+            foam.initGastrulationBiArc(generate_scenario_free_sites);
+            break;
+        case 13:
             foam.initGastrulationBezier(generate_scenario_free_sites);
             break;
         default:

@@ -8,7 +8,7 @@ public:
     double channel_width = 0.8;
     double corner_radius = 0.08;
     double w_barrier = 1e-7;
-    double w_piston = 0.1;
+    double w_piston = 1e-2;
 
 private:
 

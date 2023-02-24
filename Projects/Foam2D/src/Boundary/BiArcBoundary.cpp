@@ -43,15 +43,15 @@ void BiArcBoundary::computeGradient() {
 
         for (int ii = 0; ii < 2; ii++) {
             for (int jj = 0; jj < 3; jj++) {
-                setGradientEntry(i * 4 + 2 + ii, i * 3 + jj, outputs(ii, jj));
-                setGradientEntry(i * 4 + 2 + ii, j * 3 + jj, outputs(ii, jj + 3));
-                setRGradientEntry(i * 2 + ii, i * 3 + jj, outputs(ii + 2, jj));
-                setRGradientEntry(i * 2 + ii, j * 3 + jj, outputs(ii + 2, jj + 3));
+                addGradientEntry(i * 4 + 2 + ii, i * 3 + jj, outputs(ii, jj));
+                addGradientEntry(i * 4 + 2 + ii, j * 3 + jj, outputs(ii, jj + 3));
+                addQGradientEntry(i * 2 + ii, i * 3 + jj, outputs(ii + 2, jj));
+                addQGradientEntry(i * 2 + ii, j * 3 + jj, outputs(ii + 2, jj + 3));
             }
         }
 
-        setGradientEntry(i * 4 + 0, i * 3 + 0, 1);
-        setGradientEntry(i * 4 + 1, i * 3 + 1, 1);
+        addGradientEntry(i * 4 + 0, i * 3 + 0, 1);
+        addGradientEntry(i * 4 + 1, i * 3 + 1, 1);
     }
 }
 
@@ -80,31 +80,31 @@ void BiArcBoundary::computeHessian() {
             for (int jj = 0; jj < 3; jj++) {
                 hess = outputs[0];
                 idx = i * 4 + 2 + 0;
-                setHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
-                setHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
-                setHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
-                setHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
+                addHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
+                addHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
+                addHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
+                addHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
 
                 hess = outputs[1];
                 idx = i * 4 + 2 + 1;
-                setHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
-                setHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
-                setHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
-                setHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
+                addHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
+                addHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
+                addHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
+                addHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
 
                 hess = outputs[2];
                 idx = i * 2 + 0;
-                setRHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
-                setRHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
-                setRHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
-                setRHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
+                addQHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
+                addQHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
+                addQHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
+                addQHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
 
                 hess = outputs[3];
                 idx = i * 2 + 1;
-                setRHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
-                setRHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
-                setRHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
-                setRHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
+                addQHessianEntry(idx, i * 3 + ii, i * 3 + jj, hess(ii, jj));
+                addQHessianEntry(idx, i * 3 + ii, j * 3 + jj, hess(ii, jj + 3));
+                addQHessianEntry(idx, j * 3 + ii, i * 3 + jj, hess(ii + 3, jj));
+                addQHessianEntry(idx, j * 3 + ii, j * 3 + jj, hess(ii + 3, jj + 3));
             }
         }
     }

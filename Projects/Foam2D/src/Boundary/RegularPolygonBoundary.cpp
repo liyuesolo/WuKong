@@ -30,11 +30,11 @@ void RegularPolygonBoundary::computeGradient() {
     for (int i = 0; i < nsides; i++) {
         double t = t0 + i * M_PI * 2.0 / nsides;
 
-        setGradientEntry(i * 2 + 0, 0, cos(t));
-        setGradientEntry(i * 2 + 0, 1, -r * sin(t));
+        addGradientEntry(i * 2 + 0, 0, cos(t));
+        addGradientEntry(i * 2 + 0, 1, -r * sin(t));
 
-        setGradientEntry(i * 2 + 1, 0, sin(t));
-        setGradientEntry(i * 2 + 1, 1, r * cos(t));
+        addGradientEntry(i * 2 + 1, 0, sin(t));
+        addGradientEntry(i * 2 + 1, 1, r * cos(t));
     }
 }
 
@@ -49,15 +49,15 @@ void RegularPolygonBoundary::computeHessian() {
 
         double t = t0 + i * M_PI * 2.0 / nsides;
 
-        setHessianEntry(i * 2 + 0, 0, 0, 0);
-        setHessianEntry(i * 2 + 0, 0, 1, -sin(t));
-        setHessianEntry(i * 2 + 0, 1, 0, -sin(t));
-        setHessianEntry(i * 2 + 0, 1, 1, -r * cos(t));
+        addHessianEntry(i * 2 + 0, 0, 0, 0);
+        addHessianEntry(i * 2 + 0, 0, 1, -sin(t));
+        addHessianEntry(i * 2 + 0, 1, 0, -sin(t));
+        addHessianEntry(i * 2 + 0, 1, 1, -r * cos(t));
 
-        setHessianEntry(i * 2 + 1, 0, 0, 0);
-        setHessianEntry(i * 2 + 1, 0, 1, cos(t));
-        setHessianEntry(i * 2 + 1, 1, 0, cos(t));
-        setHessianEntry(i * 2 + 1, 1, 1, -r * sin(t));
+        addHessianEntry(i * 2 + 1, 0, 0, 0);
+        addHessianEntry(i * 2 + 1, 0, 1, cos(t));
+        addHessianEntry(i * 2 + 1, 1, 0, cos(t));
+        addHessianEntry(i * 2 + 1, 1, 1, -r * sin(t));
     }
 }
 

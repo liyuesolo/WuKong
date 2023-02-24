@@ -34,10 +34,10 @@ void HardwareBoundary0::computeVertices() {
 void HardwareBoundary0::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
 
-    setGradientEntry(3 * 2 + 0, 0, 1);
-    setGradientEntry(4 * 2 + 0, 0, 1);
-    setGradientEntry(7 * 2 + 1, 1, 1);
-    setGradientEntry(8 * 2 + 1, 1, 1);
+    addGradientEntry(3 * 2 + 0, 0, 1);
+    addGradientEntry(4 * 2 + 0, 0, 1);
+    addGradientEntry(7 * 2 + 1, 1, 1);
+    addGradientEntry(8 * 2 + 1, 1, 1);
 
     dqdp = MatrixXT::Zero(q.rows(), nfree);
 }

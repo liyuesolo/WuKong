@@ -101,6 +101,7 @@ void EnergyObjective::preProcess(const VectorXd &y, std::vector<CellInfo> &cellI
             double ib_affinity =
                     1 + mul * 3 * exp(-40 * (alpha - 0.5) * (alpha - 0.5)) -
                     mul * 3 * exp(-80 * (alpha - 0.5) * (alpha - 0.5));
+            ib_affinity = 1;
             double cell_affinity = 1;
             cellInfos[i].neighbor_affinity[j] = outer_boundary ? ob_affinity : (inner_boundary ? ib_affinity
                                                                                                : cell_affinity);

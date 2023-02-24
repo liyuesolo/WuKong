@@ -84,27 +84,27 @@ public:
     virtual MatrixXT computeEnergyHessian() { return MatrixXT::Zero(nfree, nfree); };
 
 protected:
-    inline void setGradientEntry(int iv, int ip, double value) {
+    inline void addGradientEntry(int iv, int ip, double value) {
         if (free_map(ip) >= 0) {
-            dvdp(iv, free_map(ip)) = value;
+            dvdp(iv, free_map(ip)) += value;
         }
     }
 
-    inline void setHessianEntry(int iv, int ip0, int ip1, double value) {
+    inline void addHessianEntry(int iv, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            d2vdp2[iv](free_map(ip0), free_map(ip1)) = value;
+            d2vdp2[iv](free_map(ip0), free_map(ip1)) += value;
         }
     }
 
-    inline void setRGradientEntry(int ir, int ip, double value) {
+    inline void addQGradientEntry(int ir, int ip, double value) {
         if (free_map(ip) >= 0) {
-            dqdp(ir, free_map(ip)) = value;
+            dqdp(ir, free_map(ip)) += value;
         }
     }
 
-    inline void setRHessianEntry(int ir, int ip0, int ip1, double value) {
+    inline void addQHessianEntry(int ir, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            d2qdp2[ir](free_map(ip0), free_map(ip1)) = value;
+            d2qdp2[ir](free_map(ip0), free_map(ip1)) += value;
         }
     }
 

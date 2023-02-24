@@ -35,10 +35,10 @@ void BezierCurveBoundary::computeGradient() {
         double x1 = p(j * 2 + 0);
         double y1 = p(j * 2 + 1);
 
-        setGradientEntry(i * 2 + 0, i * 2 + 0, 0.5);
-        setGradientEntry(i * 2 + 1, i * 2 + 1, 0.5);
-        setGradientEntry(i * 2 + 0, j * 2 + 0, 0.5);
-        setGradientEntry(i * 2 + 1, j * 2 + 1, 0.5);
+        addGradientEntry(i * 2 + 0, i * 2 + 0, 0.5);
+        addGradientEntry(i * 2 + 1, i * 2 + 1, 0.5);
+        addGradientEntry(i * 2 + 0, j * 2 + 0, 0.5);
+        addGradientEntry(i * 2 + 1, j * 2 + 1, 0.5);
 
         double t1, t2, t3, t4;
         t1 = y0 - y1;
@@ -49,10 +49,10 @@ void BezierCurveBoundary::computeGradient() {
         t4 = 0.1e1 / t4;
         t2 = t2 * t4;
         t1 = t1 * t3 * t4;
-        setRGradientEntry(i, i * 2 + 0, -t1);
-        setRGradientEntry(i, i * 2 + 1, -t2);
-        setRGradientEntry(i, j * 2 + 0, t1);
-        setRGradientEntry(i, j * 2 + 1, t2);
+        addQGradientEntry(i, i * 2 + 0, -t1);
+        addQGradientEntry(i, i * 2 + 1, -t2);
+        addQGradientEntry(i, j * 2 + 0, t1);
+        addQGradientEntry(i, j * 2 + 1, t2);
     }
 }
 
@@ -93,22 +93,22 @@ void BezierCurveBoundary::computeHessian() {
         int i1 = i * 2 + 1;
         int i2 = j * 2 + 0;
         int i3 = j * 2 + 1;
-        setRHessianEntry(i, i0, i0, -t4);
-        setRHessianEntry(i, i0, i1, t2);
-        setRHessianEntry(i, i0, i2, t4);
-        setRHessianEntry(i, i0, i3, t3);
-        setRHessianEntry(i, i1, i0, t2);
-        setRHessianEntry(i, i1, i1, t1);
-        setRHessianEntry(i, i1, i2, t3);
-        setRHessianEntry(i, i1, i3, -t1);
-        setRHessianEntry(i, i2, i0, t4);
-        setRHessianEntry(i, i2, i1, t3);
-        setRHessianEntry(i, i2, i2, -t4);
-        setRHessianEntry(i, i2, i3, t2);
-        setRHessianEntry(i, i3, i0, t3);
-        setRHessianEntry(i, i3, i1, -t1);
-        setRHessianEntry(i, i3, i2, t2);
-        setRHessianEntry(i, i3, i3, t1);
+        addQHessianEntry(i, i0, i0, -t4);
+        addQHessianEntry(i, i0, i1, t2);
+        addQHessianEntry(i, i0, i2, t4);
+        addQHessianEntry(i, i0, i3, t3);
+        addQHessianEntry(i, i1, i0, t2);
+        addQHessianEntry(i, i1, i1, t1);
+        addQHessianEntry(i, i1, i2, t3);
+        addQHessianEntry(i, i1, i3, -t1);
+        addQHessianEntry(i, i2, i0, t4);
+        addQHessianEntry(i, i2, i1, t3);
+        addQHessianEntry(i, i2, i2, -t4);
+        addQHessianEntry(i, i2, i3, t2);
+        addQHessianEntry(i, i3, i0, t3);
+        addQHessianEntry(i, i3, i1, -t1);
+        addQHessianEntry(i, i3, i2, t2);
+        addQHessianEntry(i, i3, i3, t1);
     }
 }
 

@@ -76,6 +76,8 @@ public:
 
     void initHardwareScenario0(int n_free_in);
 
+    void initGastrulationLinear(int n_free_in);
+
     void initGastrulationBiArc(int n_free_in);
 
     void initGastrulationBezier(int n_free_in);

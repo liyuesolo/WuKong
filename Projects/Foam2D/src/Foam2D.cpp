@@ -20,6 +20,7 @@
 #include "Projects/Foam2D/include/Boundary/BezierCurveBoundary.h"
 #include "Projects/Foam2D/include/Boundary/RigidBodyAgentBoundary.h"
 #include "Projects/Foam2D/include/Boundary/HardwareBoundary0.h"
+#include "Projects/Foam2D/include/Boundary/GastrulationLinearBoundary.h"
 #include "Projects/Foam2D/include/Boundary/GastrulationBiArcBoundary.h"
 #include "Projects/Foam2D/include/Boundary/GastrulationBezierBoundary.h"
 
@@ -331,9 +332,11 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
     double inf = 100;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
-//    VectorXT agent(8);
-//    double a = 0.15;
-//    agent << -a, -a, -a, a, a, a, a, -a;
+    VectorXT agent(8);
+    double a = 0.15;
+    agent << -a, -a, -a, a, a, a, a, -a;
+    VectorXT r = {};
+    VectorXi r_map = -1 * VectorXi::Ones(4);
 
 //    int nsides = 100;
 //    VectorXT agent(nsides * 2);
@@ -353,12 +356,12 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    r(0) = -a;
 //    VectorXi r_map = VectorXi::Zero(4);
 
-    VectorXT agent, r;
-    VectorXi r_map;
-    VectorXT topNodes(8);
-    double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
-    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
-    generateSmoothShape(topNodes, r0, agent, r, r_map);
+//    VectorXT agent, r;
+//    VectorXi r_map;
+//    VectorXT topNodes(8);
+//    double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
+//    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
+//    generateSmoothShape(topNodes, r0, agent, r, r_map);
 
     TV3 p(0, 0, 0);
 //    VectorXi free_idx(1);
@@ -416,6 +419,63 @@ void Foam2D::initHardwareScenario0(int n_free_in) {
     resetVertexParams();
 }
 
+void Foam2D::initGastrulationLinear(int n_free_in) {
+    info->n_free = n_free_in;
+    info->n_fixed = 8;
+
+    VectorXT inf_points(info->n_fixed * 2);
+    double inf = 100;
+    inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
+
+    double r_out = 0.75;
+    double r_in = 0.2;
+    double r_cells = (r_out + r_in) / 2;
+    int ncp = 6;
+    VectorXT p(ncp * 2 * 2);
+    for (int i = 0; i < ncp; i++) {
+        double theta = i * M_PI * 2.0 / ncp;
+        p(i * 2 + 0) = r_out * cos(theta);
+        p(i * 2 + 1) = r_out * sin(theta);
+    }
+    for (int i = 0; i < ncp; i++) {
+        double theta = -i * M_PI * 2.0 / ncp;
+        p((ncp + i) * 2 + 0) = r_in * cos(theta);
+        p((ncp + i) * 2 + 1) = r_in * sin(theta);
+    }
+
+//    std::random_device rdp;
+//    std::mt19937 genp(rdp());
+//    std::uniform_real_distribution<double> disp(-1, 1);
+//    for (int i = 0; i < p.rows(); i++) {
+//        p(i) += 0.01 * disp(genp);
+//    }
+
+//    IV3 free_idx(0, 1);
+    VectorXi free_idx((ncp - 1) * 2 + ncp * 2);
+    free_idx << Eigen::VectorXi::LinSpaced(ncp * 2 - 2, 2, ncp * 2 - 1), Eigen::VectorXi::LinSpaced(ncp * 2,
+                                                                                                    ncp * 2,
+                                                                                                    ncp * 2 * 2 - 1);
+//    VectorXi free_idx(6);
+//    IV3 linsp(0, 1, 2);
+//    free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
+//    VectorXi free_idx = {};
+    info->boundary = new GastrulationLinearBoundary(p, free_idx);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    double noise = 1e-3;
+    std::uniform_real_distribution<double> dis(-noise, noise);
+    vertices.resize((info->n_free + info->n_fixed) * 2);
+    for (int i = 0; i < info->n_free; i++) {
+        double theta = i * M_PI * 2.0 / info->n_free;
+        vertices(i * 2 + 0) = r_cells * cos(theta) + dis(gen);
+        vertices(i * 2 + 1) = r_cells * sin(theta) + dis(gen);
+    }
+    vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
+
+    resetVertexParams();
+}
+
 void Foam2D::initGastrulationBiArc(int n_free_in) {
     info->n_free = n_free_in;
     info->n_fixed = 8;
@@ -425,9 +485,9 @@ void Foam2D::initGastrulationBiArc(int n_free_in) {
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
     double r_out = 0.75;
-    double r_in = 0.5;
+    double r_in = 0.65;
     double r_cells = (r_out + r_in) / 2;
-    int ncp = 8;
+    int ncp = 10;
     VectorXT p(ncp * 2 * 3);
     for (int i = 0; i < ncp; i++) {
         double theta = i * M_PI * 2.0 / ncp;
@@ -443,13 +503,13 @@ void Foam2D::initGastrulationBiArc(int n_free_in) {
     }
 
 //    IV3 free_idx(0, 1, 2);
-//    VectorXi free_idx((ncp - 1) * 2 * 3);
-//    free_idx << Eigen::VectorXi::LinSpaced(ncp * 3 - 3, 3, ncp * 3 - 1), Eigen::VectorXi::LinSpaced(ncp * 3 - 3,
-//                                                                                                    ncp * 3 + 3,
-//                                                                                                    ncp * 2 * 3 - 1);
-    VectorXi free_idx(6);
-    IV3 linsp(0, 1, 2);
-    free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
+    VectorXi free_idx(ncp * 2 * 3 - 3);
+    free_idx << Eigen::VectorXi::LinSpaced(ncp * 3 - 3, 3, ncp * 3 - 1), Eigen::VectorXi::LinSpaced(ncp * 3,
+                                                                                                    ncp * 3,
+                                                                                                    ncp * 2 * 3 - 1);
+//    VectorXi free_idx(6);
+//    IV3 linsp(0, 1, 2);
+//    free_idx << linsp, ncp * 3 * IV3::Ones() + linsp;
     info->boundary = new GastrulationBiArcBoundary(p, free_idx);
 
     std::random_device rd;
@@ -499,7 +559,7 @@ void Foam2D::initGastrulationBezier(int n_free_in) {
     }
 
 //    IV3 free_idx(0, 1);
-    VectorXi free_idx((ncp - 1) * 2 * 2);
+    VectorXi free_idx((ncp - 1) * 2 + ncp * 2);
     free_idx << Eigen::VectorXi::LinSpaced(ncp * 2 - 2, 2, ncp * 2 - 1), Eigen::VectorXi::LinSpaced(ncp * 2,
                                                                                                     ncp * 2,
                                                                                                     ncp * 2 * 2 - 1);
