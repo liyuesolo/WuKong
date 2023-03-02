@@ -18,6 +18,12 @@ public:
     int selectedSite = -1;
     bool dragging = false;
 
+    int raster_resolution = 100;
+
+    int numMetricPoints = 8;
+    VectorXT metricPointsX;
+    VectorXT metricPointsY;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);

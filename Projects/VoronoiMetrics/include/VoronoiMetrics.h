@@ -25,6 +25,10 @@ using VectorXf = Vector<float, Eigen::Dynamic>;
 struct MetricPoint {
     double theta;
     double a;
+
+    double x() const { return a * cos(theta); }
+
+    double y() const { return a * sin(theta); }
 };
 
 class Site {
@@ -46,11 +50,15 @@ public:
 
     int getClosestSiteByMetric(const TV &p) const;
 
-    void createSite(const TV &p);
+    void createSite(const TV &p, const VectorXT &metricX, const VectorXT &metricY);
 
     void deleteSite(int index);
 
     void moveSite(int index, const TV &p);
+
+    void setMetric(const VectorXT &metricX, const VectorXT &metricY);
+
+    void computeVoronoiEdges(std::vector<TV> &nodes, std::vector<IV> &edges) const;
 
 public:
 

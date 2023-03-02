@@ -332,11 +332,11 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
     double inf = 100;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
-    VectorXT agent(8);
-    double a = 0.15;
-    agent << -a, -a, -a, a, a, a, a, -a;
-    VectorXT r = {};
-    VectorXi r_map = -1 * VectorXi::Ones(4);
+//    VectorXT agent(8);
+//    double a = 0.15;
+//    agent << -a, -a, -a, a, a, a, a, -a;
+//    VectorXT r = {};
+//    VectorXi r_map = -1 * VectorXi::Ones(4);
 
 //    int nsides = 100;
 //    VectorXT agent(nsides * 2);
@@ -356,12 +356,12 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
 //    r(0) = -a;
 //    VectorXi r_map = VectorXi::Zero(4);
 
-//    VectorXT agent, r;
-//    VectorXi r_map;
-//    VectorXT topNodes(8);
-//    double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
-//    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
-//    generateSmoothShape(topNodes, r0, agent, r, r_map);
+    VectorXT agent, r;
+    VectorXi r_map;
+    VectorXT topNodes(8);
+    double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
+    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
+    generateSmoothShape(topNodes, r0, agent, r, r_map);
 
     TV3 p(0, 0, 0);
 //    VectorXi free_idx(1);
