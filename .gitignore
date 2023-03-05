@@ -13,6 +13,8 @@ Projects/Foam2D/deprecated/codegen/codegen_energy/*
 Projects/Foam2D/deprecated/codegen/codegen_imagematch/*
 Projects/Foam2D/deprecated/codegen/codegen_energy_areatarget/*
 Projects/Foam2D/deprecated/codegen/__pycache__/*
+Projects/Foam2D/VideoDataExtraction/images/*
+Projects/Foam2D/VideoDataExtraction/videos/*
 .idea/*
 cmake-build-debug/*
 cmake-build-release/*

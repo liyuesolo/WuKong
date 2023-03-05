@@ -6,7 +6,7 @@ class HardwareBoundary0 : public Boundary {
 
 public:
     double channel_width = 0.8;
-    double corner_radius = 0.08;
+    double corner_radius = 0.13333333333333333;
     double w_barrier = 1e-7;
     double w_piston = 1e-2;
 

@@ -47,7 +47,7 @@ void VoronoiMetricsApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             metricPointsY.resize(numMetricPoints);
             for (int i = 0; i < numMetricPoints; i++) {
                 double theta = i * 2 * M_PI / numMetricPoints;
-                double a = 1;
+                double a = 0.8;
                 metricPointsX(i) = a * cos(theta);
                 metricPointsY(i) = a * sin(theta);
             }
