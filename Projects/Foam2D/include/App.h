@@ -58,6 +58,13 @@ public:
     cv::Mat matchMarkers;
     std::vector<cv::Vec3b> matchColors;
 
+    bool simulatingHardware = false;
+    int hardwareFrame = -1;
+    int hardwareVisualizeCellIdx = 0;
+    int hardwareVisualizeLap = 0;
+    std::vector<VectorXT> hardwareSimulationFrames;
+    int hardwareFramesPerLap = 100;
+
 public:
     void setViewer(igl::opengl::glfw::Viewer &viewer,
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);

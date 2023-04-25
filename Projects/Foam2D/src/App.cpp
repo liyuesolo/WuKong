@@ -12,6 +12,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
         if (ImGui::Checkbox("Optimize", &optimize)) {
+            simulatingHardware = false;
             foam.minimizerBFGS.inverseHessian = MatrixXd();
         }
 
@@ -99,7 +100,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("Deformation Weight", &foam.info->energy_deformation_weight, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("Deformation Volume Weight", &foam.info->energy_deformation_volume_weight, 0.001f, 0.001f,
+        ImGui::InputDouble("Deformation Volume Weight", &foam.info->energy_deformation_moment_weight, 0.001f, 0.001f,
                            "%.4f");
 
         ImGui::Spacing();
@@ -108,6 +109,8 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> colorModes;
         colorModes.push_back("Area Objective");
         colorModes.push_back("Adhesion Affinity");
+        colorModes.push_back("Initial Position");
+        colorModes.push_back("White");
         if (ImGui::Combo("Color Mode", &colormode, colorModes)) {
             updateViewerData(viewer);
         }
@@ -209,6 +212,16 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         if (generate_scenario_type == 10) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_free_sites, 10, 100);
+            if (ImGui::Button("Run Hardware Simulation")) {
+                simulatingHardware = true;
+                hardwareSimulationFrames.clear();
+                hardwareFrame = -1;
+                optimize = false;
+            }
+            if (ImGui::InputInt("Cell", &hardwareVisualizeCellIdx) ||
+                ImGui::InputInt("Lap", &hardwareVisualizeLap, 1, 1)) {
+                updateViewerData(viewer);
+            }
         }
         if (generate_scenario_type == 11) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
@@ -224,6 +237,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         }
 
         if (ImGui::Button("Generate")) {
+            simulatingHardware = false;
             matchSourcePath = "../../../Projects/Foam2D/images/" + sourcePaths[matchSource];
             generateScenario();
             updateViewerData(viewer);
@@ -368,6 +382,14 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                         areaTargets = foam.info->energy_area_targets;
                     }
                     updateViewerData(viewer);
+                } else if (simulatingHardware) {
+                    int prev_frame = hardwareFrame;
+                    VectorXT snapshot;
+                    foam.runHardwareSimulation(0.1, 0.8, 100, hardwareFrame, snapshot);
+                    if (hardwareFrame != prev_frame) {
+                        hardwareSimulationFrames.push_back(snapshot);
+                        updateViewerData(viewer);
+                    }
                 } else {
                     Eigen::Matrix<double, 4, 3> camera;
                     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
@@ -515,7 +537,7 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         Pb.row(i) = TV3(foam.info->boundary->v(i * 2 + 0), foam.info->boundary->v(i * 2 + 1), 2e-6);
         Cb.row(i) = TV3(0.5, 0.8, 0.2);
     }
-    viewer.data(0).add_points(Pb, Cb);
+//    viewer.data(0).add_points(Pb, Cb);
 
     Eigen::Matrix<double, 4, 3> camera;
     camera << -1, -1, 0, 2, -1, 0, 2, 1, 0, -1, 1, 0;
@@ -550,6 +572,25 @@ void Foam2DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         }
 
         viewer.data(0).add_points(P, C);
+    }
+
+    {
+        int frameMin = std::min((int) hardwareSimulationFrames.size(),
+                                hardwareVisualizeLap * hardwareFramesPerLap);
+        int frameMax = std::min((int) hardwareSimulationFrames.size(),
+                                (hardwareVisualizeLap + 1) * hardwareFramesPerLap);
+        if (frameMin < frameMax && hardwareVisualizeCellIdx < foam.info->n_free) {
+            MatrixXd P(frameMax - frameMin, 3);
+            MatrixXd C(frameMax - frameMin, 3);
+            for (int i = frameMin; i < frameMax; i++) {
+                P.row(i - frameMin).segment(0, 2) = hardwareSimulationFrames[i].segment(hardwareVisualizeCellIdx * 3,
+                                                                                        2);
+                P.row(i - frameMin)(2) = 2e-6;
+                C.row(i - frameMin) = TV3(1, 0, 0);
+            }
+
+            viewer.data(0).add_points(P, C);
+        }
     }
 }
 

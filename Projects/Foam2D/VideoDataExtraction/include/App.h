@@ -40,6 +40,7 @@ public:
 
     bool hasImage = false;
     cv::Mat image;
+    cv::VideoCapture video;
 
     std::vector<TV> controlPoints;
     int dragIdx = -1;

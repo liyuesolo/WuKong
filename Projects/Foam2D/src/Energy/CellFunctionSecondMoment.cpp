@@ -1,11 +1,11 @@
-#include "../../include/Energy/CellFunctionDeformationVolumeIntegral.h"
+#include "../../include/Energy/CellFunctionSecondMoment.h"
 #include <iostream>
 
 void
-CellFunctionDeformationVolumeIntegral::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
-                                                const VectorXi &btype,
-                                                double &value,
-                                                const CellInfo *cellInfo) const {
+CellFunctionSecondMoment::addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                   const VectorXi &btype,
+                                   double &value,
+                                   const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
 
     double xc = 0;
@@ -39,10 +39,10 @@ CellFunctionDeformationVolumeIntegral::addValue(const VectorXT &site, const Vect
 }
 
 void
-CellFunctionDeformationVolumeIntegral::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
-                                                   const VectorXi &btype,
-                                                   VectorXT &gradient_c,
-                                                   VectorXT &gradient_x, const CellInfo *cellInfo) const {
+CellFunctionSecondMoment::addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                      const VectorXi &btype,
+                                      VectorXT &gradient_c,
+                                      VectorXT &gradient_x, const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
     VectorXT gradient_centroid = VectorXT::Zero(2);
 
@@ -97,10 +97,10 @@ CellFunctionDeformationVolumeIntegral::addGradient(const VectorXT &site, const V
 }
 
 void
-CellFunctionDeformationVolumeIntegral::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
-                                                  const VectorXi &btype,
-                                                  MatrixXT &hessian,
-                                                  const CellInfo *cellInfo) const {
+CellFunctionSecondMoment::addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next,
+                                     const VectorXi &btype,
+                                     MatrixXT &hessian,
+                                     const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
     VectorXT gradient_centroid = VectorXT::Zero(2);
 

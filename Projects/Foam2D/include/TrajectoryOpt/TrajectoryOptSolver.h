@@ -101,10 +101,10 @@ public:
         x_l[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
         x_u[IDX_C(N - 1, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
         // Second-to-last state
-        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
-        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
-        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
+//        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+//        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 0] = trajectoryOptNlp->info->selected_target_pos(0);
+//        x_l[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
+//        x_u[IDX_C(N - 2, trajectoryOptNlp->info->selected) + 1] = trajectoryOptNlp->info->selected_target_pos(1);
 
         tbb::parallel_for(0, m, [&](int i) {
             g_l[i] = 0;

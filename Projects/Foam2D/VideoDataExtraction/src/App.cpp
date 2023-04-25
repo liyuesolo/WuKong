@@ -43,6 +43,7 @@ void VideoDataExtractionApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             updateViewerData(viewer);
         }
         ImGui::Combo("Video Path", &videoPathIdx, videoPaths);
+        ImGui::SliderInt("Frame", &frame, 0, 1000);
 
         ImGui::Spacing();
         ImGui::Spacing();
@@ -111,6 +112,10 @@ void VideoDataExtractionApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                 if (dragIdx >= 0) {
                     controlPoints[dragIdx] = p;
                     updateViewerData(viewer);
+//                    std::cout << std::endl;
+//                    for (int i = 0; i < controlPoints.size(); i++) {
+//                        std::cout << controlPoints[i].x() << " " << controlPoints[i].y() << std::endl;
+//                    }
                 }
                 return true;
             };
@@ -151,7 +156,7 @@ void VideoDataExtractionApp::updateViewerData(igl::opengl::glfw::Viewer &viewer)
         double eps = 1e-6;
         for (int i = 0; i < controlPoints.size(); i++) {
             points.row(i) = TV3(controlPoints[i].x(), controlPoints[i].y(), eps);
-            points_c.row(i) = TV3(0, 0, 0);
+            points_c.row(i) = TV3(1, 0, 0);
         }
 
         VectorXT boundaryPoints;
@@ -239,14 +244,22 @@ void VideoDataExtractionApp::loadImage() {
 }
 
 void VideoDataExtractionApp::loadVideoFrame() {
-    image = cv::imread("../../../../Projects/Foam2D/VideoDataExtraction/videos/" + videoPaths[videoPathIdx],
-                       cv::IMREAD_COLOR);
+    video = cv::VideoCapture("../../../../Projects/Foam2D/VideoDataExtraction/videos/" + videoPaths[videoPathIdx],
+                             cv::CAP_FFMPEG);
+    video.set(cv::CAP_PROP_POS_FRAMES, frame);
+    video.read(image);
     hasImage = true;
+
+    controlPoints = {{-0.196, 0.046},
+                     {-0.612, 0.458},
+                     {-0.102, -0.064},
+                     {0.008,  0.112}};
 }
 
 
 void VideoDataExtractionApp::processImage1() {
-    cv::Vec3b outsideColor(0, 0, 0);
+    cv::Vec3b outsideColor(255, 255, 255);
+    cv::Vec3b polycolor(100, 100, 100);
 
     std::vector<std::vector<cv::Point>> fillPoly(2);
 
@@ -268,7 +281,8 @@ void VideoDataExtractionApp::processImage1() {
 
     double scale_length = (controlPoints[1] - controlPoints[0]).norm() * scale;
     cv::fillPoly(image, fillPoly, outsideColor);
-    cv::resize(image, image, {(int) (image.size[1] * 300 / scale_length), (int) (image.size[0] * 300 / scale_length)});
+    cv::polylines(image, fillPoly[0], true, polycolor, 1);
+    cv::resize(image, image, {(int) (image.size[1] * 600 / scale_length), (int) (image.size[0] * 600 / scale_length)});
 }
 
 void VideoDataExtractionApp::processImage2() {

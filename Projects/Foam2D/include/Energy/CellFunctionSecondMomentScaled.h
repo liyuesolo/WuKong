@@ -1,11 +1,9 @@
 #pragma once
 
-#include "../../include/Energy/CellFunctionCentroidX.h"
-#include "../../include/Energy/CellFunctionCentroidY.h"
+#include "../../include/Energy/CellFunctionSecondMoment.h"
 
-class CellFunctionDeformationVolumeIntegral : public CellFunction {
-    CellFunctionCentroidX xc_function;
-    CellFunctionCentroidY yc_function;
+class CellFunctionSecondMomentScaled : public CellFunction {
+    CellFunctionSecondMoment moment_function;
 
 public:
     virtual void

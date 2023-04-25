@@ -29,7 +29,7 @@ public:
     double energy_drag_target_weight = 0.00;
     double energy_adhesion_weight = 0.00;
     double energy_deformation_weight = 0.00;
-    double energy_deformation_volume_weight = 0.00;
+    double energy_deformation_moment_weight = 0.00;
 
 //    double dynamics_m = 0.0001;
 //    double dynamics_eta = 0.1;
@@ -42,7 +42,7 @@ public:
     double trajOpt_target_weight = 0 * 1e-1;
     double trajOpt_velocity_weight = 0 * 1e-3;
     double trajOpt_input_weight = 1e-2;
-    double trajOpt_stepsize_weight = 1e-2;
+    double trajOpt_stepsize_weight = 0 * 3e-3;
 
     int imageMatch_N = 30;
     double imageMatch_h0 = 0.003;

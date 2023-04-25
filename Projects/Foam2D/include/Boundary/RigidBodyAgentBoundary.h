@@ -6,8 +6,8 @@ class RigidBodyAgentBoundary : public Boundary {
 
 public:
     VectorXT agentShape;
-    double bx = 0.75;
-    double by = 0.75;
+    double bx = 1.0;
+    double by = 0.3;
     double epsilon = 1e-5;
     double tmul = 10;
 

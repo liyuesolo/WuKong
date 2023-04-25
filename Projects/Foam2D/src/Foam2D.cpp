@@ -47,6 +47,7 @@ void Foam2D::resetVertexParams() {
     info->c_fixed = c.segment(info->n_free * dims, info->n_fixed * dims);
 
     dynamicsInit();
+    c_init = c;
 }
 
 void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
@@ -360,7 +361,8 @@ void Foam2D::initRigidBodyAgent(int n_free_in) {
     VectorXi r_map;
     VectorXT topNodes(8);
     double p1 = 0.1465, q1 = 0.059, p2 = 0.046, q2 = 0.081, r0 = 0.084;
-    topNodes << p1, q1, p2, q2, -p2, q2 + 0.02, -p1, q1 + 0.02;
+    topNodes << p1, q1, p2, q2, -p2, q2, -p1, q1;
+    topNodes = topNodes * 0.7;
     generateSmoothShape(topNodes, r0, agent, r, r_map);
 
     TV3 p(0, 0, 0);
@@ -397,8 +399,8 @@ void Foam2D::initHardwareScenario0(int n_free_in) {
     double inf = 100;
     inf_points << -inf, -inf, inf, -inf, inf, inf, -inf, inf, -inf, 0, inf, 0, 0, -inf, 0, inf;
 
-    TV p(0.1, 0.1);
-    IV free_idx(0, 1);
+    TV p(0.8, 0.1);
+    VectorXi free_idx = {};
     info->boundary = new HardwareBoundary0(p, free_idx);
 
     std::random_device rd;
@@ -417,6 +419,53 @@ void Foam2D::initHardwareScenario0(int n_free_in) {
     vertices.segment(info->n_free * 2, info->n_fixed * 2) = inf_points;
 
     resetVertexParams();
+}
+
+void Foam2D::runHardwareSimulation(double dmin, double dmax, int frames_per_loop, int &current_frame, VectorXT &snap) {
+    VectorXT c = info->getTessellation()->combineVerticesParams(vertices, params);
+    VectorXT c_free = c.segment(0,
+                                info->n_free * (2 + info->getTessellation()->getNumVertexParams()));
+
+    VectorXT y(c_free.rows());
+    y << c_free;
+
+    GradientDescentLineSearch *minimizer = &minimizerNewton;
+    if (current_frame < 0) {
+        TV p(dmax, dmin);
+        info->boundary->p = p;
+        info->boundary->compute({});
+
+        if (minimizer->minimize(&energyObjective, y)) {
+            current_frame++;
+            dynamicsInit();
+            snap = y;
+            std::cout << "Minimized!" << std::endl;
+        } else {
+            std::cout << "Not minimized" << std::endl;
+        }
+        c_free = y.segment(0, c_free.rows());
+        c_init = c_free;
+    } else {
+        TV p;
+        int ii = current_frame % frames_per_loop;
+        p(0) = dmin + (dmax - dmin) * fabs(1.0 - ii * 2.0 / frames_per_loop);
+        p(1) = dmax - (p(0) - dmin);
+        std::cout << p(0) << " " << p(1) << std::endl;
+        info->boundary->p = p;
+        info->boundary->compute({});
+
+        minimizer->minimize(&dynamicObjective, y);
+        if (isConvergedDynamic(1e-6)) {
+            current_frame++;
+            dynamicsInit();
+            snap = y;
+            std::cout << current_frame << std::endl;
+        }
+        c_free = y.segment(0, c_free.rows());
+    }
+
+    c.segment(0, info->n_free * (2 + info->getTessellation()->getNumVertexParams())) = c_free;
+    info->getTessellation()->separateVerticesParams(c, vertices, params);
 }
 
 void Foam2D::initGastrulationLinear(int n_free_in) {
@@ -557,6 +606,7 @@ void Foam2D::initGastrulationBezier(int n_free_in) {
     for (int i = 0; i < p.rows(); i++) {
         p(i) += 0.01 * disp(genp);
     }
+
 
 //    IV3 free_idx(0, 1);
     VectorXi free_idx((ncp - 1) * 2 + ncp * 2);
@@ -1246,8 +1296,13 @@ void Foam2D::getTessellationViewerData(MatrixXT &S, MatrixXT &X, MatrixXi &E, Ma
             color = (i == info->selected ? TV3(0.4, 0.4, 0.4) : getColor(areas(i),
                                                                          info->energy_area_targets(
                                                                                  i)));
-        } else {
+        } else if (colormode == 1) {
             color = i % 2 == 0 ? TV3(1.0, 0.6, 0.6) : TV3(0.6, 1.0, 0.6);
+        } else if (colormode == 2) {
+            VectorXT c_i = c_init.segment(i * dims, dims);
+            color = TV3((c_i(0) + 1.0) / 2.0, (c_i(1) + 1.0) / 2.0, 1.0);
+        } else if (colormode == 3) {
+            color = TV3(1.0, 1.0, 1.0);
         }
         Fc.block(currTotalFaces, 0, Ftri.rows(), 3) = color.transpose().replicate(Ftri.rows(), 1);
 

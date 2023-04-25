@@ -54,6 +54,8 @@ public:
 
     Foam2DInfo *info;
 
+    VectorXT c_init;
+
 public:
 
     void initRandomSitesInCircle(int n_free_in, int n_fixed_in);
@@ -83,6 +85,8 @@ public:
     void initGastrulationBezier(int n_free_in);
 
     void initImageMatch(MatrixXi &markers);
+
+    void runHardwareSimulation(double dmin, double dmax, int frames_per_loop, int &current_frame, VectorXT &snap);
 
     void dynamicsInit();
 

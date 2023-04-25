@@ -21,6 +21,8 @@ void Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
     // @formatter:off
     xn = 0.5e0 * x1 + 0.5e0 * x3 - 0.5e0 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1)) * (y3 - y1);
     yn = 0.5e0 * y1 + 0.5e0 * y3 + 0.5e0 * ((y3 - y2) * (y2 - y1) + (x3 - x2) * (x2 - x1)) / ((y3 - y1) * (x2 - x1) - (y2 - y1) * (x3 - x1)) * (x3 - x1);
+//    xn = 1.0 / 3.0 * (x1 + x2 + x3);
+//    yn = 1.0 / 3.0 * (y1 + y2 + y3);
     // @formatter:on
     node = TV3(xn, yn, 0);
 }
