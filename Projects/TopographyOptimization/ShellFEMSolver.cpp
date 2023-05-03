@@ -530,7 +530,7 @@ T ShellFEMSolver<T, dim>::computeResidual(const VectorXT& _u,
             compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
             // std::cout << dedx.transpose()<<std::endl;
             // std::getchar();
-            // dedx *= -1.0;
+            dedx *= -1.0;
             
             if (gravitional_energy)
             {

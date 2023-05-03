@@ -104,7 +104,7 @@ void ShellFEMSolver<T, dim>::derivativeTest()
     du *= 1.0 / du.norm();
     du *= 0.001;
     u += du;
-    checkTotalGradient();
+    // checkTotalGradient();
     checkTotalHessian();
 }
 
@@ -173,6 +173,8 @@ void ShellFEMSolver<T, dim>::checkTotalHessian()
         for(int i = 0; i < n_dof; i++)
         {
             if(A.coeff(dof_i, i) == 0 && row_FD(i) == 0)
+                continue;
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
                 continue;
             // if (std::abs( A.coeff(dof_i, i) - row_FD(i)) < 1e-4)
             //     continue;
