@@ -1,2 +1,0 @@
-model_checkpoint_path: "overfit_test.tf"
-all_model_checkpoint_paths: "overfit_test.tf"
