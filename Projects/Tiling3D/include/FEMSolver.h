@@ -13,9 +13,14 @@
 #include <complex>
 
 #include "VecMatDef.h"
-
+#include "../include/SpatialHash.h"
 using Eigen::MatrixXd;
 using Eigen::MatrixXi;
+
+enum LoadingType
+{
+    UNI_AXIAL, BI_AXIAL, TRI_AXIAL
+};
 
 class FEMSolver
 {
@@ -77,7 +82,6 @@ public:
     T density = 7.85e4; 
     T nu = 0.48;
     
-
     T penalty_weight = 1e6;
     bool use_penalty = false;
 
@@ -101,9 +105,22 @@ public:
     int num_ipc_vtx = 0;
     T barrier_distance = 1e-5;
     T barrier_weight = 1e6;
+    T max_barrier_weight = 1e8;
+    T ipc_min_dis = 1e-6;
+
     Eigen::MatrixXd ipc_vertices;
     Eigen::MatrixXi ipc_edges;
     Eigen::MatrixXi ipc_faces;
+
+    // PBC
+    T pbc_w = 1e6;
+    T pbc_strain_w = 1e6;
+    bool add_pbc_strain = false;
+    bool add_pbc = false;
+    T theta, phi;
+    TV strain_magnitudes;
+    LoadingType loading_type;
+    std::vector<std::vector<Edge>> pbc_pairs;
 
     // bending homogenization
     T curvature = 1.0;
@@ -331,9 +348,11 @@ private:
 public:
 
     // Scene.cpp
+    bool initializeSimulationDataFromFiles(const std::string& filename);
+    void generate3DUnitCell(const std::string& prefix, T width, T alpha);
     void initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
-    void initializeElementData(Eigen::MatrixXd& TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
-    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C);
+    void initializeElementData(Eigen::MatrixXd& _TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
+    void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest = false);
     void computeBoundingBox();
     void appendCylinder(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, 
         const TV& _center, const TV& direction, T R, T length = 1.0);
@@ -430,12 +449,22 @@ public:
     void addElasticHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     // IPC.cpp
+    void updateBarrierInfo(bool first_step);
     T computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du);
     void computeIPCRestData();
     void updateIPCVertices(const VectorXT& _u);
     void addIPCEnergy(T& energy);
     void addIPCForceEntries(VectorXT& residual);
     void addIPCHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
+
+    // PBC.cpp
+    void computeHomogenizationData(TM& strain_Green, TM& stress_2ndPK, T& energy_density);
+    void getPBCPairsAxisDirection(std::vector<int>& side0, 
+        std::vector<int>& side1, int direction, SpatialHash& hash);
+    bool addPBCPairs3D();
+    void addPBCEnergy(T& energy);
+    void addPBCForceEntries(VectorXT& residual);
+    void addPBCHessianEntries(std::vector<Entry>& entries, bool project_PD = false);
 
     FEMSolver() {}
     ~FEMSolver() {}

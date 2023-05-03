@@ -16,4 +16,8 @@ void computeQuadratic2DNeoHookeandfdX(double E, double nu, const Eigen::Matrix<d
 void computeNHEnergyFromGreenStrain(double E, double nu, const Eigen::Matrix<double,4,1> & Green_strain, double& energy);
 void computeNHEnergyFromGreenStrainGradient(double E, double nu, const Eigen::Matrix<double,4,1> & Green_strain, Eigen::Matrix<double, 4, 1>& energygradient);
 void computeNHEnergyFromGreenStrainHessian(double E, double nu, const Eigen::Matrix<double,4,1> & Green_strain, Eigen::Matrix<double, 4, 4>& energyhessian);
+
+void neoHookeanVoigtDerivative(double lambda, double mu, const Eigen::Matrix<double,3,1> & E, Eigen::Matrix<double, 3, 1>& dPsidE, Eigen::Matrix<double, 3, 3>& d2PsidE2);
+void computed2PsidE2(double lambda, double mu, const Eigen::Matrix<double,3,1> & epsilon, double& energy, Eigen::Matrix<double, 3, 1>& dPsidE, 
+	Eigen::Matrix<double, 3, 3>& d2PsidE2);
 #endif

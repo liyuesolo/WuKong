@@ -5,10 +5,10 @@
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
 
-#include "../include/app.h"
+#include "../include/App.h"
 
 
-int main()
+int main(int argc, char** argv)
 {
     
     using TV = Vector<double, 3>;
@@ -16,17 +16,32 @@ int main()
 
     FEMSolver fem_solver;
     Tiling3D tiling(fem_solver);
-    SimulationApp app(tiling);
-    // TilingViewerApp app(tiling);
-    
-    igl::opengl::glfw::Viewer viewer;
-    igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-    viewer.plugins.push_back(&menu);
+    if (argc > 1)
+    {
+        std::string result_folder = argv[1];
+        T alpha = std::stod(argv[2]);
+        T thickness = std::stod(argv[3]);
+        int loading_type = std::stoi(argv[4]);
+        std::vector<T> params = {alpha, thickness};
+        tiling.generateGreenStrainSecondPKPairsServerToyExample(params, result_folder, loading_type, true);
+    }
+    else
+    {
+        SimulationApp app(tiling);
+        
+        tiling.solver.generate3DUnitCell("structure", 0.05, 0.5);
+        tiling.solver.initializeSimulationDataFromFiles("structure.vtk");
+        
+        igl::opengl::glfw::Viewer viewer;
+        igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-    app.setViewer(viewer, menu);
-    
-    viewer.launch();
+        viewer.plugins.push_back(&menu);
+
+        app.setViewer(viewer, menu);
+        
+        viewer.launch();
+    }
 
     return 0;
 }

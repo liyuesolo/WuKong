@@ -1,8 +1,31 @@
 #include <ipc/ipc.hpp>
+#include <ipc/barrier/adaptive_stiffness.hpp>
 #include "../include/FEMSolver.h"
 
 #include <igl/writeOBJ.h>
 
+void FEMSolver::updateBarrierInfo(bool first_step)
+{
+    // return;
+    Eigen::MatrixXd ipc_vertices_deformed = ipc_vertices;
+    for (int i = 0; i < num_nodes; i++) 
+        ipc_vertices_deformed.row(i) = deformed.segment<3>(i * 3);
+
+    ipc::Constraints ipc_constraints;
+    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+        
+    T current_min_dis = ipc::compute_minimum_distance(ipc_vertices, ipc_edges, ipc_faces, ipc_constraints);
+    if (first_step)
+        ipc_min_dis = current_min_dis;
+    else
+    {
+        T bb_diag = (max_corner - min_corner).norm();
+        ipc::update_barrier_stiffness(ipc_min_dis, current_min_dis, max_barrier_weight, barrier_weight, bb_diag);
+        ipc_min_dis = current_min_dis;
+        // std::cout << "barrier weight " << barrier_weight << std::endl;
+    }
+}
 
 void FEMSolver::computeIPCRestData()
 {
@@ -42,6 +65,18 @@ void FEMSolver::computeIPCRestData()
         if ((vi - vj).norm() < barrier_distance)
             std::cout << "edge " << edge.transpose() << " has length < 1e-6 " << std::endl;
     }
+
+    T bb_diag = (max_corner - min_corner).norm();
+    // std::cout << "BBOX diagonal " << bb_diag << std::endl;
+    VectorXT dedx(num_nodes * 3), dbdx(num_nodes * 3);
+    dedx.setZero(); dbdx.setZero();
+    barrier_weight = 1.0;
+    addIPCForceEntries(dbdx); dbdx *= -1.0;
+    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
+    // std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
+    barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
+    // if (verbose)
+    // std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
     
 }
 

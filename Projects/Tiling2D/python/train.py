@@ -652,7 +652,7 @@ if __name__ == "__main__":
     model_name = "homo_NH"
     # exp_id = train(model_name, 
     #     train_data, train_label, validation_data, validation_label)
-    optimizeStiffnessProfile(338, model_name)
+    optimizeStiffnessProfile(371, model_name)
     # validate(330, 
     #     model_name, validation_data, validation_label)
     # validate(253, 

@@ -10,8 +10,8 @@ void meshBooleanTest(Eigen::MatrixXd& V,
     using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
     std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/teaser/";
 
-    std::string source_file = base_folder + "infill01_s.obj";
-    std::string target_file = base_folder + "part1.obj";
+    std::string source_file = base_folder + "infill03_s.obj";
+    std::string target_file = base_folder + "part3_print.obj";
     // std::string source_file = base_folder + "shoe_cut_latest.obj";
     // std::string target_file = base_folder + "shoe_initial_infill_design.obj";
     MatrixXT V_src, V_dst;

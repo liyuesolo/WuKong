@@ -30,6 +30,13 @@ from Optimization import *
 from Samples import*
 from PropertyModifier import *
 
+use_double = True
+
+if use_double:
+    tf.keras.backend.set_floatx("float64")
+else:
+    tf.keras.backend.set_floatx("float32")
+
 
 @tf.function
 def computeDirectionalPoissonRatio(n_tiling_params, inputs, thetas, model):
@@ -102,8 +109,14 @@ def loadModel(IH):
     else:
         model_name = str(IH)
 
+    
+    if use_double:
+        model_name += "double"
     save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
+    if use_double:
+        model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float64)
+    else:
+        model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float32)
     model.load_weights(save_path + "IH" + model_name + '.tf')
 
     return model, n_tiling_params, ti_default, bounds
@@ -114,7 +127,7 @@ def computePoissonRatio():
     n_sp_theta = 50
     dtheta = np.pi/float(n_sp_theta)
     thetas = np.arange(0.0, np.pi, dtheta)
-    strain = 0.02
+    strain = 0.1
     if strain < 0:
         strain = strain - 0.5 * strain * strain
     else:
@@ -655,7 +668,7 @@ def poissonRatioModifyUI():
     plt.show()
 
 if __name__ == "__main__":
-    # computePoissonRatio()
-    poissonRatioSA()
+    computePoissonRatio()
+    # poissonRatioSA()
     # poissonRatioModifyUI()
     # findNegativePoissonRatioStructure(True)

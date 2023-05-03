@@ -45,7 +45,7 @@ void FEMSolver::computeLinearModes()
             Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
             Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
             std::cout << eigen_values << std::endl;
-            std::ofstream out("fem_eigen_vectors.txt");
+            std::ofstream out("./fem_eigen_vectors.txt");
             out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
             for (int i = 0; i < eigen_vectors.cols(); i++)
                 out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
@@ -164,6 +164,13 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
         total_energy += contact_energy;
     }
 
+    if (add_pbc)
+    {
+        T pbc_energy = 0.0;
+        addPBCEnergy(pbc_energy);
+        total_energy += pbc_energy;
+    }
+
     return total_energy;
 }
 
@@ -189,22 +196,29 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     VectorXT residual_backup = residual;
 
     addElasticForceEntries(residual);
-
-    std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
+    if (verbose)
+        std::cout << "elastic force " << (residual - residual_backup).norm() << std::endl;
     residual_backup = residual;
 
     if (use_penalty)
     {
         addBCPenaltyForceEntries(residual);
-        std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
+        if (verbose)
+            std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
         residual_backup = residual;
     }
 
     if (use_ipc)
     {
         addIPCForceEntries(residual);
-        std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
+        if (verbose)
+            std::cout << "contact force " << (residual - residual_backup).norm() << std::endl;
         residual_backup = residual;
+    }
+
+    if (add_pbc)
+    {
+        addPBCForceEntries(residual);
     }
 
     // std::getchar();
@@ -408,6 +422,11 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         addIPCHessianEntries(entries, project_block_PD);
     }
 
+    if (add_pbc)
+    {
+        addPBCHessianEntries(entries);
+    }
+
     K.setFromTriplets(entries.begin(), entries.end());
 
     if (!run_diff_test)
@@ -509,24 +528,31 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
     StiffnessMatrix K(residual.rows(), residual.rows());
     Timer ti(true);
     buildSystemMatrix(_u, K);
-    std::cout << "build system takes " <<  ti.elapsed_sec() << std::endl;
+    if (verbose)
+        std::cout << "build system takes " <<  ti.elapsed_sec() << std::endl;
     bool success = linearSolve(K, residual, du);
     
     if (!success)
         return 1e16;
     T norm = du.norm();
-    std::cout << du.norm() << std::endl;
+    if (verbose)
+        std::cout << "|du| " << du.norm() << std::endl;
     
     T alpha = computeInversionFreeStepsize(_u, du);
-    std::cout << "** step size **" << std::endl;
-    std::cout << "after tet inv step size: " << alpha << std::endl;
+    if (verbose)
+    {
+        std::cout << "** step size **" << std::endl;
+        std::cout << "after tet inv step size: " << alpha << std::endl;
+    }
     if (use_ipc)
     {
         T ipc_step_size = computeCollisionFreeStepsize(_u, du);
         alpha = std::min(alpha, ipc_step_size);
-        std::cout << "after ipc step size: " << alpha << std::endl;
+        if (verbose)
+            std::cout << "after ipc step size: " << alpha << std::endl;
     }
-    std::cout << "**       **" << std::endl;
+    if (verbose)
+        std::cout << "**       **" << std::endl;
 
     T E0 = computeTotalEnergy(_u);
     int cnt = 0;
@@ -544,7 +570,8 @@ T FEMSolver::lineSearchNewton(VectorXT& _u, VectorXT& residual)
         alpha *= 0.5;
         cnt += 1;
     }
-    std::cout << "#ls " << cnt << " alpha = " << alpha << std::endl;
+    if (verbose)
+        std::cout << "#ls " << cnt << " alpha = " << alpha << std::endl;
     return norm;
 }
 
@@ -612,21 +639,36 @@ bool FEMSolver::staticSolveStep(int step)
 
     T residual_norm = computeResidual(u, residual);
     if (use_ipc)
+    {
+        updateBarrierInfo(step == 0);
         updateIPCVertices(u);
+    }
     // saveIPCMesh("/home/yueli/Documents/ETH/WuKong/output/ThickShell/IPC_mesh_iter_" + std::to_string(step) + ".obj");
     // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
     std::cout << "iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol)
+    {
+        T pbc_energy = 0.0;
+        addPBCEnergy(pbc_energy);
+        std::cout << "pbc energy " << pbc_energy << std::endl;
+
+        TM strain_Green, stress_2ndPK;
+        T energy_density;
+        computeHomogenizationData(strain_Green, stress_2ndPK, energy_density);
+        std::cout << "strain " << strain_Green << std::endl << std::endl;
+        std::cout << "stress " << stress_2ndPK << std::endl << std::endl;
+        std::cout << "energy density " << energy_density << std::endl << std::endl;
         return true;
+    }
     
 
     T dq_norm = lineSearchNewton(u, residual);
     // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(step) + ".obj");
-    if (three_point_bending_with_cylinder)
-        saveThreePointBendingData("/home/yueli/Documents/ETH/WuKong/output/ThickShell/", step);
-    else    
-        saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/structure_iter_" + std::to_string(step) + ".obj");
+    // if (three_point_bending_with_cylinder)
+    //     saveThreePointBendingData("/home/yueli/Documents/ETH/WuKong/output/ThickShell/", step);
+    // else    
+    //     saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/structure_iter_" + std::to_string(step) + ".obj");
     // iterateDirichletDoF([&](int offset, T target)
     // {
     //     u[offset] = target;
@@ -658,7 +700,10 @@ bool FEMSolver::staticSolve()
 
         residual_norm = computeResidual(u, residual);
         if (use_ipc)
+        {
+            updateBarrierInfo(cnt == 0);
             updateIPCVertices(u);
+        }
         // saveToOBJ("/home/yueli/Documents/ETH/WuKong/output/ThickShell/iter_" + std::to_string(cnt) + ".obj");
         
         if (verbose)

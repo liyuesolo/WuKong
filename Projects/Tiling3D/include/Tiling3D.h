@@ -42,6 +42,7 @@ public:
     using TV = Vector<double, 3>;
     using TV2 = Vector<double, 2>;
     using TM2 = Matrix<double, 2, 2>;
+    using TM = Matrix<double, 3, 3>;
     using IV = Vector<int, 3>;
 
     using PointLoops = std::vector<TV2>;
@@ -56,6 +57,9 @@ public:
     Tiling3D(FEMSolver& _solver) : solver(_solver) {}
     ~Tiling3D() {}
 
+    // training
+    void generateGreenStrainSecondPKPairsServerToyExample(const std::vector<T>& params,
+        const std::string& result_folder, int loading_type, bool generate_mesh = false);
 
     void generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons, std::vector<TV2>& pbc_corners);
     void fetchUnitCellFromOneFamily(int IH, std::vector<std::vector<TV2>>& eigen_polygons,

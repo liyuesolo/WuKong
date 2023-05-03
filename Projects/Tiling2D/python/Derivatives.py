@@ -174,3 +174,34 @@ def objGradUniaxialStress(n_tiling_params, ti, uniaxial_strain, theta, model):
     dOdE = tape.jacobian(dTSd, uniaxial_strain)
     del tape
     return tf.squeeze(dTSd), tf.squeeze(grad), tf.squeeze(dOdE)
+
+@tf.function
+def objUniaxialStress(n_tiling_params, ti, uniaxial_strain, theta, model):
+    batch_dim = uniaxial_strain.shape[0]
+    thetas = tf.tile(theta, (uniaxial_strain.shape[0], 1))
+    
+    d = tf.concat((tf.math.cos(thetas),
+                        tf.math.sin(thetas)), 
+                        axis = 1)
+    d = tf.cast(d, tf.float64)
+    ti = tf.expand_dims(ti, 0)
+    
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(ti)
+        tape.watch(uniaxial_strain)
+        ti_batch = tf.tile(ti, (batch_dim, 1))
+        inputs = tf.concat((ti_batch, uniaxial_strain), axis=1)
+        psi = model(inputs, training=False)
+        dedlambda = tape.gradient(psi, inputs)
+        stress = tf.slice(dedlambda, [0, n_tiling_params], [batch_dim, 3])
+        stress_xx = tf.gather(stress, [0], axis = 1)
+        stress_yy = tf.gather(stress, [1], axis = 1)
+        stress_xy = tf.gather(stress, [2], axis = 1)
+        stress_reorder = tf.concat((stress_xx, stress_xy, stress_xy, stress_yy), axis=1)
+        stress_tensor = tf.reshape(stress_reorder, (batch_dim, 2, 2))
+
+        Sd = tf.linalg.matvec(stress_tensor, d)
+        
+        dTSd = tf.expand_dims(tf.einsum("ij,ij->i",d, Sd), 1)
+    del tape
+    return tf.squeeze(dTSd)

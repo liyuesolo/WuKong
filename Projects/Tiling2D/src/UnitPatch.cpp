@@ -911,7 +911,8 @@ void Tiling2D::generateOneStructureSquarePatch(int IH, const std::vector<T>& par
     std::vector<std::vector<dvec2>> polygons_v;
     Vector<T, 4> transf; TV2 xy;
     // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 16.0, 16.0, xy);
-    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 8.0, 8.0, xy);
+    // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 6.0, 6.0, xy);
+    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 5.0, 5.0, xy);
 
     ClipperLib::Paths polygons(polygons_v.size());
     T mult = 1e12;
@@ -944,8 +945,8 @@ void Tiling2D::generateOneStructureSquarePatch(int IH, const std::vector<T>& par
         }
     T dx = max_x - min_x;
     T dy = max_y - min_y;
-    // T scale_x = 0.08, scale_y = 0.4;
-    T scale_x = 0.38, scale_y = 0.38;
+    T scale_x = 0.08, scale_y = 0.4;
+    // T scale_x = 0.38, scale_y = 0.38;
     Vector<T, 8> periodic;
     periodic << min_x + scale_x * dx, min_y + scale_y * dy, max_x - scale_x * dx, 
                 min_y + scale_y * dy, max_x - scale_x * dx, max_y - scale_y * dy, 
@@ -1141,11 +1142,18 @@ void Tiling2D::generateOnePerodicUnit()
     std::vector<std::vector<TV2>> polygons;
     std::vector<TV2> pbc_corners; 
     // int tiling_idx = 19;
-    int tiling_idx = 46;
-    // int tiling_idx = 60;
-    // int tiling_idx = 26;
-    // int tiling_idx = 1;
+    // int tiling_idx = 46;
+    // int tiling_idx = 0;
+    int tiling_idx = 26;
+    // int tiling_idx = 20;
     // int tiling_idx = 47;
+    // int tiling_idx = 27;
+
+    T unit = 5.0;
+    if (tiling_idx == 19 || tiling_idx == 46 || tiling_idx == 60 || tiling_idx == 20)
+        unit = 5.0;
+    else if (tiling_idx == 26 || tiling_idx == 0 || tiling_idx == 27)
+        unit = 10.0;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -1153,22 +1161,19 @@ void Tiling2D::generateOnePerodicUnit()
     std::vector<T> params(num_params);
     for (int j = 0; j < num_params;j ++)
         params[j] = new_params[j];
-    // std::vector<T> diff_params = params;
-    // for (int k = 0; k < num_params; k++)
-    // {
-    //     T rand_params = 0.1 * (zeta() * 2.0 - 1.0);
-    //     diff_params[k] = std::max(std::min(params[k] + rand_params, 0.92), 0.08);
-    // }
-    // params[0] = 0.12; params[1] = 0.65;
-    // params[0] = 0.25001023; params[1] = 0.84998991;
+    
+    // params = {0.1841};
+    for (int k = 0; k < num_params - 1; k++)
+        std::cout << params[k] << ", ";
+    std::cout << params[num_params - 1] << std::endl;
     // std::cout << params[0] << " " << params[1] << std::endl;
-    // params = {0.2313, 0.504, 0.0616, 0.5828};
-    // params = {0.46, 0.48, 0.55};
+    params = {0.02878188105, 0.5263784471};
     // params[0] += 1e-4;
+    
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0., 0.75, 0.;
     fetchUnitCellFromOneFamily(tiling_idx, 2, polygons, pbc_corners, params, 
-        cubic_weights, data_folder + "a_structure.txt");
+        cubic_weights, data_folder + "a_structure.txt", unit);
     
     generatePeriodicMesh(polygons, pbc_corners, true, data_folder + "a_structure");
     // generateHomogenousMesh(polygons, pbc_corners, true, data_folder + "a_structure");
@@ -1176,6 +1181,8 @@ void Tiling2D::generateOnePerodicUnit()
     //     data_folder + "a_structure.vtk");   
     solver.pbc_translation_file = data_folder + "a_structure_translation.txt";
     initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_XY);
+    if (tiling_idx == 0)
+        solver.pbc_strain_w = 1e7;
 }
 
 void Tiling2D::generateOneStructureWithRotation()
@@ -1432,7 +1439,7 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     std::vector<TV2>& eigen_base, 
     const std::vector<T>& params,
     const Vector<T, 4>& eij, const std::string& filename,
-    T angle)
+    T unit, T angle)
 {
     using namespace csk;
     using namespace std;
@@ -1471,9 +1478,9 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
     std::vector<std::vector<dvec2>> polygons_v;
 
     Vector<T, 4> transf; TV2 xy;
-    // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 10.0, 10.0, xy);
+    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, unit, unit, xy);
     // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 8.0, 8.0, xy);
-    getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 5.0, 5.0, xy);
+    // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 5.0, 5.0, xy);
     // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 4.0, 4.0, xy);
 
     
@@ -2013,10 +2020,14 @@ void Tiling2D::generateHomogenousMesh(std::vector<std::vector<TV2>>& polygons,
 
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.05);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.1);
     // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1);
     // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.2);
-    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.3);
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.3);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 1.0);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 2.0);
     gmsh::model::mesh::field::setAsBackgroundMesh(2);
     gmsh::model::occ::synchronize();
 
@@ -2215,6 +2226,10 @@ void Tiling2D::generatePeriodicMesh(std::vector<std::vector<TV2>>& polygons,
     gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.2);
     gmsh::model::mesh::field::setNumber(2, "SizeMax", 1.0);
     gmsh::model::mesh::field::setNumber(2, "DistMin", 0.005);
+
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 1.0);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 2.0);
+    // gmsh::model::mesh::field::setNumber(2, "DistMin", 0.005);
 
     gmsh::model::mesh::field::setAsBackgroundMesh(2);
     

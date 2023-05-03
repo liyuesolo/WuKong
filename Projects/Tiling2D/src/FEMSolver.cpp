@@ -60,7 +60,7 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
         addBCPenaltyEnergy(penalty_weight, penalty);
         total_energy += penalty;
     }
-
+    // total_energy *= thickness;
     total_energy -= _u.dot(f);
 
 
@@ -85,6 +85,7 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
     deformed = undeformed + projected;
 
     residual = f;
+    residual.setZero();
     
     VectorXT residual_backup = residual;
 
@@ -135,7 +136,8 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
             residual_backup = residual;
         }
     }
-
+    // residual *= thickness;
+    residual += f;
     // std::getchar();
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -285,7 +287,7 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         addBCPenaltyHessianEntries(penalty_weight, entries);
 
     K.setFromTriplets(entries.begin(), entries.end());
-
+    // K *= thickness;
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
     
@@ -464,16 +466,33 @@ bool FEMSolver::staticSolveStep(int step)
     }
     std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
-    if (residual_norm < newton_tol)
+    if (residual_norm < newton_tol || step == max_newton_iter)
     {
         if (add_pbc_strain)
         {
+            if (verbose)
+            {
+                T E_bc = 0.0, E_pbc = 0.0;
+                addBCPenaltyEnergy(penalty_weight, E_bc);
+                addPBCEnergy(E_pbc);
+                std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
+            }
+
             TM secondPK_stress, Green_strain;
             T psi;
             computeHomogenizationData(secondPK_stress, Green_strain, psi);
             std::cout << "strain " << Green_strain << std::endl << std::endl;
             std::cout << "stress " << secondPK_stress << std::endl << std::endl;
-            std::cout << std::setprecision(16) << "energy density " << psi << std::endl;
+            // std::cout << std::setprecision(8) << "energy density " << psi << std::endl << std::endl;
+            std::cout << "energy density " << psi << std::endl << std::endl;
+            
+            // TM avg_2ndPK, avg_Cauchy_strain, avg_Green_strain;
+            // Matrix<T, 3, 3> elasticity_tensor;
+            // computeAveragedHomogenizationData(avg_2ndPK, avg_Cauchy_strain, avg_Green_strain, elasticity_tensor);
+            // std::cout << "Cauchy strain " << avg_Cauchy_strain << std::endl << std::endl;
+            // std::cout << "Green strain " << avg_Green_strain << std::endl << std::endl;
+            // std::cout << "2nd PK stress " << avg_2ndPK << std::endl << std::endl;
+            // std::cout << "elasticity tensor " << elasticity_tensor << std::endl << std::endl;
         }
         return true;
     }
@@ -550,11 +569,34 @@ bool FEMSolver::staticSolve()
         addPBCEnergy(E_pbc);
         std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
     }
+    // if (add_pbc_strain)
+    // {
+    //     // if (verbose)
+    //     {
+    //         T E_bc = 0.0, E_pbc = 0.0;
+    //         addBCPenaltyEnergy(penalty_weight, E_bc);
+    //         addPBCEnergy(E_pbc);
+    //         std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
+    //     }
+
+    //     TM secondPK_stress, Green_strain;
+    //     T psi;
+    //     computeHomogenizationData(secondPK_stress, Green_strain, psi);
+    //     std::cout << "strain " << Green_strain << std::endl << std::endl;
+    //     std::cout << "stress " << secondPK_stress << std::endl << std::endl;
+    //     std::cout << "energy density " << psi << std::endl << std::endl;
+    // }
+    // TM secondPK_stress, Green_strain;
+    // T psi;
+    // computeHomogenizationData(secondPK_stress, Green_strain, psi);
+    // std::cout << "strain " << Green_strain << std::endl << std::endl;
+    // std::cout << "stress " << secondPK_stress << std::endl << std::endl;
+    // std::cout << std::setprecision(8) << "energy density " << psi << std::endl << std::endl;
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
         << residual_norm << "|ddu|: " << du_norm  << std::endl;
     // std::cout << u.norm() << std::endl;
     
-    if (cnt == max_newton_iter || du_norm > 1e10 || residual_norm > 1)
+    if ((cnt == max_newton_iter && residual_norm > 5e-6) || du_norm > 1e10 || residual_norm > 1)
         return false;
     return true;
     

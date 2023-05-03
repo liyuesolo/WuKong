@@ -70,6 +70,9 @@ public:
 
     void inverseDesignFD();
 
+    void getTilingConfig(int IH, int& n_tiling_params, 
+        int& actual_IH, std::vector<TV>& bounds, VectorXT& ti_default, int& unit);
+
     // ########################## Tiling2D.cpp ########################## 
     void generateSurfaceMeshFromVTKFile(const std::string& vtk_file, const std::string surface_mesh_file);
     void initializeSimulationDataFromVTKFile(const std::string& filename);
@@ -84,6 +87,13 @@ public:
     void generateForceDisplacementCurve(const std::string& result_folder);
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
     
+    // validation
+    void generateStrainStressDataFromParams(const std::string& result_folder, int IH, 
+        const TV& range, int n_samples, const std::vector<T>& params);
+    void generateStrainStressSimulationData(const std::string& result_folder, int IH, int n_samples);
+    void generateStrainStressSimulationDataFromFile(const std::string& result_folder, 
+        const std::string& filename, const std::string& suffix, int IH, int n_samples);
+
     // ################ Generate Result ###############
     void generateTenPointUniaxialStrainData(const std::string& result_folder,
         int IH, T theta, const TV& strain_range, T strain_delta, const std::vector<T>& params);
@@ -154,6 +164,7 @@ public:
     void generateOneNonperiodicStructure();
     void generateOnePerodicUnit();
 
+
     void generateOneStructureSquarePatch(int IH, const std::vector<T>& params);
 
     void extrudeToMesh(const std::string& tiling_param,
@@ -167,10 +178,11 @@ public:
         std::vector<std::vector<TV2>>& eigen_polygons,
         std::vector<TV2>& eigen_base, 
         const std::vector<T>& params,
-        const Vector<T, 4>& eij, const std::string& filename, T angle = 0.0);
-    
+        const Vector<T, 4>& eij, const std::string& filename, T unit = 5.0, T angle = 0.0);
         
 private:
+    void minMaxCornerFromBounds(const std::vector<TV>& bounds, VectorXT& min_corner, VectorXT& max_corner);
+
     void generate3DSandwichMesh(std::vector<std::vector<TV2>>& polygons, 
         std::vector<TV2>& pbc_corners, bool save_to_file = false, std::string filename = "");
     

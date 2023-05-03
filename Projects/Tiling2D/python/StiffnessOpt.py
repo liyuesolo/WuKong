@@ -24,8 +24,57 @@ import time
 from Derivatives import *
 from Optimization import *
 from PropertyModifier import *
+from Common import *
 
+use_double = False
 
+if use_double:
+    tf.keras.backend.set_floatx("float64")
+else:
+    tf.keras.backend.set_floatx("float32")
+
+def CauchyToGreen(cauchy):
+    if cauchy < 0:
+        return cauchy - 0.5 * cauchy * cauchy
+    else:
+        return cauchy + 0.5 * cauchy * cauchy
+
+@tf.function
+def psiGradHessNH(strain, data_type = tf.float32):
+    lambda_tf = 26.0 * 0.48 / (1.0 + 0.48) / (1.0 - 2.0 * 0.48)
+    mu_tf = 26.0 / 2.0 / (1.0 + 0.48)
+    
+    batch_dim = strain.shape[0]
+    with tf.GradientTape() as tape_outer:
+        tape_outer.watch(strain)
+        with tf.GradientTape() as tape:
+            tape.watch(strain)
+            
+            strain_xx = tf.gather(strain, [0], axis = 1)
+            strain_yy = tf.gather(strain, [1], axis = 1)
+            
+            strain_xy = tf.constant(0.5, dtype=data_type) * tf.gather(strain, [2], axis = 1)
+            strain_vec_reorder = tf.concat((strain_xx, strain_xy, strain_xy, strain_yy), axis=1)
+            
+            strain_tensor = tf.reshape(strain_vec_reorder, (batch_dim, 2, 2))    
+                        
+            righCauchy = tf.constant(2.0, dtype=data_type) * strain_tensor + tf.eye(2, batch_shape=[batch_dim], dtype=data_type)
+            
+            J = tf.math.sqrt(tf.linalg.det(righCauchy))
+            
+            I1 = tf.linalg.trace(righCauchy)
+            C1 = tf.constant(0.5 * mu_tf, dtype=data_type)
+            D1 = tf.constant(lambda_tf * 0.5, dtype=data_type)
+            lnJ = tf.math.log(J)
+            psi = C1 * (I1 - tf.constant(2.0, dtype=data_type) - tf.constant(2.0, dtype=data_type) * lnJ) + D1 * (lnJ*lnJ)
+            
+            stress = tape.gradient(psi, strain)
+            # print(stress)
+            # exit(0)
+    C = tape_outer.batch_jacobian(stress, strain)
+    del tape
+    del tape_outer
+    return psi, stress, C
 
 @tf.function
 def valueGradHessian(n_tiling_params, inputs, model):
@@ -80,10 +129,10 @@ def optimizeStiffnessProfile():
         all_label.append(label)
         stiffness_gt.append(item[-6])
     
-    thetas = np.array(thetas[0:]).astype(np.float32)
-    all_data = np.array(all_data[0:]).astype(np.float32)
-    all_label = np.array(all_label[0:]).astype(np.float32) 
-    stiffness_gt = np.array(stiffness_gt).astype(np.float32)
+    thetas = np.array(thetas[0:]).astype(np.float64)
+    all_data = np.array(all_data[0:]).astype(np.float64)
+    all_label = np.array(all_label[0:]).astype(np.float64) 
+    stiffness_gt = np.array(stiffness_gt).astype(np.float64)
 
     current_dir = os.path.dirname(os.path.realpath(__file__))
     save_path = os.path.join(current_dir, 'Models/' + str(327) + "/")
@@ -167,102 +216,50 @@ def optimizeStiffnessProfile():
     plt.savefig(save_path + "hessian_check.png", dpi=300)
     plt.close()
 
+def computeStiffnessTensor():
+
+    strain = 0.05
+    # strain = CauchyToGreen(strain)
+    thetas = np.array([0.5 * np.pi])
+    bounds = []
+    IH = 50
+    model, n_tiling_params, ti_default, bounds = loadModel(IH)
+    ti = ti_default
+    uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, 
+        thetas, model, ti, True)
+    ti_batch = np.tile(ti, (1, 1))
+    nn_inputs = tf.convert_to_tensor(np.hstack((ti_batch, uniaxial_strain)))
+    psi, stress, elasticity_tensor = valueGradHessian(n_tiling_params, nn_inputs, model)
+    # uniaxial_strain = np.array([[-0.0432051, 0.051247,  2.0 * -1.21863e-08]])
+    # psi, stress, elasticity_tensor = psiGradHessNH(uniaxial_strain, tf.float64)
+    print(psi)
+    print(stress)
+    print(elasticity_tensor)
 
 def computeStiffness():
     bounds = []
     IH = 1
-    n_sp_theta = 100
+    n_sp_theta = 50
     dtheta = np.pi/float(n_sp_theta)
     thetas = np.arange(0.0, np.pi, dtheta)
     # print(len(thetas))
-    strain = 0.01
+    strain = 0.05
+    # strain = CauchyToGreen(strain)
     current_dir = os.path.dirname(os.path.realpath(__file__))
     idx = np.arange(0, len(thetas), 5)
-
-    if IH == 21:
-        strain = 0.02
-        strain = strain + 0.5 * strain * strain
-        n_tiling_params = 2
-        bounds.append([0.105, 0.195])
-        bounds.append([0.505, 0.795])
-        ti = np.array([0.18, 0.7])
-        # ti = np.array([0.1044, 0.65])
-        # ti = np.array([0.104, 0.65])
-        # ti = np.array([0.17, 0.51])
-        ti_target = np.array([0.1045, 0.65])
-
-        sample_idx = [2, 7, -1]
-        theta = 0.0
-    elif IH == 50:
-        n_sp_theta = 100
-        n_tiling_params = 2
-        bounds.append([0.1, 0.3])
-        bounds.append([0.25, 0.75])
-        ti_default = np.array([0.2308, 0.5])
-        # ti = np.array([0.2903, 0.6714])
-        ti = ti_default
-    elif IH == 67:
-        # n_sp_theta = 100
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
-        n_tiling_params = 2
-        bounds.append([0.1, 0.3])
-        bounds.append([0.6, 1.1])
-        # ti = np.array([0.18, 0.68])
-        ti = np.array([0.25, 0.85])
-        idx = np.arange(0, len(thetas), 5)
-        
-    elif IH == 28:
-        strain = 0.05
-        strain = strain + 0.5 * strain * strain
-        n_tiling_params = 2
-        bounds.append([0.005, 0.8])
-        bounds.append([0.005, 1.0])
-        ti = np.array([0.6, 0.6])
-        ti_target = np.array([0.4, 0.8])
-        # ti_target = np.array([0.6, 0.6])
-        idx = np.arange(0, len(thetas), 5)
-    elif IH == 1:
-        strain = 0.1
-        if strain < 0:
-            strain = strain - 0.5 * strain * strain
-        else:
-            strain = strain + 0.5 * strain * strain
-        n_tiling_params = 4
-        bounds.append([0.05, 0.3])
-        bounds.append([0.25, 0.75])
-        bounds.append([0.05, 0.15])
-        bounds.append([0.4, 0.8])
-        # ti = np.array([0.1224, 0.5, 0.1434, 0.625])
-        # ti = np.array([0.1224,  0.5254, 0.1433, 0.49])
-        # ti = np.array([0.1224, 0.6, 0.13, 0.625])
-        ti = np.array([0.1161, 0.6434, 0.1706, 0.6])
-    elif IH == 3:
-        strain = 0.1
-        if strain < 0:
-            strain = strain - 0.5 * strain * strain
-        else:
-            strain = strain + 0.5 * strain * strain
-        n_tiling_params = 4
-        bounds.append([0.05, 0.5])
-        bounds.append([0.2, 0.8])
-        bounds.append([0.08, 0.5])
-        bounds.append([0.4, 0.8])
-        # ti = np.array([0.1224,  0.5, 0.2253, 0.625])
-        ti = np.array([0.12,  0.5, 0.2, 0.625])
-
-    # strain = -0.12
-    # strain = strain - 0.5 * strain * strain
-
-    model_name = str(IH)
-    if IH < 10:
-        model_name = "0" + str(IH)
-    else:
-        model_name = str(IH)
-
-    save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH" + model_name + '.tf')
+    
+    model, n_tiling_params, ti_default, bounds = loadModel(IH, use_double)
+    # ti = ti_default
+    # ti = np.array([0.18, 0.7])
+    # ti = np.array([0.10518343, 0.65234672])
+    # IH50
+    # ti = np.array([0.2308, 0.5])
+    # ti = np.array([0.28821646, 0.32763136])
+    # ti = np.array([0.18, 0.68])
+    # ti = np.array([0.24992313, 0.85549645])
+    # ti = np.array([0.6, 0.6])
+    # ti = np.array([0.34022665, 0.48979112])
+    ti = np.array([0.122398, 0.5, 0.143395, 0.625])
 
     uniaxial_strain = computeUniaxialStrainThetaBatch(n_tiling_params, strain, thetas, model, ti, True)
     
@@ -278,12 +275,38 @@ def computeStiffness():
                     tf.convert_to_tensor(thetas), model)
     stiffness = stiffness.numpy()
 
+    stiffness_FD = np.array([.370623, 0.366909, 0.364125, 0.362323, 0.361539, 0.361883, 0.3635, 0.366461, 0.37062, 0.375509, 0.380324, 0.384056, 0.385808, 0.385154, 0.382344, 0.378168, 0.37359, 0.369383, 0.36598, 0.36353, 0.362064, 0.36164, 0.362387, 0.364441, 0.367816, 0.372268, 0.377211, 0.381748, 0.384871, 0.385802, 0.384338, 0.38094, 0.376506, 0.371967, 0.367989, 0.364896, 0.362779, 0.361665, 0.361636, 0.362834, 0.365367, 0.369176, 0.373906, 0.378853, 0.383052, 0.385523, 0.385652, 0.383465, 0.379609, 0.375039])
+    # stiffness_FD = np.array([1.43745, 0.672769, 0.269529, 0.142263, 0.0883217, 0.0542932, 0.035367, 0.0265625, 0.0215774, 0.0185241, 0.0166268, 0.0155122, 0.0149951, 0.0149973, 0.0155192, 0.0166402, 0.0185474, 0.0216182, 0.0266388, 0.0355313, 0.0547152, 0.0892022, 0.143966, 0.272705, 0.676159, 1.41953, 0.674962, 0.272559, 0.144041, 0.0892999, 0.054757, 0.0355465, 0.0266474, 0.0216239, 0.0185516, 0.0166434, 0.0155218, 0.0149995, 0.014997, 0.0155139, 0.0166282, 0.0185254, 0.0215783, 0.0265624, 0.0353637, 0.0542724, 0.0882689, 0.142241, 0.269721, 0.673889])
+    stiffness_FD = np.array([0.425687, 0.551427, 0.675132, 0.683656, 0.578379, 0.460208, 0.364833, 0.293946, 0.245465, 0.215213, 0.198916, 0.193812, 0.198925, 0.21501, 0.244551, 0.29165, 0.36185, 0.463586, 0.597765, 0.695328, 0.655639, 0.53727, 0.425757, 0.338664, 0.27558, 0.23368, 0.208484, 0.196131, 0.194453, 0.203058, 0.223275, 0.258153, 0.312256, 0.391821, 0.505863, 0.640841, 0.698089, 0.618963, 0.497446, 0.393823, 0.314932, 0.259383, 0.223585, 0.203039, 0.194406, 0.196124, 0.208376, 0.23307, 0.273805, 0.335599])
+    # IH21 strain 0.02
+    # stiffness_FD = np.array([0.260281, 0.307975, 0.339395, 0.330674, 0.289049, 0.241459, 0.202845, 0.175397, 0.157182, 0.146068, 0.140608, 0.140078, 0.14439, 0.154076, 0.170358, 0.195165, 0.230624, 0.276315, 0.321724, 0.34142, 0.319105, 0.272742, 0.227321, 0.19253, 0.168424, 0.152784, 0.143679, 0.139912, 0.140976, 0.146989, 0.158703, 0.177584, 0.205742, 0.244955, 0.292522, 0.332614, 0.338446, 0.304877, 0.256723, 0.214445, 0.183411, 0.162379, 0.149096, 0.141866, 0.139733, 0.142403, 0.150199, 0.164101, 0.185816, 0.217545])
+    stiffness_FD = np.array([0.266417, 0.264772, 0.262606, 0.260238, 0.258002, 0.256194, 0.255047, 0.254702, 0.255203, 0.256492, 0.258412, 0.260716, 0.26309, 0.26519, 0.2667, 0.267385, 0.267138, 0.266003, 0.264162, 0.261897, 0.259539, 0.257414, 0.255801, 0.254902, 0.254828, 0.255591, 0.257098, 0.259161, 0.261509, 0.263812, 0.265733, 0.266974, 0.267342, 0.26678, 0.265382, 0.263366, 0.261039, 0.258733, 0.256761, 0.25538, 0.254762, 0.254984, 0.256023, 0.257753, 0.259954, 0.262332, 0.264548, 0.266271, 0.267234, 0.267284])
+    #IH50 init
+    stiffness_FD = np.array([1.78656, 0.68645, 0.23261, 0.105387, 0.0611431, 0.0409898, 0.0301952, 0.0238234, 0.0198355, 0.0172695, 0.0156303, 0.0146518, 0.0141934, 0.0141939, 0.0146534, 0.0156332, 0.0172743, 0.0198434, 0.0238368, 0.0302194, 0.0410384, 0.0612588, 0.105749, 0.234087, 0.688747, 1.76401, 0.687705, 0.233795, 0.105643, 0.0612108, 0.0410124, 0.0302034, 0.023826, 0.0198355, 0.0172682, 0.0156282, 0.0146491, 0.0141901, 0.0141898, 0.0146483, 0.0156268, 0.0172657, 0.0198312, 0.0238182, 0.0301884, 0.0409798, 0.0611264, 0.105353, 0.232538, 0.686539])
+    #IH50 opt
+    stiffness_FD = np.array([0.00655229, 0.00652896, 0.00646134, 0.00636111, 0.00624425, 0.00612874, 0.00603146, 0.00596762, 0.00595085, 0.00599425, 0.00611174, 0.00632024, 0.00664211, 0.00710907, 0.00776788, 0.00869042, 0.00999113, 0.0118614, 0.0146389, 0.0189648, 0.0261808, 0.0394973, 0.0683262, 0.15107, 0.478657, 1.46059, 0.479414, 0.151305, 0.0683882, 0.0395147, 0.0261848, 0.0189634, 0.0146351, 0.0118565, 0.00998551, 0.00868426, 0.00776142, 0.0071024, 0.00663523, 0.00631319, 0.00610454, 0.00598691, 0.00594346, 0.00596028, 0.00602432, 0.00612209, 0.00623833, 0.00635616, 0.0064578, 0.0065271])
+    #IH67 init
+    stiffness_FD = np.array([2.06382, 1.81357, 1.36084, 1.00028, 0.742477, 0.487645, 0.206891, 0.107543, 0.0738437, 0.058276, 0.0501748, 0.0461184, 0.044827, 0.0459385, 0.0497116, 0.0571188, 0.0702601, 0.0927298, 0.0254716, 0.0246712, 0.0248849, 0.0256183, 0.0266934, 0.0278559, 0.0287712, 0.0291214, 0.0287719, 0.0278569, 0.0266935, 0.0256154, 0.0248727, 0.0246225, 0.0246518, 0.092729, 0.0702605, 0.0571197, 0.0497127, 0.0459398, 0.0448285, 0.0461202, 0.050177, 0.0582791, 0.0738483, 0.107551, 0.206909, 0.487674, 0.742505, 1.00031, 1.36087, 1.81359])
+    stiffness_FD = np.array([1.53477, 0.752797, 0.308027, 0.16267, 0.10033, 0.0614721, 0.0402176, 0.0302622, 0.0246079, 0.0211389, 0.0189812, 0.017713, 0.0171246, 0.0171276, 0.0177225, 0.0189992, 0.0211701, 0.0246623, 0.0303642, 0.0404411, 0.0621475, 0.101751, 0.16487, 0.312047, 0.764442, 1.5677, 0.764458, 0.31205, 0.16487, 0.10175, 0.0621472, 0.040441, 0.0303641, 0.0246623, 0.0211701, 0.0189992, 0.0177225, 0.0171276, 0.0171246, 0.017713, 0.0189812, 0.0211389, 0.0246079, 0.0302623, 0.0402177, 0.0614726, 0.100331, 0.162674, 0.308035, 0.752818])
+    #IH28
+    stiffness_FD = np.array([0.108185, 0.108907, 0.113197, 0.12203, 0.137428, 0.161045, 0.184726, 0.188797, 0.18193, 0.185644, 0.206695, 0.246272, 0.304732, 0.379303, 0.457005, 0.506337, 0.489168, 0.406139, 0.306365, 0.229064, 0.179045, 0.148109, 0.12901, 0.11739, 0.110858, 0.108189, 0.108911, 0.113202, 0.122036, 0.137435, 0.161052, 0.184723, 0.188787, 0.181932, 0.185666, 0.206735, 0.246321, 0.304781, 0.379337, 0.457015, 0.506323, 0.489142, 0.406116, 0.306349, 0.229054, 0.179039, 0.148104, 0.129006, 0.117387, 0.110855])
+    stiffness_FD = np.array([0.75476, 0.701533, 0.631539, 0.565699, 0.509772, 0.46227, 0.421192, 0.38602, 0.357188, 0.335185, 0.320186, 0.312128, 0.3109, 0.316473, 0.328913, 0.348264, 0.374332, 0.406503, 0.443903, 0.486197, 0.534599, 0.591643, 0.657681, 0.72318, 0.763562, 0.754741, 0.701504, 0.631508, 0.565672, 0.509753, 0.462259, 0.421189, 0.386023, 0.357196, 0.335196, 0.320199, 0.312141, 0.310913, 0.316487, 0.328926, 0.348276, 0.374342, 0.406509, 0.443905, 0.486193, 0.53459, 0.59163, 0.657667, 0.723173, 0.763567])
+    #IH01
+    stiffness_FD = np.array([0.781698, 0.788103, 0.807234, 0.838658, 0.881103, 0.931229, 0.982485, 1.02485, 1.04719, 1.04258, 1.01246, 0.965824, 0.913983, 0.865871, 0.82683, 0.799414, 0.784498, 0.782367, 0.793019, 0.816304, 0.851616, 0.897093, 0.948485, 0.997968, 1.03477, 1.0485, 1.03471, 0.997842, 0.948308, 0.896931, 0.851442, 0.816127, 0.792851, 0.782214, 0.784373, 0.799288, 0.826726, 0.865772, 0.913908, 0.965788, 1.01245, 1.04262, 1.0473, 1.02495, 0.982586, 0.931308, 0.881166, 0.838692, 0.807241, 0.788118])
     for i in range(n_sp_theta):
         thetas= np.append(thetas, thetas[i] - np.pi)
         stiffness = np.append(stiffness, stiffness[i])
+        stiffness_FD = np.append(stiffness_FD, stiffness_FD[i])
     thetas= np.append(thetas, thetas[0])
     stiffness = np.append(stiffness, stiffness[0])
-    plt.polar(thetas, stiffness, label = "tensor", linewidth=3.0)
+    stiffness_FD = np.append(stiffness_FD, stiffness_FD[0])
+
+    fig1 = plt.figure()
+    ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
+    # ax1.set_ylim(0.1, 0.38)
+    ax1.plot(thetas, stiffness, label = "stiffness-NN", linewidth=3.0)
+    ax1.plot(thetas, stiffness_FD, label = "stiffness-FD", linewidth=3.0, linestyle='--')
+    plt.legend(loc="upper left")
     plt.savefig("images/stiffness.png", dpi=300)
     plt.close()
 
@@ -323,7 +346,7 @@ def computeStiffnessBatch():
             
             for strain in [0.001, 0.01, 0.025, 0.05, 0.075, 0.1]:
             
-                thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float32)
+                thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float64)
 
                 strain_green = strain #+ 0.5 * np.power(strain, 2.0)
                 uniaxial_strain = []
@@ -356,7 +379,7 @@ def computeStiffnessBatch():
             #     strain = strain_range[0] + float(i) * dstrain
                 
             #     # strain = 0.5
-            #     thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float32)
+            #     thetas = np.arange(0.0, np.pi, np.pi/float(n_sp_theta)).astype(np.float64)
 
             #     strain_green = strain + 0.5 * np.power(strain, 2.0)
             #     uniaxial_strain = []
@@ -758,48 +781,6 @@ def stiffnessOptimizationSA():
         plt.close()
         os.system("convert stiffness_optimization_IH"+str(IH)+"_optimized.png -trim stiffness_optimization_IH"+str(IH)+"_optimized.png")
 
-def loadModel(IH):
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    bounds = []
-    if IH == 21:
-        n_tiling_params = 2
-        bounds.append([0.105, 0.195])
-        bounds.append([0.505, 0.795])
-        ti_default = np.array([0.1045, 0.65])
-    elif IH == 50:
-        n_tiling_params = 2
-        bounds.append([0.1, 0.3])
-        bounds.append([0.25, 0.75])
-        ti_default = np.array([0.2308, 0.5])
-    elif IH == 67:
-        n_tiling_params = 2
-        bounds.append([0.1, 0.3])
-        bounds.append([0.6, 1.1]) 
-        ti_default = np.array([0.2308, 0.8696])
-    elif IH == 28:
-        n_tiling_params = 2
-        bounds.append([0.005, 0.8])
-        bounds.append([0.005, 1.0])
-        ti_default = np.array([0.4528, 0.5])
-    elif IH == 1:
-        n_tiling_params = 4
-        bounds.append([0.05, 0.3])
-        bounds.append([0.25, 0.75])
-        bounds.append([0.05, 0.15])
-        bounds.append([0.4, 0.8])
-        ti_default = np.array([0.1224, 0.5, 0.1434, 0.625])
-    
-    model_name = str(IH)
-    if IH < 10:
-        model_name = "0" + str(IH)
-    else:
-        model_name = str(IH)
-
-    save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
-    model.load_weights(save_path + "IH" + model_name + '.tf')
-
-    return model, n_tiling_params, ti_default, bounds
 
 def getDirectionStiffness(ti, n_tiling_params, model, strain_cauchy, n_sp_theta = 20, sym=True):
     if strain_cauchy <  0:
@@ -874,6 +855,7 @@ def stiffnessModifyUI():
     plt.show()
 
 if __name__ == "__main__":
-    # computeStiffness()
-    stiffnessOptimizationSA()
+    # computeStiffnessTensor()
+    computeStiffness()
+    # stiffnessOptimizationSA()
     # stiffnessModifyUI()

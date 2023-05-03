@@ -249,15 +249,15 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         {
             // tiling.generateOneStructureSquarePatch(46, {0.19606062, 0.35272865});
             // tiling.generateOneStructureSquarePatch(19, {0.115, 0.765});
-            tiling.generateOneStructureSquarePatch(19, {0.195,     0.6403507});
+            // tiling.generateOneStructureSquarePatch(19, {0.195,     0.6403507});
             // tiling.generateOneStructureSquarePatch(1, {0.1224, 0.5525, 0.3282, 0.1706});
             // tiling.generateOneStructureSquarePatch(4, {0.1224, 0.5, 0.0373, 0.3767, 0.5});
-            // tiling.generateOneStructureSquarePatch(0, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
-            // tiling.generateOneStructureSquarePatch(0, {0.17290776, 0.50585887, 0.1029633,  0.64167318});
+            tiling.generateOneStructureSquarePatch(0, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
+            // tiling.generateOneStructureSquarePatch(0, {0.17194996, 0.42948579, 0.05507779, 0.66815703});
             // tiling.generateOneStructureSquarePatch(46, {0.23, 0.32});
             // 0.28787868 0.33627991
             // tiling.generateOneStructureSquarePatch(60, {0.2308, 0.8969});
-            // tiling.generateOneStructureSquarePatch(28, {0.2308});
+            // tiling.generateOneStructureSquarePatch(26, {0.00930862, 0.67854564});
             // tiling.generateOneStructureSquarePatch(26, {0.55, 0.7});
             // tiling.generateOneStructureSquarePatch(26, {0.39184731, 0.66088703});
             
@@ -297,6 +297,19 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             tiling.solver.staticSolve();
             updateScreen(viewer);
         }
+        if (ImGui::Button("CheckElasticityTensor", ImVec2(-1,0)))
+        {
+            Matrix<T, 3, 3> elasticity_tensor;
+            tiling.solver.computeHomogenizationElasticityTensorSA(M_PI * 0.5, 1.05, elasticity_tensor);
+            std::cout << elasticity_tensor << std::endl;
+            // VectorXT stiffness_values;
+            // tiling.solver.computeDirectionStiffnessFiniteDifference(50, 1.05, stiffness_values);
+            // for (int i = 0; i < stiffness_values.rows() - 1; i++)
+            // {
+            //     std::cout<< stiffness_values[i] << ", ";
+            // }
+            // std::cout<< stiffness_values[stiffness_values.rows() - 1] << std::endl;
+        }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
             tiling.solver.reset();
@@ -308,6 +321,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             std::string fname = igl::file_dialog_open();
             if (fname.length() != 0)
             {
+                tiling.solver.pbc_translation_file =  "./a_structure_translation.txt";
                 bool valid_structure = tiling.initializeSimulationDataFromFiles(fname, PBC_XY);
                 if (valid_structure)
                 {
@@ -626,7 +640,7 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         default: 
             return false;
         case 's':
-            tiling.solver.staticSolveStep(static_solve_step);
+            tiling.solver.staticSolveStep(static_solve_step++);
             updateScreen(viewer);
             return true;
         case ' ':

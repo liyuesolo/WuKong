@@ -175,7 +175,7 @@ void FEMSolver::addIPCEnergy(T& energy)
     ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
         ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
 
-    contact_energy = barrier_weight * ipc::compute_barrier_potential(ipc_vertices_deformed, 
+    contact_energy = 1 * barrier_weight * ipc::compute_barrier_potential(ipc_vertices_deformed, 
     ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
 
     energy += contact_energy;
@@ -212,7 +212,7 @@ void FEMSolver::addIPCForceEntries(VectorXT& residual)
     // std::cout << ipc_constraints.pv_constraints.size() << std::endl;
     // std::exit(0);
 
-    VectorXT contact_gradient = barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
+    VectorXT contact_gradient = 1 * barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
     for (int i = 0; i < num_ipc_vtx; i++)
     {
@@ -233,7 +233,7 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
     ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
         ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
 
-    StiffnessMatrix contact_hessian = barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
+    StiffnessMatrix contact_hessian = 1 * barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
         ipc_edges, ipc_faces, ipc_constraints, barrier_distance, project_PD);
 
     std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);

@@ -199,14 +199,14 @@ def buildSrainStressModel():
 
 def buildConstitutiveModel(n_strain_entry):
     inputS = Input(shape=(n_strain_entry,),dtype=tf.float32, name="inputS")
-    num_hidden = 256
+    num_hidden = 64
     # x = SinusodialRepresentationDense(num_hidden, w0=30.0, activation='sine')(inputS)
-    # x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
-    x = Dense(num_hidden, activation=tf.keras.activations.softplus)(inputS)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(inputS)
+    # x = Dense(num_hidden, activation=tf.keras.activations.softplus)(inputS)
     for _ in range(5):
         # x = SinusodialRepresentationDense(num_hidden, w0=1.0, activation='sine')(x)
-        # x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
-        x = Dense(num_hidden, activation=tf.keras.activations.softplus)(x)
+        x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+        # x = Dense(num_hidden, activation=tf.keras.activations.softplus)(x)
     # output = SinusodialRepresentationDense(1, w0=1.0, activation=tf.keras.activations.softplus)(x)
     output = Dense(1, activation=tf.keras.activations.softplus)(x)
     model = Model(inputS, output)
@@ -232,6 +232,28 @@ def buildSingleFamilyModelSeparateTilingParamsSwish(num_params, data_type=tf.flo
 
     model = Model(inputS, output)
     return model
+
+def buildSingleFamilyModelSeparateTilingParamsSwish3D(num_params, data_type=tf.float32):
+    
+    inputS = Input(shape=(6 + num_params,),dtype=data_type, name="inputS")
+    tiling_params = get_sub_tensor(1, 0, num_params)(inputS)
+    strain = get_sub_tensor(1, num_params, num_params + 6)(inputS)
+    num_hidden = 256
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(tiling_params)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    x = Dense(num_hidden, activation=tf.keras.activations.swish)(x)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(strain)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    y = Dense(num_hidden, activation=tf.keras.activations.swish)(y)
+    z = Concatenate()([x, y]) 
+    for i in range(5):
+        z = Dense(num_hidden, activation=tf.keras.activations.swish)(z)
+    output = Dense(1, activation=tf.keras.activations.softplus)(z)
+    
+
+    model = Model(inputS, output)
+    return model
+
 
 def buildSingleFamilyModelSeparateTilingParamsSwishSmall(num_params, data_type=tf.float32):
     

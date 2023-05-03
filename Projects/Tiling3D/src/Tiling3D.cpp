@@ -8,8 +8,248 @@
 #include <random>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 
 #include "../include/Util.h"
+
+void Tiling3D::generateGreenStrainSecondPKPairsServerToyExample(const std::vector<T>& params,
+        const std::string& result_folder, int loading_type, bool generate_mesh)
+{
+    std::ofstream out;
+    if (loading_type == 0)
+        out.open(result_folder + "data_uniaxial.txt");
+    else if (loading_type == 1)
+        out.open(result_folder + "data_biaxial.txt");
+    else if (loading_type == 2)
+        out.open(result_folder + "data_triaxial.txt");
+    out << std::setprecision(12);
+    TV2 range_strain(0.7, 1.5);
+    TV2 range_strain_biaixial(0.9, 1.2);
+    TV2 range_strain_triaixial(0.9, 1.2);
+	TV2 range_theta(0.0, 2.0 * M_PI);
+    TV2 range_phi(-M_PI_2, M_PI_2);
+        
+    int n_sp_strain = 50;
+    int n_sp_strain_bi = 10;
+    int n_sp_strain_tri = 5;
+    int n_sp_theta = 15;
+    int n_sp_phi = 15;
+
+    T delta_strain = (range_strain[1] - range_strain[0]) / T(n_sp_strain);
+    T delta_strain_bi = (range_strain_biaixial[1] - range_strain_biaixial[0]) / T(n_sp_strain_bi);
+    T delta_strain_tri = (range_strain_triaixial[1] - range_strain_triaixial[0]) / T(n_sp_strain_tri);
+
+    auto runSim = [&](int& sim_cnt, T theta, T phi, TV strain_magnitude)
+    {
+        sim_cnt++;
+            
+        // bool solve_succeed = solver.staticSolve();
+        bool solve_succeed = true;
+
+        VectorXT residual(solver.num_nodes * 3); residual.setZero();
+        solver.computeResidual(solver.u, residual);
+        TM secondPK_stress, Green_strain;
+        T psi;
+        solver.computeHomogenizationData(Green_strain, secondPK_stress, psi);
+        for (int m = 0; m < params.size(); m++)
+        {
+            out << params[m] << " ";
+        }
+        for (int i = 0; i < 3; i++)
+            out << Green_strain(i, i) << " ";
+        out << Green_strain(0, 1) << " " << Green_strain(0, 2) << " " << Green_strain(1, 2) << " ";
+        for (int i = 0; i < 3; i++)
+            out << secondPK_stress(i, i) << " ";
+        out << secondPK_stress(0, 1) << " " << secondPK_stress(0, 2) << " " << secondPK_stress(1, 2) << " ";
+        out << psi << " " << theta << " " << phi << " " << strain_magnitude[0] 
+            << " " << strain_magnitude[1] << " " << strain_magnitude[2] << " "
+            << residual.norm() << std::endl;
+        if (!solve_succeed)
+        {
+            solver.reset();
+        }
+    };
+
+    if (generate_mesh)
+        solver.generate3DUnitCell(result_folder + "/structure", params[0], params[1]);
+    return;
+
+    bool valid_structure = solver.initializeSimulationDataFromFiles(result_folder + "structure.vtk");
+    if (!valid_structure)
+        return;
+    solver.verbose = false;
+    int cnt = 0;
+    
+    if (loading_type == 0)
+    {
+        solver.loading_type = UNI_AXIAL;
+        
+        for(int i = 0; i < n_sp_theta; i++)
+        {
+            T theta = range_theta[0] + ((double)i/(double)n_sp_theta)*(range_theta[1] - range_theta[0]);
+            for(int j = 0; j < n_sp_phi; j++)
+            {
+                T phi = range_phi[0] + ((double)j/(double)n_sp_phi)*(range_phi[1] - range_phi[0]);
+                solver.theta = theta;
+                solver.phi = phi;
+                for (T strain = 1.001; strain < range_strain[1]; strain += delta_strain)
+                {
+                    TV strain_mag(strain, 0, 0);
+                    solver.strain_magnitudes = strain_mag;
+                    runSim(cnt, theta, phi, strain_mag);
+                }
+                solver.reset();
+                for (T strain = 0.999; strain > range_strain[0]; strain -= delta_strain)
+                {    
+                    TV strain_mag(strain, 0, 0);
+                    solver.strain_magnitudes = strain_mag;
+                    runSim(cnt, theta, phi, strain_mag);
+                }
+            }
+        }
+    }
+    else if (loading_type == 1)
+    {
+        solver.loading_type = BI_AXIAL;
+        
+        for(int i = 0; i < n_sp_theta; i++)
+        {
+            T theta = range_theta[0] + ((double)i/(double)n_sp_theta)*(range_theta[1] - range_theta[0]);
+            for(int j = 0; j < n_sp_phi; j++)
+            {
+                T phi = range_phi[0] + ((double)j/(double)n_sp_phi)*(range_phi[1] - range_phi[0]);
+                solver.theta = theta;
+                solver.phi = phi;
+                for (T strain = 1.001; strain < range_strain_biaixial[1]; strain += delta_strain_bi)
+                {
+                    solver.reset();
+                    for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+                    {
+                        TV strain_mag(strain, strain_ortho, 0);
+                        solver.strain_magnitudes = strain_mag;
+                        runSim(cnt, theta, phi, strain_mag);
+                    }
+                    solver.reset();
+                    for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+                    {
+                        TV strain_mag(strain, strain_ortho, 0);
+                        solver.strain_magnitudes = strain_mag;
+                        runSim(cnt, theta, phi, strain_mag);
+                    }
+                }
+                
+                for (T strain = 0.999; strain > range_strain_biaixial[0]; strain -= delta_strain_bi)
+                {    
+                    solver.reset(); 
+                    for (T strain_ortho = 1.001; strain_ortho < range_strain_biaixial[1]; strain_ortho += delta_strain_bi)
+                    {
+                        TV strain_mag(strain, strain_ortho, 0);
+                        solver.strain_magnitudes = strain_mag;
+                        runSim(cnt, theta, phi, strain_mag);
+                    }
+                    solver.reset();
+                    for (T strain_ortho = 0.999; strain_ortho > range_strain_biaixial[0]; strain_ortho -= delta_strain_bi)
+                    {
+                        TV strain_mag(strain, strain_ortho, 0);
+                        solver.strain_magnitudes = strain_mag;
+                        runSim(cnt, theta, phi, strain_mag);
+                    }
+                }
+            }
+        }
+    }
+    else if (loading_type == 2)
+    {
+        solver.loading_type = TRI_AXIAL;
+        for(int i = 0; i < n_sp_theta; i++)
+        {
+            T theta = range_theta[0] + ((double)i/(double)n_sp_theta)*(range_theta[1] - range_theta[0]);
+            for(int j = 0; j < n_sp_phi; j++)
+            {
+                T phi = range_phi[0] + ((double)j/(double)n_sp_phi)*(range_phi[1] - range_phi[0]);
+                solver.theta = theta;
+                solver.phi = phi;
+                for (T strain = 1.001; strain < range_strain_triaixial[1]; strain += delta_strain_tri)
+                {
+                    for (T strain_ortho = 1.001; strain_ortho < range_strain_triaixial[1]; strain_ortho += delta_strain_tri)
+                    {
+                        solver.reset();
+                        for (T strain_third = 1.001; strain_third < range_strain_triaixial[1]; strain_third += delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                        solver.reset();
+                        for (T strain_third = 0.999; strain_third > range_strain_triaixial[0]; strain_third -= delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                    }
+                    for (T strain_ortho = 0.999; strain_ortho > range_strain_triaixial[0]; strain_ortho -= delta_strain_tri)
+                    {
+                        solver.reset();
+                        for (T strain_third = 1.001; strain_third < range_strain_triaixial[1]; strain_third += delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                        solver.reset();
+                        for (T strain_third = 0.999; strain_third > range_strain_triaixial[0]; strain_third -= delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                    }
+                }
+                
+                for (T strain = 0.999; strain > range_strain_triaixial[0]; strain -= delta_strain_tri)
+                {    
+                    for (T strain_ortho = 1.001; strain_ortho < range_strain_triaixial[1]; strain_ortho += delta_strain_tri)
+                    {
+                        solver.reset();
+                        for (T strain_third = 1.001; strain_third < range_strain_triaixial[1]; strain_third += delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                        solver.reset();
+                        for (T strain_third = 0.999; strain_third > range_strain_triaixial[0]; strain_third -= delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                    }
+                    for (T strain_ortho = 0.999; strain_ortho > range_strain_triaixial[0]; strain_ortho -= delta_strain_tri)
+                    {
+                        solver.reset();
+                        for (T strain_third = 1.001; strain_third < range_strain_triaixial[1]; strain_third += delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                        solver.reset();
+                        for (T strain_third = 0.999; strain_third > range_strain_triaixial[0]; strain_third -= delta_strain_tri)
+                        {
+                            TV strain_mag(strain, strain_ortho, strain_third);
+                            solver.strain_magnitudes = strain_mag;
+                            runSim(cnt, theta, phi, strain_mag);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    out.close();
+}
 
 
 std::random_device rd;

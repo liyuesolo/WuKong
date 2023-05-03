@@ -20,6 +20,7 @@ class FEMSolver
 {
 public:
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
     using VectorXi = Vector<int, Eigen::Dynamic>;
     using TV = Vector<T, 2>;
     using IV = Vector<int, 2>;
@@ -27,6 +28,7 @@ public:
     using IV4 = Vector<int, 4>;
     using TV3 = Vector<T, 3>;
     using TM = Matrix<T, 2, 2>;
+    using TM3 = Matrix<T, 3, 3>;
 
     // using StiffnessMatrix = Eigen::SparseMatrix<T>;
     typedef int StorageIndex;
@@ -72,6 +74,7 @@ public:
     bool prescribe_strain_tensor = false;
     TV3 target_strain = TV3(1, 1, 0); // epsilon_xx epsilon_yy epsilon_xy
     Vector<int, 4> pbc_corners = Vector<int, 4>::Constant(-1);
+    T scale = 1.0;
 
     std::unordered_map<int, T> dirichlet_data;
     std::unordered_map<int, T> penalty_pairs;
@@ -92,6 +95,7 @@ public:
     T penalty_weight = 1e6;
     T y_bar = 0.0;
     T thickness = 1.0;
+    
 
     // IPC
     T max_barrier_weight = 1e8;
@@ -197,6 +201,14 @@ v
     }
 
 private:
+    template<int dim0, int dim1>
+    void clipMatrixMin(Matrix<T, dim0, dim1>& mat, T epsilon = 1e-12)
+    {
+        for (int i = 0; i < dim0; i++)
+            for (int j = 0; j < dim1; j++)
+                if (std::abs(mat(i, j)) < epsilon)
+                    mat(i, j) = epsilon;
+    }
 
     template<int size>
     bool isHessianBlockPD(const Matrix<T, size, size> & symMtr)
@@ -249,6 +261,21 @@ private:
             residual.segment<2>(vtx_idx[i] * 2) += gradent.template segment<2>(i * 2);
     }
 
+    template<int dim>
+    void getSubVector(const VectorXT& _vector, 
+        const VectorXi& vtx_idx, 
+        Vector<T, dim>& sub_vec)
+    {
+        if (vtx_idx.rows() * 2 != dim)
+            std::cout << "wrong gradient block size in getSubVector" << std::endl;
+
+        sub_vec = Vector<T, dim>::Zero(vtx_idx.rows() * 2);
+        for (int i = 0; i < vtx_idx.rows(); i++)
+        {
+            sub_vec.template segment<2>(i * 2) = _vector.segment<2>(vtx_idx[i] * 2);
+        }
+    }
+
     template<int size>
     void addHessianEntry(
         std::vector<Entry>& triplets,
@@ -269,6 +296,27 @@ private:
                     {
                         if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
                             triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                    }
+            }
+        }
+    }
+
+    template<int size>
+    void getHessianSubBlock(
+        const StiffnessMatrix& hessian,
+        const VectorXi& vtx_idx, 
+        Matrix<T, size, size>& sub_hessian)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 2; k++)
+                    for (int l = 0; l < 2; l++)
+                    {
+                        sub_hessian(i * 2 + k, j * 2 + l) = hessian.coeff(dof_i * 2 + k, dof_j * 2 + l);
                     }
             }
         }
@@ -413,12 +461,27 @@ public:
     void computePrincipleStress(VectorXT& principle_stress);
 
     // PBC.cpp
-    void computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density);
+    void computeDirectionStiffnessAnalytical(int n_samples, T strain_mag, VectorXT& stiffness_values);
+    void computeDirectionStiffnessFiniteDifference(int n_samples, T strain_mag, VectorXT& stiffness_values);
+    void computeHomogenizationElasticityTensor(T strain_dir, T strain_mag, 
+        Matrix<T, 3, 3>& elasticity_tensor);
+    void computeHomogenizationElasticityTensorSA(T strain_dir, T strain_mag, 
+        Matrix<T, 3, 3>& elasticity_tensor);
+    void diffTestdxdE(const TV3& strain_voigt);
+    void diffTestdfdE(const TV3& strain_voigt);
+    void diffTestdxdEScale(const TV3& strain_voigt);
+    void diffTestdfdEScale(const TV3& strain_voigt);
+    void computedfdE(const TV3& strain_voigt, MatrixXT& dfdE);
+    void computedxdE(const TV3& strain_voigt, MatrixXT& dxdE);
+    void computeHomogenizationData(TM& secondPK_stress, TM& Green_strain, T& energy_density, int pair_idx = 0);
     void computeHomogenizationDataCauchy(TM& cauchy_stress, TM& cauchy_strain, T& energy_density);
     void computeHomogenizedStressStrain(TM& sigma, TM& epsilon);
     void computeHomogenizedStressStrain(TM& sigma, TM& Cauchy_strain, TM& Green_strain);
+    void computeAveragedHomogenizationData(TM& sigma, TM& Cauchy_strain, TM& Green_strain, Matrix<T, 3, 3>& elasticity_tensor);
     void computeMarcoBoundaryIndices();
     void getMarcoBoundaryData(Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X, IV4& bd_indices);
+    void getPBCPairData(int pair_idx, Matrix<T, 4, 2>& x, Matrix<T, 4, 2>& X, IV4& bd_indices);
+
     void addPBCPairInX();
     bool addPBCPairsXY();
     void getPBCPairs3D(std::vector<std::pair<TV3, TV3>>& pairs);

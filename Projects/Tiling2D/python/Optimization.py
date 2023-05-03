@@ -128,6 +128,11 @@ def computeUniaxialStrainThetaBatch(n_tiling_params, strain,
         H = hessPsiSum(n_tiling_params, tf.convert_to_tensor(x), 
             tf.convert_to_tensor(tiling_params), model)
         H = H.numpy()
+        
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-6))
         return H
 
     def objAndEnergy(x):
