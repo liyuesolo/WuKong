@@ -913,6 +913,7 @@ void Tiling2D::generateOneStructureSquarePatch(int IH, const std::vector<T>& par
     // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 16.0, 16.0, xy);
     // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 6.0, 6.0, xy);
     getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 5.0, 5.0, xy);
+    // getTranslationUnitPolygon(polygons_v, shape, a_tiling, transf, 8.0, 8.0, xy);
 
     ClipperLib::Paths polygons(polygons_v.size());
     T mult = 1e12;
@@ -1509,17 +1510,17 @@ void Tiling2D::fetchUnitCellFromOneFamily(int IH, int n_unit,
         // break;
         // std::cout << std::endl;
     }
-    std::ofstream polygon_obj("polygon_obj.obj");
-    // for (auto polygon : polygons)
-    for (int i = 0; i < polygons.size(); i++)
-    {
-        auto polygon = polygons[i];
+    // std::ofstream polygon_obj("polygon_obj.obj");
+    // // for (auto polygon : polygons)
+    // for (int i = 0; i < polygons.size(); i++)
+    // {
+    //     auto polygon = polygons[i];
         
-        for (auto vtx : polygon)
-            polygon_obj << "v " << vtx.X << " " << vtx.Y << " 0" << std::endl;
+    //     for (auto vtx : polygon)
+    //         polygon_obj << "v " << vtx.X << " " << vtx.Y << " 0" << std::endl;
         
-    }
-    polygon_obj.close();
+    // }
+    // polygon_obj.close();
 
     periodic.segment<2>(2) = R * periodic.segment<2>(2);
     periodic.segment<2>(4) = R * periodic.segment<2>(4);

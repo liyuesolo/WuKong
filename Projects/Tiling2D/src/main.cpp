@@ -283,14 +283,38 @@ int main(int argc, char** argv)
                 igl::png::writePNG(R,G,B,A, folder + std::to_string(i)+".png");
             }
         };
+        
+        // auto renderPaperStructure = [&]()
+        // {
+        //     igl::opengl::glfw::Viewer viewer;
+        //     igl::opengl::glfw::imgui::ImGuiMenu menu;
 
-        auto save3DMesh = [&]()
-        {
-            // tiling.extrudeToMesh("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+".txt", 
-            //     "/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk");
-            // Eigen::MatrixXi tets, faces; Eigen::MatrixXd vertices;
-            // loadMeshFromVTKFile3D("/home/yueli/Documents/ETH/SandwichStructure/TilingVTKNew/"+std::to_string(i)+"_3d.vtk", vertices, faces, tets);
-        };
+        //     viewer.plugins.push_back(&menu);
+        //     SimulationApp app(tiling);
+            
+        //     app.setViewer(viewer, menu);
+        //     std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/";
+        //     int width = 2000, height = 2000;
+        //     CMat R(width,height), G(width,height), B(width,height), A(width,height);
+        //     viewer.core().background_color.setOnes();
+        //     viewer.data().set_face_based(true);
+        //     viewer.data().shininess = 1.0;
+        //     viewer.data().point_size = 10.0;
+        //     viewer.core().camera_zoom *= 1.4;
+        //     viewer.launch_init();
+
+        //     for (int IH : {1, 21, 22, 28, 50, 67})
+        //     {
+
+        //         // tiling.generateOneStructureSquarePatch(IH, );
+        //         updateScreen(viewer);
+        //         viewer.core().align_camera_center(V);
+        //         viewer.core().viewport(2) = 2000; viewer.core().viewport(3) = 1600;
+        //         viewer.core().camera_zoom *= 8.0; //IH01
+        //         // viewer.core().camera_zoom *= 6.0;
+        //     }
+        // };
+
         // save3DMesh();
         // testNeuralConstitutiveModel();
         // inverseDesign();
@@ -306,7 +330,7 @@ int main(int argc, char** argv)
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
-        // runSimApp();
+        runSimApp();
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 1, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 67, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 50, 100);
@@ -327,32 +351,27 @@ int main(int argc, char** argv)
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 29, 50);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 21, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 28, 50);
+        // for (int IH : {1, 21, 22, 28, 29, 50, 67})
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21);
         std::exit(0);
-        tiling.generateOnePerodicUnit();
-        // tiling.solver.pbc_strain_w = 1e10;
-        // tiling.solver.staticSolve();
-        // tiling.solver.prescribe_strain_tensor = true;
-        // tiling.solver.pbc_strain_w = 1e10;
-        // tiling.solver.target_strain = TV3(-0.0432076, 0.05125, 2.0* -4.68e-10);
-        // tiling.solver.staticSolve();
-        
-        tiling.solver.diffTestdxdE(TV3(0.05, 0.05, 0.001));
+        // tiling.generateOnePerodicUnit();
+
+        // tiling.solver.diffTestdxdE(TV3(0.05, 0.05, 0.001));
         // tiling.solver.diffTestdfdE(TV3(0.05, 0.05, 0.001));
         // tiling.solver.diffTestdxdEScale(TV3(0.05, 0.05, 0.001));
         // tiling.solver.diffTestdfdEScale(TV3(0.05, 0.05, 0.001));
         // tiling.solver.diffTestdxdE(TV3(0.0186157, -0.0105733,  0.0898344));
-        Matrix<T, 3, 3> elasticity_tensor;
-        tiling.solver.computeHomogenizationElasticityTensorSA(M_PI * 0.0, 1.05, elasticity_tensor);
-        std::cout << elasticity_tensor << std::endl;
-        std::exit(0);
-        VectorXT stiffness_values;// VectorXT stiffness_values;
-        tiling.solver.computeDirectionStiffnessAnalytical(50, 1.05, stiffness_values);
-        // tiling.solver.computeDirectionStiffnessFiniteDifference(50, 1.05, stiffness_values);
-        for (int i = 0; i < stiffness_values.rows() - 1; i++)
-        {
-            std::cout<< stiffness_values[i] << ", ";
-        }
-        std::cout<< stiffness_values[stiffness_values.rows() - 1] << std::endl;
+        // Matrix<T, 3, 3> elasticity_tensor;
+        // tiling.solver.computeHomogenizationElasticityTensorSA(M_PI * 0.0, 1.05, elasticity_tensor);
+        // std::cout << elasticity_tensor << std::endl;
+        // std::exit(0);
+        std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/poisson_ratio/";
+        for (int IH : {22})
+            tiling.generatePoissonRatioDataFromParams(base_folder, IH);
+            // tiling.generateStiffnessDataFromParams(base_folder, IH);
+        // base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/stiffness/";
+        //     tiling.generateStiffnessDataFromParams(base_folder, 28);
         // renderToyExample();
         // tiling.sampleSingleStructurePoissonDisk("/home/yueli/Documents/ETH/SandwichStructure/IH21_PoissonDisk/", TV(0.7, 1.5), TV(0.9, 1.2), TV(0, M_PI), 100, 19);
         // generatePoisonDiskSample();

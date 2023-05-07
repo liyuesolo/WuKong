@@ -2,6 +2,7 @@ import math
 import numpy as np
 import tensorflow as tf
 
+from scipy.linalg import lu_factor, lu_solve
 from scipy.optimize import LinearConstraint
 from scipy.optimize import minimize
 from Derivatives import *
@@ -72,7 +73,7 @@ def optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params,
         ev_H = np.linalg.eigvals(H)
         min_ev = np.min(ev_H)
         if min_ev < 0.0:
-            H += np.diag(np.full(len(x),min_ev + 1e-6))
+            H += np.diag(np.full(len(x),min_ev))
         return H
 
     def objAndEnergy(x):
@@ -193,3 +194,66 @@ def computeDirectionalStiffness(n_tiling_params, inputs, thetas, model):
         dTSd = tf.expand_dims(tf.tensordot(d_voigt[i, :], Sd, 1), axis=0)
         stiffness = tf.concat((stiffness, tf.divide(tf.constant([1.0], dtype=tf.float64), dTSd)), 0)
     return tf.squeeze(stiffness)
+
+
+def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, 
+    theta, strain, tiling_params, verbose = True):
+    
+    strain_init = np.array([0.105, 0.2, 0.01])
+
+    d = np.array([np.cos(theta), np.sin(theta)])
+    strain_tensor_init = np.outer(d, d) * strain
+    strain_init = np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]])
+
+    def constraint(x):
+        strain_tensor = np.reshape([x[0], 0.5 * x[-1], 0.5 * x[-1], x[1]], (2, 2))
+        dTEd = np.dot(d, np.dot(strain_tensor, np.transpose(d)))
+        c = dTEd - strain
+        return c
+
+    def hessian(x):
+        model_input = tf.convert_to_tensor([np.hstack((tiling_params, x))])
+        C = computeStiffnessTensor(n_tiling_params, model_input, model)
+        H = C.numpy()
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-6))
+        return H
+
+    def objAndEnergy(x):
+        model_input = tf.convert_to_tensor([np.hstack((np.hstack((tiling_params, x))))])
+        _, stress, _, psi = testStep(n_tiling_params, model_input, model)
+        
+        obj = np.squeeze(psi.numpy()) 
+        grad = stress.numpy().flatten()
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+    if verbose:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : True})
+    else:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : False})
+    
+    opt_model_input = tf.convert_to_tensor([np.hstack((tiling_params, result.x))])
+    
+    d2Phi_dE2 = computeStiffnessTensor(n_tiling_params, opt_model_input, model)
+    dCdE = computedCdE(d)
+    d2Ldqdp = np.zeros((3 + 1, n_tiling_params))
+    dsigma_dp = computedStressdp(n_tiling_params, opt_model_input, model)
+    if (len(dsigma_dp.shape) == 1):
+        dsigma_dp = np.reshape(dsigma_dp, (3, 1))
+    d2Ldqdp[:3, :] = dsigma_dp
+    d2Ldq2 = np.zeros((3 + 1, 3 + 1))
+    d2Ldq2[:3, :3] = d2Phi_dE2
+    d2Ldq2[:3, 3] = -dCdE
+    d2Ldq2[3, :3] = -dCdE
+    lu, piv = lu_factor(d2Ldq2)
+    
+    dqdp = lu_solve((lu, piv), -d2Ldqdp)
+
+    
+    return result.x, dqdp

@@ -194,6 +194,143 @@ void loadMeshFromVTKFile3D(const std::string& filename, Eigen::MatrixXd& V, Eige
     }
 }
 
+void FEMSolver::generate3DHomogenousMesh(const std::string& prefix)
+{
+    T eps = 1e-6;
+    gmsh::initialize();
+
+    gmsh::model::add("tiling");
+    gmsh::logger::start();
+
+    gmsh::option::setNumber("Geometry.ToleranceBoolean", eps);
+    gmsh::option::setNumber("Geometry.Tolerance", eps);
+    gmsh::option::setNumber("Mesh.ElementOrder", 1);
+
+    gmsh::option::setNumber("Mesh.MeshSizeExtendFromBoundary", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromPoints", 0);
+    gmsh::option::setNumber("Mesh.MeshSizeFromCurvature", 0);
+
+    int bounding_cube = gmsh::model::occ::addBox(0, 0, 0, 1.0, 1.0, 1.0);
+
+   
+    gmsh::model::occ::synchronize();
+    TV t1(1, 0, 0), t2(0, 1, 0), t3(0, 0, 1);
+
+    std::vector<T> translation_hor({1, 0, 0, t1[0], 0, 1, 0, t1[1], 0, 0, 1, t1[2], 0, 0, 0, 1});
+	std::vector<T> translation_ver({1, 0, 0, t2[0], 0, 1, 0, t2[1], 0, 0, 1, t2[2], 0, 0, 0, 1});
+    std::vector<T> translation_dep({1, 0, 0, t3[0], 0, 1, 0, t3[1], 0, 0, 1, t3[2], 0, 0, 0, 1});
+
+    std::vector<std::pair<int, int>> sleft;
+    gmsh::model::getEntitiesInBoundingBox(-eps, -eps, -eps, 
+        t1[0] + eps, t2[1]+eps, t3[2]+eps, sleft, 2);
+    // std::cout << "sleft size : " << sleft.size() << std::endl;
+    
+    for(auto i : sleft) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > sright;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t1[0], ymin-eps+t1[1], zmin - eps+t1[2], 
+            xmax+eps+t1[0], ymax+eps+t1[1], zmax + eps+t1[2], sright, 2);
+        // std::cout << "sright size : " << sright.size() << std::endl;
+        // std::getchar();
+        for(auto j : sright) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t1[0];
+            ymin2 -= t1[1];
+            xmax2 -= t1[0];
+            ymax2 -= t1[1];
+            zmax2 -= t1[2];
+            zmin2 -= t1[2];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(2, {j.second}, {i.second}, translation_hor);
+                // std::cout << "X " << j.second << " " << i.second << std::endl;
+                // std::getchar();
+            }
+        }
+    }
+
+    std::vector<std::pair<int, int>> sbottom;
+    gmsh::model::getEntitiesInBoundingBox(-eps, -eps, -eps, 
+        t1[0] + eps, +eps, t3[2]+eps, sbottom, 2);
+    
+    for(auto i : sbottom) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > stop;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t2[0], ymin-eps+t2[1], zmin - eps +t2[2], 
+            xmax+eps+t2[0], ymax+eps+t2[1], zmax + eps + t2[2], stop, 2);
+
+        for(auto j : stop) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t2[0];
+            ymin2 -= t2[1];
+            zmin2 -= t2[2];
+            xmax2 -= t2[0];
+            ymax2 -= t2[1];
+            zmax2 -= t2[2];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(2, {j.second}, {i.second}, translation_ver);
+                // std::cout << "Y " << j.second << " " << i.second << std::endl;
+            }
+        }
+    }
+
+    std::vector<std::pair<int, int>> sback;
+    gmsh::model::getEntitiesInBoundingBox(-eps, -eps, -eps, 
+        t1[0] + eps, t2[1]+eps, +eps, sback, 2);
+    
+    for(auto i : sback) {
+        T xmin, ymin, zmin, xmax, ymax, zmax;
+        gmsh::model::getBoundingBox(i.first, i.second, xmin, ymin, zmin, xmax, ymax, zmax);
+        std::vector<std::pair<int, int> > sfront;
+        gmsh::model::getEntitiesInBoundingBox(xmin-eps+t3[0], ymin-eps+t3[1], zmin - eps +t3[2], 
+            xmax+eps+t3[0], ymax+eps+t3[1], zmax + eps + t3[2], sfront, 2);
+
+        for(auto j : sfront) {
+            T xmin2, ymin2, zmin2, xmax2, ymax2, zmax2;
+            gmsh::model::getBoundingBox(j.first, j.second, xmin2, ymin2, zmin2, xmax2, ymax2, zmax2);
+            xmin2 -= t3[0];
+            ymin2 -= t3[1];
+            zmin2 -= t3[2];
+            xmax2 -= t3[0];
+            ymax2 -= t3[1];
+            zmax2 -= t3[2];
+            if(std::abs(xmin2 - xmin) < eps && std::abs(xmax2 - xmax) < eps &&
+                std::abs(ymin2 - ymin) < eps && std::abs(ymax2 - ymax) < eps &&
+                std::abs(zmin2 - zmin) < eps && std::abs(zmax2 - zmax) < eps) 
+            {
+                gmsh::model::mesh::setPeriodic(2, {j.second}, {i.second}, translation_dep);
+                // std::cout << "Z " << j.second << " " << i.second << std::endl;
+            }
+        }
+    }
+
+
+    gmsh::model::occ::synchronize();
+
+    gmsh::model::mesh::field::add("Distance", 1);
+    gmsh::model::mesh::field::add("Threshold", 2);
+    gmsh::model::mesh::field::setNumber(2, "InField", 1);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.05);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.01);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.02);
+    gmsh::model::mesh::field::setAsBackgroundMesh(2);
+    gmsh::model::occ::synchronize();
+
+    gmsh::model::mesh::generate(3);
+    gmsh::write(prefix + ".vtk");
+    gmsh::finalize();
+}
+
 void FEMSolver::generate3DUnitCell(const std::string& prefix, T width, T alpha)
 {
     T eps = 1e-6;
@@ -497,8 +634,8 @@ void FEMSolver::initializeElementData(Eigen::MatrixXd& _TV,
     add_pbc = true;
     if (add_pbc)
     {
-        pbc_w = 1e6;
-        pbc_strain_w = 1e7;
+        pbc_w = 1e8;
+        pbc_strain_w = 1e10;
         addPBCPairs3D();
         // theta = 0.0; phi = 0.0; // along Z
         // theta = M_PI * 0.5; phi = 0.0; // along X
@@ -508,7 +645,7 @@ void FEMSolver::initializeElementData(Eigen::MatrixXd& _TV,
         // theta = M_PI * 0.05; phi = M_PI * 0.3; // along 45
         // strain_magnitudes = TV(1.1, 0.0, 0.0); 
         loading_type = UNI_AXIAL;
-        strain_magnitudes = TV(1.4, 1.05, 1.2);
+        strain_magnitudes = TV(1.2, 1.05, 1.2);
         // loading_type = TRI_AXIAL;
     }
 

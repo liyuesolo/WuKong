@@ -79,6 +79,7 @@ void FEMSolver::addPBCEnergy(T& energy)
     auto addPBCEnergyDirection = [&](int dir)
     {
         int cnt = 0;
+        int n_pairs = pbc_pairs[dir].size();
         for (auto pbc_pair : pbc_pairs[dir])
         {
             // strain term
@@ -93,7 +94,7 @@ void FEMSolver::addPBCEnergy(T& energy)
             
             // add uniaxial loading first
             T dij_target = Dij * strain_magnitudes[0];
-            energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
+            energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target) / T(n_pairs);
 
             if (loading_type == BI_AXIAL || loading_type == TRI_AXIAL)
             {
@@ -101,7 +102,7 @@ void FEMSolver::addPBCEnergy(T& energy)
                 dij = (xj - xi).dot(dir_ortho);
                 
                 T dij_target = Dij * strain_magnitudes[1];
-                energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
+                energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target) / T(n_pairs);
             }
 
             if (loading_type == TRI_AXIAL)
@@ -110,7 +111,7 @@ void FEMSolver::addPBCEnergy(T& energy)
                 dij = (xj - xi).dot(dir_tri);
                 
                 T dij_target = Dij * strain_magnitudes[2];
-                energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target);
+                energy_pbc += 0.5 * pbc_strain_w * (dij - dij_target) * (dij - dij_target) / T(n_pairs);
             }
 
             
@@ -123,7 +124,7 @@ void FEMSolver::addPBCEnergy(T& energy)
             TV xj_ref = deformed.segment<3>(pbc_pairs[dir][0][1] * 3);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            energy_pbc += 0.5 * pbc_w * pair_dis_vec.dot(pair_dis_vec);
+            energy_pbc += 0.5 * pbc_w * pair_dis_vec.dot(pair_dis_vec) / T(n_pairs);
         }
     };           
 
@@ -149,6 +150,7 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
     auto addPBCForceDirection = [&](int dir)
     {
         int cnt = 0;
+        int n_pairs = pbc_pairs[dir].size();
         for (auto pbc_pair : pbc_pairs[dir])
         {
             int idx0 = pbc_pair[0], idx1 = pbc_pair[1];
@@ -161,8 +163,8 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
             T Dij = (Xj - Xi).dot(strain_dir);
             T dij_target = Dij * strain_magnitudes[0];
             T dij = (xj - xi).dot(strain_dir);
-            pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * strain_dir * (dij - dij_target);
-            pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * strain_dir * (dij - dij_target);
+            pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * strain_dir * (dij - dij_target) / T(n_pairs);
+            pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * strain_dir * (dij - dij_target) / T(n_pairs);
 
             if (loading_type == BI_AXIAL || loading_type == TRI_AXIAL)
             {
@@ -170,8 +172,8 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
                 dij = (xj - xi).dot(dir_ortho);
                 
                 T dij_target = Dij * strain_magnitudes[1];
-                pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * dir_ortho * (dij - dij_target);
-                pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * dir_ortho * (dij - dij_target);
+                pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * dir_ortho * (dij - dij_target) / T(n_pairs);
+                pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * dir_ortho * (dij - dij_target) / T(n_pairs);
             }
 
             if (loading_type == TRI_AXIAL)
@@ -180,8 +182,8 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
                 dij = (xj - xi).dot(dir_tri);
                 
                 T dij_target = Dij * strain_magnitudes[2];
-                pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * dir_tri * (dij - dij_target);
-                pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * dir_tri * (dij - dij_target);
+                pbc_force.segment<3>(idx0 * 3) += pbc_strain_w * dir_tri * (dij - dij_target) / T(n_pairs);
+                pbc_force.segment<3>(idx1 * 3) -= pbc_strain_w * dir_tri * (dij - dij_target) / T(n_pairs);
             }
 
             cnt++;
@@ -192,11 +194,11 @@ void FEMSolver::addPBCForceEntries(VectorXT& residual)
             TV xj_ref = deformed.segment<3>(pbc_pairs[dir][0][1] * 3);
 
             TV pair_dis_vec = xj - xi - (xj_ref - xi_ref);
-            pbc_force.segment<3>(idx0 * 3) += pbc_w * pair_dis_vec;
-            pbc_force.segment<3>(idx1 * 3) += -pbc_w * pair_dis_vec;
+            pbc_force.segment<3>(idx0 * 3) += pbc_w * pair_dis_vec / T(n_pairs);
+            pbc_force.segment<3>(idx1 * 3) += -pbc_w * pair_dis_vec / T(n_pairs);
 
-            pbc_force.segment<3>(pbc_pairs[dir][0][0] * 3) += -pbc_w * pair_dis_vec;
-            pbc_force.segment<3>(pbc_pairs[dir][0][1] * 3) += pbc_w * pair_dis_vec;
+            pbc_force.segment<3>(pbc_pairs[dir][0][0] * 3) += -pbc_w * pair_dis_vec / T(n_pairs);
+            pbc_force.segment<3>(pbc_pairs[dir][0][1] * 3) += pbc_w * pair_dis_vec / T(n_pairs);
         }
     };
 
@@ -217,6 +219,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
     auto addPBCHessianDirection = [&](int dir)
     {
         int cnt = 0;
+        int n_pairs = pbc_pairs[dir].size();
         for (auto pbc_pair : pbc_pairs[dir])
         {
             int idx0 = pbc_pair[0], idx1 = pbc_pair[1];
@@ -226,7 +229,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             TV xj = deformed.segment<3>(idx1 * 3);
 
 
-            TM Hessian = strain_dir * strain_dir.transpose();
+            TM Hessian = strain_dir * strain_dir.transpose() / T(n_pairs);
             
             for(int i = 0; i < 3; i++)
             {
@@ -241,7 +244,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
 
             if (loading_type == BI_AXIAL || loading_type == TRI_AXIAL)
             {
-                Hessian = dir_ortho * dir_ortho.transpose();
+                Hessian = dir_ortho * dir_ortho.transpose() / T(n_pairs);
                 for(int i = 0; i < 3; i++)
                 {
                     for(int j = 0; j < 3; j++)
@@ -257,7 +260,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
 
             if (loading_type == TRI_AXIAL)
             {
-                Hessian = dir_tri * dir_tri.transpose();
+                Hessian = dir_tri * dir_tri.transpose() / T(n_pairs);
                 for(int i = 0; i < 3; i++)
                 {
                     for(int j = 0; j < 3; j++)
@@ -286,7 +289,7 @@ void FEMSolver::addPBCHessianEntries(std::vector<Entry>& entries, bool project_P
             for(int k = 0; k < 4; k++)
                 for(int l = 0; l < 4; l++)
                     for(int i = 0; i < 3; i++)
-                        entries.push_back(Entry(nodes[k]*3 + i, nodes[l] * 3 + i, -pbc_w *sign_F[k]*sign_J[l]));
+                        entries.push_back(Entry(nodes[k]*3 + i, nodes[l] * 3 + i, -pbc_w *sign_F[k]*sign_J[l] / T(n_pairs)));
         }
     };
 
@@ -315,22 +318,27 @@ void FEMSolver::computeHomogenizationData(TM& strain_Green, TM& stress_2ndPK, T&
     VectorXT inner_force(num_nodes * 3);
     inner_force.setZero(); 
     addPBCForceEntries(inner_force);
-
-    
+    iterateDirichletDoF([&](int offset, T target)
+    {
+        inner_force[offset] = 0.0;
+    });
 
     TV f0 = TV::Zero(), f1 = TV::Zero(), f2 = TV::Zero();
     T l0 = (xj - xi).norm(), l1 = (xl - xk).norm(), l2 = (xm - xn).norm();
+    T area12 = ((xl-xk).cross(xn-xm)).norm();
+    T area02 = ((xj-xi).cross(xn-xm)).norm();
+    T area01 = ((xj-xi).cross(xl-xk)).norm();
     for (auto pbc_pair : pbc_pairs[0])
     {
-        f0 += inner_force.segment<3>(pbc_pair[0] * 3) / l1 / l2;
+        f0 += inner_force.segment<3>(pbc_pair[0] * 3) / area12;
     }
     for (auto pbc_pair : pbc_pairs[1])
     {
-        f1 += inner_force.segment<3>(pbc_pair[1] * 3) / l0 / l2;
+        f1 += inner_force.segment<3>(pbc_pair[0] * 3) / area02;
     }
     for (auto pbc_pair : pbc_pairs[2])
     {
-        f2 += inner_force.segment<3>(pbc_pair[1] * 3) / l0 / l1;
+        f2 += inner_force.segment<3>(pbc_pair[0] * 3) / area01;
     }
 
     TM _X = TM::Zero(), _x = TM::Zero();
@@ -365,11 +373,13 @@ void FEMSolver::computeHomogenizationData(TM& strain_Green, TM& stress_2ndPK, T&
     strain_Green = 0.5 * (F_macro.transpose() * F_macro - TM::Identity());
 
     TM cauchy_stress = f_bc * n_bc.inverse();
+    // std::cout << "cauchy stress" << std::endl;
+    // std::cout << cauchy_stress << std::endl << std::endl;
     TM F_inv = F_macro.inverse();
     stress_2ndPK = F_macro.determinant() * F_inv * cauchy_stress.transpose() * F_inv.transpose();
 
     
-    T volume = ((Xj - Xi).cross(Xl - Xk)).norm() * (Xn - Xm).norm();
+    T volume = std::abs(((Xj - Xi).cross(Xl - Xk)).dot(Xn - Xm));
     T total_energy = computeTotalEnergy(u);
     energy_density = total_energy / volume;
 

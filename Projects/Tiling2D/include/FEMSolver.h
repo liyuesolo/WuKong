@@ -463,7 +463,10 @@ public:
     // PBC.cpp
     void computeDirectionStiffnessAnalytical(int n_samples, T strain_mag, VectorXT& stiffness_values);
     void computeDirectionStiffnessFiniteDifference(int n_samples, T strain_mag, VectorXT& stiffness_values);
+    
     void computeHomogenizationElasticityTensor(T strain_dir, T strain_mag, 
+        Matrix<T, 3, 3>& elasticity_tensor);
+    void computeHomogenizationElasticityTensor(const TV3& strain_voigt, 
         Matrix<T, 3, 3>& elasticity_tensor);
     void computeHomogenizationElasticityTensorSA(T strain_dir, T strain_mag, 
         Matrix<T, 3, 3>& elasticity_tensor);

@@ -51,6 +51,7 @@ public:
     using TM2 = Matrix<T, 2, 2>;
     using TM = Matrix<T, 2, 2>;
     using IV3 = Vector<int, 3>;
+    using TM3 = Matrix<T, 3, 3>;
     using IV = Vector<int, 2>;
 
     using PointLoops = std::vector<TV2>;
@@ -88,8 +89,9 @@ public:
     void generateForceDisplacementCurveSingleStructure(const std::string& vtk_file, const std::string& result_folder);
     
     // validation
-    void generateStrainStressDataFromParams(const std::string& result_folder, int IH, 
-        const TV& range, int n_samples, const std::vector<T>& params);
+    void generateStiffnessDataFromParams(const std::string& result_folder, int IH);
+    void generatePoissonRatioDataFromParams(const std::string& result_folder, int IH);
+    void generateStrainStressDataFromParams(const std::string& result_folder, int IH);
     void generateStrainStressSimulationData(const std::string& result_folder, int IH, int n_samples);
     void generateStrainStressSimulationDataFromFile(const std::string& result_folder, 
         const std::string& filename, const std::string& suffix, int IH, int n_samples);

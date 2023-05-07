@@ -630,9 +630,9 @@ void FEMSolver::computeDirectionStiffnessAnalytical(int n_samples, T strain_mag,
         computeHomogenizationElasticityTensorSA(theta, strain_mag, elasticity_tensor);
         // TM3 elasticity_tensor_FD;
         // computeHomogenizationElasticityTensor(theta, strain_mag, elasticity_tensor_FD);
-        std::cout << "elasticity tensor " << elasticity_tensor << std::endl << std::endl;
+        // std::cout << "elasticity tensor " << elasticity_tensor << std::endl << std::endl;
         // std::cout << "elasticity tensor FD " << elasticity_tensor_FD << std::endl << std::endl;
-        std::getchar();
+        // std::getchar();
         TV3 d_voigt = TV3(std::cos(theta) * std::cos(theta),
                             std::sin(theta) * std::sin(theta),
                             std::cos(theta) * std::sin(theta));
@@ -1327,6 +1327,61 @@ void FEMSolver::computedxdE(const TV3& strain_voigt, MatrixXT& dxdE)
 //     std::cout << "tensor GT " << tensor_GT << std::endl << std::endl;
 // }
 
+void FEMSolver::computeHomogenizationElasticityTensor(const TV3& strain_voigt, 
+        Matrix<T, 3, 3>& elasticity_tensor)
+{
+    T E1, E2;
+    elasticity_tensor.setZero();
+    T epsilon = 1e-4;
+    prescribe_strain_tensor = true;
+    pbc_strain_w = 1e3;
+    target_strain = strain_voigt;
+    staticSolve();
+    pbc_strain_w = 1e7;
+    staticSolve();
+    // pbc_strain_w = 1e7;
+    TM stress_forward, stress_backward, dummy;
+    // epsilon = 1e-4 * strain_voigt[0];
+    // C(0, 0) 
+    target_strain = TV3(strain_voigt[0] + epsilon, strain_voigt[1], strain_voigt[2]);
+    
+    staticSolve();
+    computeHomogenizationData(stress_forward, dummy, E1);
+    target_strain = TV3(strain_voigt[0] - epsilon, strain_voigt[1], strain_voigt[2]);
+    staticSolve();
+    computeHomogenizationData(stress_backward, dummy, E2);
+    elasticity_tensor(0, 0) = (stress_forward(0, 0) - stress_backward(0, 0)) / epsilon / 2.0;
+    elasticity_tensor(0, 1) = (stress_forward(1, 1) - stress_backward(1, 1)) / epsilon / 2.0;
+    elasticity_tensor(2, 0) = elasticity_tensor(0, 2) = (stress_forward(0, 1) - stress_backward(0, 1)) / epsilon / 2.0;
+    // std::cout << "stress forward " << stress_forward << std::endl << std::endl;
+    // std::cout << "stress backward " << stress_forward << std::endl << std::endl;
+
+    // C(1, 1), C(0, 1), C(1, 0) 
+    // epsilon = 1e-3 * strain_voigt[1];
+    target_strain = TV3(strain_voigt[0], strain_voigt[1] + epsilon, strain_voigt[2]);
+    staticSolve();
+    computeHomogenizationData(stress_forward, dummy, E1);
+    target_strain = TV3(strain_voigt[0], strain_voigt[1] - epsilon, strain_voigt[2]);
+    staticSolve();
+    computeHomogenizationData(stress_backward, dummy, E2);
+    elasticity_tensor(1, 0) = (stress_forward(0, 0) - stress_backward(0, 0)) / epsilon / 2.0;
+    elasticity_tensor(1, 1) = (stress_forward(1, 1) - stress_backward(1, 1)) / epsilon / 2.0;
+    elasticity_tensor(2, 1) = elasticity_tensor(1, 2) = (stress_forward(1, 0) - stress_backward(1, 0)) / epsilon / 2.0;
+
+    // C(2, 2), C(0, 2), C(2, 0), C(1, 2), C(2, 1) 
+    // epsilon = 1e-3 * strain_voigt[2];
+    target_strain = TV3(strain_voigt[0], strain_voigt[1], strain_voigt[2] + epsilon);
+    staticSolve();
+    computeHomogenizationData(stress_forward, dummy, E1);
+    target_strain = TV3(strain_voigt[0], strain_voigt[1], strain_voigt[2] -  epsilon);
+    staticSolve();
+    computeHomogenizationData(stress_backward, dummy, E2);
+
+    // elasticity_tensor(2, 0) = (stress_forward(0, 0) - stress_backward(0, 0)) / epsilon / 2.0;
+    // elasticity_tensor(2, 1) = (stress_forward(1, 1) - stress_backward(1, 1)) / epsilon / 2.0;
+    elasticity_tensor(2, 2) = (stress_forward(0, 1) - stress_backward(0, 1)) / epsilon / 2.0;
+}
+
 void FEMSolver::computeHomogenizationElasticityTensor(
     T strain_dir, T strain_mag, Matrix<T, 3, 3>& elasticity_tensor)
 {
@@ -1358,7 +1413,7 @@ void FEMSolver::computeHomogenizationElasticityTensor(
     // std::cout << "2nd PK stress " << stress_2ndPK << std::endl << std::endl;
     T epsilon = 1e-4;
     prescribe_strain_tensor = true;
-    pbc_strain_w = 1e10;
+    pbc_strain_w = 1e7;
     // pbc_strain_w = 1e7;
     TM stress_forward, stress_backward, dummy;
     // epsilon = 1e-4 * strain_voigt[0];

@@ -14,8 +14,8 @@ import keras.backend as K
 from Summary import *
 import tensorflow_probability as tfp
 import scipy
-tf.keras.backend.set_floatx('float64')
 
+tf.keras.backend.set_floatx('float64')
 
 def relativeL2(y_true, y_pred):
     if (y_true.shape[1] > 1):
@@ -57,8 +57,8 @@ def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconver
     # exit(0)
     start = 0
     end = -1
-    all_data = np.array(all_data[start:100]).astype(np.float64)
-    all_label = np.array(all_label[start:100]).astype(np.float64) 
+    all_data = np.array(all_data[start:end]).astype(np.float64)
+    all_label = np.array(all_label[start:end]).astype(np.float64) 
     
     # all_data = np.array(all_data).astype(np.float64)
     # all_label = np.array(all_label).astype(np.float64)
@@ -73,10 +73,6 @@ def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconver
     return all_data, all_label
 
 
-loss_l2 = tf.keras.losses.MeanSquaredError()
-loss_logl2 = tf.keras.losses.MeanSquaredLogarithmicError()
-# loss_function = relativeL2
-
 w_grad = tf.constant(1.0, dtype=tf.float64)
 w_e = tf.constant(1.0, dtype=tf.float64)
 
@@ -88,13 +84,10 @@ def generator(train_data, train_label):
 
 @tf.function
 def trainStep(n_tiling_params, opt, lambdas, sigmas, model, train_vars):
-    # aux = tf.tile(tf.constant([[50, 14.2045, 50, 26, 0.48]]), tf.constant((lambdas.shape[0], 1), tf.int32))
     
     with tf.GradientTape(persistent=True) as tape:
         tape.watch(train_vars)
         tape.watch(lambdas)
-        # all_input = tf.concat((lambdas, aux), axis=-1)
-        
         psi = model(lambdas)
         dedlambda = tape.gradient(psi, lambdas)
         batch_dim = psi.shape[0]
@@ -148,11 +141,10 @@ def validate(n_tiling_params, count, model_name, validation_data, validation_lab
     print("validation loss grad: {} energy: {}".format(grad_loss, e_loss))
 
 def train(n_tiling_params, model_name, train_data, train_label, validation_data, validation_label):
-    batch_size = np.minimum(1000, len(train_data))
+    batch_size = np.minimum(10000, len(train_data))
     print("batch size: {}".format(batch_size))
     # model = buildSingleFamilyModel(n_tiling_params)
     model = buildSingleFamilyModelSeparateTilingParamsSwish3D(n_tiling_params)
-    # model = buildSingleFamilyModelSeparateTilingParamsAux(n_tiling_params)
     
     train_vars = model.trainable_variables
     opt = Adam(learning_rate=1e-4)
@@ -227,35 +219,23 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
     plt.savefig(save_path + model_name + "_log.png", dpi = 300)
     plt.close()
 
-def test(n_tiling_params, model_name, test_data, test_label):
-    
-    test_dataTF = tf.convert_to_tensor(test_data)
-    test_labelTF = tf.convert_to_tensor(test_label)
-    save_path = "./"
-    B = np.fromfile(os.path.join(save_path, model_name+"B.dat"), dtype=float)
-    model = loadSingleFamilyModel(n_tiling_params)
-    model.load_weights(model_name+'.tf')
-    
-    test_loss, sigma, energy = testStep(test_dataTF, test_labelTF, model)
-    # plot(model_name + "_test", sigma.numpy(), test_label)
-    print("test_lost", test_loss)
-    return sigma
-    
-    
+
 if __name__ == "__main__":
     n_tiling_params = 2
     
-    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerToy3D/all_data_toy3D_shuffled.txt"  
+    full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerToy3D/uniaxial_data_toy3D_shuffled.txt"  
 
     
     data_all, label_all = loadDataSplitTest(n_tiling_params, full_data, False, True)
     
 
     five_percent = int(len(data_all) * 0.05)
-    # five_percent = int(len(data_all) * 0.2)
+    if (len(data_all) < 100):
+        five_percent = 1
     
-    train_data =  data_all#[:-five_percent]
-    train_label =  label_all#[:-five_percent]
+    
+    train_data =  data_all[:-five_percent]
+    train_label =  label_all[:-five_percent]
 
     validation_data = data_all[-five_percent:]
     validation_label = label_all[-five_percent:]

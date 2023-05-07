@@ -350,6 +350,7 @@ public:
     // Scene.cpp
     bool initializeSimulationDataFromFiles(const std::string& filename);
     void generate3DUnitCell(const std::string& prefix, T width, T alpha);
+    void generate3DHomogenousMesh(const std::string& prefix);
     void initializeSurfaceData(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
     void initializeElementData(Eigen::MatrixXd& _TV, const Eigen::MatrixXi& TF, const Eigen::MatrixXi& TT);
     void generateMeshForRendering(Eigen::MatrixXd& V, Eigen::MatrixXi& F, Eigen::MatrixXd& C, bool rest = false);

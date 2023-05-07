@@ -247,18 +247,19 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("GenerateNonPeriodicPatch", ImVec2(-1,0)))
         {
-            // tiling.generateOneStructureSquarePatch(46, {0.19606062, 0.35272865});
-            // tiling.generateOneStructureSquarePatch(19, {0.115, 0.765});
-            // tiling.generateOneStructureSquarePatch(19, {0.195,     0.6403507});
-            // tiling.generateOneStructureSquarePatch(1, {0.1224, 0.5525, 0.3282, 0.1706});
+            // tiling.generateOneStructureSquarePatch(46, {0.2, 0.52});
+            tiling.generateOneStructureSquarePatch(20, {0.15167278906780407, 0.47085740050672936, 0.0746412751989358});
+            // tiling.generateOneStructureSquarePatch(19, {0.12677579378699774, 0.6368868054229614});
+            // tiling.generateOneStructureSquarePatch(0, {0.16, 0.58, 0.08, 0.6});
             // tiling.generateOneStructureSquarePatch(4, {0.1224, 0.5, 0.0373, 0.3767, 0.5});
-            tiling.generateOneStructureSquarePatch(0, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
-            // tiling.generateOneStructureSquarePatch(0, {0.17194996, 0.42948579, 0.05507779, 0.66815703});
-            // tiling.generateOneStructureSquarePatch(46, {0.23, 0.32});
+            // tiling.generateOneStructureSquarePatch(19, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
+            // tiling.generateOneStructureSquarePatch(0, {0.20010873572425653, 0.47335635814107446, 0.06784288606621826, 0.7852569023102524});
+            // tiling.generateOneStructureSquarePatch(46, {0.29231978150602683, 0.3292686322856566});
             // 0.28787868 0.33627991
-            // tiling.generateOneStructureSquarePatch(60, {0.2308, 0.8969});
-            // tiling.generateOneStructureSquarePatch(26, {0.00930862, 0.67854564});
-            // tiling.generateOneStructureSquarePatch(26, {0.55, 0.7});
+            // tiling.generateOneStructureSquarePatch(60, {0.183218004061822, 0.8167905051390307});
+            // tiling.generateOneStructureSquarePatch(26, {0.4000000015988753, 0.5999999999230171});
+            // tiling.generateOneStructureSquarePatch(27, {0.09});
+            // tiling.generateOneStructureSquarePatch(26, {0.3739129236387746, 0.3605566205650171});
             // tiling.generateOneStructureSquarePatch(26, {0.39184731, 0.66088703});
             
             updateScreen(viewer);
