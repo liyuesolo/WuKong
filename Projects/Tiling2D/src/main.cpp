@@ -330,7 +330,7 @@ int main(int argc, char** argv)
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
-        runSimApp();
+        // runSimApp();
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 1, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 67, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 50, 100);
@@ -353,8 +353,23 @@ int main(int argc, char** argv)
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 28, 50);
         // for (int IH : {1, 21, 22, 28, 29, 50, 67})
         // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50);
-        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21);
-        std::exit(0);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21,
+            0, {0.10887782216199968, 0.6526880237650166}, TV(0.9, 1.2), 25, false);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50,
+            0, {0.21330992098074827, 0.6013053081575949}, TV(0.9, 1.2), 25, false);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 67,
+            0.5 * M_PI, {0.1499092468720663, 0.7400465501354314}, TV(0.9, 1.2), 25, false);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 28,
+            0.5 * M_PI, {0.219595270751497, 0.397364995280736}, TV(0.9, 1.2), 25, false);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 1,
+            0.25 * M_PI, {0.07592219809002378, 0.6738283023035684, 0.13498317834561663, 0.5710111040053688}, TV(0.9, 1.2), 25, false);
+        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 22,
+            0, {0.22090099256867987, 0.6187215051849427, 0.1571724148917844}, TV(0.9, 1.2), 25, false);
+        
+
+        // tiling.generateStrainStressSimulationDataFromFile("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", "sim_uni", 21, 25);
+
+        // std::exit(0);
         // tiling.generateOnePerodicUnit();
 
         // tiling.solver.diffTestdxdE(TV3(0.05, 0.05, 0.001));
@@ -366,9 +381,9 @@ int main(int argc, char** argv)
         // tiling.solver.computeHomogenizationElasticityTensorSA(M_PI * 0.0, 1.05, elasticity_tensor);
         // std::cout << elasticity_tensor << std::endl;
         // std::exit(0);
-        std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/poisson_ratio/";
-        for (int IH : {22})
-            tiling.generatePoissonRatioDataFromParams(base_folder, IH);
+        // std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/poisson_ratio/";
+        // for (int IH : {22})
+            // tiling.generatePoissonRatioDataFromParams(base_folder, IH);
             // tiling.generateStiffnessDataFromParams(base_folder, IH);
         // base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/stiffness/";
         //     tiling.generateStiffnessDataFromParams(base_folder, 28);

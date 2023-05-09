@@ -4,6 +4,7 @@
 #include<cstdlib>
 #include "../include/Tiling2D.h"
 #include "../include/PoissonDisk.h"
+#include "../include/Timer.h"
 
 inline bool exists_test0 (const std::string& name) {
     std::ifstream f(name.c_str());
@@ -2117,8 +2118,6 @@ void Tiling2D::generateStrainStressSimulationDataFromFile(const std::string& res
             in >> samples[i * n_tiling_params + j];
         in >> thetas[i];
     }
-    
-    
 
     std::cout << " generating all samples" << std::endl;
 
@@ -2567,13 +2566,148 @@ void Tiling2D::generateStiffnessDataFromParams(const std::string& result_folder,
     out.close();
 }
 
-void Tiling2D::generateStrainStressDataFromParams(const std::string& result_folder, int IH)
+void Tiling2D::generateStrainStressDataFromParams(const std::string& result_folder, int IH, T theta, 
+        const std::vector<T>& params, const TV& strain_range, int n_samples, bool save_result)
+{
+    int actual_IH, n_tiling_params, unit;
+    std::vector<TV> bounds; 
+    VectorXT ti_default;
+    getTilingConfig(IH, n_tiling_params, actual_IH, bounds, ti_default, unit);
+    
+    std::vector<std::vector<TV2>> polygons;
+    std::vector<TV2> pbc_corners; 
+    csk::IsohedralTiling a_tiling( csk::tiling_types[ actual_IH ] );
+    Vector<T, 4> cubic_weights;
+    cubic_weights << 0.25, 0., 0.75, 0.;
+
+    fetchUnitCellFromOneFamily(actual_IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, "./a_structure.txt", unit);
+    
+    generatePeriodicMesh(polygons, pbc_corners, true, "./a_structure");
+
+    solver.pbc_translation_file =  "./a_structure_translation.txt";
+    bool valid_structure = initializeSimulationDataFromFiles("./a_structure.vtk", PBC_XY);
+    if (!valid_structure)
+        return;
+    if (IH == 1)
+    {
+        solver.pbc_strain_w = 1e7;
+    }
+    else
+        solver.pbc_strain_w = 1e6;
+    solver.max_newton_iter = 3000;
+    solver.project_block_PD = true;
+    if (IH == 22 || IH == 28)
+        solver.project_block_PD = false;
+    solver.verbose = false;
+    solver.biaxial = false;
+    solver.prescribe_strain_tensor = false;
+
+    std::vector<T> timings(n_samples);
+
+    auto runSim = [&](T _theta, T strain, T strain_ortho, int _fail_cnt, int idx) -> bool
+    {
+        if (_fail_cnt < 3)
+        {
+            Timer timer(true);
+            bool solve_succeed = solver.staticSolve();
+            // solver.saveToOBJ(result_folder + std::to_string(idx)+"_"+std::to_string(strain_samples[idx])+".obj");
+            VectorXT residual(solver.num_nodes * 2); residual.setZero();
+            solver.computeResidual(solver.u, residual);
+            TM secondPK_stress, Green_strain;
+            T psi;
+            solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+            std::cout << timer.elapsed_sec() << std::endl;
+            timings[idx] = timer.elapsed_sec();
+            std::string obj_file = result_folder + "/obj/IH_" + std::to_string(IH) + "_strain_stress_"+std::to_string(idx)+".obj";
+            solver.saveToOBJ(obj_file, false);
+            // for (int m = 0; m < params.size(); m++)
+            // {
+            //     out << params[m] << " ";
+            // }
+            // out << Green_strain(0, 0) << " "<< Green_strain(1, 1) << " " << Green_strain(1, 0)
+            //     << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
+            //     << secondPK_stress(1, 0) << " " << psi << " " << _theta << " " << strain 
+            //     << " " << strain_ortho << " "
+            //     << residual.norm() << std::endl;
+            return solve_succeed;
+        }
+        else
+        {
+            // for (int m = 0; m < params.size(); m++)
+            // {
+            //     out << params[m] << " ";
+            // }
+            // out << "-1" << " "<< "-1" << " " << "-1"
+            //     << " " << "-1" << " " << "-1" << " "
+            //     << "-1" << " " << "-1" << " " << _theta << " " << strain 
+            //     << " " << strain_ortho << " "
+            //     << 1e10 << std::endl;
+            return false;
+        }
+    };
+
+    int min_strain_idx = 0;
+    int cnt = 0;
+    T min_strain = 1e10;
+    std::vector<T> strain_samples;
+    T strain_delta = (strain_range[1] - strain_range[0]) / T(n_samples);
+    
+    for (T strain = strain_range[0]; strain < strain_range[1]; strain += strain_delta)
+    {
+        strain_samples.push_back(strain);
+        // std::cout << strain << std::endl;
+        T value = std::abs(strain - 1.0);
+        if (value < min_strain && strain > 1.0)
+        {
+            min_strain = value;
+            min_strain_idx = cnt;
+        }
+        cnt++;       
+    }
+    
+    std::cout << strain_samples[min_strain_idx] << " " << min_strain_idx << std::endl;
+
+    int fail_cnt = 0;
+    for (int i = min_strain_idx; i < strain_samples.size(); i++)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        bool solve_succeed = runSim(theta, strain_samples[i], 0.0, fail_cnt, i);
+        if (!solve_succeed) 
+            fail_cnt ++;
+        else
+            fail_cnt = 0;
+    }
+    solver.reset(); fail_cnt = 0;
+    for (int i = min_strain_idx-1; i > -1; i--)
+    {
+        solver.strain_theta = theta;
+        solver.uniaxial_strain = strain_samples[i];
+        bool solve_succeed = runSim(theta, strain_samples[i], 0.0, fail_cnt, i);
+        if (!solve_succeed) 
+            fail_cnt ++;
+        else
+            fail_cnt = 0;
+    }
+    std::ofstream out(result_folder + "/" + "IH_" + std::to_string(IH) + "_strain_stress_timing.txt");
+    for (T time : timings)
+        out << time << " ";
+    out.close();
+}
+
+void Tiling2D::generateStrainStressDataFromParams(const std::string& result_folder, int IH, bool save_result)
 {
     std::string log_file = result_folder + "uniaxial_stress_IH" + std::to_string(IH) + ".txt";
     std::ifstream in(log_file);
     std::string data_file = result_folder + "IH_" + std::to_string(IH) + "_strain_stress_sim.txt";
-    std::ofstream out(data_file);
-    out << std::setprecision(10);
+    
+    std::ofstream out;
+    if (save_result)
+    {
+        out.open(data_file);
+        out << std::setprecision(10);
+    }
     int actual_IH, n_tiling_params, unit;
     std::vector<TV> bounds; 
     VectorXT ti_default;
@@ -2592,10 +2726,13 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
         // std::cout << params[i] << std::endl;
     }
 
+    Timer timer(true);
     fetchUnitCellFromOneFamily(actual_IH, 2, polygons, pbc_corners, params, 
         cubic_weights, "./a_structure.txt", unit);
     
     generatePeriodicMesh(polygons, pbc_corners, true, "./a_structure");
+
+    std::cout << "mesh generation timing : " << timer.elapsed_sec() << std::endl;
         
     solver.pbc_translation_file =  "./a_structure_translation.txt";
     bool valid_structure = initializeSimulationDataFromFiles("./a_structure.vtk", PBC_XY);
@@ -2605,8 +2742,8 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
     {
         solver.pbc_strain_w = 1e7;
     }
-    solver.max_newton_iter = 500;
-    solver.project_block_PD = true;
+    solver.max_newton_iter = 3000;
+    solver.project_block_PD = false;
     if (IH == 22 || IH == 28)
         solver.project_block_PD = false;
     solver.verbose = false;
@@ -2620,19 +2757,28 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
     }
     std::vector<TM> strain_sim, stress_sim;
     std::vector<T> res_norms;
+    std::vector<T> timings;
+    std::vector<VectorXT> deformed_states;
     auto runSim = [&](const TV3& strain, int _fail_cnt) -> bool
     {
         if (_fail_cnt < 3)
         {
             solver.target_strain = strain;
             solver.prescribe_strain_tensor = true;
+            Timer timer(true);
+            // solver.reset();
             bool solve_succeed = solver.staticSolve();
+            deformed_states.push_back(solver.deformed);
+            std::string obj_file = result_folder + "IH_" + std::to_string(IH) + "_strain_stress_temp.obj";
+            solver.saveToOBJ(obj_file, false);
             // solver.saveToOBJ(result_folder + std::to_string(idx)+"_"+std::to_string(strain_samples[idx])+".obj");
             VectorXT residual(solver.num_nodes * 2); residual.setZero();
             solver.computeResidual(solver.u, residual);
             TM secondPK_stress, Green_strain;
             T psi;
             solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+            std::cout << timer.elapsed_sec() << std::endl;
+            timings.push_back(timer.elapsed_sec());
             strain_sim.push_back(Green_strain);
             stress_sim.push_back(secondPK_stress);
             res_norms.push_back(residual.norm());
@@ -2640,18 +2786,19 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
             //     << " " << secondPK_stress(0, 0) << " " << secondPK_stress(1, 1) << " "
             //     << secondPK_stress(1, 0)  << " "
             //     << residual.norm() << std::endl;
+            
             return solve_succeed;
         }
         else
         {
-            for (int m = 0; m < params.size(); m++)
-            {
-                out << params[m] << " ";
-            }
-            out << "-1" << " "<< "-1" << " " << "-1"
-                << " " << "-1" << " " << "-1" << " "
-                << "-1" << " " << "-1" << " " 
-                << 1e10 << std::endl;
+            // for (int m = 0; m < params.size(); m++)
+            // {
+            //     out << params[m] << " ";
+            // }
+            // out << "-1" << " "<< "-1" << " " << "-1"
+            //     << " " << "-1" << " " << "-1" << " "
+            //     << "-1" << " " << "-1" << " " 
+            //     << 1e10 << std::endl;
             return false;
         }
     };
@@ -2666,23 +2813,47 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
     solver.reset();
     for (int i = 7; i > -1; i--)
         runSim(strain_samples[i], fail_cnt);
-    for (int i = 0; i < 8; i++)
+    if (save_result)
     {
-        int idx = strain_samples.size() - i - 1;
-        out << strain_sim[idx](0, 0) << " "<< strain_sim[idx](1, 1) << " " << strain_sim[idx](1, 0)
-                << " " << stress_sim[idx](0, 0) << " " << stress_sim[idx](1, 1) << " "
-                << stress_sim[idx](1, 0)  << " "
-                << res_norms[idx] << std::endl;
+        for (int i = 0; i < 8; i++)
+        {
+            int idx = strain_samples.size() - i - 1;
+            out << strain_sim[idx](0, 0) << " "<< strain_sim[idx](1, 1) << " " << strain_sim[idx](1, 0)
+                    << " " << stress_sim[idx](0, 0) << " " << stress_sim[idx](1, 1) << " "
+                    << stress_sim[idx](1, 0)  << " "
+                    << res_norms[idx] << std::endl;
+            solver.deformed = deformed_states[idx];
+            std::string obj_file = result_folder + "IH_" + std::to_string(IH) + "_strain_stress_obj"+std::to_string(idx)+".obj";
+            solver.saveToOBJ(obj_file, false);
+            std::cout << timings[idx] << ", ";
+        }
+        for (int i = 8; i < strain_samples.size(); i++)
+        {
+            int idx = i - 8;
+            out << strain_sim[idx](0, 0) << " "<< strain_sim[idx](1, 1) << " " << strain_sim[idx](1, 0)
+                    << " " << stress_sim[idx](0, 0) << " " << stress_sim[idx](1, 1) << " "
+                    << stress_sim[idx](1, 0)  << " "
+                    << res_norms[idx] << std::endl;
+            std::cout << timings[idx] << ", ";
+            solver.deformed = deformed_states[idx];
+            std::string obj_file = result_folder + "IH_" + std::to_string(IH) + "_strain_stress_obj"+std::to_string(idx)+".obj";
+            solver.saveToOBJ(obj_file);
+        }
+        
+        out.close();
     }
-    for (int i = 8; i < strain_samples.size(); i++)
+    else
     {
-        int idx = i - 8;
-        out << strain_sim[idx](0, 0) << " "<< strain_sim[idx](1, 1) << " " << strain_sim[idx](1, 0)
-                << " " << stress_sim[idx](0, 0) << " " << stress_sim[idx](1, 1) << " "
-                << stress_sim[idx](1, 0)  << " "
-                << res_norms[idx] << std::endl;
+        for (int i = 0; i < 8; i++)
+        {
+            int idx = strain_samples.size() - i - 1;
+            std::cout << timings[idx] << ", ";
+        }
+        for (int i = 8; i < strain_samples.size(); i++)
+        {
+            int idx = i - 8;
+            std::cout << timings[idx] << ", ";
+        }
     }
-    
-    out.close();
     in.close();
 }

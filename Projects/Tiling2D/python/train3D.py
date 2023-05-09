@@ -56,7 +56,7 @@ def loadDataSplitTest(n_tiling_params, filename, shuffle = True, ignore_unconver
     print("#valid data:{}".format(len(all_data)))
     # exit(0)
     start = 0
-    end = -1
+    end = 1000
     all_data = np.array(all_data[start:end]).astype(np.float64)
     all_label = np.array(all_label[start:end]).astype(np.float64) 
     
@@ -188,7 +188,8 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
             sigmasTF = tf.convert_to_tensor(mini_bacth_sigmas)
             
             grad, e, g_norm = trainStep(n_tiling_params, opt, lambdasTF, sigmasTF, model, train_vars)
-            
+            if (g_norm < 1e-6):
+                break
             train_loss_grad += grad
             train_loss_e += e
             g_norm_sum += g_norm
@@ -221,7 +222,7 @@ def train(n_tiling_params, model_name, train_data, train_label, validation_data,
 
 
 if __name__ == "__main__":
-    n_tiling_params = 2
+    n_tiling_params = 1
     
     full_data = "/home/yueli/Documents/ETH/SandwichStructure/ServerToy3D/uniaxial_data_toy3D_shuffled.txt"  
 

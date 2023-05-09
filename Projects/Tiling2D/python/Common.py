@@ -57,7 +57,10 @@ def loadModel(IH, use_double = False):
     if use_double:
         model_name += "double"
     save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
-    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float64)
+    if use_double:
+        model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float64)
+    else:
+        model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params, tf.float32)
     model.load_weights(save_path + "IH" + model_name + '.tf')
 
     return model, n_tiling_params, ti_default, bounds

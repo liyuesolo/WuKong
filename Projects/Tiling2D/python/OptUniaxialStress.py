@@ -1050,12 +1050,7 @@ def loadSimulationDataSorted(filename, theta):
         sim_obj.append(d.dot(stress.dot(d)))
         strain_mag.append(item[-3])
     return sim_obj    
-    indices = [idx for idx in range(len(sim_obj))]
-    sim_obj = np.array(sim_obj)
-    def cmp_strain(a, b):
-        return strain_mag[a] - strain_mag[b]
-    indices = sorted(indices, key=cmp_to_key(cmp_strain))
-    return sim_obj[indices]
+
 
 def optimizeUniaxialStressSA(IH, plot_sim = False):
     bounds = []
@@ -1165,9 +1160,11 @@ def optimizeUniaxialStressSA(IH, plot_sim = False):
     #     uniaxial_strain.append(uni_strain)
 
     def computeTarget(ti):
+        
         uniaxial_strain = optimizeUniaxialStrainSingleDirectionConstraintBatch(model, n_tiling_params, 
                                     theta, strain_samples, 
                                     ti)
+        
         # for i in range(len(uniaxial_strain)):
         #     print(uniaxial_strain[i], 1.0 + strain_samples[i], theta, ti)
         ti_TF = tf.convert_to_tensor(ti)
@@ -1204,10 +1201,13 @@ def optimizeUniaxialStressSA(IH, plot_sim = False):
     def objAndGradient(x):
         uniaxial_strain = []
         dqdp = []
+        # tic = time.perf_counter()
         for strain in strain_samples[sample_idx]:
             uni_strain, dqidpi = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, x, False)
             uniaxial_strain.append(uni_strain)
             dqdp.append(dqidpi)
+        # toc = time.perf_counter()
+        # print(f"constraint takes {toc - tic:0.6f} seconds")
         ti_TF = tf.convert_to_tensor(x)
         uniaxial_strain_TF = tf.convert_to_tensor(uniaxial_strain)
         stress_d, stress_d_grad, dOdE = objGradUniaxialStress(n_tiling_params, ti_TF, uniaxial_strain_TF, tf.constant([[theta]]), model)
@@ -1225,10 +1225,8 @@ def optimizeUniaxialStressSA(IH, plot_sim = False):
         for i in range(len(sample_idx)):
             grad += (stress_current[i] - stress_targets[i]) * stress_d_grad[i].flatten() + \
                 (stress_current[i] - stress_targets[i]) * np.dot(dOdE[i][i], dqdp[i][:3, :]).flatten() #/ np.linalg.norm(stress_targets)
-        # for i in range(3):
-        #     grad += (stress_current[i] - stress_targets[i]) * stress_d_grad[sample_idx[i]].flatten() + \
-        #         (stress_current[i] - stress_targets[i]) * np.dot(dOdE[sample_idx[i]][sample_idx[i]], dqdp[sample_idx[i]][:3, :]).flatten()
-        print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
         return obj, grad
     
     def fdGradient(x0):
@@ -1247,9 +1245,9 @@ def optimizeUniaxialStressSA(IH, plot_sim = False):
     
     
     if (not plot_GT) and (not plot_sim):
-        result = minimize(objAndGradient, ti0, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
+        # result = minimize(objAndGradient, ti0, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
         tic = time.perf_counter()
-        # result = minimize(objAndGradient, ti0, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+        result = minimize(objAndGradient, ti0, method='L-BFGS-B', jac=True, options={'disp' : False, "iprint": -1}, bounds=bounds)
         toc = time.perf_counter()
         print(f"Optimization takes {toc - tic:0.6f} seconds")
         
@@ -1913,6 +1911,8 @@ def compareNNWithSimulation(IH):
         os.mkdir(base_dir + "IH" + str(IH))
     model, n_tiling_params, ti_default, bounds = loadModel(IH, use_double)
     samples, thetas, data_items = loadSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/IH_"+str(IH)+"_strain_stress.txt", 100, n_tiling_params)
+    error_sum = 0.0
+    cnt = 0
     for i in range(len(samples)):
         # ti = samples[i]
         # theta = thetas[i]
@@ -1949,11 +1949,16 @@ def compareNNWithSimulation(IH):
         indices = sorted(indices, key=cmp_to_key(cmp_strain))
         # plt.plot(strain_samples[indices][10:-10], nn_obj[indices][10:-10], label = "NN", linewidth=3.0, zorder=0)
         # plt.plot(strain_samples[indices][10:-10], sim_obj[indices][10:-10], label = "SIM", linewidth=3.0, zorder=5)
-        plt.plot(strain_samples[indices][:], nn_obj[indices][:], label = "NN", linewidth=3.0, zorder=0)
-        plt.plot(strain_samples[indices][:], sim_obj[indices][:], label = "SIM", linewidth=3.0, zorder=5)
-        plt.legend()
-        plt.savefig(base_dir + "IH" + str(IH) + "/" + str(i)+".png", dpi=300)
-        plt.close() 
+        # plt.plot(strain_samples[indices][:], nn_obj[indices][:], label = "NN", linewidth=3.0, zorder=0)
+        # plt.plot(strain_samples[indices][:], sim_obj[indices][:], label = "SIM", linewidth=3.0, zorder=5)
+        # plt.legend()
+        # plt.savefig(base_dir + "IH" + str(IH) + "/" + str(i)+".png", dpi=300)
+        # plt.close() 
+        
+        for i in range(len(nn_obj)):
+            error_sum += abs(nn_obj[i] - sim_obj[i]) / sim_obj[i]
+        cnt += 1
+    print(error_sum / float(cnt))
         # exit(0)
 
 
@@ -2012,13 +2017,135 @@ def plotBatch():
     # for i in range(len(samples)):
     #     print(i, samples[i])
 
+def getTimings(IH):
+    bounds = []
+    current_dir = os.path.dirname(os.path.realpath(__file__))
+    plot_GT = False
+    theta = 0.0
+    
+    strain_range = [-0.1, 0.2]
+    n_sp_strain = 25
+    strain_samples = np.arange(strain_range[0], strain_range[1], (strain_range[1] - strain_range[0])/float(n_sp_strain))
+
+    if IH == 21:
+        n_tiling_params = 2
+        bounds.append([0.105, 0.195])
+        bounds.append([0.505, 0.795])
+        # ti0 = np.array([0.16, 0.52])
+        ti_target = np.array([0.106, 0.65])
+        ti0 = np.array([0.115, 0.765])
+        # sample_idx = np.arange(2, n_sp_strain-2, 6)
+        theta = 0.0
+    elif IH == 50:
+        n_tiling_params = 2
+        bounds.append([0.1, 0.3])
+        bounds.append([0.25, 0.75])
+        ti0 = np.array([0.2, 0.52])
+        # ti0 = np.array([0.2903, 0.6714])
+        ti_target = np.array([0.21, 0.6])
+        theta = 0.0 * np.pi
+    elif IH == 67:
+        n_tiling_params = 2
+        bounds.append([0.1, 0.3])
+        bounds.append([0.6, 1.1])
+        ti0 = np.array([0.24, 0.87])
+        ti_target = np.array([0.15, 0.74])
+        # sample_idx = [2, 7, -1]
+        theta = 0.5 * np.pi
+    elif IH == 28:
+        n_tiling_params = 2
+        bounds.append([0.005, 0.8])
+        bounds.append([0.005, 1.0])
+        # ti0 = np.array([0.4528, 0.5])
+        # ti0 = np.array([0.4, 0.8])
+        sample_idx = [2, 7, -1]
+        theta = 0.1 * np.pi
+        # ti0 = np.array([0.3, 0.5])
+        ti0 = np.array([0.03411184, 0.37176683])
+        ti_target = np.array([0.2205, 0.6016])
+        sample_idx = np.arange(0, n_sp_strain, 6)
+        theta = 0.5 * np.pi
+    elif IH == 1:
+        n_tiling_params = 4
+        bounds.append([0.05, 0.3])
+        bounds.append([0.25, 0.75])
+        bounds.append([0.05, 0.15])
+        bounds.append([0.4, 0.8])
+        ti_target = np.array([0.1224, 0.5, 0.1434, 0.625])
+        # ti0 = np.array([0.1, 0.5, 0.13, 0.45])
+        ti0 = np.array([0.1224, 0.6, 0.1434, 0.625])
+        # ti0 = np.array([ 0.12, 0.504, 0.1, 0.625])
+        theta = 0.25 * np.pi
+    elif IH == 29:
+        n_tiling_params = 1
+        bounds.append([0.005, 1.0])
+        ti_target = np.array([0.45])
+        ti0 = np.array([0.15])
+        theta = 1.0 / 4.0 * np.pi
+    elif IH == 22:
+        n_tiling_params = 3
+        bounds.append([0.1, 0.3])
+        bounds.append([0.3, 0.7]) 
+        bounds.append([0.0, 0.3])
+        ti_target = np.array([0.2, 0.6, 0.12])
+        ti0 = np.array([0.2, 0.7, 0.15])
+        theta = 0.0 * np.pi
+
+    sample_idx = np.arange(5, n_sp_strain-3, 8)
+    # theta = 0.5 * np.pi
+    
+    model_name = str(IH)
+    if IH < 10:
+        model_name = "0" + str(IH)
+    else:
+        model_name = str(IH)
+    
+    if use_double:
+        model_name += "double"
+
+    save_path = os.path.join(current_dir, 'Models/IH' + model_name + "/")
+    model = buildSingleFamilyModelSeparateTilingParamsSwish(n_tiling_params)
+    model.load_weights(save_path + "IH" + model_name + '.tf')
+
+    base_dir = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/"
+    f = open(base_dir + "uniaxial_stress_IH"+str(IH)+".txt")
+        
+    param_opt = [np.float64(i) for i in f.readline().split(" ")]
+    
+    # tic = time.perf_counter()
+    for strain in strain_samples:
+        uni_strain, dqidpi = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, param_opt, False)
+    # toc = time.perf_counter()
+    # print(f"constraint takes {toc - tic:0.6f} seconds")
+
+    timings = []
+    for strain in strain_samples:
+        tic = time.perf_counter()
+        uni_strain, dqidpi = optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params, theta, strain, param_opt, False)
+        toc = time.perf_counter()
+        timings.append(toc - tic)
+        # print(f"constraint takes {toc - tic:0.6f} seconds")
+        
+    timingNN = np.array(timings)
+    f = open(base_dir + "/IH_" + str(IH) + "_strain_stress_timing.txt")
+    timingSim = [np.float64(i) for i in f.readline().split(" ")[:-1]]
+
+    strain_samples =  strain_samples * 100.0
+    
+    plt.plot(strain_samples, timingNN, label = "NN", linewidth=3.0, zorder=0)
+    plt.plot(strain_samples, timingSim, label = "SIM", linewidth=3.0, zorder=5)
+    plt.legend()
+    plt.savefig(base_dir + "timings_IH" + str(IH) + ".png", dpi=300)
+    os.system("convert " + base_dir + "timings_IH" + str(IH) + ".png -trim " + base_dir + "timings_IH" + str(IH) + ".png")
+    plt.close() 
 
 if __name__ == "__main__":
     # optimizeUniaxialStressConstraints()
     # for idx in [1, 21, 22, 28, 50, 67]:
         # optimizeUniaxialStressSA(idx, True)
-    optimizeUniaxialStressSA(21, True)
-    optimizeUniaxialStressSA(50, True)
+    # optimizeUniaxialStressSA(21, False)
+    getTimings(21)
+    # optimizeUniaxialStressSA(50, True)
     # plotEnergyAlongDirection()
     # plotNNFDCurves()
     # teaserPlot()
@@ -2026,5 +2153,5 @@ if __name__ == "__main__":
     # plotBatch()
     # compareNNWithSimulation(28)
     # for IH in [1, 21, 28, 22, 50, 67]:
-    # compareNNWithSimulation(1)
+    #     compareNNWithSimulation(IH)
 

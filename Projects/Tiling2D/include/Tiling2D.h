@@ -91,7 +91,9 @@ public:
     // validation
     void generateStiffnessDataFromParams(const std::string& result_folder, int IH);
     void generatePoissonRatioDataFromParams(const std::string& result_folder, int IH);
-    void generateStrainStressDataFromParams(const std::string& result_folder, int IH);
+    void generateStrainStressDataFromParams(const std::string& result_folder, int IH, bool save_result = true);
+    void generateStrainStressDataFromParams(const std::string& result_folder, int IH, T theta, 
+        const std::vector<T>& params, const TV& strain_range, int n_samples, bool save_result = true);
     void generateStrainStressSimulationData(const std::string& result_folder, int IH, int n_samples);
     void generateStrainStressSimulationDataFromFile(const std::string& result_folder, 
         const std::string& filename, const std::string& suffix, int IH, int n_samples);
