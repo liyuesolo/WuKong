@@ -5,3 +5,5 @@ add_subdirectory(Foam2D/VideoDataExtraction)
 add_subdirectory(Foam2D/Profiling)
 
 add_subdirectory(VoronoiMetrics)
+
+add_subdirectory(Foam3D)

@@ -1,0 +1,444 @@
+#include <igl/copyleft/cgal/remesh_self_intersections.h>
+#include <igl/remove_unreferenced.h>
+#include <igl/winding_number.h>
+#include <igl/extract_manifold_patches.h>
+
+#include "../../include/Tessellation/Tessellation.h"
+#include "../../include/Tessellation/CellFunction.h"
+#include <set>
+#include <iostream>
+#include <utility>
+
+#include <Eigen/Core>
+
+bool operator<(const Node &a, const Node &b) {
+    if (a.type != b.type) return a.type < b.type;
+    if (a.gen[0] != b.gen[0]) return a.gen[0] < b.gen[0];
+    if (a.gen[1] != b.gen[1]) return a.gen[1] < b.gen[1];
+    if (a.gen[2] != b.gen[2]) return a.gen[2] < b.gen[2];
+    if (a.gen[3] != b.gen[3]) return a.gen[3] < b.gen[3];
+    return false;
+}
+
+void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const int n_cells) {
+    VectorXT c_new = combineVerticesParams(vertices, params);
+
+    // Check if inputs are the same as previous tessellation, do nothing if so.
+    bool same = true;
+    same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
+    if (same) return;
+
+    isValid = true;
+    c = c_new;
+    nodes.clear();
+    faces.clear();
+
+    getDualGraph();
+
+    for (int i = 0; i < faces.size(); i++) {
+        for (Node node: faces[i].nodes) {
+            if (nodes.find(node) == nodes.end()) {
+                VectorXT v0 = c.segment<4>(node.gen[0] * 4);
+                VectorXT v1 = c.segment<4>(node.gen[1] * 4);
+                VectorXT v2 = c.segment<4>(node.gen[2] * 4);
+                VectorXT v3 = c.segment<4>(node.gen[3] * 4);
+
+                NodePosition nodePosition;
+                getNode(v0, v1, v2, v3, nodePosition.pos);
+
+                nodes[node] = nodePosition;
+            }
+        }
+    }
+
+//
+//    auto cmp = [](IV4 a, IV4 b) {
+//        for (int i = 0; i < 4; i++) {
+//            if (a(i) < b(i)) return true;
+//            if (a(i) > b(i)) return false;
+//        }
+//        return false;
+//    };
+//    std::set<IV4, decltype(cmp)> triplets(cmp);
+//
+//    for (int i = 0; i < n_free; i++) {
+//        Cell cell = cells[i];
+//        for (int j = 0; j < cell.edges.size(); j++) {
+//            int n1 = cell.edges[j].neighbor;
+//            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
+//            int flag = cell.edges[cell.edges[j].nextEdge].flag;
+//
+//            IV4 triplet(i, n1, n2, flag);
+//            std::sort(triplet.data(), triplet.data() + 3);
+//
+//            triplets.insert(triplet);
+//        }
+//    }
+//    std::vector<IV4> faces(triplets.begin(), triplets.end());
+//
+//    int dims = 2 + getNumVertexParams();
+//    int n_vtx = c.rows() / dims;
+//    int n_bdy = bdry->v.rows() / 2;
+//    for (int i = 0; i < n_free; i++) {
+//        Cell cell = cells[i];
+//        for (int j = 0; j < cell.edges.size(); j++) {
+//            int n1 = cell.edges[j].neighbor;
+//            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
+//            int flag = cell.edges[cell.edges[j].nextEdge].flag;
+//
+//            IV4 triplet(i, n1, n2, flag);
+//            std::sort(triplet.data(), triplet.data() + 3);
+//
+//            auto lower = std::lower_bound(faces.begin(), faces.end(), triplet, cmp);
+//            assert(lower != faces.end() && *lower == triplet);
+//        }
+//    }
+//
+//    dual.resize(faces.size() * 4);
+//    for (int i = 0; i < faces.size(); i++) {
+//        dual.segment<4>(i * 4) = faces[i];
+//    }
+//
+//    x.resize(faces.size() * CellFunction::nx);
+//    x.setZero();
+//    MatrixXT dxdc_dense = MatrixXT::Zero(x.rows(), n_free * dims);
+//    MatrixXT dxdv_dense = MatrixXT::Zero(x.rows(), bdry->v.rows());
+//    MatrixXT dxdq_dense = MatrixXT::Zero(x.rows(), bdry->q.rows());
+//    d2xdy2.resize(x.rows());
+//    for (int i = 0; i < faces.size(); i++) {
+//        IV4 face = faces[i];
+//
+//        VectorXT node;
+//        MatrixXT nodeGrad;
+//        std::vector<MatrixXT> nodeHess;
+//        int type;
+//        getNodeWrapper(face[0], face[1], face[2], face[3], node, nodeGrad, nodeHess,
+//                       type);
+//
+//        x.segment<CellFunction::nx>(i * CellFunction::nx) = node;
+//
+//        for (int j = 0; j < CellFunction::nx; j++) {
+//            d2xdy2[i * CellFunction::nx + j] = nodeHess[j];
+//        }
+//
+//        // Assemble global Jacobian matrix dxdc.
+//        int n_sites = c.rows() / dims;
+//        switch (type) {
+//            case 0:
+//                for (int j = 0; j < 3; j++) {
+//                    if (face[j] >= n_free) {
+//                        continue;
+//                    }
+//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
+//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
+//                }
+//                break;
+//            case 1:
+//                for (int j = 0; j < 2; j++) {
+//                    if (face[j] >= n_free) {
+//                        continue;
+//                    }
+//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
+//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
+//                }
+//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
+//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
+//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
+//                                 2) =
+//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 2);
+//
+//                break;
+//            case 2:
+//                for (int j = 0; j < 2; j++) {
+//                    if (face[j] >= n_free) {
+//                        continue;
+//                    }
+//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
+//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
+//                }
+//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
+//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
+//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
+//                                 2) =
+//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 2);
+//
+//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
+//                        nodeGrad.block(0, 2 * dims + 4, CellFunction::nx, 1);
+//                break;
+//            case 3:
+//                for (int j = 0; j < 2; j++) {
+//                    if (face[j] >= n_free) {
+//                        continue;
+//                    }
+//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
+//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
+//                }
+//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
+//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
+//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
+//                                 2) =
+//                        nodeGrad.block(0, 2 * dims + 3, CellFunction::nx, 2);
+//
+//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
+//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 1);
+//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[bdry->edges[face[2] - n_sites].nextEdge].q_idx,
+//                                 CellFunction::nx, 1) =
+//                        nodeGrad.block(0, 2 * dims + 5, CellFunction::nx, 1);
+//                break;
+//            case 4:
+//                dxdv_dense.block(i * CellFunction::nx, (face[1] - n_sites) * 2, CellFunction::nx, 2) =
+//                        nodeGrad.block(0, 0, CellFunction::nx, 2);
+//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
+//                        nodeGrad.block(0, 3, CellFunction::nx, 2);
+//
+//                if (bdry->edges[face[1] - n_sites].q_idx >= 0) {
+//                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[1] - n_sites].q_idx, CellFunction::nx, 1) =
+//                            nodeGrad.block(0, 2, CellFunction::nx, 1);
+//                }
+//                if (bdry->edges[face[2] - n_sites].q_idx >= 0) {
+//                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
+//                            nodeGrad.block(0, 5, CellFunction::nx, 1);
+//                }
+//                break;
+//            default:
+//                assert(0);
+//                break;
+//        }
+//    }
+//
+//    dxdc = dxdc_dense.sparseView();
+//    dxdv = dxdv_dense.sparseView();
+//    dxdq = dxdq_dense.sparseView();
+//
+//    for (int i = 0; i < n_free; i++) {
+//        if (cells[i].edges.size() < 2) {
+//            isValid = false;
+//            return;
+//        }
+//    }
+}
+
+// TODO: This function is horrendous.
+void Tessellation::clipFaces(TempStruct &ts) {
+    int n_cells = c.rows() / getDims();
+
+    std::vector<Face> unclippedFaces(faces.size());
+    std::copy(faces.begin(), faces.end(), unclippedFaces.begin());
+    faces.clear();
+
+    std::map<Node, int> nodeIndices;
+    int i = 0;
+    for (auto n: nodes) {
+        nodeIndices[n.first] = i;
+        i++;
+    }
+
+    MatrixXT V(nodes.size() + bv.size(), 3);
+    i = 0;
+    for (auto n: nodes) {
+        V.row(i) = n.second.pos;
+        i++;
+    }
+    for (auto v: bv) {
+        V.row(i) = v.pos;
+        i++;
+    }
+
+    int ntri = 0;
+    for (Face face: unclippedFaces) {
+        ntri += face.nodes.size() - 2;
+    }
+
+    MatrixXi F(ntri + bf.size(), 3);
+    VectorXi Fsource(F.rows());
+    i = 0;
+    int source = 0;
+    for (Face face: unclippedFaces) {
+        for (int j = 1; j < face.nodes.size() - 1; j++) {
+            F.row(i) = IV3(nodeIndices.at(face.nodes[0]),
+                           nodeIndices.at(face.nodes[j]),
+                           nodeIndices.at(face.nodes[j + 1]));
+            Fsource(i) = source;
+            i++;
+        }
+        source++;
+    }
+    for (auto face: bf) {
+        F.row(i) = face.vertices + IV3::Constant(nodes.size());
+        Fsource(i) = source;
+        source++;
+        i++;
+    }
+
+    igl::copyleft::cgal::RemeshSelfIntersectionsParam param;
+
+    MatrixXT VV, SV;
+    MatrixXi FF, SF;
+    MatrixXi IF;
+    VectorXi J, SJ;
+    VectorXi IM, SIM;
+
+    // resolve intersections
+    igl::copyleft::cgal::remesh_self_intersections(V, F, param, VV, FF, IF, J, IM);
+    std::for_each(FF.data(), FF.data() + FF.size(), [&IM](int &a) { a = IM(a); });
+    igl::remove_unreferenced(VV, FF, SV, SF, SIM, SJ);
+
+    // Eliminate out-of-bounds triangles using winding number
+    MatrixXT Q(SF.rows(), 3);
+    for (int i = 0; i < SF.rows(); i++) {
+        Q.row(i) = (SV.row(SF(i, 0)) + SV.row(SF(i, 1)) + SV.row(SF(i, 2))) / 3.0;
+    }
+    VectorXT W;
+    MatrixXT WV = V.block(nodes.size(), 0, bv.size(), 3);
+    MatrixXi WF = F.block(ntri, 0, bf.size(), 3) - MatrixXi::Constant(bf.size(), 3, nodes.size());
+    igl::winding_number(WV, WF, Q, W);
+    std::vector<int> rk;
+    for (int i = 0; i < W.rows(); i++) {
+        if (fabs(W(i)) > 0.5) rk.push_back(i);
+    }
+    // Remove rows from SF -> FF2
+    MatrixXi FF2(rk.size(), 3);
+    VectorXi J2(rk.size());
+    for (int i = 0; i < rk.size(); i++) {
+        FF2.row(i) = SF.row(rk[i]);
+        J2(i) = J(rk[i]);
+    }
+
+    Eigen::MatrixXi E, uE;
+    Eigen::VectorXi EMAP;
+    std::vector<std::vector<size_t>> uE2E;
+    igl::unique_edge_map(FF2, E, uE, EMAP, uE2E);
+    auto edge_index_to_face_index = [&](size_t ei) { return ei % FF2.rows(); };
+    auto face_and_corner_index_to_edge_index = [&](size_t fi, size_t ci) {
+        return ci * FF2.rows() + fi;
+    };
+    auto is_manifold_edge = [&](size_t fi, size_t ci) -> bool {
+        const size_t ei = face_and_corner_index_to_edge_index(fi, ci);
+        return uE2E[EMAP(ei)].size() == 2;
+    };
+    auto is_non_manifold_or_bedge = [&](size_t fi, size_t ci) -> bool {
+        const size_t ei = face_and_corner_index_to_edge_index(fi, ci);
+
+        auto matching_edges = uE2E[EMAP(ei)];
+        if (matching_edges.size() != 2) return true;
+
+        int source = Fsource(J2(fi));
+//        std::cout << "bedge" << std::endl;
+        for (auto e: matching_edges) {
+//            std::cout << ei << " " << e << " " << source << " " << Fsource(J2(edge_index_to_face_index(e)))
+//                      << std::endl;
+            if (Fsource(J2(edge_index_to_face_index(e))) != source) return true;
+        }
+
+        return false;
+    };
+
+    VectorXi P;
+    igl::extract_manifold_patches(FF2, EMAP, uE2E, P);
+    std::map<std::tuple<int, int, int>, std::tuple<int, int, int>> coolMap; // Maps (vertex, patch, source face) to (next vertex, face index, pre clip face)
+    for (int i = 0; i < FF2.rows(); i++) {
+        IV3 tri = FF2.row(i);
+//        if (P(i) == 35) {
+//            if (!is_manifold_edge(i, 2) || is_bedge(tri(0), tri(1))) {
+//                coolMap[{tri(0), P(i), Fsource(J2(i))}] = {tri(1), i, J2(i)};
+//            }
+//            if (!is_manifold_edge(i, 0) || is_bedge(tri(1), tri(2))) {
+//                coolMap[{tri(1), P(i), Fsource(J2(i))}] = {tri(2), i, J2(i)};
+//            }
+//            if (!is_manifold_edge(i, 1) || is_bedge(tri(2), tri(0))) {
+//                coolMap[{tri(2), P(i), Fsource(J2(i))}] = {tri(0), i, J2(i)};
+//            }
+
+        if (is_non_manifold_or_bedge(i, 2)) {
+            coolMap[{tri(0), P(i), Fsource(J2(i))}] = {tri(1), i, J2(i)};
+        }
+        if (is_non_manifold_or_bedge(i, 0)) {
+            coolMap[{tri(1), P(i), Fsource(J2(i))}] = {tri(2), i, J2(i)};
+        }
+        if (is_non_manifold_or_bedge(i, 1)) {
+            coolMap[{tri(2), P(i), Fsource(J2(i))}] = {tri(0), i, J2(i)};
+        }
+//            std::cout << "wow " << tri(0) << " " << tri(1) << " " << tri(2) << std::endl;
+//            std::cout << is_non_manifold_or_bedge(i, 0) << " " << is_non_manifold_or_bedge(i, 1) << " "
+//                      << is_non_manifold_or_bedge(i, 2)
+//                      << std::endl;
+//            std::cout << Fsource(J2(i)) << " " << J2(i) << std::endl;
+//        }
+    }
+
+    std::vector<std::vector<std::tuple<int, int, int>>> tuples;
+    std::set<int> badVerts;
+    while (!coolMap.empty()) {
+        auto p = coolMap.begin();
+
+        int vstart = std::get<0>(p->first);
+        int patch = std::get<1>(p->first);
+        int source = std::get<2>(p->first);
+
+//        int v = vstart;
+//        do {
+//            thisFace.push_back(v);
+//            int vprev = v;
+//            v = std::get<0>(coolMap.at({v, patch, source}));
+//            coolMap.erase({vprev, patch, source});
+//        } while (v != vstart);
+
+        std::vector<std::tuple<int, int, int>> thisTuples;
+        int v = vstart;
+        do {
+            int vprev = v;
+            auto mapped = coolMap.at({v, patch, source});
+            v = std::get<0>(mapped);
+            thisTuples.push_back(mapped);
+            coolMap.erase({vprev, patch, source});
+        } while (v != vstart);
+
+        for (int i = 0; i < thisTuples.size(); i++) {
+            int tupSource0 = std::get<2>(thisTuples[i]);
+            int tupSource1 = std::get<2>(thisTuples[(i + 1) % thisTuples.size()]);
+            int tupV = std::get<0>(thisTuples[i]);
+            if (tupSource0 != tupSource1 && tupV >= nodes.size() + bv.size()) {
+                badVerts.insert(tupV);
+            }
+        }
+
+        tuples.push_back(thisTuples);
+    }
+
+    std::vector<std::vector<int>> newFaces;
+    ntri = 0;
+    for (std::vector<std::tuple<int, int, int>> thisTuples: tuples) {
+        std::vector<int> thisFace;
+
+        for (int i = 0; i < thisTuples.size(); i++) {
+            int tupV = std::get<0>(thisTuples[i]);
+            if (badVerts.find(tupV) == badVerts.end()) {
+                thisFace.push_back(tupV);
+            }
+        }
+
+        ntri += thisFace.size() - 2;
+        newFaces.push_back(thisFace);
+    }
+
+    MatrixXT colors = MatrixXT::Random(1000, 3) * 0.5 + MatrixXT::Constant(1000, 3, 0.5);
+
+    MatrixXi FF3(ntri, 3);
+    MatrixXT Fc(ntri, 3);
+    int iColor = 0;
+    i = 0;
+    for (auto newFace: newFaces) {
+        for (int j = 1; j < newFace.size() - 1; j++) {
+            FF3.row(i) = IV3(newFace[0],
+                             newFace[j],
+                             newFace[j + 1]);
+            Fc.row(i) = colors.row(iColor);
+            i++;
+        }
+        iColor++;
+    }
+
+    ts.V = SV;
+    ts.F = FF3;
+    ts.Fc = Fc;
+}
