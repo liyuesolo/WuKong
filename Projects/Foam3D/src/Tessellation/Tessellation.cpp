@@ -24,9 +24,10 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     VectorXT c_new = combineVerticesParams(vertices, params);
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
-    bool same = true;
-    same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
-    if (same) return;
+    // TODO: move clipping inside Tessellate so this doesn't break it.
+//    bool same = true;
+//    same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
+//    if (same) return;
 
     isValid = true;
     c = c_new;
@@ -227,47 +228,60 @@ void Tessellation::clipFaces(TempStruct &ts) {
     faces.clear();
 
     std::map<Node, int> nodeIndices;
-    int i = 0;
-    for (auto n: nodes) {
-        nodeIndices[n.first] = i;
-        i++;
+    {
+        int iCool = 0;
+        for (auto n: nodes) {
+            nodeIndices[n.first] = iCool;
+            iCool++;
+        }
     }
 
     MatrixXT V(nodes.size() + bv.size(), 3);
-    i = 0;
-    for (auto n: nodes) {
-        V.row(i) = n.second.pos;
-        i++;
-    }
-    for (auto v: bv) {
-        V.row(i) = v.pos;
-        i++;
-    }
-
-    int ntri = 0;
-    for (Face face: unclippedFaces) {
-        ntri += face.nodes.size() - 2;
-    }
-
-    MatrixXi F(ntri + bf.size(), 3);
-    VectorXi Fsource(F.rows());
-    i = 0;
-    int source = 0;
-    for (Face face: unclippedFaces) {
-        for (int j = 1; j < face.nodes.size() - 1; j++) {
-            F.row(i) = IV3(nodeIndices.at(face.nodes[0]),
-                           nodeIndices.at(face.nodes[j]),
-                           nodeIndices.at(face.nodes[j + 1]));
-            Fsource(i) = source;
-            i++;
+    std::vector<Node> nodeVector(V.rows());
+    {
+        int iCool = 0;
+        for (auto n: nodes) {
+            V.row(iCool) = n.second.pos;
+            nodeVector[iCool] = n.first;
+            iCool++;
         }
-        source++;
+        for (auto v: bv) {
+            V.row(iCool) = v.pos;
+            nodeVector[iCool].type = NodeType::B_VERTEX;
+            nodeVector[iCool].gen[0] = iCool - nodes.size();
+            nodeVector[iCool].gen[1] = -1;
+            nodeVector[iCool].gen[2] = -1;
+            nodeVector[iCool].gen[3] = -1;
+            iCool++;
+        }
     }
-    for (auto face: bf) {
-        F.row(i) = face.vertices + IV3::Constant(nodes.size());
-        Fsource(i) = source;
-        source++;
-        i++;
+
+    int ntri_unclipped = 0;
+    for (Face face: unclippedFaces) {
+        ntri_unclipped += face.nodes.size() - 2;
+    }
+
+    MatrixXi F(ntri_unclipped + bf.size(), 3);
+    VectorXi Fsource(F.rows());
+    {
+        int iCool = 0;
+        int source = 0;
+        for (Face face: unclippedFaces) {
+            for (int j = 1; j < face.nodes.size() - 1; j++) {
+                F.row(iCool) = IV3(nodeIndices.at(face.nodes[0]),
+                                   nodeIndices.at(face.nodes[j]),
+                                   nodeIndices.at(face.nodes[j + 1]));
+                Fsource(iCool) = source;
+                iCool++;
+            }
+            source++;
+        }
+        for (auto face: bf) {
+            F.row(iCool) = face.vertices + IV3::Constant(nodes.size());
+            Fsource(iCool) = source;
+            source++;
+            iCool++;
+        }
     }
 
     igl::copyleft::cgal::RemeshSelfIntersectionsParam param;
@@ -278,10 +292,35 @@ void Tessellation::clipFaces(TempStruct &ts) {
     VectorXi J, SJ;
     VectorXi IM, SIM;
 
-    // resolve intersections
+    // Resolve intersections
     igl::copyleft::cgal::remesh_self_intersections(V, F, param, VV, FF, IF, J, IM);
+
+    // Identify edge and face which generated each new vertex
+    MatrixXi preClipFaces = MatrixXi::Constant(VV.rows(), 2, -1);
+    for (int i = 0; i < FF.rows(); i++) {
+        for (int j = 0; j < 3; j++) {
+            int v = FF(i, j);
+            if (preClipFaces(v, 0) == -1) {
+                preClipFaces(v, 0) = J(i);
+            } else if (preClipFaces(v, 0) != J(i)) {
+                preClipFaces(v, 1) = J(i);
+            }
+        }
+    }
+    MatrixXi originFaces = MatrixXi::Constant(VV.rows(), 3, -1); // Row is (edge face 0, edge face 1, intersected face).
+    for (int i = V.rows(); i < VV.rows(); i++) {
+        int j = IM(i);
+        if (preClipFaces(i, 1) == -1) {
+            originFaces(j, 2) = preClipFaces(i, 0);
+        } else {
+            originFaces.block<1, 2>(j, 0) = preClipFaces.row(i);
+        }
+    }
+
+    // Merge duplicate vertices
     std::for_each(FF.data(), FF.data() + FF.size(), [&IM](int &a) { a = IM(a); });
     igl::remove_unreferenced(VV, FF, SV, SF, SIM, SJ);
+
 
     // Eliminate out-of-bounds triangles using winding number
     MatrixXT Q(SF.rows(), 3);
@@ -290,7 +329,7 @@ void Tessellation::clipFaces(TempStruct &ts) {
     }
     VectorXT W;
     MatrixXT WV = V.block(nodes.size(), 0, bv.size(), 3);
-    MatrixXi WF = F.block(ntri, 0, bf.size(), 3) - MatrixXi::Constant(bf.size(), 3, nodes.size());
+    MatrixXi WF = F.block(ntri_unclipped, 0, bf.size(), 3) - MatrixXi::Constant(bf.size(), 3, nodes.size());
     igl::winding_number(WV, WF, Q, W);
     std::vector<int> rk;
     for (int i = 0; i < W.rows(); i++) {
@@ -311,10 +350,6 @@ void Tessellation::clipFaces(TempStruct &ts) {
     auto edge_index_to_face_index = [&](size_t ei) { return ei % FF2.rows(); };
     auto face_and_corner_index_to_edge_index = [&](size_t fi, size_t ci) {
         return ci * FF2.rows() + fi;
-    };
-    auto is_manifold_edge = [&](size_t fi, size_t ci) -> bool {
-        const size_t ei = face_and_corner_index_to_edge_index(fi, ci);
-        return uE2E[EMAP(ei)].size() == 2;
     };
     auto is_non_manifold_or_bedge = [&](size_t fi, size_t ci) -> bool {
         const size_t ei = face_and_corner_index_to_edge_index(fi, ci);
@@ -338,16 +373,6 @@ void Tessellation::clipFaces(TempStruct &ts) {
     std::map<std::tuple<int, int, int>, std::tuple<int, int, int>> coolMap; // Maps (vertex, patch, source face) to (next vertex, face index, pre clip face)
     for (int i = 0; i < FF2.rows(); i++) {
         IV3 tri = FF2.row(i);
-//        if (P(i) == 35) {
-//            if (!is_manifold_edge(i, 2) || is_bedge(tri(0), tri(1))) {
-//                coolMap[{tri(0), P(i), Fsource(J2(i))}] = {tri(1), i, J2(i)};
-//            }
-//            if (!is_manifold_edge(i, 0) || is_bedge(tri(1), tri(2))) {
-//                coolMap[{tri(1), P(i), Fsource(J2(i))}] = {tri(2), i, J2(i)};
-//            }
-//            if (!is_manifold_edge(i, 1) || is_bedge(tri(2), tri(0))) {
-//                coolMap[{tri(2), P(i), Fsource(J2(i))}] = {tri(0), i, J2(i)};
-//            }
 
         if (is_non_manifold_or_bedge(i, 2)) {
             coolMap[{tri(0), P(i), Fsource(J2(i))}] = {tri(1), i, J2(i)};
@@ -375,14 +400,6 @@ void Tessellation::clipFaces(TempStruct &ts) {
         int patch = std::get<1>(p->first);
         int source = std::get<2>(p->first);
 
-//        int v = vstart;
-//        do {
-//            thisFace.push_back(v);
-//            int vprev = v;
-//            v = std::get<0>(coolMap.at({v, patch, source}));
-//            coolMap.erase({vprev, patch, source});
-//        } while (v != vstart);
-
         std::vector<std::tuple<int, int, int>> thisTuples;
         int v = vstart;
         do {
@@ -397,7 +414,7 @@ void Tessellation::clipFaces(TempStruct &ts) {
             int tupSource0 = std::get<2>(thisTuples[i]);
             int tupSource1 = std::get<2>(thisTuples[(i + 1) % thisTuples.size()]);
             int tupV = std::get<0>(thisTuples[i]);
-            if (tupSource0 != tupSource1 && tupV >= nodes.size() + bv.size()) {
+            if (tupSource0 != tupSource1 && SJ(tupV) >= nodes.size() + bv.size()) {
                 badVerts.insert(tupV);
             }
         }
@@ -406,34 +423,124 @@ void Tessellation::clipFaces(TempStruct &ts) {
     }
 
     std::vector<std::vector<int>> newFaces;
-    ntri = 0;
+    int ntri_final = 0;
     for (std::vector<std::tuple<int, int, int>> thisTuples: tuples) {
         std::vector<int> thisFace;
+        Face thisFaceReal;
 
+        TV3 avgPos = TV3::Zero();
         for (int i = 0; i < thisTuples.size(); i++) {
             int tupV = std::get<0>(thisTuples[i]);
             if (badVerts.find(tupV) == badVerts.end()) {
                 thisFace.push_back(tupV);
+
+                IV3 sources = originFaces.row(SJ(tupV));
+
+                Node node;
+                if (SJ(tupV) < nodeVector.size()) {
+                    node = nodeVector[SJ(tupV)];
+                } else {
+                    for (int j = 0; j < 3; j++) {
+                        sources(j) = Fsource(sources(j));
+                    }
+                    if (sources(0) < unclippedFaces.size()) {
+                        node.type = NodeType::B_FACE; // gen order (bf, c0, c1, c2)
+                        node.gen[0] = sources(2) - unclippedFaces.size();
+                        node.gen[1] = unclippedFaces[sources(0)].site0;
+                        node.gen[2] = unclippedFaces[sources(0)].site1;
+                        if (unclippedFaces[sources(1)].site0 == node.gen[1] ||
+                            unclippedFaces[sources(1)].site0 == node.gen[2]) {
+                            node.gen[3] = unclippedFaces[sources(1)].site1;
+                        } else {
+                            node.gen[3] = unclippedFaces[sources(1)].site0;
+                        }
+                        std::sort(std::begin(node.gen) + 1, std::end(node.gen));
+                    } else {
+                        node.type = NodeType::B_EDGE; // gen order (b0, b1, c0, c1)
+                        IV3 bf0 = bf[sources(0) - unclippedFaces.size()].vertices;
+                        IV3 bf1 = bf[sources(1) - unclippedFaces.size()].vertices;
+                        int icv = 0;
+                        for (int j = 0; j < 3; j++) {
+                            int iv = bf0(j);
+                            if (iv == bf1(0) || iv == bf1(1) || iv == bf1(2)) {
+                                node.gen[icv] = iv;
+                                icv++;
+                            }
+                        }
+                        node.gen[2] = unclippedFaces[sources(2)].site0;
+                        node.gen[3] = unclippedFaces[sources(2)].site1;
+                        std::sort(std::begin(node.gen), std::begin(node.gen) + 2);
+                        std::sort(std::begin(node.gen) + 2, std::end(node.gen));
+                    }
+                }
+
+                thisFaceReal.nodes.push_back(node);
+
+                NodePosition nodePos;
+                nodePos.pos = SV.row(tupV);
+                nodes[node] = nodePos;
+
+                avgPos += nodePos.pos;
             }
         }
+        avgPos /= thisFaceReal.nodes.size();
 
-        ntri += thisFace.size() - 2;
+        int refFace = Fsource(std::get<2>(thisTuples[0]));
+        if (refFace < unclippedFaces.size()) {
+            thisFaceReal.site0 = unclippedFaces[refFace].site0;
+            thisFaceReal.site1 = unclippedFaces[refFace].site1;
+        } else {
+//            for (Node node: thisFaceReal.nodes) {
+//                if (node.type == NodeType::B_FACE || node.type == NodeType::B_EDGE) {
+//                    double dmin = 1e10;
+//                    int jmin = -1;
+//                    for (int j = (node.type == NodeType::B_FACE ? 1 : 2); j < 4; j++) {
+//                        double dcurr = (c.segment<3>(node.gen[j] * 4) - avgPos).squaredNorm();
+//                        if (dcurr < dmin) {
+//                            dmin = dcurr;
+//                            jmin = j;
+//                        }
+//                    }
+//                    thisFaceReal.site0 = node.gen[jmin];
+//                    thisFaceReal.site1 = -1;
+//
+//                    break;
+//                }
+//            }
+
+            // TODO: The method commented above failed for unintersected boundary faces (i.e. tris with 3 boundary verts)
+            double dmin = 1e10;
+            int jmin = -1;
+            for (int j = 0; j < n_cells; j++) {
+                double dcurr = (c.segment<3>(j * 4) - avgPos).squaredNorm();
+                if (dcurr < dmin) {
+                    dmin = dcurr;
+                    jmin = j;
+                }
+            }
+            thisFaceReal.site0 = jmin;
+            thisFaceReal.site1 = -1;
+        }
+
+        faces.push_back(thisFaceReal);
+
+        ntri_final += thisFace.size() - 2;
         newFaces.push_back(thisFace);
     }
 
-    MatrixXT colors = MatrixXT::Random(1000, 3) * 0.5 + MatrixXT::Constant(1000, 3, 0.5);
+    MatrixXT colors = MatrixXT::Random(10000, 3) * 0.5 + MatrixXT::Constant(10000, 3, 0.5);
 
-    MatrixXi FF3(ntri, 3);
-    MatrixXT Fc(ntri, 3);
+    MatrixXi FF3(ntri_final, 3);
+    MatrixXT Fc(ntri_final, 3);
     int iColor = 0;
-    i = 0;
+    int iOut = 0;
     for (auto newFace: newFaces) {
         for (int j = 1; j < newFace.size() - 1; j++) {
-            FF3.row(i) = IV3(newFace[0],
-                             newFace[j],
-                             newFace[j + 1]);
-            Fc.row(i) = colors.row(iColor);
-            i++;
+            FF3.row(iOut) = IV3(newFace[0],
+                                newFace[j],
+                                newFace[j + 1]);
+            Fc.row(iOut) = colors.row(iColor);
+            iOut++;
         }
         iColor++;
     }
