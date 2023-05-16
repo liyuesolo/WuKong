@@ -6,10 +6,7 @@
 #include "../../include/Tessellation/Tessellation.h"
 #include "../../include/Tessellation/CellFunction.h"
 #include <set>
-#include <iostream>
-#include <utility>
-
-#include <Eigen/Core>
+#include <chrono>
 
 bool operator<(const Node &a, const Node &b) {
     if (a.type != b.type) return a.type < b.type;
@@ -34,7 +31,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     nodes.clear();
     faces.clear();
 
+    auto time_0 = std::chrono::high_resolution_clock::now();
     getDualGraph();
+    auto time_1 = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < faces.size(); i++) {
         for (Node node: faces[i].nodes) {
@@ -51,6 +50,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
             }
         }
     }
+    auto time_2 = std::chrono::high_resolution_clock::now();
+    std::cout << "getDualGraph " << (time_1 - time_0).count() << std::endl;
+    std::cout << "node computations " << (time_2 - time_1).count() << std::endl;
 
 //
 //    auto cmp = [](IV4 a, IV4 b) {
@@ -221,6 +223,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
 // TODO: This function is horrendous.
 void Tessellation::clipFaces(TempStruct &ts) {
+    auto time_0 = std::chrono::high_resolution_clock::now();
+
     int n_cells = c.rows() / getDims();
 
     std::vector<Face> unclippedFaces(faces.size());
@@ -292,8 +296,11 @@ void Tessellation::clipFaces(TempStruct &ts) {
     VectorXi J, SJ;
     VectorXi IM, SIM;
 
+    auto time_1 = std::chrono::high_resolution_clock::now();
+
     // Resolve intersections
     igl::copyleft::cgal::remesh_self_intersections(V, F, param, VV, FF, IF, J, IM);
+    auto time_2 = std::chrono::high_resolution_clock::now();
 
     // Identify edge and face which generated each new vertex
     MatrixXi preClipFaces = MatrixXi::Constant(VV.rows(), 2, -1);
@@ -422,18 +429,13 @@ void Tessellation::clipFaces(TempStruct &ts) {
         tuples.push_back(thisTuples);
     }
 
-    std::vector<std::vector<int>> newFaces;
-    int ntri_final = 0;
     for (std::vector<std::tuple<int, int, int>> thisTuples: tuples) {
-        std::vector<int> thisFace;
         Face thisFaceReal;
 
         TV3 avgPos = TV3::Zero();
         for (int i = 0; i < thisTuples.size(); i++) {
             int tupV = std::get<0>(thisTuples[i]);
             if (badVerts.find(tupV) == badVerts.end()) {
-                thisFace.push_back(tupV);
-
                 IV3 sources = originFaces.row(SJ(tupV));
 
                 Node node;
@@ -523,29 +525,11 @@ void Tessellation::clipFaces(TempStruct &ts) {
         }
 
         faces.push_back(thisFaceReal);
-
-        ntri_final += thisFace.size() - 2;
-        newFaces.push_back(thisFace);
     }
 
-    MatrixXT colors = MatrixXT::Random(10000, 3) * 0.5 + MatrixXT::Constant(10000, 3, 0.5);
+    auto time_3 = std::chrono::high_resolution_clock::now();
 
-    MatrixXi FF3(ntri_final, 3);
-    MatrixXT Fc(ntri_final, 3);
-    int iColor = 0;
-    int iOut = 0;
-    for (auto newFace: newFaces) {
-        for (int j = 1; j < newFace.size() - 1; j++) {
-            FF3.row(iOut) = IV3(newFace[0],
-                                newFace[j],
-                                newFace[j + 1]);
-            Fc.row(iOut) = colors.row(iColor);
-            iOut++;
-        }
-        iColor++;
-    }
-
-    ts.V = SV;
-    ts.F = FF3;
-    ts.Fc = Fc;
+    std::cout << "pre process " << (time_1 - time_0).count() << std::endl;
+    std::cout << "clip " << (time_2 - time_1).count() << std::endl;
+    std::cout << "post process " << (time_3 - time_2).count() << std::endl;
 }

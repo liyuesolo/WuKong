@@ -210,7 +210,7 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<int, -1, -1> F;
     Eigen::Matrix<double, -1, -1> Fc;
 
-    if (!optimize) {
+    {
         int nx = foam.tessellation.nodes.size();
         std::map<Node, int> nodeIndices;
         nodes.resize(nx, 3);
@@ -394,19 +394,21 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
         viewer.data(1).set_colors(F1c);
         viewer.data(1).show_lines = 0;
         viewer.data(1).is_visible = slice_visible;
-    } else {
-        V = ts.V;
-        F = ts.F;
-        Fc = ts.Fc;
-
-//        Fc = MatrixXT::Zero(F.rows(), 3);
-//        Fc.col(0).setConstant(1);
-
-        viewer.data(0).clear();
-        viewer.data(0).set_mesh(V, F);
-        viewer.data(0).set_colors(Fc);
-        viewer.data(0).show_lines = true;
     }
+
+//    else {
+//        V = ts.V;
+//        F = ts.F;
+//        Fc = ts.Fc;
+//
+////        Fc = MatrixXT::Zero(F.rows(), 3);
+////        Fc.col(0).setConstant(1);
+//
+//        viewer.data(0).clear();
+//        viewer.data(0).set_mesh(V, F);
+//        viewer.data(0).set_colors(Fc);
+//        viewer.data(0).show_lines = true;
+//    }
 }
 
 void Foam3DApp::updatePlotData() {
