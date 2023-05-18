@@ -77,13 +77,13 @@ private:
 public:
     Tessellation() {}
 
-    void clipFaces(TempStruct &ts);
+    void clipFaces();
 
     virtual void
     getDualGraph() = 0;
 
     virtual void
-    getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, TV3 &node) = 0;
+    getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos) = 0;
 
     virtual void
     getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
@@ -93,6 +93,13 @@ public:
     getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
                    std::vector<MatrixXT> &nodeHess) = 0;
 
+    virtual void
+    getNodeBFace(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                 const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos) = 0;
+
+    virtual void
+    getNodeBEdge(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                 const VectorXT &v1, NodePosition &nodePos) = 0;
 
     void tessellate(const VectorXT &vertices, const VectorXT &params, int n_cells);
 

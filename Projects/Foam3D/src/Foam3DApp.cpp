@@ -156,7 +156,6 @@ void Foam3DApp::generateScenario() {
 
     foam.vertices = vertices;
     foam.params = params;
-    foam.tessellation.tessellate(foam.vertices, foam.params, 0);
 
     double bound = 1;
     MatrixXd bbox(8, 3);
@@ -182,7 +181,7 @@ void Foam3DApp::generateScenario() {
             3, 7, 5,
             2, 6, 3,
             6, 7, 3;
-
+    
     foam.tessellation.bv.resize(bbox.rows());
     foam.tessellation.bf.resize(btri.rows());
     for (int i = 0; i < bbox.rows(); i++) {
@@ -192,7 +191,7 @@ void Foam3DApp::generateScenario() {
         foam.tessellation.bf[i].vertices = btri.row(i);
     }
 
-    foam.tessellation.clipFaces(ts);
+    foam.tessellation.tessellate(foam.vertices, foam.params, 0);
 }
 
 void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {

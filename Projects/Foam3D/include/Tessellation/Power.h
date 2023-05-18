@@ -13,7 +13,15 @@ public:
     getDualGraph();
 
     virtual void
-    getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, TV3 &node);
+    getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos);
+
+    virtual void
+    getNodeBFace(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                 const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos);
+
+    virtual void
+    getNodeBEdge(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                 const VectorXT &v1, NodePosition &nodePos);
 
     virtual void
     getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad);
