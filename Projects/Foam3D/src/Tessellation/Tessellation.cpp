@@ -1,9 +1,9 @@
 #include "../../include/Tessellation/Tessellation.h"
-#include "../../include/Tessellation/CellFunction.h"
 #include <set>
 #include <chrono>
- 
-void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const int n_cells) {
+#include <iostream>
+
+void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) {
     VectorXT c_new = combineVerticesParams(vertices, params);
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
@@ -15,6 +15,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     c = c_new;
     nodes.clear();
     faces.clear();
+    cells.clear();
 
     getDualGraph();
 
@@ -52,6 +53,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                         v3 = c.segment<4>(node.gen[3] * 4);
 
                         getNode(v0, v1, v2, v3, nodePosition);
+                        getNodeGradient(v0, v1, v2, v3, nodePosition);
+                        getNodeHessian(v0, v1, v2, v3, nodePosition);
                         break;
                     case B_FACE:
                         b0 = bv[bf[node.gen[0]].vertices(0)].pos;
@@ -63,6 +66,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                         v2 = c.segment<4>(node.gen[3] * 4);
 
                         getNodeBFace(b0, b1, b2, v0, v1, v2, nodePosition);
+                        getNodeBFaceGradient(b0, b1, b2, v0, v1, v2, nodePosition);
+                        getNodeBFaceHessian(b0, b1, b2, v0, v1, v2, nodePosition);
                         break;
                     case B_EDGE:
                         b0 = bv[node.gen[0]].pos;
@@ -72,6 +77,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                         v1 = c.segment<4>(node.gen[3] * 4);
 
                         getNodeBEdge(b0, b1, v0, v1, nodePosition);
+                        getNodeBEdgeGradient(b0, b1, v0, v1, nodePosition);
+                        getNodeBEdgeHessian(b0, b1, v0, v1, nodePosition);
                         break;
                     case B_VERTEX:
                         nodePosition.pos = bv[node.gen[0]].pos;
@@ -83,6 +90,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
             }
         }
     }
+
+    computeCellData();
 
 //
 //    auto cmp = [](IV4 a, IV4 b) {
@@ -249,4 +258,48 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 //            return;
 //        }
 //    }
+}
+
+#include "../../include/Tessellation/CellFunctionPerTriangle.h"
+#include "../../include/Energy/PerTriangleVolume.h"
+
+void Tessellation::computeCellData() {
+    int n_cells = c.rows() / 4;
+    cells.resize(n_cells);
+
+    for (int f = 0; f < faces.size(); f++) {
+        if (faces[f].site0 >= 0) {
+            cells[faces[f].site0].facesPos.push_back(f);
+        }
+        if (faces[f].site1 >= 0) {
+            cells[faces[f].site1].facesNeg.push_back(f);
+        }
+    }
+
+    double totalv = 0;
+    PerTriangleVolume perTriVol;
+
+    CellFunctionPerTriangle volFunc;
+    volFunc.perTriangleFunction = &perTriVol;
+    for (Cell cell: cells) {
+        int i = 0;
+        auto func = [&](const int &f) {
+            for (Node n: faces[f].nodes) {
+                if (cell.nodeIndices.find(n) == cell.nodeIndices.end()) {
+                    cell.nodeIndices[n] = i;
+                    i++;
+                }
+            }
+        };
+        std::for_each(cell.facesPos.begin(), cell.facesPos.end(), func);
+        std::for_each(cell.facesNeg.begin(), cell.facesNeg.end(), func);
+
+        CellValue cellVal(cell);
+        volFunc.addValue(this, cellVal);
+        volFunc.addGradient(this, cellVal);
+        volFunc.addHessian(this, cellVal);
+        totalv += cellVal.value;
+        std::cout << cellVal.value << std::endl;
+    }
+    std::cout << "total " << totalv << std::endl;
 }

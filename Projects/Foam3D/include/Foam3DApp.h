@@ -24,8 +24,6 @@ public:
     int generate_scenario_type = 0;
     int generate_scenario_num_sites = 50;
 
-    TempStruct ts;
-
     bool slice_visible = false;
     bool slice_follow = true;
     int slice_mode = 0;

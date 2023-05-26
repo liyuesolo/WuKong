@@ -16,19 +16,36 @@ public:
     getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos);
 
     virtual void
+    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
+                    NodePosition &nodePos);
+
+    virtual void
+    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
+                   NodePosition &nodePos);
+
+    virtual void
     getNodeBFace(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
                  const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos);
+
+    virtual void
+    getNodeBFaceGradient(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                         const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos);
+
+    virtual void
+    getNodeBFaceHessian(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                        const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos);
 
     virtual void
     getNodeBEdge(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
                  const VectorXT &v1, NodePosition &nodePos);
 
     virtual void
-    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad);
+    getNodeBEdgeGradient(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                         const VectorXT &v1, NodePosition &nodePos);
 
     virtual void
-    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
-                   std::vector<MatrixXT> &nodeHess);
+    getNodeBEdgeHessian(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                        const VectorXT &v1, NodePosition &nodePos);
 
     virtual int getNumVertexParams() { return 1; }
 

@@ -11,18 +11,6 @@ enum TessellationType {
     POWER
 };
 
-using TV = Vector<double, 2>;
-using TV3 = Vector<double, 3>;
-using TM = Matrix<double, 2, 2>;
-using IV = Vector<int, 2>;
-using IV3 = Vector<int, 3>;
-using IV4 = Vector<int, 4>;
-
-using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
-using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
-using VectorXi = Vector<int, Eigen::Dynamic>;
-
 enum NodeType {
     STANDARD,
     B_FACE,
@@ -39,6 +27,8 @@ bool operator<(const Node &a, const Node &b);
 
 struct NodePosition {
     TV3 pos;
+    MatrixXT grad;
+    MatrixXT hess[3];
 };
 
 struct Face {
@@ -54,16 +44,18 @@ struct BoundaryFace {
     IV3 vertices;
 };
 
-struct TempStruct {
-    MatrixXT V;
-    MatrixXi F;
-    MatrixXT Fc;
+struct Cell {
+    std::vector<int> facesPos;
+    std::vector<int> facesNeg;
+    std::map<Node, int> nodeIndices;
 };
 
 class Tessellation {
 
 public:
     VectorXT c;
+
+    std::vector<Cell> cells;
 
     std::vector<Face> faces;
     std::map<Node, NodePosition> nodes;
@@ -79,6 +71,8 @@ public:
 
     void clipFaces();
 
+    void computeCellData();
+
     virtual void
     getDualGraph() = 0;
 
@@ -87,21 +81,37 @@ public:
 
     virtual void
     getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
-                    MatrixXT &nodeGrad) = 0;
+                    NodePosition &nodePos) = 0;
 
     virtual void
     getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
-                   std::vector<MatrixXT> &nodeHess) = 0;
+                   NodePosition &nodePos) = 0;
 
     virtual void
     getNodeBFace(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
                  const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos) = 0;
 
     virtual void
+    getNodeBFaceGradient(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                         const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos) = 0;
+
+    virtual void
+    getNodeBFaceHessian(const TV3 &b0, const TV3 &b1, const TV3 &b2, const VectorXT &v0,
+                        const VectorXT &v1, const VectorXT &v2, NodePosition &nodePos) = 0;
+
+    virtual void
     getNodeBEdge(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
                  const VectorXT &v1, NodePosition &nodePos) = 0;
 
-    void tessellate(const VectorXT &vertices, const VectorXT &params, int n_cells);
+    virtual void
+    getNodeBEdgeGradient(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                         const VectorXT &v1, NodePosition &nodePos) = 0;
+
+    virtual void
+    getNodeBEdgeHessian(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
+                        const VectorXT &v1, NodePosition &nodePos) = 0;
+
+    void tessellate(const VectorXT &vertices, const VectorXT &params);
 
     virtual int getNumVertexParams() = 0;
 

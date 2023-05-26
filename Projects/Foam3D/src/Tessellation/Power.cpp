@@ -1,7 +1,7 @@
 #include <igl/triangle/triangulate.h>
 // libigl library must be included first
 #include "../../include/Tessellation/Power.h"
-#include "../../include/Tessellation/CellFunction.h"
+#include "../../include/Tessellation/PerTriangleFunction.h"
 #include <iostream>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -9,7 +9,7 @@
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Regular_triangulation_3<K> Regular_triangulation;
- 
+
 int idxClosest(const TV3 &p, const VectorXT &c) {
     int n_vtx = c.rows() / 4;
 

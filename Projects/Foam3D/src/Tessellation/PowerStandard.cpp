@@ -1,6 +1,8 @@
 #include "../../include/Tessellation/Power.h"
 #include <iostream>
-  
+
+#define NINPUTS 16
+
 // @formatter:off
 void Power::getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos) {
     double x0 = v0(0);
@@ -87,7 +89,7 @@ void Power::getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, 
 }
 
 void
-Power::getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
+Power::getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos) {
     double x0 = v0(0);
     double y0 = v0(1);
     double z0 = v0(2);
@@ -105,7 +107,7 @@ Power::getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v
     double z3 = v3(2);
     double w3 = v3(3);
 
-    double unknown[3][16];
+    double unknown[3][NINPUTS];
 
     double t1 = x0 * z2;
     double t2 = x0 * z3;
@@ -397,12 +399,11 @@ Power::getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v
     unknown[2][14] = t675 * (0.2e1 * x0 * (t502 - t556) + 0.2e1 * x1 * (-t448 + t556) + 0.2e1 * x2 * (t448 - t502)) - t638 * t715;
     unknown[2][15] = t675 * (-x0 * t752 - x1 * t799 - x2 * t844);
 
-    nodeGrad = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], 16, 3).transpose();
+    nodePos.grad = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], NINPUTS, 3).transpose();
 }
 
 void
-Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
-                      std::vector<MatrixXT> &nodeHess) {
+Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, NodePosition &nodePos) {
     double x0 = v0(0);
     double y0 = v0(1);
     double z0 = v0(2);
@@ -420,8 +421,7 @@ Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2
     double z3 = v3(2);
     double w3 = v3(3);
 
-    nodeHess.resize(3);
-    double unknown[16][16];
+    double unknown[NINPUTS][NINPUTS];
 
     {
         double t1 = -z2 + z3;
@@ -1021,7 +1021,7 @@ Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2
         unknown[15][15] = 0.0e0;
     }
 
-    nodeHess[0] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], 16, 16);
+    nodePos.hess[0] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], NINPUTS, NINPUTS);
 
     {
         double t1 = z2 - z3;
@@ -1617,7 +1617,7 @@ Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2
         unknown[15][15] = 0.0e0;
     }
 
-    nodeHess[1] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], 16, 16);
+    nodePos.hess[1] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], NINPUTS, NINPUTS);
 
     {
         double t1 = -y2 + y3;
@@ -2211,7 +2211,7 @@ Power::getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2
         unknown[15][13] = -t1085;
         unknown[15][14] = -t1092;
         unknown[15][15] = 0.0e0;
-    
-        nodeHess[2] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], 16, 16);
     }
+
+    nodePos.hess[2] = Eigen::Map<Eigen::MatrixXd>(&unknown[0][0], NINPUTS, NINPUTS);
 }

@@ -6,43 +6,36 @@
 #include <Eigen/Dense>
 
 #include "Projects/Foam2D/include/VecMatDef.h"
+#include "Tessellation.h"
 
-using TV = Vector<double, 2>;
-using TV3 = Vector<double, 3>;
-using TM = Matrix<double, 2, 2>;
-using IV3 = Vector<int, 3>;
-using IV = Vector<int, 2>;
+struct CellValue {
+    Cell cell;
 
-using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
-using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-using MatrixXi = Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
-using VectorXi = Vector<int, Eigen::Dynamic>;
+    double value;
+    VectorXT gradient;
+    MatrixXT hessian;
 
-struct CellInfo {
-    double target_area;
-    bool agent = false;
-    TV target_position;
-    VectorXT border_pix;
-    VectorXT neighbor_affinity;
+    CellValue(Cell &_cell) {
+        cell = _cell;
+        
+        int nvars = cell.nodeIndices.size() * 3 + 4;
+
+        value = 0;
+        gradient = VectorXT::Zero(nvars);
+        hessian = VectorXT::Zero(nvars, nvars);
+    }
 };
 
 class CellFunction {
 public:
-    const static int nx = 3;
+    virtual void
+    addValue(Tessellation *tessellation, CellValue &value) const = 0;
+
+    virtual void
+    addGradient(Tessellation *tessellation, CellValue &value) const = 0;
+
+    virtual void
+    addHessian(Tessellation *tessellation, CellValue &value) const = 0;
 
 public:
-    virtual void
-    addValue(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype, double &value,
-             const CellInfo *cellInfo) const = 0;
-
-    virtual void
-    addGradient(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype,
-                VectorXT &gradient_c,
-                VectorXT &gradient_x,
-                const CellInfo *cellInfo) const = 0;
-
-    virtual void
-    addHessian(const VectorXT &site, const VectorXT &nodes, const VectorXi &next, const VectorXi &btype,
-               MatrixXT &hessian,
-               const CellInfo *cellInfo) const = 0;
 };

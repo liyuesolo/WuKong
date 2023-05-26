@@ -4,10 +4,10 @@
 #include <igl/extract_manifold_patches.h>
 
 #include "../../include/Tessellation/Tessellation.h"
-#include "../../include/Tessellation/CellFunction.h"
+#include "../../include/Tessellation/PerTriangleFunction.h"
 #include <set>
 #include <chrono>
-  
+
 bool operator<(const Node &a, const Node &b) {
     if (a.type != b.type) return a.type < b.type;
     if (a.gen[0] != b.gen[0]) return a.gen[0] < b.gen[0];
