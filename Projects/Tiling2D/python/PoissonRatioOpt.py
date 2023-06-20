@@ -226,6 +226,7 @@ def poissonRatioSA(IH, plot_sim = False, plot_GT = False):
         bounds.append([0.505, 0.795])
         ti = np.array([0.165, 0.72])
         ti_target = np.array([0.175, 0.52])
+        
     elif IH == 22:
         strain = 0.05
         n_tiling_params = 3
@@ -367,9 +368,9 @@ def poissonRatioSA(IH, plot_sim = False, plot_GT = False):
         return obj, grad
 
     if (not plot_GT) and (not plot_sim):
-        # result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
+        result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
         tic = time.perf_counter()
-        result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+        # result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
         toc = time.perf_counter()
         print(f"Optimization takes {toc - tic:0.6f} seconds")
         uniaxial_strain_opt = []
@@ -463,8 +464,8 @@ def poissonRatioSA(IH, plot_sim = False, plot_GT = False):
     
     ax1.set_ylim(min_pr - 0.1 * dpr, max_pr + 0.1 * max_pr)
     
-    # ax1.set_ylim(-1.0, 3.5)
-    ax1.plot(thetas,poisson_ratio,lw=2.5, label = "poisson ratio initial", zorder = 0,  color= "#00ABBD")
+    # ax1.set_ylim(0.4, 1.4)
+    ax1.plot(thetas,poisson_ratio,lw=2.5, label = "poisson ratio initial", zorder = 0, color= "#00ABBD")
     ax1.plot(thetas,poisson_ratio_targets,lw=2.5, label = "poisson ratio target", linestyle = "dashed", color= "#FF9933", zorder = 2)
     # plt.polar(thetas, poisson_ratio, label = "poisson_ratio initial", linewidth=3.0, zorder=0)
     # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
@@ -476,6 +477,7 @@ def poissonRatioSA(IH, plot_sim = False, plot_GT = False):
         fig1 = plt.figure()
         ax1 = fig1.add_axes([0.1,0.1,0.8,0.8],polar=True)
         ax1.set_ylim(min_pr - 0.1 * dpr, max_pr + 0.1 * max_pr)
+        # ax1.set_ylim(0.4, 1.4)
         # ax1.set_ylim(-0.5, 3.0)
         # plt.polar(thetas, poisson_ratio_opt, label = "poisson_ratio optimized", linewidth=3.0, zorder=0)
         # plt.polar(thetas, poisson_ratio_targets, linestyle = "dashed", label = "poisson_ratio target", linewidth=3.0, zorder=0)
@@ -612,7 +614,7 @@ if __name__ == "__main__":
     # computePoissonRatio()
     
     # for idx in [22, 28, 21, 29, 1, 50, 67]:
-    for idx in [22]:
+    for idx in [21]:
         poissonRatioSA(idx, plot_sim = True, plot_GT=False)
         
     # poissonRatioModifyUI()

@@ -9,7 +9,7 @@
 
 bool FEMSolver::addPBCPairsXY()
 {
-    std::cout << pbc_translation_file << std::endl;
+    // std::cout << pbc_translation_file << std::endl;
     std::ifstream in(pbc_translation_file);
     TV t1, t2;
     in >> t1[0] >> t1[1] >> t2[0] >> t2[1];

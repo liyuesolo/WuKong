@@ -1,7 +1,69 @@
 
 #include <igl/mosek/mosek_quadprog.h>
 #include <LBFGSB.h>
+#include <nlopt.h>
+#include "../include/Timer.h"
 #include "../include/SensitivityAnalysis.h"
+
+void SensitivityAnalysis::optimizeNelderMead()
+{
+    
+    Vector<T, 4> ti; ti << 0.1224, 0.6, 0.1434, 0.625;
+    objective.targets.resize(3);
+    objective.targets << -0.09095851020611506, 0.2256941159303769, 0.5523345728407226;
+    objective.bounds.push_back(TV(0.05, 0.3));
+    objective.bounds.push_back(TV(0.25, 0.75));
+    objective.bounds.push_back(TV(0.05, 0.15));
+    objective.bounds.push_back(TV(0.4, 0.8));
+    objective.n_dof_design = ti.rows();
+    design_parameters = ti;
+    n_dof_design = objective.n_dof_design; 
+    T tol_g = 1e-6;
+    VectorXT min_p(n_dof_design), max_p(n_dof_design);
+    for (int i = 0; i < n_dof_design; i++)
+    {
+        min_p[i] = objective.bounds[i][0]; max_p[i] = objective.bounds[i][1];   
+    }
+
+    nlopt_opt opt;
+    opt = nlopt_create(NLOPT_LN_NELDERMEAD, n_dof_design);
+    // opt = nlopt_create(NLOPT_LN_COBYLA, n_dof_design);
+    // opt = nlopt_create(NLOPT_LN_BOBYQA, n_dof_design);
+    
+    nlopt_set_lower_bounds(opt, min_p.data());
+    nlopt_set_upper_bounds(opt, max_p.data());
+
+
+    
+    auto myfunc = [](unsigned n, const double *x, double *grad, void *my_func_data)->double
+    {
+        
+        VectorXT _x(n);
+        for (int i = 0; i < n; i++)
+        {
+            _x[i] = x[i];
+        }
+        UniaxialStressObjective *objective = reinterpret_cast<UniaxialStressObjective*>(my_func_data);
+        T energy = objective->value(_x, true, true);
+        objective->counter ++;
+        std::cout << "iter " << objective->counter << " obj " << energy << std::endl;
+        return energy;
+    };
+    
+    nlopt_set_min_objective(opt, myfunc, &objective);
+
+    T minf; 
+    nlopt_set_maxeval(opt, 300);
+    Timer timer(true);
+    if (nlopt_optimize(opt, ti.data(), &minf) < 0) {
+        printf("nlopt failed!\n");
+    }
+    else {
+        std::cout << "opt paramter " << ti.transpose() << " " << " obj " << minf << std::endl;
+    }
+    std::cout << "optimization takes " << timer.elapsed_sec() << "s" << std::endl;
+
+}
 
 void SensitivityAnalysis::optimizeGradientDescent()
 {

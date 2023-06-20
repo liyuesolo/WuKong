@@ -45,15 +45,16 @@ void UniaxialStressObjective::computeStressForDifferentStrain(const VectorXT& ti
     VectorXT& stress)
 {
     std::cout << "ti " << ti.transpose() << std::endl;
+
+    int actual_IH, n_tiling_params, unit;
+    std::vector<TV> bounds; 
+    VectorXT ti_default;
+    tiling.getTilingConfig(IH, n_tiling_params, actual_IH, bounds, ti_default, unit);
+
     stress.resize(strain_samples.rows());
     std::string result_folder = "./";
-    csk::IsohedralTiling a_tiling( csk::tiling_types[ IH ] );
-    int num_params = a_tiling.numParameters();
-    T new_params[ num_params ];
-    a_tiling.getParameters( new_params );
-    std::vector<T> params(num_params);
-    std::vector<TV> params_range(num_params);
-    for (int j = 0; j < num_params;j ++)
+    std::vector<T> params(n_tiling_params);
+    for (int j = 0; j < n_tiling_params;j ++)
     {
         params[j] = ti[j];
     }
@@ -61,8 +62,8 @@ void UniaxialStressObjective::computeStressForDifferentStrain(const VectorXT& ti
     std::vector<TV> pbc_corners; 
     Vector<T, 4> cubic_weights;
     cubic_weights << 0.25, 0, 0.75, 0;
-    tiling.fetchUnitCellFromOneFamily(IH, 2, polygons, pbc_corners, params, 
-        cubic_weights, result_folder + "structure.txt");
+    tiling.fetchUnitCellFromOneFamily(actual_IH, 2, polygons, pbc_corners, params, 
+        cubic_weights, result_folder + "structure.txt", unit);
     
     tiling.generatePeriodicMesh(polygons, pbc_corners, true, result_folder + "structure");
 
@@ -79,6 +80,14 @@ void UniaxialStressObjective::computeStressForDifferentStrain(const VectorXT& ti
     solver.pbc_strain_w = 1e6;
     solver.project_block_PD = false;
     solver.strain_theta = theta;
+    if (IH == 1)
+    {
+        solver.pbc_strain_w = 1e7;
+    }
+    solver.max_newton_iter = 500;
+    solver.project_block_PD = true;
+    if (IH == 22 || IH == 28)
+        solver.project_block_PD = false;
     TV d(std::cos(theta), std::sin(theta));
     
     solver.reset();
@@ -86,7 +95,7 @@ void UniaxialStressObjective::computeStressForDifferentStrain(const VectorXT& ti
     {
         solver.uniaxial_strain = strain_samples[i];
         bool solve_succeed = solver.staticSolve();
-        solver.saveToOBJ("./tmp/" + std::to_string(ti[0]) +"_"+ std::to_string(ti[1]) + "_" + std::to_string(i) + "_rest.obj", true);
+        // solver.saveToOBJ("./tmp/" + std::to_string(ti[0]) +"_"+ std::to_string(ti[1]) + "_" + std::to_string(i) + "_rest.obj", true);
         TM secondPK_stress, Green_strain;
         T psi;
         solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);

@@ -145,11 +145,12 @@ int main(int argc, char** argv)
         auto inverseDesign = [&]()
         {
             UniaxialStressObjective ti_obj(tiling);
+            ti_obj.IH = 1;
             SensitivityAnalysis sa(fem_solver, ti_obj);
             VectorXT strain_samples;
             strain_samples.resize(3);
             // strain_samples << 1.0-0.025, 1.0+0.025, 1.0+0.085;
-            strain_samples << 1.0 - 0.025, 1.0 + 0.025, 1.0 + 0.085;
+            strain_samples << 1.0-0.09095851020611506, 1.2256941159303769, 1.5523345728407226;
             // TV strain_range(-0.05, 0.1);
             // int n_sp_strain = 10;
             // strain_samples.resize(n_sp_strain);
@@ -171,7 +172,7 @@ int main(int argc, char** argv)
             // sa.optimizeLBFGSB();
             // sa.optimizeGradientDescent();
             //-0.00700946   0.0239969   0.0720543
-            sa.sampleGradientDirection();
+            sa.optimizeNelderMead();
 
         };
 
@@ -317,7 +318,7 @@ int main(int argc, char** argv)
 
         // save3DMesh();
         // testNeuralConstitutiveModel();
-        // inverseDesign();
+        inverseDesign();
         // renderScene();
         // run3DSim();
         // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
@@ -334,7 +335,7 @@ int main(int argc, char** argv)
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 1, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 67, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 50, 100);
-        // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 22, 100);
+        // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 29, 100);
         // tiling.generateStrainStressSimulationDataFromFile("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 
         //     "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/IH_1_strain_stress.txt", 
         //     "projectPD", 1, 50);
@@ -353,18 +354,33 @@ int main(int argc, char** argv)
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 28, 50);
         // for (int IH : {1, 21, 22, 28, 29, 50, 67})
         // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21,
-            0, {0.10887782216199968, 0.6526880237650166}, TV(0.9, 1.2), 25, false);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50,
-            0, {0.21330992098074827, 0.6013053081575949}, TV(0.9, 1.2), 25, false);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 67,
-            0.5 * M_PI, {0.1499092468720663, 0.7400465501354314}, TV(0.9, 1.2), 25, false);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 28,
-            0.5 * M_PI, {0.219595270751497, 0.397364995280736}, TV(0.9, 1.2), 25, false);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 1,
-            0.25 * M_PI, {0.07592219809002378, 0.6738283023035684, 0.13498317834561663, 0.5710111040053688}, TV(0.9, 1.2), 25, false);
-        tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 22,
-            0, {0.22090099256867987, 0.6187215051849427, 0.1571724148917844}, TV(0.9, 1.2), 25, false);
+        
+        
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21,
+        //     0.0 * M_PI, {0.115, 0.756}, TV(0.9, 1.2), 25, "init", false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 21,
+        //     0, {0.10887782216199968, 0.6526880237650166}, TV(0.9, 1.2), 25, "opt", false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50,
+        //     0, {0.21330992098074827, 0.6013053081575949}, TV(0.9, 1.2), 25, "opt", false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 50,
+        //     0, {0.2, 0.52}, TV(0.9, 1.2), 25, "init", false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 67,
+        //     0.5 * M_PI, {0.1499092468720663, 0.7400465501354314}, TV(0.9, 1.2), 25, "opt",false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 67,
+        //     0.5 * M_PI, {0.24, 0.87}, TV(0.9, 1.2), 25, "init",false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 28,
+        //     0.5 * M_PI, {0.219595270751497, 0.397364995280736}, TV(0.9, 1.2), 25, "opt",false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 28,
+        //     0.5 * M_PI, {0.03411184, 0.37176683}, TV(0.9, 1.2), 25, "int", false);
+
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 1,
+        //     0.25 * M_PI, {0.07592219809002378, 0.6738283023035684, 0.13498317834561663, 0.5710111040053688}, TV(0.9, 1.2), 25, "opt",false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 1,
+        //     0.25 * M_PI, {0.1224, 0.6, 0.1434, 0.625}, TV(0.9, 1.2), 25, "init",false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 22,
+        //     0, {0.22090099256867987, 0.6187215051849427, 0.1571724148917844}, TV(0.9, 1.2), 25, "opt", false);
+        // tiling.generateStrainStressDataFromParams("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", 22,
+        //     0, {0.2, 0.7, 0.15}, TV(0.9, 1.2), 25, "init", false);
         
 
         // tiling.generateStrainStressSimulationDataFromFile("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/", "sim_uni", 21, 25);
@@ -381,9 +397,9 @@ int main(int argc, char** argv)
         // tiling.solver.computeHomogenizationElasticityTensorSA(M_PI * 0.0, 1.05, elasticity_tensor);
         // std::cout << elasticity_tensor << std::endl;
         // std::exit(0);
-        // std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/poisson_ratio/";
-        // for (int IH : {22})
-            // tiling.generatePoissonRatioDataFromParams(base_folder, IH);
+        // std::string base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/stiffness/";
+        // for (int IH : {1})
+        //     tiling.generatePoissonRatioDataFromParams(base_folder, IH);
             // tiling.generateStiffnessDataFromParams(base_folder, IH);
         // base_folder = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/stiffness/";
         //     tiling.generateStiffnessDataFromParams(base_folder, 28);

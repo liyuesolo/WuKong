@@ -45,6 +45,7 @@ public:
     std::vector<TV> bounds;
     VectorXT targets;
 
+    int counter = 0;
 public:
     virtual T value(const VectorXT& p_curr, bool simulate = true, bool use_prev_equil = false) {}
     virtual T gradient(const VectorXT& p_curr, VectorXT& dOdp, T& energy, bool simulate = true, bool use_prev_equil = false) {}

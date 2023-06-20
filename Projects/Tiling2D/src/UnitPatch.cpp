@@ -1144,8 +1144,8 @@ void Tiling2D::generateOnePerodicUnit()
     std::vector<TV2> pbc_corners; 
     // int tiling_idx = 19;
     // int tiling_idx = 46;
-    // int tiling_idx = 0;
-    int tiling_idx = 26;
+    int tiling_idx = 0;
+    // int tiling_idx = 26;
     // int tiling_idx = 20;
     // int tiling_idx = 47;
     // int tiling_idx = 27;
@@ -1155,6 +1155,8 @@ void Tiling2D::generateOnePerodicUnit()
         unit = 5.0;
     else if (tiling_idx == 26 || tiling_idx == 0 || tiling_idx == 27)
         unit = 10.0;
+    if (tiling_idx == 0)
+        unit = 5.0;
     csk::IsohedralTiling a_tiling( csk::tiling_types[ tiling_idx ] );
     int num_params = a_tiling.numParameters();
     T new_params[ num_params ];
@@ -1168,7 +1170,7 @@ void Tiling2D::generateOnePerodicUnit()
         std::cout << params[k] << ", ";
     std::cout << params[num_params - 1] << std::endl;
     // std::cout << params[0] << " " << params[1] << std::endl;
-    params = {0.02878188105, 0.5263784471};
+    // params = {0.115, 0.765};
     // params[0] += 1e-4;
     
     Vector<T, 4> cubic_weights;

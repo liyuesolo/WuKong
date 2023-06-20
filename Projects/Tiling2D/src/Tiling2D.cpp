@@ -153,12 +153,12 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             if (!valid_structure)
                 return false;
             solver.add_pbc_strain = true;
-            solver.strain_theta = 0.4469340574;
+            solver.strain_theta = 0. * M_PI;
             solver.uniaxial_strain = 1.2;
             // solver.strain_theta = 0.5 * M_PI;
-            // solver.uniaxial_strain = 1.2;
-            // solver.uniaxial_strain_ortho = 0.9;
-            solver.biaxial = false;
+            // solver.uniaxial_strain = 0.9;
+            solver.uniaxial_strain_ortho = 0.8;
+            // solver.biaxial = true;
             // solver.pbc_strain_w = 1e7; //IH01
             solver.pbc_strain_w = 1e6; //IH
             solver.pbc_w = 1e6;
@@ -226,7 +226,7 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             return false;
         }
     }
-
+    // std::cout << solver.num_nodes * 3 << std::endl;
     solver.project_block_PD = true;
     solver.verbose = false;
     solver.max_newton_iter = 500;
@@ -2083,7 +2083,7 @@ void Tiling2D::getTilingConfig(int IH, int& n_tiling_params, int& actual_IH,
     {
         n_tiling_params = 1;
         actual_IH = 27;
-        bounds.push_back(TV(0.005, 1.0));
+        bounds.push_back(TV(0.005, 0.4));
         ti_default = Vector<T, 1>(0.3669);
         unit = 10;
     }
@@ -2567,7 +2567,7 @@ void Tiling2D::generateStiffnessDataFromParams(const std::string& result_folder,
 }
 
 void Tiling2D::generateStrainStressDataFromParams(const std::string& result_folder, int IH, T theta, 
-        const std::vector<T>& params, const TV& strain_range, int n_samples, bool save_result)
+        const std::vector<T>& params, const TV& strain_range, int n_samples, const std::string& suffix, bool save_result)
 {
     int actual_IH, n_tiling_params, unit;
     std::vector<TV> bounds; 
@@ -2619,7 +2619,7 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
             solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
             std::cout << timer.elapsed_sec() << std::endl;
             timings[idx] = timer.elapsed_sec();
-            std::string obj_file = result_folder + "/obj/IH_" + std::to_string(IH) + "_strain_stress_"+std::to_string(idx)+".obj";
+            std::string obj_file = result_folder + "/obj/IH_" + std::to_string(IH) + "_strain_stress_"+suffix+"_"+std::to_string(idx)+".obj";
             solver.saveToOBJ(obj_file, false);
             // for (int m = 0; m < params.size(); m++)
             // {
@@ -2690,10 +2690,10 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
         else
             fail_cnt = 0;
     }
-    std::ofstream out(result_folder + "/" + "IH_" + std::to_string(IH) + "_strain_stress_timing.txt");
-    for (T time : timings)
-        out << time << " ";
-    out.close();
+    // std::ofstream out(result_folder + "/" + "IH_" + std::to_string(IH) + "_strain_stress_timing.txt");
+    // for (T time : timings)
+    //     out << time << " ";
+    // out.close();
 }
 
 void Tiling2D::generateStrainStressDataFromParams(const std::string& result_folder, int IH, bool save_result)

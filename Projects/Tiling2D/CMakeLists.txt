@@ -1,4 +1,4 @@
-set(DEPS igl::mosek  poisson_disk lbfgsb_solver solver boost_filesystem clipper tbb tbbmalloc tbbmalloc_proxy Eigen3::Eigen igl::core igl::opengl_glfw igl::opengl_glfw_imgui igl::tetgen igl::triangle igl::png mkl_intel_lp64 mkl_sequential mkl_core cholmod_solver gmp mpfr)
+set(DEPS igl::mosek  poisson_disk lbfgsb_solver solver boost_filesystem clipper tbb tbbmalloc tbbmalloc_proxy Eigen3::Eigen igl::core igl::opengl_glfw igl::opengl_glfw_imgui igl::tetgen igl::triangle igl::png mkl_intel_lp64 mkl_sequential mkl_core cholmod_solver gmp mpfr nlopt)
 
 
 
@@ -17,6 +17,19 @@ list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/../pytorch/)
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_SOURCE_DIR}/../pytorch/build_libtorch/build/lib/)
 find_package(Torch REQUIRED)
 target_link_libraries(Tiling2D torch)
+
+find_package (NLOPT REQUIRED)
+if(NLOPT_FOUND)
+message("NLOPT Found!")
+message("nlopt include dirs:" ${NLOPT_INCLUDE_DIRS})
+message("nlopt libraries:"  ${NLOPT_LIBRARIES})
+include_directories(${NLOPT_INCLUDE_DIRS})
+if(NLOPT_FOUND)
+target_link_libraries(Tiling2D ${NLOPT_LIBRARIES})
+endif()
+else()
+message("NLOPT Not Found!")
+endif()
 
 target_include_directories(Tiling2D PUBLIC ../../Libs/lbfgsb-Jonas)
 target_include_directories(Tiling2D PUBLIC ../../Libs/spectra/include)

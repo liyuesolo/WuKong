@@ -40,6 +40,7 @@ public:
     void optimizeGradientDescent();
     void optimizeLBFGSB();
     void optimizeGaussNewton();
+    void optimizeNelderMead();
 
     int max_iter = 500;
     void sampleGradientDirection();

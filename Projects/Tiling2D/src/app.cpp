@@ -248,9 +248,9 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if (ImGui::Button("GenerateNonPeriodicPatch", ImVec2(-1,0)))
         {
             // tiling.generateOneStructureSquarePatch(46, {0.2, 0.52});
-            tiling.generateOneStructureSquarePatch(20, {0.15167278906780407, 0.47085740050672936, 0.0746412751989358});
+            // tiling.generateOneStructureSquarePatch(20, {0.15167278906780407, 0.47085740050672936, 0.0746412751989358});
             // tiling.generateOneStructureSquarePatch(19, {0.12677579378699774, 0.6368868054229614});
-            // tiling.generateOneStructureSquarePatch(0, {0.16, 0.58, 0.08, 0.6});
+            tiling.generateOneStructureSquarePatch(0, {0.1224, 0.5, 0.0676, 0.6249});
             // tiling.generateOneStructureSquarePatch(4, {0.1224, 0.5, 0.0373, 0.3767, 0.5});
             // tiling.generateOneStructureSquarePatch(19, {0.0667531,  0.65467978, 0.11134775, 0.65909504});
             // tiling.generateOneStructureSquarePatch(0, {0.20010873572425653, 0.47335635814107446, 0.06784288606621826, 0.7852569023102524});
@@ -340,6 +340,27 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 tiling.solver.loadOBJ(fname);
                 updateScreen(viewer);
             }
+        }
+        if (ImGui::Button("LoadMeshForRendering", ImVec2(-1,0)))
+        {
+            // std::string fname = igl::file_dialog_open();
+            // if (fname.length() != 0)
+            // {
+            //     igl::readOBJ(fname, V, F);
+            //     viewer.data().clear();
+            //     viewer.data().set_mesh(V, F);
+            //     C.resize(F.rows(), 3);
+            //     C.col(1).setConstant(0.3); C.col(2).setOnes();
+            //     viewer.core().align_camera_center(V);
+            //     viewer.data().set_colors(C);
+            // }
+            igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/strain_stress/obj/IH_21_strain_stress_0.obj", V, F);
+            viewer.data().clear();
+            viewer.data().set_mesh(V, F);
+            C.resize(F.rows(), 3);
+            C.col(1).setConstant(0.3); C.col(2).setOnes();
+            viewer.core().align_camera_center(V);
+            viewer.data().set_colors(C);
         }
         if (ImGui::Button("ExtrudeTo3D", ImVec2(-1,0)))
         {

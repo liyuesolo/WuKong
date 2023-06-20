@@ -5,13 +5,14 @@ import os
 log_file = "/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/lbfgsb_log_correct_test3.txt"
 
 def plotTrainingCurve():
-    log = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/Models/350/log.txt"
+    log = "/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/python/Models/IH29double/log.txt"
     iterations = []
     e_losses_train = []
     g_losses_train = []
     e_losses_val = []
     g_losses_val = []
     log_scale = True
+    cnt = 0
     for line in open(log).readlines():
         item = [float(i) for i in line.strip().split(" ")[1:]]
         iterations.append(int(item[0]))
@@ -25,6 +26,9 @@ def plotTrainingCurve():
             e_losses_train.append(item[2])
             g_losses_val.append(item[3])
             e_losses_val.append(item[4])
+        cnt += 1
+        # if (cnt == 10000):
+        #     break
 
     # plt.plot(iterations, g_losses_train, linewidth=2.0, label = "gradient loss train")
     # plt.plot(iterations, e_losses_train, linewidth=2.0, label = "energy loss train")
@@ -42,13 +46,13 @@ def plotTrainingCurve():
     plt.savefig("train_g_loss.png", dpi=300)
     os.system("convert train_g_loss.png -trim train_g_loss.png")
     plt.close()
-    # plt.figure(figsize=(8,6))
-    # plt.xticks(fontsize=14)
-    # plt.yticks(fontsize=14)
-    # plt.plot(iterations, e_losses_train, linewidth=2.0)
-    # plt.savefig("train_e_loss.png", dpi=300)
-    # os.system("convert train_e_loss.png -trim train_e_loss.png")
-    # plt.close()
+    plt.figure(figsize=(8,6))
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.plot(iterations, e_losses_train, linewidth=2.0)
+    plt.savefig("train_e_loss.png", dpi=300)
+    os.system("convert train_e_loss.png -trim train_e_loss.png")
+    plt.close()
     # plt.plot(iterations, g_losses_val, linewidth=2.0)
     # plt.savefig("val_g_loss.png", dpi=300)
     # plt.close()
@@ -199,7 +203,7 @@ def plotSmallRangeLarge():
 
 
 
-# plotTrainingCurve()
+plotTrainingCurve()
 # plotLargeRange()
 # plotSmallRange()
 # plotTinyRange()
@@ -208,12 +212,12 @@ def plotSmallRangeLarge():
 # plotSmallRangeLarge()
 # plotLargeRange()
 
-from PIL import Image, ImageDraw, ImageFont
+# from PIL import Image, ImageDraw, ImageFont
 
-for i in range(280):
-    value = '{0:.3f}'.format(-0.7000 + float(i) * 0.005)
-    img = Image.new('RGB', (555, 240), color = (255, 255, 255))
-    d = ImageDraw.Draw(img)
-    font = ImageFont.truetype("Ubuntu-R.ttf", 200)
-    d.text((0,0), value, fill=(0,0,0),font=font)
-    img.save('params/' +str(i) + '.png')
+# for i in range(280):
+#     value = '{0:.3f}'.format(-0.7000 + float(i) * 0.005)
+#     img = Image.new('RGB', (555, 240), color = (255, 255, 255))
+#     d = ImageDraw.Draw(img)
+#     font = ImageFont.truetype("Ubuntu-R.ttf", 200)
+#     d.text((0,0), value, fill=(0,0,0),font=font)
+#     img.save('params/' +str(i) + '.png')

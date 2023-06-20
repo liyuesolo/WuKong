@@ -236,7 +236,8 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
     else:
         result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
             constraints={"fun": constraint, "type": "eq"},
-            options={'disp' : False})
+            # options={'disp' : False})
+        options={'disp' : False, 'maxiter':100, 'gtol' : 1e-5})
     
     opt_model_input = tf.convert_to_tensor([np.hstack((tiling_params, result.x))])
     
@@ -257,3 +258,53 @@ def optimizeUniaxialStrainSingleDirectionConstraint(model, n_tiling_params,
 
     
     return result.x, dqdp
+
+
+def optimizeUniaxialStrainSingleDirection(model, n_tiling_params, 
+    theta, strain, tiling_params, verbose = False):
+    
+    
+    d = np.array([np.cos(theta), np.sin(theta)])
+    strain_tensor_init = np.outer(d, d) * strain
+    strain_init = np.array([strain_tensor_init[0][0], strain_tensor_init[1][1], 2.0 * strain_tensor_init[0][1]])
+    
+    def constraint(x):
+        strain_tensor = np.reshape([x[0], 0.5 * x[-1], 0.5 * x[-1], x[1]], (2, 2))
+        dTEd = np.dot(d, np.dot(strain_tensor, np.transpose(d)))
+        c = dTEd - strain
+        return c
+
+
+    def hessian(x):
+        model_input = tf.convert_to_tensor([np.hstack((tiling_params, x))])
+        C = computeStiffnessTensor(n_tiling_params, model_input, model)
+        H = C.numpy()
+        ev_H = np.linalg.eigvals(H)
+        min_ev = np.min(ev_H)
+        if min_ev < 0.0:
+            H += np.diag(np.full(len(x),min_ev + 1e-7))
+        return H
+
+    def objAndEnergy(x):
+        model_input = tf.convert_to_tensor([np.hstack((np.hstack((tiling_params, x))))])
+        _, stress, _, psi = testStep(n_tiling_params, model_input, model)
+        
+        obj = np.squeeze(psi.numpy()) 
+        grad = stress.numpy().flatten()
+        # print("obj: {} |grad|: {}".format(obj, np.linalg.norm(grad)))
+        return obj, grad
+    if verbose:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : True, 'maxiter':100, 'gtol' : 1e-6})
+            # options={'disp' : True})
+    else:
+        result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, hess=hessian,
+            constraints={"fun": constraint, "type": "eq"},
+            options={'disp' : False, 'maxiter':100, 'gtol' : 1e-5})
+        # result = minimize(objAndEnergy, strain_init, method='trust-constr', jac=True, 
+        #     constraints={"fun": constraint, "type": "eq"},
+        #     options={'disp' : False})
+    
+    
+    return result.x

@@ -542,7 +542,7 @@ def stiffnessOptimizationSA(IH, plot_sim = False):
         bounds.append([0.05, 0.15])
         bounds.append([0.4, 0.8])
         # test 1
-        # ti = np.array([0.1224, 0.5, 0.1434, 0.625])
+        ti = np.array([0.1224, 0.5, 0.1434, 0.625])
         # ti_target = np.array([0.1224, 0.6, 0.13, 0.625])
         # test 2
         # ti = np.array([0.1224, 0.6, 0.13, 0.625])
@@ -554,8 +554,8 @@ def stiffnessOptimizationSA(IH, plot_sim = False):
         # ti = np.array([0.1224, 0.5, 0.1087, 0.55408])
         # ti_target = np.array([0.1224, 0.5, 0.1434, 0.625])
         # test 5
-        ti = np.array([0.1692, 0.4223, 0.0635, 0.6888])
-        ti_target = np.array([0.1224, 0.4724, 0.12, 0.625])
+        # ti = np.array([0.1692, 0.4223, 0.0635, 0.6888])
+        # ti_target = np.array([0.1224, 0.4724, 0.12, 0.625])
         # test 6
         # ti = np.array([0.1224, 0.4724, 0.12, 0.625])
         # ti_target = np.array([0.16, 0.5, 0.12, 0.55])
@@ -569,7 +569,7 @@ def stiffnessOptimizationSA(IH, plot_sim = False):
 
         # ti = np.array([0.2434, 0.4494, 0.0494, 0.625])
         # ti = np.array([0.16, 0.5, 0.12, 0.55])
-        # ti_target = np.array([0.1161, 0.6434, 0.1706, 0.6])
+        ti_target = np.array([0.26, 0.75,  0.15,  0.58])
         # ti_target = np.array([0.1949, 0.6434, 0.1403, 0.6858])
         idx = np.arange(0, len(thetas), 5)
 
@@ -650,8 +650,8 @@ def stiffnessOptimizationSA(IH, plot_sim = False):
 
     if (not plot_GT) and (not plot_sim):
         tic = time.perf_counter()
-        # result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
-        result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
+        result = minimize(objAndGradient, ti, method='trust-constr', jac=True, options={'disp' : True}, bounds=bounds)
+        # result = minimize(objAndGradient, ti, method='L-BFGS-B', jac=True, options={'disp' : True}, bounds=bounds)
         toc = time.perf_counter()
         print(f"Optimization takes {toc - tic:0.6f} seconds")
         uniaxial_strain_opt = []
@@ -854,7 +854,7 @@ def stiffnessModifyUI():
 if __name__ == "__main__":
     # computeStiffnessTensor()
     # computeStiffness()
-    for idx in [28]:
+    for idx in [1]:
         stiffnessOptimizationSA(idx, True)
     # stiffnessOptimizationSA(22, True)
     # stiffnessModifyUI()
