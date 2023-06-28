@@ -46,7 +46,7 @@ public:
     std::vector<std::pair<TV, TV>> voronoi_edges;
 
 private:
-    void triangulatePointCloud(const VectorXT& points, VectorXi& triangle_indices);
+    // void triangulatePointCloud(const VectorXT& points, VectorXi& triangle_indices);
     void constructCentroidalVD(const VectorXi& triangulation, 
                                 const VectorXT& site_locations,
                                 VectorXT& nodal_positions,

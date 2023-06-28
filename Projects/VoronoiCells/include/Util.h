@@ -3,6 +3,8 @@
 
 #include "VecMatDef.h"
 
+
+
 template <typename _type, int _n_col>
 void vectorToIGLMatrix(const Matrix<_type, Eigen::Dynamic, 1>& vec, 
     Matrix<_type, Eigen::Dynamic, Eigen::Dynamic>& mat)
@@ -22,5 +24,7 @@ void iglMatrixFatten(const Matrix<_type, Eigen::Dynamic, Eigen::Dynamic>& mat,
     for (int i = 0; i < n_rows; i++)
         vec.template segment<_n_col>(i * _n_col) = mat.row(i);
 }
+
+void triangulatePointCloud(const Eigen::VectorXd& points, Eigen::VectorXi& triangle_indices);
 
 #endif

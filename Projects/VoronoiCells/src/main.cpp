@@ -23,14 +23,18 @@ inline bool fileExist (const std::string& name) {
 using CMat = Eigen::Matrix<unsigned char,Eigen::Dynamic,Eigen::Dynamic>;
 using TV = Vector<T, 3>;
 using TV3 = Vector<T, 3>;
+using TM3 = Matrix<T, 3, 3>;
 using VectorXT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
 
 int main(int argc, char** argv)
 {
-    bool with_viewer = true;
+    bool with_viewer = false;
+    bool render_seq = false;
+    bool run_sim = false;
     IntrinsicSimulation intrinsic_simulation;
-    intrinsic_simulation.initializeMassPointScene();
-    // intrinsic_simulation.checkTotalGradient(true);
+    intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
+    intrinsic_simulation.checkTotalHessian(true);
 
     if (with_viewer)
     {
@@ -44,7 +48,39 @@ int main(int argc, char** argv)
 
         MassSpringApp app(intrinsic_simulation);    
         app.setViewer(viewer, menu);
-        viewer.launch(true, false, "WuKong viewer", 2000, 1600);
+        if (render_seq)
+        {
+            viewer.core().camera_zoom *= 1.8;
+            viewer.launch_init(true, false, "WuKong viewer", 2000, 1600);
+            for(int i = 0; i < 50; i++)
+            {
+                app.updateScreen(viewer);
+                int w = viewer.core().viewport(2), h = viewer.core().viewport(3);
+                CMat R(w,h), G(w,h), B(w,h), A(w,h);
+                viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
+                A.setConstant(255);
+                igl::png::writePNG(R,G,B,A, "frame"+std::to_string(i)+".png");
+                bool converged = intrinsic_simulation.advanceOneStep(i);
+                if (converged)
+                    break;
+            }
+        }
+        else
+        {
+            viewer.launch(true, false, "WuKong viewer", 2000, 1600);
+        }
+    }
+    else
+    {
+        if (!run_sim)
+            return 0;
+        for (int i = 0; i < intrinsic_simulation.max_newton_iter; i++)
+        {
+            bool converged = intrinsic_simulation.advanceOneStep(i);
+            if (converged)
+                break;
+        }
+        
     }
 
 

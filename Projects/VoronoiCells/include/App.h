@@ -89,6 +89,8 @@ public:
 
     IntrinsicSimulation& simulation;
     bool all_edges = false;
+    int selected = -1;
+    T x0, y0;
 public:
     MassSpringApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
     ~MassSpringApp() {}

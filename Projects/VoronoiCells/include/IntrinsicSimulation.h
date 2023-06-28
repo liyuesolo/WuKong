@@ -30,6 +30,8 @@
 namespace gcs = geometrycentral::surface;
 namespace gc = geometrycentral;
 
+// #define PARALLEL_GEODESIC
+
 class IntrinsicSimulation
 {
 public:
@@ -56,6 +58,15 @@ public:
     using Vector3 = geometrycentral::Vector3;
     using SurfacePoint = geometrycentral::surface::SurfacePoint;
 
+    struct IxnData
+    {
+        TV start, end;
+        T t;
+        IxnData(const TV& _start, const TV& _end, T _t) 
+            : start(_start), end(_end), t(_t) {};
+    };
+    
+
 public:
     VectorXT extrinsic_vertices;
     VectorXi extrinsic_indices;
@@ -69,19 +80,21 @@ public:
     std::unordered_map<int, T> dirichlet_data;
     bool run_diff_test = false;
     int max_newton_iter = 500;
+    bool use_Newton = true;
     T newton_tol = 1e-6;
 
     std::vector<std::pair<gcVertex, gcFace>> mass_vertices;
+    std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points;
     std::vector<Edge> spring_edges;
     std::vector<T> rest_length;
-    
-
+    bool verbose = false;
+    bool use_intrinsic = false;
     T we = 1.0;
 
-    std::unique_ptr<geometrycentral::surface::ManifoldSurfaceMesh> mesh;
-    std::unique_ptr<geometrycentral::surface::VertexPositionGeometry> geometry;
+    std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
+    std::unique_ptr<gcs::VertexPositionGeometry> geometry;
 
-    std::unique_ptr<geometrycentral::surface::FlipEdgeNetwork> edgeNetwork; 
+    std::unique_ptr<gcs::FlipEdgeNetwork> edgeNetwork; 
 
     std::vector<std::pair<TV, TV>> all_intrinsic_edges;
 
@@ -111,23 +124,71 @@ private:
     }
 
     
+    template<int dim>
+    void addHessianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const Matrix<T, dim, dim>& hessian)
+    {
+        if (vtx_idx.size() * 2 != dim)
+            std::cout << "wrong hessian block size" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 2; k++)
+                    for (int l = 0; l < 2; l++)
+                    {
+                        if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
+                            triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                    }
+            }
+        }
+    }
+
+    template<int size>
+    VectorXT computeHessianBlockEigenValues(const Matrix<T, size, size> & symMtr)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, size, size>> eigenSolver(symMtr);
+        return eigenSolver.eigenvalues();
+    }
+
+    void edgeLengthHessian(const TV& v0, const TV& v1, Matrix<T, 6, 6>& hess)
+    {
+        TV dir = (v1-v0).normalized();
+        hess.setZero();
+        hess.block(0, 0, 3, 3) = (TM::Identity() - dir * dir.transpose())/(v1 - v0).norm();
+        hess.block(3, 3, 3, 3) = hess.block(0, 0, 3, 3);
+        hess.block(0, 3, 3, 3) = -hess.block(0, 0, 3, 3);
+        hess.block(3, 0, 3, 3) = -hess.block(0, 0, 3, 3);
+    }
 
 public:
-    void initializeMassPointScene();
+    void computeExactGeodesic(const SurfacePoint& va, const SurfacePoint& vb, 
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, 
+        bool trace_path = false);
+
+    void initialize3MassPointScene();
+    void initializeMassSpringScene();
+    void initializeMassSpringSceneExactGeodesic();
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
     
     T computeTotalEnergy(const VectorXT& _u);
     T computeResidual(const VectorXT& _u, VectorXT& residual);
-
+    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
     T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
-
+    void reset();
     // bool staticSolve();
 
     // bool staticSolveStep(int step);
 
-    // bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
 
-    // void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
 
     bool advanceOneStep(int step);
 
@@ -138,12 +199,16 @@ public:
     void addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries);
 
     // DerivativeTest.cpp
+    void checkGeodesicDerivative(bool perturb = true);
     void checkLengthDerivatives();
     void checkLengthDerivativesScale();
     void checkTotalGradientScale(bool perturb = false);
     void checkTotalGradient(bool perturb = false);
-    // void checkTotalHessianScale(bool perturb = false);
+    void checkTotalHessian(bool perturb = false);
+    void checkTotalHessianScale(bool perturb = false);
 
+    void massPointPosition(int idx, TV& pos);
+    void moveMassPoint(int idx, int bc);
 public:
     IntrinsicSimulation() {}
     ~IntrinsicSimulation() {}

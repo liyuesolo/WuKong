@@ -1,5 +1,7 @@
 #include <igl/boundary_loop.h>
 #include <igl/edge_lengths.h>
+#include <igl/project.h>
+#include <igl/unproject_on_plane.h>
 #include "../include/App.h"
 
 void SimulationApp::appendCylindersToEdges(const std::vector<std::pair<TV3, TV3>>& edge_pairs, 
@@ -258,8 +260,8 @@ void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     
     simulation.updateVisualization(all_edges);
 
-    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(1.0,0.3,0.0));
-    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.008, V, F, C);
+    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(1.0,103.0/255.0,0.0/255.0));
+    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.005, V, F, C);
     
 
     viewer.data().clear();
@@ -292,7 +294,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
-            // tiling.solver.reset();
+            simulation.reset();
             static_solve_step = 0;
             updateScreen(viewer);
         }
@@ -319,6 +321,57 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if(viewer.core().is_animating && check_modes)
         {
             
+        }
+        return false;
+    };
+
+    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+    {
+        return false;
+        double x = viewer.current_mouse_x;
+        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        for (int i = 0; i < simulation.mass_vertices.size(); i++)
+        {
+            Eigen::MatrixXd pxy(1, 3);
+            TV x3d;
+            simulation.massPointPosition(i, x3d);
+            // std::cout << x3d.transpose() << std::endl;
+            igl::project(x3d.transpose(), viewer.core().view, viewer.core().proj, viewer.core().viewport, pxy);
+            // std::cout << pxy << std::endl;
+            if(abs(pxy.row(0)[0]-x)<20 && abs(pxy.row(0)[1]-y)<20)
+            {
+                selected = i;
+                x0 = x;
+                y0 = y;
+                std::cout << "selected " << selected << std::endl;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    viewer.callback_mouse_up = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+	  {
+		if(selected!=-1)
+		{
+			selected = -1;
+			return true;
+		}
+	    return false;
+	  };
+
+    viewer.callback_mouse_move =
+        [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+    {
+        if(selected!=-1)
+        {
+            double x = viewer.current_mouse_x;
+            double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        
+            double delta_x = (x - x0) / viewer.core().viewport(2);
+            double delta_y = (y - y0) / viewer.core().viewport(3);
+
+            return true;
         }
         return false;
     };
@@ -352,9 +405,16 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             succeed = simulation.advanceOneStep(static_solve_step++);
             updateScreen(viewer);
             return true;
+        case 'm':
+            simulation.moveMassPoint(0, 0);
+            simulation.updateVisualization(all_edges);
+            updateScreen(viewer);
+            return true;
         case 'd':
             // simulation.checkTotalGradientScale(true);
-            simulation.checkTotalGradient(true);
+            // simulation.checkTotalGradient(true);
+            simulation.checkTotalHessianScale(true);
+            simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
             return true;
         case ' ':
