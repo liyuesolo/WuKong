@@ -1,5 +1,10 @@
 
 #include <Eigen/CholmodSupport>
+// #include <Spectra/SymEigsShiftSolver.h>
+// #include <Spectra/MatOp/SparseSymShiftSolve.h>
+// #include <Spectra/SymEigsSolver.h>
+// #include <Spectra/MatOp/SparseSymMatProd.h>
+
 #include "../include/IntrinsicSimulation.h"
 
 
@@ -7,7 +12,7 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, bool trace_path)
 {
-    
+    ixn_data.clear();
     int n_tri = extrinsic_indices.rows() / 3;
     std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
     for (int i = 0; i < n_tri; i++)
@@ -79,13 +84,25 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 if ((test_interp - ixn).norm() > 1e-6)
                     std::swap(start, end);
                 
-                // TV dir0 = (end-start).normalized();
-                // TV dir1 = (ixn-start).normalized();
+                TV dir0 = (end-start).normalized();
+                TV dir1 = (ixn-start).normalized();
+                if ((dir0.cross(dir1)).norm() > 1e-6)
+                {
+                    std::cout << "error in cross product" << std::endl;
+                    std::exit(0);
+                }
+                test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
+                if ((ixn - test_interp).norm() > 1e-6)
+                {
+                    std::cout << "error in interpolation" << std::endl;
+                    std::exit(0);
+                }
+                edge_t = pt.tEdge;
                 // std::cout << pt.tEdge << " " << " cross " << (dir0.cross(dir1)).norm() << std::endl;
                 // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
                 // std::getchar();
             }
-            ixn_data.push_back(IxnData(start, end, pt.tEdge));
+            ixn_data.push_back(IxnData(start, end, (1.0-edge_t)));
             pt.face = mesh->face(pt.face.getIndex());
             pt.edge = mesh->edge(pt.edge.getIndex());
             pt.vertex = mesh->vertex(pt.vertex.getIndex());
@@ -109,133 +126,80 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
     //     dis = mmp.getDistance(vb_sub);
 }
 
-
-bool IntrinsicSimulation::simDoFToPosition(const VectorXT& sim_dof)
+void IntrinsicSimulation::updateCurrentState()
 {
-    if (use_intrinsic)
-    {
-        edgeNetwork = std::unique_ptr<gcs::FlipEdgeNetwork>(new gcs::FlipEdgeNetwork(*mesh, *geometry, {}));
-        edgeNetwork->posGeom = geometry.get();
-
-        for (int i = 0; i < mass_vertices.size(); i++)
-        {
-            gcFace fi = mass_vertices[i].second;
-            Vector3 start_bc{undeformed[i * 2 + 0], undeformed[i*2+1], 1.0 - undeformed[i * 2 + 0] - undeformed[i * 2 + 1]};
-            Vector3 target{sim_dof[i*2+0],sim_dof[i*2+1],1.0-sim_dof[i*2+0]-sim_dof[i*2+1]};
-            Vector3 trace_vec = target - start_bc;
-            
-            gcs::TraceOptions options; 
-            options.includePath = true;
-            
-            // trace geodesic on the extrinsic mesh
-            gcs::TraceGeodesicResult result = gcs::traceGeodesic(*geometry, fi, start_bc, trace_vec, options);
-            if (result.pathPoints.size() != 1)
-            {
-                // find equivalent intrinc vertex
-                SurfacePoint new_pt_intrinsic = edgeNetwork->tri->equivalentPointOnIntrinsic(result.endPoint);
-                gcVertex new_vtx = edgeNetwork->tri->insertVertex(new_pt_intrinsic);
-                // std::cout << "insert" << std::endl;        
-                mass_vertices[i].first = new_vtx;
-                SurfacePoint endpoint = result.endPoint.inSomeFace();
-                // DO NOT CHANGE FACE REFERENCE
-                // mass_vertices[i].second = endpoint.face;
-                // sim_dof[i*2+0] = endpoint.faceCoords.x;
-                // sim_dof[i*2+1] = endpoint.faceCoords.y;
-            }
-            else 
-            {
-                SurfacePoint new_pt = SurfacePoint(fi, start_bc);
-                SurfacePoint new_pt_intrinsic = edgeNetwork->tri->equivalentPointOnIntrinsic(new_pt);
-                gcVertex new_vtx = edgeNetwork->tri->insertVertex(new_pt_intrinsic);
-                mass_vertices[i].first = new_vtx;
-            }
-            // mass_vertices[i].first
-        }
-        
-        for (int i = 0; i < mass_vertices.size() - 1; i++)
-        {
-            gcVertex vA = mass_vertices[i].first;
-            gcVertex vB = mass_vertices[i + 1].first;
-            
-            std::vector<gcs::Halfedge> path = shortestEdgePath(*edgeNetwork->tri, vA, vB);
-            edgeNetwork->addPath(path);
-            edgeNetwork->nFlips = 0;
-            edgeNetwork->nShortenIters = 0;
-            edgeNetwork->EPS_ANGLE = 1e-5;
-            edgeNetwork->straightenAroundMarkedVertices = true;
-            size_t iterLim = gc::INVALID_IND;
-            double lengthLim = 0.;
-            edgeNetwork->addAllWedgesToAngleQueue();
-            // std::cout << "empty " << edgeNetwork->wedgeAngleQueue.empty() << std::endl;
-            edgeNetwork->iterativeShorten(iterLim, lengthLim);
-            gcEdge e = edgeNetwork->tri->intrinsicMesh->connectingEdge(vA, vB);
-            if (e == gcEdge())
-            {
-                std::cout << "non-existing edge connecting vtx " << vA.getIndex() << " and " << vB.getIndex()<< std::endl;   
-                return false;
-            }
-        }
-        
-        return true;
-    }
-    else
-    {
-        for (int i = 0; i < mass_surface_points.size(); i++)
-        {
-            gcFace fi = mass_surface_points[i].second;
-            Vector3 start_bc{undeformed[i * 2 + 0], undeformed[i*2+1], 1.0 - undeformed[i * 2 + 0] - undeformed[i * 2 + 1]};
-            Vector3 target{sim_dof[i*2+0],sim_dof[i*2+1],1.0-sim_dof[i*2+0]-sim_dof[i*2+1]};
-            Vector3 trace_vec = target - start_bc;
-            
-            gcs::TraceOptions options; 
-            options.includePath = true;
-            
-            // trace geodesic on the extrinsic mesh
-            gcs::TraceGeodesicResult result = gcs::traceGeodesic(*geometry, fi, start_bc, trace_vec, options);
-            // std::cout << result.pathPoints.size() << std::endl;
-            if (result.pathPoints.size() != 1)
-            {
-                // find equivalent intrinc vertex
-                SurfacePoint endpoint = result.endPoint.inSomeFace();
-                mass_surface_points[i].first = endpoint;
-                // DO NOT CHANGE FACE REFERENCE
-            }
-            // mass_vertices[i].first
-        }
-        return true;
-        // std::cout << "simDoFToPosition failed" << std::endl;
-    }
-}
-
-void IntrinsicSimulation::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
-{
-    VectorXT projected = _u;
     if (!run_diff_test)
     {
         iterateDirichletDoF([&](int offset, T target)
         {
-            projected[offset] = target;
+            delta_u[offset] = target;
         });
     }
 
-    deformed = undeformed + projected;
-    bool update_succeed = simDoFToPosition(deformed);
-    std::vector<Entry> entries;
-    addEdgeLengthHessianEntries(we, entries);
-
-    int n_dof = deformed.rows();
-    K.resize(n_dof, n_dof);
-    
-    K.setFromTriplets(entries.begin(), entries.end());
-    if (!run_diff_test)
-        projectDirichletDoFMatrix(K, dirichlet_data);
-    
-    K.makeCompressed();
+    for (int i = 0; i < mass_surface_points.size(); i++)
+    {
+        gcFace fi = mass_surface_points[i].second;
+        Vector3 start_bc = mass_surface_points[i].first.faceCoords;
+        Vector3 trace_vec{delta_u[i*2+0],delta_u[i*2+1],0.0-delta_u[i*2+0]-delta_u[i*2+1]};
+        
+        gcs::TraceOptions options; 
+        options.includePath = true;
+        
+        // trace geodesic on the extrinsic mesh
+        gcs::TraceGeodesicResult result = gcs::traceGeodesic(*geometry, fi, start_bc, trace_vec, options);
+        // std::cout << result.pathPoints.size() << std::endl;
+        if (result.pathPoints.size() != 1)
+        {
+            // find equivalent intrinc vertex
+            SurfacePoint endpoint = result.endPoint.inSomeFace();
+            mass_surface_points[i].first = endpoint;
+            // DO NOT CHANGE FACE REFERENCE
+            
+            mass_surface_points[i].second = endpoint.face;
+            mass_surface_points[i].first = endpoint;
+            
+        }
+        // mass_vertices[i].first
+    }
 }
+
+bool IntrinsicSimulation::simDoFToPosition(VectorXT& sim_dof)
+{
+    for (int i = 0; i < mass_surface_points.size(); i++)
+    {
+        gcFace fi = mass_surface_points[i].second;
+        Vector3 start_bc{undeformed[i * 2 + 0], undeformed[i*2+1], 1.0 - undeformed[i * 2 + 0] - undeformed[i * 2 + 1]};
+        Vector3 target{sim_dof[i*2+0],sim_dof[i*2+1],1.0-sim_dof[i*2+0]-sim_dof[i*2+1]};
+        Vector3 trace_vec = target - start_bc;
+        
+        gcs::TraceOptions options; 
+        options.includePath = true;
+        
+        // trace geodesic on the extrinsic mesh
+        gcs::TraceGeodesicResult result = gcs::traceGeodesic(*geometry, fi, start_bc, trace_vec, options);
+        // std::cout << result.pathPoints.size() << std::endl;
+        if (result.pathPoints.size() != 1)
+        {
+            // find equivalent intrinc vertex
+            SurfacePoint endpoint = result.endPoint.inSomeFace();
+            mass_surface_points[i].first = endpoint;
+            // DO NOT CHANGE FACE REFERENCE
+            
+            mass_surface_points[i].second = endpoint.face;
+            // mass_surface_points[i].first = 
+            
+        }
+        // mass_vertices[i].first
+    }
+    return true;
+}
+
+
 
 bool IntrinsicSimulation::linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du)
 {
-    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix> solver;
     
     T alpha = 1e-6;
     StiffnessMatrix H(K.rows(), K.cols());
@@ -318,23 +282,9 @@ void IntrinsicSimulation::projectDirichletDoFMatrix(StiffnessMatrix& A, const st
     }
 }
 
-
-T IntrinsicSimulation::computeTotalEnergy(const VectorXT& _u)
+T IntrinsicSimulation::computeTotalEnergy()
 {
     T total_energy = 0.0;
-    VectorXT projected = _u;
-    if (!run_diff_test)
-    {
-        iterateDirichletDoF([&](int offset, T target)
-        {
-            projected[offset] = target;
-        });
-    }
-
-    deformed = undeformed + projected;
-    bool update_succeed = simDoFToPosition(deformed);
-    if (!update_succeed)
-        return 1e10;
 
     addEdgeLengthEnergy(we, total_energy);
     
@@ -342,23 +292,9 @@ T IntrinsicSimulation::computeTotalEnergy(const VectorXT& _u)
     return total_energy;
 }
 
-T IntrinsicSimulation::computeResidual(const VectorXT& _u, VectorXT& residual)
+T IntrinsicSimulation::computeResidual(VectorXT& residual)
 {
-    VectorXT projected = _u;
-    if (!run_diff_test)
-    {
-        iterateDirichletDoF([&](int offset, T target)
-        {
-            projected[offset] = target;
-        });
-    }
 
-    deformed = undeformed + projected;
-    // START_TIMING(simToPos)
-    bool update_succeed = simDoFToPosition(deformed);
-    // FINISH_TIMING_PRINT(simToPos)
-    if (!update_succeed)
-        return residual.norm();
     addEdgeLengthForceEntries(we, residual);
 
     if (!run_diff_test)
@@ -370,14 +306,30 @@ T IntrinsicSimulation::computeResidual(const VectorXT& _u, VectorXT& residual)
     return residual.norm();
 }
 
+void IntrinsicSimulation::buildSystemMatrix(StiffnessMatrix& K)
+{
+   
+    std::vector<Entry> entries;
+    addEdgeLengthHessianEntries(we, entries);
+
+    int n_dof = deformed.rows();
+    K.resize(n_dof, n_dof);
+    
+    K.setFromTriplets(entries.begin(), entries.end());
+    if (!run_diff_test)
+        projectDirichletDoFMatrix(K, dirichlet_data);
+    
+    K.makeCompressed();
+}
+
 void IntrinsicSimulation::moveMassPoint(int idx, int bc)
 {
     
-    u[idx * 2 + bc] = 0.1;
+    u[idx * 2 + bc] += 0.001;
     
     deformed = undeformed + u;
     simDoFToPosition(deformed);
-    undeformed = deformed;
+    // undeformed = deformed;
     if (use_intrinsic)
         std::cout << "on face " << mass_vertices[idx].second.getIndex() << std::endl;
     else
@@ -401,125 +353,51 @@ void IntrinsicSimulation::massPointPosition(int idx, TV& pos)
 
 void IntrinsicSimulation::updateVisualization(bool all_edges)
 {
-    // std::cout << edgeNetwork->paths.size() << std::endl;
-    // std::cout << edgeNetwork->isMarkedVertex.size() << std::endl;
-    // std::cout << edgeNetwork->tri->markedEdges.size() << std::endl;
-    // std::cout << "update visualization" << std::endl;
-    if (use_intrinsic)
+    
+    all_intrinsic_edges.resize(0);
+
+    int n_springs = spring_edges.size();
+    std::vector<std::vector<std::pair<TV, TV>>> sub_pairs(n_springs, std::vector<std::pair<TV, TV>>());
+    
+#ifdef PARALLEL_GEODESIC
+    tbb::parallel_for(0, n_springs, [&](int i)
+#else
+	for(int i = 0; i < n_springs; i++)
+#endif
     {
-        all_intrinsic_edges.resize(0);
-        gcs::EdgeData<std::vector<SurfacePoint>> tracedEdges(*edgeNetwork->tri->intrinsicMesh);
-
-        if (all_edges)
+        SurfacePoint vA = mass_surface_points[spring_edges[i][0]].first;
+        SurfacePoint vB = mass_surface_points[spring_edges[i][1]].first;
+        
+        T geo_dis; std::vector<SurfacePoint> path;
+        std::vector<IxnData> ixn_data;
+        computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
+        
+        for(int j = 0; j < path.size() - 1; j++)
         {
-            gcs::EdgeData<std::vector<SurfacePoint>> traces = edgeNetwork->tri->traceAllIntrinsicEdgesAlongInput();
-            for (gcEdge e : edgeNetwork->tri->mesh.edges()) 
-            {
-                std::vector<TV> loop;
-                for (geometrycentral::surface::SurfacePoint& p : traces[e]) 
-                {
-                    Vector3 vtx = p.interpolate(geometry->inputVertexPositions);
-                    loop.push_back(TV(vtx.x, vtx.y, vtx.z));
-                }
-                for (int i = 0; i < loop.size()-1; i++)
-                {
-                    int j = (i + 1) % loop.size();
-                    all_intrinsic_edges.push_back(std::make_pair(loop[i], loop[j]));
-                }
-            }
-        }
-        else
-        {
-            for (Edge eij : spring_edges) 
-            {
-                gcVertex vA = mass_vertices[eij[0]].first;
-                gcVertex vB = mass_vertices[eij[1]].first;
-                
-                gcEdge e = edgeNetwork->tri->intrinsicMesh->connectingEdge(vA, vB);
-                gcs::Halfedge he = e.halfedge();
-
-                tracedEdges[e] = edgeNetwork->tri->traceIntrinsicHalfedgeAlongInput(he);
-                std::vector<TV> loop;
-                for (gcs::SurfacePoint& p : tracedEdges[e]) 
-                {
-                    Vector3 vtx = p.interpolate(geometry->inputVertexPositions);
-                    loop.push_back(TV(vtx.x, vtx.y, vtx.z));
-                }
-                for (int i = 0; i < loop.size()-1; i++)
-                {
-                    int j = (i + 1) % loop.size();
-                    all_intrinsic_edges.push_back(std::make_pair(loop[i], loop[j]));
-                }
-            }  
+            sub_pairs[i].push_back(std::make_pair(
+                toTV(path[j].interpolate(geometry->vertexPositions)),
+                toTV(path[j+1].interpolate(geometry->vertexPositions))
+            ));
         }
     }
-    else
+#ifdef PARALLEL_GEODESIC
+    );
+#endif
+    for (int i = 0; i < n_springs; i++)
     {
-        all_intrinsic_edges.resize(0);
-        // for (const Edge& edge : spring_edges)
-        // {
-        //     SurfacePoint vA = mass_surface_points[edge[0]].first;
-        //     SurfacePoint vB = mass_surface_points[edge[1]].first;
-            
-        //     T geo_dis = 0.0; std::vector<SurfacePoint> path;
-        //     computeExactGeodesic(vA, vB, geo_dis, path, true);
-        //     rest_length.push_back(geo_dis);
-        //     for(int i = 0; i < path.size() - 1; i++)
-        //     {
-        //         all_intrinsic_edges.push_back(std::make_pair(
-        //             toTV(path[i].interpolate(geometry->vertexPositions)),
-        //             toTV(path[i+1].interpolate(geometry->vertexPositions))
-        //         ));
-        //     }
-        // }
-        int n_springs = spring_edges.size();
-        std::vector<std::vector<std::pair<TV, TV>>> sub_pairs(n_springs, std::vector<std::pair<TV, TV>>());
-        // START_TIMING(geodesic)
-        
-        // for(int i = 0; i < n_springs; i++)
-        tbb::parallel_for(0, n_springs, [&](int i)
-        {
-            SurfacePoint vA = mass_surface_points[spring_edges[i][0]].first;
-            SurfacePoint vB = mass_surface_points[spring_edges[i][1]].first;
-            
-            T geo_dis; std::vector<SurfacePoint> path;
-            std::vector<IxnData> ixn_data;
-            computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
-            
-            for(int j = 0; j < path.size() - 1; j++)
-            {
-                sub_pairs[i].push_back(std::make_pair(
-                    toTV(path[j].interpolate(geometry->vertexPositions)),
-                    toTV(path[j+1].interpolate(geometry->vertexPositions))
-                ));
-            }
-        }
-        );
-        // FINISH_TIMING_PRINT(geodesic)
-        // std::exit(0);
-        for (int i = 0; i < n_springs; i++)
-        {
-            all_intrinsic_edges.insert(all_intrinsic_edges.end(), sub_pairs[i].begin(), sub_pairs[i].end());
-        }
+        all_intrinsic_edges.insert(all_intrinsic_edges.end(), sub_pairs[i].begin(), sub_pairs[i].end());
     }
 }
 
 bool IntrinsicSimulation::advanceOneStep(int step)
 {
-    // u = VectorXT::Zero(undeformed.rows());
-    // u << 0, -0.1, 0.1, 0.1, 0, -0.1, 0, 0,0;
-    // deformed = undeformed + u;
-    // simDoFToPosition(deformed);
-    // std::cout << "simDoFToPosition done" << std::endl;
-    // updateVisualization();
-    // std::cout << "advanceOneStep done" << std::endl;
-    // return true;
-
+    START_TIMING(NewtonStep)
     VectorXT residual(deformed.rows());
     residual.setZero();
-    START_TIMING(computeResidual)
-    T residual_norm = computeResidual(u, residual);
-    FINISH_TIMING_PRINT(computeResidual)
+    // START_TIMING(computeResidual)
+    traceGeodesics();
+    T residual_norm = computeResidual(residual);
+    // FINISH_TIMING_PRINT(computeResidual)
     std::cout << "[NEWTON] iter " << step << "/" 
         << max_newton_iter << ": residual_norm " 
         << residual_norm << " tol: " << newton_tol << std::endl;
@@ -528,50 +406,56 @@ bool IntrinsicSimulation::advanceOneStep(int step)
     {
         return true;
     }
-    T dq_norm = 1e10;
-    START_TIMING(lineSearchNewton)
-    dq_norm = lineSearchNewton(u, residual);
-    FINISH_TIMING_PRINT(lineSearchNewton)
-    // u += residual;
-    
-    if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
+    T du_norm = 1e10;
+    // START_TIMING(lineSearchNewton)
+    // dq_norm = lineSearchNewton(u, residual);
+    du_norm = lineSearchNewton(residual);
+    // checkHessian();
+    // FINISH_TIMING_PRINT(lineSearchNewton)
+    FINISH_TIMING_PRINT(NewtonStep)
+    if(step == max_newton_iter || du_norm > 1e10 || du_norm < 1e-12)
     {
-        
+        std::cout << "ABNORMAL STOP with |du| " << du_norm << std::endl;
         return true;
     }
     
     return false;
 }
 
-T IntrinsicSimulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual)
+
+T IntrinsicSimulation::lineSearchNewton(VectorXT& residual)
 {
     VectorXT du = residual;
     du.setZero();
 
     du = residual;
 
+    StiffnessMatrix K(residual.rows(), residual.rows());
     if (use_Newton)
     {
-        StiffnessMatrix K(residual.rows(), residual.rows());
         // Timer ti(true);
-        buildSystemMatrix(_u, K);
+        buildSystemMatrix(K);
         // // std::cout << "\tbuild system takes " <<  ti.elapsed_sec() << std::endl;
         bool success = linearSolve(K, residual, du);
         if (!success)
+        {
+            std::cout << "Linear Solve Failed" << std::endl;
             return 1e16;
+        }
     }
     T norm = du.norm();
     
     T alpha = 1.0;
-    T E0 = computeTotalEnergy(_u);
+    T E0 = computeTotalEnergy();
     // std::cout << std::setprecision(8) << "ls E0  " << E0 << std::endl;
     int cnt = 0;
     while (true)
     {
-        VectorXT u_ls = _u + alpha * du;
-        // std::cout << "u_ls: " << alpha * du.transpose() << std::endl;
-        T E1 = computeTotalEnergy(u_ls);
-        // std::cout << "ls final " << E1 << " #ls " << cnt << std::endl;
+        delta_u = alpha * du;
+        updateCurrentState();
+        T E1 = computeTotalEnergy();
+        if (verbose)
+            std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
         if (E1 - E0 < 0 || cnt > 15)
         {
             // std::cout << "|du| " << alpha * du.norm() << std::endl;
@@ -579,9 +463,10 @@ T IntrinsicSimulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual)
             if (cnt > 15)
             {
                 // std::cout << "cnt > 15" << std::endl;
+                // Eigen::EigenSolver<MatrixXT> es(K);
+                // std::cout << es.eigenvalues() << std::endl;
                 return 1e16;
             }
-            _u = u_ls;
             break;
         }
         alpha *= 0.5;
@@ -589,7 +474,6 @@ T IntrinsicSimulation::lineSearchNewton(VectorXT& _u,  VectorXT& residual)
     }
     return norm;
 }
-
 
 void IntrinsicSimulation::reset()
 {

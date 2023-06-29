@@ -29,12 +29,12 @@ using VectorXT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 int main(int argc, char** argv)
 {
-    bool with_viewer = false;
+    bool with_viewer = true;
     bool render_seq = false;
     bool run_sim = false;
     IntrinsicSimulation intrinsic_simulation;
     intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
-    intrinsic_simulation.checkTotalHessian(true);
+    // intrinsic_simulation.checkTotalHessianScale(true);
 
     if (with_viewer)
     {

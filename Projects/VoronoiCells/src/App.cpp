@@ -327,10 +327,10 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
     {
-        return false;
+        // return false;
         double x = viewer.current_mouse_x;
         double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-        for (int i = 0; i < simulation.mass_vertices.size(); i++)
+        for (int i = 0; i < simulation.mass_surface_points.size(); i++)
         {
             Eigen::MatrixXd pxy(1, 3);
             TV x3d;
@@ -406,16 +406,19 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case 'm':
-            simulation.moveMassPoint(0, 0);
+            simulation.moveMassPoint(selected, 0);
             simulation.updateVisualization(all_edges);
             updateScreen(viewer);
             return true;
         case 'd':
-            // simulation.checkTotalGradientScale(true);
-            // simulation.checkTotalGradient(true);
-            simulation.checkTotalHessianScale(true);
+            simulation.checkTotalGradientScale(true);
+            simulation.checkTotalGradient(true);
+            // simulation.checkTotalHessianScale(true);
             simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
+            return true;
+        case 'c':
+            // simulation.checkHessian();
             return true;
         case ' ':
             viewer.core().is_animating = true;

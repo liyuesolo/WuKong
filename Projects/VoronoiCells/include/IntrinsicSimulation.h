@@ -30,7 +30,7 @@
 namespace gcs = geometrycentral::surface;
 namespace gc = geometrycentral;
 
-// #define PARALLEL_GEODESIC
+#define PARALLEL_GEODESIC
 
 class IntrinsicSimulation
 {
@@ -76,6 +76,7 @@ public:
     VectorXT intrinsic_vertices_deformed;
 
     VectorXT deformed, undeformed;
+    VectorXT delta_u;
     VectorXT u;
     std::unordered_map<int, T> dirichlet_data;
     bool run_diff_test = false;
@@ -94,10 +95,11 @@ public:
     std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
     std::unique_ptr<gcs::VertexPositionGeometry> geometry;
 
-    std::unique_ptr<gcs::FlipEdgeNetwork> edgeNetwork; 
-
     std::vector<std::pair<TV, TV>> all_intrinsic_edges;
 
+    std::vector<T> current_length;
+    std::vector<std::vector<SurfacePoint>> paths;
+	std::vector<std::vector<IxnData>> ixn_data_list;
 private:
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
@@ -106,7 +108,7 @@ private:
         } 
     }
 
-    bool simDoFToPosition(const VectorXT& sim_dof);
+    bool simDoFToPosition(VectorXT& sim_dof);
 
     Vector3 toVec3(const TV& vec) const
     {
@@ -172,15 +174,16 @@ public:
         std::vector<IxnData>& ixn_data, 
         bool trace_path = false);
 
-    void initialize3MassPointScene();
-    void initializeMassSpringScene();
+    
     void initializeMassSpringSceneExactGeodesic();
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
     
-    T computeTotalEnergy(const VectorXT& _u);
-    T computeResidual(const VectorXT& _u, VectorXT& residual);
-    void buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K);
-    T lineSearchNewton(VectorXT& _u,  VectorXT& residual);
+    T computeTotalEnergy();
+    T computeResidual(VectorXT& residual);
+    void buildSystemMatrix(StiffnessMatrix& K);
+    T lineSearchNewton(VectorXT& residual);
+    void updateCurrentState();
+    void traceGeodesics();
     void reset();
     // bool staticSolve();
 
@@ -198,10 +201,9 @@ public:
     void addEdgeLengthForceEntries(T w, VectorXT& residual);
     void addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries);
 
-    // DerivativeTest.cpp
-    void checkGeodesicDerivative(bool perturb = true);
-    void checkLengthDerivatives();
-    void checkLengthDerivativesScale();
+    void checkHessian();
+
+    // DerivativeTest.cpp    
     void checkTotalGradientScale(bool perturb = false);
     void checkTotalGradient(bool perturb = false);
     void checkTotalHessian(bool perturb = false);
