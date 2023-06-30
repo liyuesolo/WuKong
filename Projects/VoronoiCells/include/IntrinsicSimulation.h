@@ -72,8 +72,6 @@ public:
     VectorXi extrinsic_indices;
 
     VectorXT intrinsic_vertices_barycentric_coords;
-    VectorXT intrinsic_vertices_undeformed;
-    VectorXT intrinsic_vertices_deformed;
 
     VectorXT deformed, undeformed;
     VectorXT delta_u;
@@ -84,13 +82,15 @@ public:
     bool use_Newton = true;
     T newton_tol = 1e-6;
 
-    std::vector<std::pair<gcVertex, gcFace>> mass_vertices;
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points;
+    std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points_undeformed;
     std::vector<Edge> spring_edges;
     std::vector<T> rest_length;
     bool verbose = false;
     bool use_intrinsic = false;
     T we = 1.0;
+    T ref_dis = 1.0;
+    bool retrace = true;
 
     std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
     std::unique_ptr<gcs::VertexPositionGeometry> geometry;
@@ -169,6 +169,10 @@ private:
     }
 
 public:
+    void computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, 
+        bool trace_path = false);
     void computeExactGeodesic(const SurfacePoint& va, const SurfacePoint& vb, 
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, 
@@ -211,6 +215,7 @@ public:
 
     void massPointPosition(int idx, TV& pos);
     void moveMassPoint(int idx, int bc);
+    void getAllPointsPosition(VectorXT& positions);
 public:
     IntrinsicSimulation() {}
     ~IntrinsicSimulation() {}

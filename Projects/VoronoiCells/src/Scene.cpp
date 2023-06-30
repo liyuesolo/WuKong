@@ -1,5 +1,6 @@
 #include <igl/readOBJ.h>
 #include <igl/edges.h>
+#include <igl/per_vertex_normals.h>
 #include "../include/IntrinsicSimulation.h"
 
 void IntrinsicSimulation::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C)
@@ -16,12 +17,23 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     use_Newton = true;
     MatrixXT V; MatrixXi F;
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", 
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", 
-        V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", 
+    //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/torus.obj", 
     //     V, F);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/single_tet.obj", 
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/ellipsoid.obj", 
     //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/bumpy-cube.obj", 
+    //     V, F);
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/bumpy-cube-simplified.obj", 
+        V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/ellipsoid_outward_bump.obj", 
+    //     V, F);
+    
+    MatrixXT N;
+    igl::per_vertex_normals(V, F, N);
+
+    // V.row(10) += 3.0 * N.row(10);
 
     iglMatrixFatten<T, 3>(V, extrinsic_vertices);
     iglMatrixFatten<int, 3>(F, extrinsic_indices);
@@ -42,14 +54,15 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
                     std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
                                                              std::move(std::get<1>(lvals))); // geometry
 
-    int n_faces = extrinsic_indices.rows()/ 3;    
+    int n_faces = extrinsic_indices.rows()/ 3 / 10;    
+
     intrinsic_vertices_barycentric_coords.resize(n_faces * 2);
     
     VectorXT mass_point_Euclidean(n_faces * 3);
     for (int i = 0; i < n_faces; i++)
     {
-        // T alpha = 0.2, beta = 0.5;
-        T alpha = 0.99, beta = 0.0;
+        T alpha = 0.2, beta = 0.5;
+        // T alpha = 0.99, beta = 0.0;
         // T alpha = 0.5, beta = 0.0;
         TV vi = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 0] * 3);
         TV vj = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 1] * 3);
@@ -60,6 +73,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         mass_point_Euclidean.segment<3>(i * 3) =  vi * alpha + vj * beta + vk * (1.0 - alpha - beta);
         mass_surface_points.push_back(std::make_pair(new_pt, f));
     }
+    mass_surface_points_undeformed = mass_surface_points;
     undeformed = intrinsic_vertices_barycentric_coords;
     deformed = undeformed;
     u.resize(undeformed.rows()); u.setZero();
@@ -85,9 +99,11 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 
 
     int n_springs = igl_edges.rows();
-    std::vector<std::vector<std::pair<TV, TV>>> sub_pairs(n_springs, std::vector<std::pair<TV, TV>>());
+    std::vector<std::vector<std::pair<TV, TV>>> 
+        sub_pairs(n_springs, std::vector<std::pair<TV, TV>>());
     rest_length.resize(n_springs);
     spring_edges.resize(n_springs);
+    VectorXT ref_lengths(n_springs);
 #ifdef PARALLEL_GEODESIC
     tbb::parallel_for(0, n_springs, [&](int i)
 #else
@@ -102,6 +118,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         std::vector<IxnData> ixn_data;
         computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
         rest_length[i] = 0.0;
+        ref_lengths[i] = geo_dis;
         for(int j = 0; j < path.size() - 1; j++)
         {
             sub_pairs[i].push_back(std::make_pair(
@@ -118,6 +135,6 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         all_intrinsic_edges.insert(all_intrinsic_edges.end(), sub_pairs[i].begin(), sub_pairs[i].end());
     }
 
-    
+    ref_dis = ref_lengths.sum() / ref_lengths.rows();
     
 }

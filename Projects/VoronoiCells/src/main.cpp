@@ -29,9 +29,10 @@ using VectorXT = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 int main(int argc, char** argv)
 {
+    std::string exp = "bumpy_cube";
     bool with_viewer = true;
     bool render_seq = false;
-    bool run_sim = false;
+    bool run_sim = true;
     IntrinsicSimulation intrinsic_simulation;
     intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
     // intrinsic_simulation.checkTotalHessianScale(true);
@@ -59,7 +60,7 @@ int main(int argc, char** argv)
                 CMat R(w,h), G(w,h), B(w,h), A(w,h);
                 viewer.core().draw_buffer(viewer.data(),true,R,G,B,A);
                 A.setConstant(255);
-                igl::png::writePNG(R,G,B,A, "frame"+std::to_string(i)+".png");
+                igl::png::writePNG(R,G,B,A, exp+"_frame"+std::to_string(i)+".png");
                 bool converged = intrinsic_simulation.advanceOneStep(i);
                 if (converged)
                     break;

@@ -32,7 +32,86 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                     std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
                                                              std::move(std::get<1>(lvals))); // geometry
     
-    // std::unique_ptr<gcs::FlipEdgeNetwork> sub_edgeNetwork = std::unique_ptr<gcs::FlipEdgeNetwork>(new gcs::FlipEdgeNetwork(*mesh, *geometry, {}));
+    gcs::GeodesicAlgorithmExact mmp(*sub_mesh, *sub_geometry);
+
+    SurfacePoint va_sub(sub_mesh->face(va.face.getIndex()), va.faceCoords);
+    SurfacePoint vb_sub(sub_mesh->face(vb.face.getIndex()), vb.faceCoords);
+    
+    mmp.propagate(va_sub);
+    if (trace_path)
+    {
+        path = mmp.traceBack(vb_sub, dis);
+        std::reverse(path.begin(), path.end());
+        for (auto& pt : path)
+        {
+            T edge_t = -1.0; TV start = TV::Zero(), end = TV::Zero();
+            bool is_edge_point = (pt.type == gcs::SurfacePointType::Edge);
+            if (is_edge_point)
+            {
+                auto he = pt.edge.halfedge();
+                SurfacePoint start_extrinsic = he.tailVertex();
+                SurfacePoint end_extrinsic = he.tipVertex();
+                start = toTV(start_extrinsic.interpolate(sub_geometry->vertexPositions));
+                end = toTV(end_extrinsic.interpolate(sub_geometry->vertexPositions));
+                TV ixn = toTV(pt.interpolate(sub_geometry->vertexPositions));
+                TV test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
+                if ((test_interp - ixn).norm() > 1e-6)
+                    std::swap(start, end);
+                
+                TV dir0 = (end-start).normalized();
+                TV dir1 = (ixn-start).normalized();
+                if ((dir0.cross(dir1)).norm() > 1e-6)
+                {
+                    std::cout << "error in cross product" << std::endl;
+                    std::exit(0);
+                }
+                test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
+                if ((ixn - test_interp).norm() > 1e-6)
+                {
+                    std::cout << "error in interpolation" << std::endl;
+                    std::exit(0);
+                }
+                edge_t = pt.tEdge;
+                // std::cout << pt.tEdge << " " << " cross " << (dir0.cross(dir1)).norm() << std::endl;
+                // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
+                // std::getchar();
+            }
+            ixn_data.push_back(IxnData(start, end, (1.0-edge_t)));
+            pt.edge = mesh->edge(pt.edge.getIndex());
+            pt.vertex = mesh->vertex(pt.vertex.getIndex());
+            pt.face = mesh->face(pt.face.getIndex());
+            pt = pt.inSomeFace();
+        }
+        
+    }
+    else
+        dis = mmp.getDistance(vb_sub);
+}
+
+void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, bool trace_path)
+{
+    ixn_data.clear();
+    int n_tri = extrinsic_indices.rows() / 3;
+    std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
+    for (int i = 0; i < n_tri; i++)
+        for (int d = 0; d < 3; d++)
+            mesh_indices_gc[i][d] = extrinsic_indices[i * 3 + d];
+    int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+    std::vector<gc::Vector3> mesh_vertices_gc(n_vtx_extrinsic);
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+        mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+            extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+    // START_TIMING(contruct)
+    auto lvals = gcs::makeManifoldSurfaceMeshAndGeometry(mesh_indices_gc, mesh_vertices_gc);
+    // FINISH_TIMING_PRINT(contruct)
+    std::unique_ptr<gcs::ManifoldSurfaceMesh> sub_mesh;
+    std::unique_ptr<gcs::VertexPositionGeometry> sub_geometry;
+    std::tie(sub_mesh, sub_geometry) = std::tuple<std::unique_ptr<gcs::ManifoldSurfaceMesh>,
+                    std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
+                                                             std::move(std::get<1>(lvals))); // geometry
+    
     
     std::unique_ptr<gcs::FlipEdgeNetwork> sub_edgeNetwork = std::unique_ptr<gcs::FlipEdgeNetwork>(new gcs::FlipEdgeNetwork(*sub_mesh, *sub_geometry, {}));
     sub_edgeNetwork->posGeom = sub_geometry.get();
@@ -60,6 +139,10 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
     sub_edgeNetwork->iterativeShorten(iterLim, lengthLim);
     
     gcEdge ei = sub_edgeNetwork->tri->intrinsicMesh->connectingEdge(va_vtx, vb_vtx);
+    if (ei == gcEdge())
+    {
+        std::cout << "Failed Connection" <<std::endl;
+    }
     dis = sub_edgeNetwork->tri->edgeLengths[ei];
     if (trace_path)
     {
@@ -124,6 +207,15 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
     // }
     // else
     //     dis = mmp.getDistance(vb_sub);
+}
+
+void IntrinsicSimulation::getAllPointsPosition(VectorXT& positions)
+{
+    positions.resize(mass_surface_points.size() * 3);
+    for (int i = 0; i < mass_surface_points.size(); i++)
+    {
+        positions.segment<3>(i * 3) = toTV(mass_surface_points[i].first.interpolate(geometry->vertexPositions));
+    }
 }
 
 void IntrinsicSimulation::updateCurrentState()
@@ -330,25 +422,14 @@ void IntrinsicSimulation::moveMassPoint(int idx, int bc)
     deformed = undeformed + u;
     simDoFToPosition(deformed);
     // undeformed = deformed;
-    if (use_intrinsic)
-        std::cout << "on face " << mass_vertices[idx].second.getIndex() << std::endl;
-    else
-        std::cout << "on face " << mass_surface_points[idx].second.getIndex() << std::endl;
+    std::cout << "on face " << mass_surface_points[idx].second.getIndex() << std::endl;
 }
 
 void IntrinsicSimulation::massPointPosition(int idx, TV& pos)
 {
     Vector3 bary{deformed[idx*2+0], deformed[idx*2+1], 1.0-deformed[idx*2+0]-deformed[idx*2+1]};
-    if (use_intrinsic)
-    {
-        SurfacePoint pi(mass_vertices[idx].second, bary);
-        pos = toTV(pi.interpolate(geometry->vertexPositions));
-    }
-    else
-    {
-        SurfacePoint pi(mass_surface_points[idx].second, bary);
-        pos = toTV(pi.interpolate(geometry->vertexPositions));
-    }
+    SurfacePoint pi(mass_surface_points[idx].second, bary);
+    pos = toTV(pi.interpolate(geometry->vertexPositions));
 }
 
 void IntrinsicSimulation::updateVisualization(bool all_edges)
@@ -359,19 +440,22 @@ void IntrinsicSimulation::updateVisualization(bool all_edges)
     int n_springs = spring_edges.size();
     std::vector<std::vector<std::pair<TV, TV>>> sub_pairs(n_springs, std::vector<std::pair<TV, TV>>());
     
-#ifdef PARALLEL_GEODESIC
-    tbb::parallel_for(0, n_springs, [&](int i)
-#else
+    if (retrace)
+    {
+        traceGeodesics();
+        retrace = false;
+    }
+
 	for(int i = 0; i < n_springs; i++)
-#endif
     {
         SurfacePoint vA = mass_surface_points[spring_edges[i][0]].first;
         SurfacePoint vB = mass_surface_points[spring_edges[i][1]].first;
         
-        T geo_dis; std::vector<SurfacePoint> path;
-        std::vector<IxnData> ixn_data;
-        computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
+        // T geo_dis; std::vector<SurfacePoint> path;
+        // std::vector<IxnData> ixn_data;
+        // computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
         
+        std::vector<SurfacePoint> path = paths[i];
         for(int j = 0; j < path.size() - 1; j++)
         {
             sub_pairs[i].push_back(std::make_pair(
@@ -380,9 +464,6 @@ void IntrinsicSimulation::updateVisualization(bool all_edges)
             ));
         }
     }
-#ifdef PARALLEL_GEODESIC
-    );
-#endif
     for (int i = 0; i < n_springs; i++)
     {
         all_intrinsic_edges.insert(all_intrinsic_edges.end(), sub_pairs[i].begin(), sub_pairs[i].end());
@@ -394,8 +475,10 @@ bool IntrinsicSimulation::advanceOneStep(int step)
     START_TIMING(NewtonStep)
     VectorXT residual(deformed.rows());
     residual.setZero();
-    // START_TIMING(computeResidual)
+    // START_TIMING(traceGeodesics)
     traceGeodesics();
+    // FINISH_TIMING_PRINT(traceGeodesics)
+    // START_TIMING(computeResidual)
     T residual_norm = computeResidual(residual);
     // FINISH_TIMING_PRINT(computeResidual)
     std::cout << "[NEWTON] iter " << step << "/" 
@@ -434,7 +517,9 @@ T IntrinsicSimulation::lineSearchNewton(VectorXT& residual)
     if (use_Newton)
     {
         // Timer ti(true);
+        // START_TIMING(buildSystemMatrix)
         buildSystemMatrix(K);
+        // FINISH_TIMING_PRINT(buildSystemMatrix)
         // // std::cout << "\tbuild system takes " <<  ti.elapsed_sec() << std::endl;
         bool success = linearSolve(K, residual, du);
         if (!success)
@@ -445,38 +530,56 @@ T IntrinsicSimulation::lineSearchNewton(VectorXT& residual)
     }
     T norm = du.norm();
     
-    T alpha = 1.0;
+    retrace = false;
     T E0 = computeTotalEnergy();
     // std::cout << std::setprecision(8) << "ls E0  " << E0 << std::endl;
-    int cnt = 0;
-    while (true)
+
+    auto lineSearchInDirection = [&](const VectorXT& direction) -> bool
     {
-        delta_u = alpha * du;
-        updateCurrentState();
-        T E1 = computeTotalEnergy();
-        if (verbose)
-            std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
-        if (E1 - E0 < 0 || cnt > 15)
+        T alpha = 1.0;
+        int cnt = 0;
+        while (true)
         {
-            // std::cout << "|du| " << alpha * du.norm() << std::endl;
-            // std::cout << "ls final " << E1 << " #ls " << cnt << std::endl;
-            if (cnt > 15)
+            delta_u = alpha * direction;
+            updateCurrentState();
+            retrace = true;
+            T E1 = computeTotalEnergy();
+            retrace = false;
+            if (verbose)
+                std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
+            if (E1 - E0 < 0 || cnt > 15)
             {
-                // std::cout << "cnt > 15" << std::endl;
-                // Eigen::EigenSolver<MatrixXT> es(K);
-                // std::cout << es.eigenvalues() << std::endl;
-                return 1e16;
+                // std::cout << "|du| " << alpha * du.norm() << std::endl;
+                // std::cout << "ls final " << E1 << " #ls " << cnt << std::endl;
+                if (cnt > 15)
+                {
+                    std::cout << "-----line search max----- cnt > 15" << std::endl;
+                    std::cout << residual.norm() << std::endl;
+                    return false;
+                    // Eigen::EigenSolver<MatrixXT> es(K);
+                    // std::cout << es.eigenvalues().real().maxCoeff() << std::endl;
+                    // return 1e16;
+                }
+                return true;
             }
-            break;
+            alpha *= 0.5;
+            cnt += 1;
         }
-        alpha *= 0.5;
-        cnt += 1;
-    }
-    return norm;
+    };
+
+    bool ls_succeed = lineSearchInDirection(du);
+    if (!ls_succeed)
+        ls_succeed = lineSearchInDirection(residual);
+
+    return delta_u.norm();
 }
 
 void IntrinsicSimulation::reset()
 {
-    deformed = undeformed;
-    u.setZero();
+    mass_surface_points = mass_surface_points_undeformed;
+    delta_u.setZero();
+    updateCurrentState();
+    retrace = true;
+    traceGeodesics();
+    retrace = false;
 }

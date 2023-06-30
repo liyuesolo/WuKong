@@ -10,6 +10,7 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
     delta_u = VectorXT::Zero(undeformed.rows());
     
     updateCurrentState();
+    retrace = true;
     traceGeodesics();
     computeResidual(gradient);
     gradient *= -1.0;
@@ -20,14 +21,18 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
     for(int dof_i = 0; dof_i < n_dof; dof_i++)
     {
         delta_u(dof_i) += epsilon;
+        mass_surface_points = mass_surface_points_undeformed;
         updateCurrentState();
+        retrace = true;
         T E0 = computeTotalEnergy();
         
         delta_u(dof_i) -= 2.0 * epsilon;
+        mass_surface_points = mass_surface_points_undeformed;
         updateCurrentState();
+        retrace = true;
         T E1 = computeTotalEnergy();
         delta_u(dof_i) += epsilon;
-        updateCurrentState();
+        
         std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         gradient_FD(dof_i) = (E0 - E1) / (2.0 *epsilon);
         if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
@@ -43,6 +48,7 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
 
 void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
 {
+    std::cout << "================CHECK GRADIENT SCALE==============" <<std::endl;
     run_diff_test = true;
     int n_dof = deformed.rows();
 
@@ -55,23 +61,27 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
         // delta_u *= 0.01;
     }
     VectorXT delta_u_backup = delta_u;
+    mass_surface_points = mass_surface_points_undeformed;
     updateCurrentState();
+    retrace = true;
     traceGeodesics();
 
     computeResidual(gradient);
     gradient *= -1.0;
 
+    retrace = false;
     T E0 = computeTotalEnergy();
     VectorXT dx(n_dof);
     dx.setRandom();
     dx *= 1.0 / dx.norm();
-    dx *= 0.01;
+    dx *= 0.001;
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
     {    
         delta_u = delta_u_backup + dx;
+        mass_surface_points = mass_surface_points_undeformed;
         updateCurrentState();
-        // traceGeodesics();
+        retrace = true;
         T E1 = computeTotalEnergy();
         T dE = E1 - E0;
         dE -= gradient.dot(dx);
@@ -84,68 +94,80 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
         dx *= 0.5;
     }
     run_diff_test = false;
+    std::cout << "================ DONE ==============" <<std::endl;
 }
 
 void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
 {
-    // run_diff_test = true;
-    // int n_dof = deformed.rows();
-    
-    // delta_u = VectorXT::Zero(undeformed.rows());
-    // if (perturb)
-    // {
-    //     delta_u.setRandom();
-    //     delta_u *= 1.0 / delta_u.norm();
-    //     delta_u *= 0.01;
-    // }
-
-    // StiffnessMatrix A(n_dof, n_dof);
-    // buildSystemMatrix(A);
-
-    // VectorXT f0(n_dof);
-    // f0.setZero();
-    // computeResidual(u, f0);
-    // f0 *= -1;
-    
-    // VectorXT dx(n_dof);
-    // dx.setRandom();
-    // dx *= 1.0 / dx.norm();
-    
-    // dx *= 0.1;
-    // T previous = 0.0;
-    // for (int i = 0; i < 10; i++)
-    // {
-        
-    //     VectorXT f1(n_dof);
-    //     f1.setZero();
-    //     computeResidual(u + dx, f1);
-    //     f1 *= -1;
-    //     T df_norm = (f0 + (A * dx) - f1).norm();
-    //     std::cout << "df_norm " << df_norm << std::endl;
-    //     if (i > 0)
-    //     {
-    //         std::cout << (previous/df_norm) << std::endl;
-    //     }
-    //     previous = df_norm;
-    //     dx *= 0.5;
-    // }
-    // run_diff_test = false;
-}
-
-void IntrinsicSimulation::checkTotalHessian(bool perturb)
-{
-    T epsilon = 1e-6;
+    std::cout << "================CHECK HESSIAN SCALE==============" <<std::endl;
     run_diff_test = true;
     int n_dof = deformed.rows();
     
     delta_u = VectorXT::Zero(undeformed.rows());
     if (perturb)
     {
-        delta_u.setRandom();
-        delta_u *= 1.0 / delta_u.norm();
-        delta_u *= 0.01;
+        // delta_u.setRandom();
+        // delta_u *= 1.0 / delta_u.norm();
+        // delta_u *= 0.01;
     }
-    updateCurrentState();
+    VectorXT delta_u_backup = delta_u;
+    mass_surface_points = mass_surface_points_undeformed;
+    retrace = true;
+    traceGeodesics();
+    StiffnessMatrix A(n_dof, n_dof);
+    buildSystemMatrix(A);
+
+    VectorXT f0(n_dof);
+    f0.setZero();
+    computeResidual(f0);
+    f0 *= -1;
+    
+    VectorXT dx(n_dof);
+    dx.setRandom();
+    dx *= 1.0 / dx.norm();
+    
+    dx *= 0.01;
+    T previous = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        
+        VectorXT f1(n_dof);
+        f1.setZero();
+        delta_u = delta_u_backup + dx;
+        mass_surface_points = mass_surface_points_undeformed;
+        updateCurrentState();
+        retrace = true;
+        traceGeodesics();
+
+        computeResidual(f1);
+        f1 *= -1;
+        T df_norm = (f0 + (A * dx) - f1).norm();
+        // std::cout << "df_norm " << df_norm << std::endl;
+        if (i > 0)
+        {
+            std::cout << (previous/df_norm) << std::endl;
+        }
+        previous = df_norm;
+        dx *= 0.5;
+    }
+    run_diff_test = false;
+    std::cout << "================ DONE ==============" <<std::endl;
+}
+
+void IntrinsicSimulation::checkTotalHessian(bool perturb)
+{
+    T epsilon = 1e-4;
+    run_diff_test = true;
+    int n_dof = deformed.rows();
+    
+    delta_u = VectorXT::Zero(undeformed.rows());
+    if (perturb)
+    {
+        // delta_u.setRandom();
+        // delta_u *= 1.0 / delta_u.norm();
+        // delta_u *= 0.01;
+    }
+    retrace = true;
     traceGeodesics();
     StiffnessMatrix A(n_dof, n_dof);
     buildSystemMatrix(A);
@@ -154,7 +176,9 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
     {
         // std::cout << dof_i << std::endl;
         delta_u(dof_i) += epsilon;
+        mass_surface_points = mass_surface_points_undeformed;
         updateCurrentState();
+        retrace = true;
         traceGeodesics();
         VectorXT g0(n_dof), g1(n_dof);
         g0.setZero(); g1.setZero();
@@ -163,7 +187,9 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
         g0 *= -1.0; 
         
         delta_u(dof_i) -= 2.0 * epsilon;
+        mass_surface_points = mass_surface_points_undeformed;
         updateCurrentState();
+        retrace = true;
         traceGeodesics();
         computeResidual(g1); 
         g1 *= -1.0;

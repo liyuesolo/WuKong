@@ -2,27 +2,20 @@
 
 
 void IntrinsicSimulation::addEdgeLengthEnergy(T w, T& energy)
-{    
+{
+    if (retrace)
+        traceGeodesics();
     VectorXT energies = VectorXT::Zero(spring_edges.size());
-#ifdef PARALLEL_GEODESIC
-    tbb::parallel_for(0, (int)spring_edges.size(), [&](int i)
-#else
-	for(int i = 0; i < n_springs; i++)
-#endif
+	for(int i = 0; i < spring_edges.size(); i++)
     {
         Edge eij = spring_edges[i];
         T l0 = rest_length[i];
         SurfacePoint vA = mass_surface_points[eij[0]].first;
         SurfacePoint vB = mass_surface_points[eij[1]].first;
         
-        T geo_dis; std::vector<SurfacePoint> path;
-        std::vector<IxnData> ixn_data;
-        computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, false);
+        T geo_dis = current_length[i];
         energies[i] = w * (geo_dis - l0) * (geo_dis-l0);
     }
-#ifdef PARALLEL_GEODESIC
-    );
-#endif
     energy += energies.sum();
 }
 
@@ -59,6 +52,11 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
 
             TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
             dldx1 = -(ixn1 - v1).normalized();
+
+            if ((ixn0-v0).norm() < 1e-4)
+                std::cout << "small edge : |x0 - c0| " << (ixn0-v0).norm() << std::endl;
+            if ((v1-ixn1).norm() < 1e-4)
+                std::cout << "mall edge : |xn - c1| " << (v1-ixn1).norm() << std::endl;
         }
 
         TV v10 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().vertex()]);
@@ -89,6 +87,8 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
 
 void IntrinsicSimulation::traceGeodesics()
 {
+    if (!retrace)
+        return;
     int n_springs = spring_edges.size();
     current_length.resize(n_springs);
     paths.resize(n_springs);
@@ -244,7 +244,7 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
             // if intersections are too close to the mass points,
             // then there could appear super large value in the element hessian
             // we use an approximated hessian in this case
-            if (dfdx.maxCoeff() > 1e10 || dfdx.minCoeff() < 1e-10)
+            if (dfdx.maxCoeff() > 1e6 || dfdx.minCoeff() < -1e6)
                 d2ldx2 = d2ldx2_approx;
             // Eigen::EigenSolver<MatrixXT> es(dfdx);
             // std::cout << es.eigenvalues().real().transpose() << std::endl;

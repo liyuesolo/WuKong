@@ -260,8 +260,12 @@ void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     
     simulation.updateVisualization(all_edges);
 
-    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(1.0,103.0/255.0,0.0/255.0));
-    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.005, V, F, C);
+    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(0.95,103.0/255.0,0.0/255.0));
+    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.01 * simulation.ref_dis, V, F, C);
+    
+    VectorXT sites;
+    simulation.getAllPointsPosition(sites);
+    appendSpheresToPositions(sites, simulation.ref_dis * 0.03, TV::Ones(), V, F, C);
     
 
     viewer.data().clear();
@@ -412,9 +416,9 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         case 'd':
             simulation.checkTotalGradientScale(true);
-            simulation.checkTotalGradient(true);
-            // simulation.checkTotalHessianScale(true);
-            simulation.checkTotalHessian(true);
+            // simulation.checkTotalGradient(true);
+            simulation.checkTotalHessianScale(true);
+            // simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
             return true;
         case 'c':
