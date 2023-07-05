@@ -261,12 +261,15 @@ void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     simulation.updateVisualization(all_edges);
 
     std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(0.95,103.0/255.0,0.0/255.0));
-    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.01 * simulation.ref_dis, V, F, C);
+    appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.03 * simulation.ref_dis, V, F, C);
     
     VectorXT sites;
     simulation.getAllPointsPosition(sites);
-    appendSpheresToPositions(sites, simulation.ref_dis * 0.03, TV::Ones(), V, F, C);
+    appendSpheresToPositions(sites, simulation.ref_dis * 0.05, TV::Ones(), V, F, C);
     
+    // VectorXT markers;
+    // simulation.getMarkerPointsPosition(markers);
+    // appendSpheresToPositions(markers, simulation.ref_dis * 0.03, TV(1.0, 0.0, 0.0), V, F, C);
 
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -290,6 +293,29 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             
         //     updateScreen(viewer);
         // }
+        if (ImGui::Button("LoadState", ImVec2(-1,0)))
+        {
+            step_along_search_direction = true;
+            static_solve_step = 0;
+            std::ifstream in("search_direction.txt");
+            int length; in >> length;
+            search_direction.resize(length);
+            for (int i = 0; i < length; i++)
+                in >> search_direction[i];
+            int n_pts; in >> n_pts;
+            for (int i = 0; i < n_pts; i++)
+            {
+                TV bary; in >> bary[0] >> bary[1] >> bary[2];
+                int face_idx; in >> face_idx;
+                gcs::Face f = simulation.mesh->face(face_idx);
+                simulation.mass_surface_points[i].second = f;
+                simulation.mass_surface_points[i].first = gcs::SurfacePoint(f, gc::Vector3{bary[0],bary[1], bary[2]});
+            }
+            simulation.updateCurrentState();
+            simulation.mass_surface_points_undeformed = simulation.mass_surface_points;
+            simulation.retrace = true;
+            updateScreen(viewer);
+        }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
             // tiling.solver.staticSolve();
@@ -410,19 +436,48 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case 'm':
-            simulation.moveMassPoint(selected, 0);
-            simulation.updateVisualization(all_edges);
+            // simulation.moveMassPoint(selected, 0);
+            // simulation.updateVisualization(all_edges);
+            if (step_along_search_direction)
+            {
+                simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
+                simulation.delta_u = (static_solve_step) * search_direction;
+                simulation.updateCurrentState();
+                simulation.retrace = true;
+                T total_energy = simulation.computeTotalEnergy();
+                std::cout << "energy : " << total_energy << std::endl;
+                static_solve_step++;
+            }
+            updateScreen(viewer);
+            return true;
+        case 'n':
+            if (step_along_search_direction)
+            {
+                simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
+                simulation.delta_u = (static_solve_step-1) * search_direction;
+                simulation.updateCurrentState();
+                simulation.retrace = true;
+                T total_energy = simulation.computeTotalEnergy();
+                std::cout << "energy : " << total_energy << std::endl;
+                static_solve_step--;
+            }
             updateScreen(viewer);
             return true;
         case 'd':
-            simulation.checkTotalGradientScale(true);
-            // simulation.checkTotalGradient(true);
-            simulation.checkTotalHessianScale(true);
+            // simulation.checkTotalGradientScale(true);
+            simulation.checkTotalGradient(true);
+            // simulation.checkTotalHessianScale(true);
             // simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
+            updateScreen(viewer);
             return true;
         case 'c':
             // simulation.checkHessian();
+            simulation.checkInformation();
+            return true;
+        case 'r':
+            simulation.reset();
+            updateScreen(viewer);
             return true;
         case ' ':
             viewer.core().is_animating = true;

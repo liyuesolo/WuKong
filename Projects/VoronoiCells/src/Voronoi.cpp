@@ -16,44 +16,11 @@
 
 #include "../include/Util.h"
 
-//CGAL 
-// typedef CGAL::Simple_cartesian<double> K;
-// typedef K::Point_3  Point_3;
-// typedef std::array<std::size_t,3> Facet;
-
-
 void VoronoiCells::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C)
 {
     V = surface_vtx; F = surface_indices;
     C.resize(F.rows(), 3); C.col(0).setConstant(0.0); C.col(1).setConstant(0.3); C.col(2).setConstant(1.0);
 }
-
-// void VoronoiCells::triangulatePointCloud(const VectorXT& points, VectorXi& triangle_indices)
-// {
-//     if (n_sites != points.size() / 3)
-//     {
-//         std::cout << "# voronoi sites is incorrect" << std::endl;
-//         std::exit(0);
-//     }
-
-//     std::vector<Point_3> pointsCGAL;
-//     std::vector<Facet> facets;
-
-//     for (int i = 0; i < n_sites; i++)
-//         pointsCGAL.push_back(Point_3(points[i * 3 + 0],
-//         points[i * 3 + 1],
-//         points[i * 3 + 2]));
-    
-    
-//     CGAL::advancing_front_surface_reconstruction(pointsCGAL.begin(),
-//                                                 pointsCGAL.end(),
-//                                                 std::back_inserter(facets));
-    
-//     triangle_indices.resize(facets.size() * 3);
-//     for (int i = 0; i < facets.size(); i++)
-//         triangle_indices.segment<3>(i * 3) = IV(facets[i][2], facets[i][1], facets[i][0]);
-// }
-
 
 void VoronoiCells::constructCentroidalVD(const VectorXi& triangulation,
     const VectorXT& site_locations, VectorXT& nodal_positions,

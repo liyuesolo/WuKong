@@ -87,10 +87,10 @@ public:
     std::vector<Edge> spring_edges;
     std::vector<T> rest_length;
     bool verbose = false;
-    bool use_intrinsic = false;
     T we = 1.0;
     T ref_dis = 1.0;
     bool retrace = true;
+    T IRREGULAR_EPSILON = 1e-6;
 
     std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
     std::unique_ptr<gcs::VertexPositionGeometry> geometry;
@@ -108,12 +108,13 @@ private:
         } 
     }
 
-    bool simDoFToPosition(VectorXT& sim_dof);
 
     Vector3 toVec3(const TV& vec) const
     {
         return Vector3{vec[0], vec[1], vec[2]};
     }
+
+    void formEdgesFromConnection(const MatrixXi& F, MatrixXi& igl_edges);
 
     TV toTV(const Vector3& vec) const
     {
@@ -123,6 +124,33 @@ private:
     void printVec3(const Vector3& vec) const
     {
         std::cout << vec.x << " " << vec.y << " " << vec.z << std::endl;
+    }
+
+    template<int dim>
+    void addForceEntry(VectorXT& residual, 
+        const std::vector<int>& vtx_idx, 
+        const Vector<T, dim>& gradent)
+    {
+        if (vtx_idx.size() * 2 != dim)
+            std::cout << "wrong gradient block size in addForceEntry" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+            residual.segment<2>(vtx_idx[i] * 2) += gradent.template segment<2>(i * 2);
+    }
+
+    template<int dim>
+    void getSubVector(const VectorXT& _vector, 
+        const std::vector<int>& vtx_idx, 
+        Vector<T, dim>& sub_vec)
+    {
+        if (vtx_idx.size() * 2 != dim)
+            std::cout << "wrong gradient block size in getSubVector" << std::endl;
+
+        sub_vec = Vector<T, dim>::Zero(vtx_idx.size() * 2);
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            sub_vec.template segment<2>(i * 2) = _vector.segment<2>(vtx_idx[i] * 2);
+        }
     }
 
     
@@ -168,6 +196,9 @@ private:
         hess.block(3, 0, 3, 3) = -hess.block(0, 0, 3, 3);
     }
 
+    bool hasSmallSegment(const std::vector<SurfacePoint>& path);
+
+    bool closeToIrregular(const SurfacePoint& point);
 public:
     void computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
         T& dis, std::vector<SurfacePoint>& path, 
@@ -177,35 +208,29 @@ public:
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, 
         bool trace_path = false);
-
-    
-    void initializeMassSpringSceneExactGeodesic();
-    void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
     
     T computeTotalEnergy();
     T computeResidual(VectorXT& residual);
     void buildSystemMatrix(StiffnessMatrix& K);
-    T lineSearchNewton(VectorXT& residual);
-    void updateCurrentState();
+    T lineSearchNewton(const VectorXT& residual);
+    void updateCurrentState(bool trace = true);
     void traceGeodesics();
     void reset();
-    // bool staticSolve();
 
-    // bool staticSolveStep(int step);
-
-    bool linearSolve(StiffnessMatrix& K, VectorXT& residual, VectorXT& du);
+    bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);
 
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
 
     bool advanceOneStep(int step);
 
     void updateVisualization(bool all_edges = false);
+    void checkHessian();
+    void checkInformation();
 
+    // EdgeTerms.cpp
     void addEdgeLengthEnergy(T w, T& energy);
     void addEdgeLengthForceEntries(T w, VectorXT& residual);
     void addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries);
-
-    void checkHessian();
 
     // DerivativeTest.cpp    
     void checkTotalGradientScale(bool perturb = false);
@@ -213,9 +238,18 @@ public:
     void checkTotalHessian(bool perturb = false);
     void checkTotalHessianScale(bool perturb = false);
 
+    // Scene.cpp
+    void initializeMassSpringSceneExactGeodesic();
+    void initializeMassSpringDebugScene();
+    void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
+    void movePointsPlotEnergy();
+
     void massPointPosition(int idx, TV& pos);
     void moveMassPoint(int idx, int bc);
     void getAllPointsPosition(VectorXT& positions);
+    void getMarkerPointsPosition(VectorXT& positions);
+    
+    void getCurrentMassPointConfiguration(std::vector<std::pair<SurfacePoint, gcFace>>& configuration);
 public:
     IntrinsicSimulation() {}
     ~IntrinsicSimulation() {}

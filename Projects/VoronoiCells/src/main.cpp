@@ -34,7 +34,10 @@ int main(int argc, char** argv)
     bool render_seq = false;
     bool run_sim = true;
     IntrinsicSimulation intrinsic_simulation;
-    intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
+    intrinsic_simulation.initializeMassSpringDebugScene();
+    // intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
+    // intrinsic_simulation.checkTotalGradientScale();
+    // intrinsic_simulation.checkTotalGradient();
     // intrinsic_simulation.checkTotalHessianScale(true);
 
     if (with_viewer)

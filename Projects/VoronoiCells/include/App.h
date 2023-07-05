@@ -91,6 +91,8 @@ public:
     bool all_edges = false;
     int selected = -1;
     T x0, y0;
+    bool step_along_search_direction = false;
+    VectorXT search_direction;
 public:
     MassSpringApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
     ~MassSpringApp() {}

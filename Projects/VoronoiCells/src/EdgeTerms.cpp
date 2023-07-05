@@ -12,7 +12,8 @@ void IntrinsicSimulation::addEdgeLengthEnergy(T w, T& energy)
         T l0 = rest_length[i];
         SurfacePoint vA = mass_surface_points[eij[0]].first;
         SurfacePoint vB = mass_surface_points[eij[1]].first;
-        
+        std::vector<SurfacePoint> path = paths[i];
+        // std::cout << path.size() << std::endl;
         T geo_dis = current_length[i];
         energies[i] = w * (geo_dis - l0) * (geo_dis-l0);
     }
@@ -28,6 +29,9 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
     {
         SurfacePoint vA = mass_surface_points[eij[0]].first;
         SurfacePoint vB = mass_surface_points[eij[1]].first;
+
+        // std::cout << "va barycentric " << vA.faceCoords << std::endl;
+        // std::cout << "vb barycentric " << vB.faceCoords << std::endl;
         
         T l = current_length[cnt];
         std::vector<SurfacePoint> path = paths[cnt];
@@ -40,9 +44,18 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
         TV dldx0, dldx1;
         TV v0 = toTV(path[0].interpolate(geometry->vertexPositions));
         TV v1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
+
+        TV v10 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().vertex()]);
+        TV v11 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().next().vertex()]);
+        TV v12 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().next().next().vertex()]);
+
+        TV v20 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().vertex()]);
+        TV v21 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().next().vertex()]);
+        TV v22 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().next().next().vertex()]);
+
         if (length == 2)
         {
-            dldx0 = -(v1 - v0).normalized();
+            dldx0 = -(v1 - v0).normalized();   
             dldx1 = -dldx0;
         }
         else
@@ -52,37 +65,38 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
 
             TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
             dldx1 = -(ixn1 - v1).normalized();
+            // std::cout << dldx0.transpose() << " " << dldx1.transpose() << std::endl;
+            // std::getchar();
 
-            if ((ixn0-v0).norm() < 1e-4)
-                std::cout << "small edge : |x0 - c0| " << (ixn0-v0).norm() << std::endl;
-            if ((v1-ixn1).norm() < 1e-4)
-                std::cout << "mall edge : |xn - c1| " << (v1-ixn1).norm() << std::endl;
+            if ((ixn0-v0).norm() < 1e-6)
+                std::cout << "small edge : |x0 - c0| " << (ixn0-v0).norm() << " vi " << eij[0] << " vj " << eij[1] << std::endl;
+            if ((v1-ixn1).norm() < 1e-6)
+                std::cout << "small edge : |xn - c1| " << (v1-ixn1).norm() << " vi " << eij[0] << " vj " << eij[1] << std::endl;
         }
 
-        TV v10 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().vertex()]);
-        TV v11 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().next().vertex()]);
-        TV v12 = toTV(geometry->vertexPositions[mass_surface_points[eij[0]].second.halfedge().next().next().vertex()]);
+        if (hasSmallSegment(path) && !run_diff_test)
+        {
+            std::cout << "has small segment" << std::endl;
+            // std::getchar();
+        }
 
-        Matrix<T, 3, 2> dx0dw0;
-        dx0dw0.col(0) = v10 - v12;
-        dx0dw0.col(1) = v11 - v12;
+        Vector<T, 6> dldx; dldx.setZero();
+        dldx.segment<3>(0) = dldx0;
+        dldx.segment<3>(3) = dldx1;
 
-        TV2 dldw0 = dldx0.transpose() * dx0dw0;
+        Matrix<T, 6, 4> dxdw; dxdw.setZero();
+        dxdw.block(0, 0, 3, 1) = v10 - v12;
+        dxdw.block(0, 1, 3, 1) = v11 - v12;
 
-        TV v20 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().vertex()]);
-        TV v21 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().next().vertex()]);
-        TV v22 = toTV(geometry->vertexPositions[mass_surface_points[eij[1]].second.halfedge().next().next().vertex()]);
+        dxdw.block(3, 2, 3, 1) = v20 - v22;
+        dxdw.block(3, 3, 3, 1) = v21 - v22;
 
-        Matrix<T, 3, 2> dx1dw1;
-        dx1dw1.col(0) = v20 - v22;
-        dx1dw1.col(1) = v21 - v22;
+        Vector<T, 4> dldw = dldx.transpose() * dxdw;
 
-        TV2 dldw1 = dldx1.transpose() * dx1dw1;
-
-        residual.segment<2>(eij[0]*2) += -dldw0 * coeff;
-        residual.segment<2>(eij[1]*2) += -dldw1 * coeff;
+        addForceEntry<4>(residual, {eij[0], eij[1]}, -dldw * coeff);
         cnt++;
     }
+    
 }
 
 void IntrinsicSimulation::traceGeodesics()
@@ -102,9 +116,10 @@ void IntrinsicSimulation::traceGeodesics()
         SurfacePoint vA = mass_surface_points[spring_edges[i][0]].first;
         SurfacePoint vB = mass_surface_points[spring_edges[i][1]].first;
         
-        T geo_dis; std::vector<SurfacePoint> path;
+        T geo_dis = 0.0; std::vector<SurfacePoint> path;
 		std::vector<IxnData> ixn_data;
         computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
+        // computeExactGeodesicEdgeFlip(vA, vB, geo_dis, path, ixn_data, true);
         ixn_data_list[i] = ixn_data;
         paths[i] = path;
         current_length[i] = geo_dis;
@@ -112,6 +127,7 @@ void IntrinsicSimulation::traceGeodesics()
 #ifdef PARALLEL_GEODESIC
     );
 #endif
+    retrace = false;
 }
 
 void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries)
@@ -130,7 +146,6 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
         std::vector<SurfacePoint> path = paths[cnt];
         
         T l0 = rest_length[cnt];
-        T coeff = 2.0 * w * (l - l0);
         
         int length = path.size();
         // std::cout << "===========================" << std::endl;
@@ -188,6 +203,11 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
             TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
             dldx1 = -(ixn1 - v1).normalized();
 
+            // if ((ixn0-v0).norm() < 1e-5)
+            //     std::cout << "small edge : |x0 - c0| " << (ixn0-v0).norm() << " vi " << eij[0] << " vj " << eij[1] << std::endl;
+            // if ((v1-ixn1).norm() < 1e-5)
+            //     std::cout << "small edge : |xn - c1| " << (v1-ixn1).norm() << " vi " << eij[0] << " vj " << eij[1] << std::endl;
+
             dldx.segment<3>(0) = dldx0;
             dldx.segment<3>(3) = dldx1;
             
@@ -244,8 +264,14 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
             // if intersections are too close to the mass points,
             // then there could appear super large value in the element hessian
             // we use an approximated hessian in this case
-            if (dfdx.maxCoeff() > 1e6 || dfdx.minCoeff() < -1e6)
-                d2ldx2 = d2ldx2_approx;
+            // if ((dfdx.maxCoeff() > 1e6 || dfdx.minCoeff() < -1e6) && !run_diff_test)
+            //     d2ldx2 = d2ldx2_approx;
+            
+            // if (hasSmallSegment(path) && !run_diff_test)
+            // {
+            //     std::cout << "has small segment" << std::endl;
+            //     d2ldx2 = d2ldx2_approx;
+            // }
             // Eigen::EigenSolver<MatrixXT> es(dfdx);
             // std::cout << es.eigenvalues().real().transpose() << std::endl;
 
@@ -257,6 +283,10 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
         Matrix<T, 4, 4> hessian_full = 
             2.0 * w * (dldw * dldw.transpose() + (l - l0) * (dxdw.transpose() * d2ldx2 * dxdw));
         addHessianEntry<4>(entries, {eij[0], eij[1]}, hessian_full);
+
+        // VectorXT ev = computeHessianBlockEigenValues<4>(hessian_full);
+        // std::cout << ev.transpose() << std::endl;
+        
         cnt++;
     }
 }
