@@ -57,13 +57,16 @@ public:
 
 class GradientDescentLineSearch : public GradientDescentFixedStep {
 public:
+    double alpha_start = 1.;
+
+public:
     GradientDescentLineSearch(int maxIterations = 100, double solveResidual = 1e-5, int maxLineSearchIterations = 15)
             : GradientDescentFixedStep(maxIterations, solveResidual), maxLineSearchIterations(maxLineSearchIterations) {
     }
 
 public:
     virtual void step(const ObjectiveFunction *function, const VectorXd &dx, VectorXd &x) {
-        double alpha_nominal = 1.;
+        double alpha_nominal = alpha_start;
         double O0 = function->evaluate(x);
         VectorXd x_cand = x;
         for (int i = 0; i < maxLineSearchIterations; ++i) {
@@ -76,6 +79,8 @@ public:
 //                if (function->evaluate(x_cand2) < function->evaluate(x_cand)) x_cand = x_cand2;
                 // TODO: Logan
                 x = x_cand;
+                alpha_start = std::min(2 * alpha, 1.0);
+                std::cout << "new alpha " << alpha_start << std::endl;
                 return;
             }
         }

@@ -2,7 +2,7 @@
 
 #include "PerTriangleFunction.h"
 
-class PerTriangleVolume : public PerTriangleFunction {
+class PerTriangleWeightedMeanY : public PerTriangleFunction {
 public:
     virtual void getValue(TriangleValue &value) const;
 

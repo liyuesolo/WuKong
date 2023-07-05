@@ -3,6 +3,9 @@
 #include <chrono>
 #include <iostream>
 
+#include "Projects/Foam3D/include/Energy/CellFunctionPerTriangle.h"
+#include "../../include/Energy/PerTriangleVolume.h"
+
 void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) {
     VectorXT c_new = combineVerticesParams(vertices, params);
 
@@ -17,6 +20,16 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
     faces.clear();
     cells.clear();
 
+    for (int i = 0; i < c.rows() / 4 - 8; i++) {
+        if (fabs(c(i * 4 + 0)) > 5
+            || fabs(c(i * 4 + 1)) > 5
+            || fabs(c(i * 4 + 2)) > 5) {
+            isValid = false;
+            break;
+        }
+    }
+    if (!isValid) return;
+
     getDualGraph();
 
     for (int i = 0; i < faces.size(); i++) {
@@ -30,6 +43,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
                 VectorXT v3 = c.segment<4>(node.gen[3] * 4);
 
                 getNode(v0, v1, v2, v3, nodePosition);
+                getNodeGradient(v0, v1, v2, v3, nodePosition);
+                getNodeHessian(v0, v1, v2, v3, nodePosition);
                 nodes[node] = nodePosition;
             }
         }
@@ -92,6 +107,18 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
     }
 
     computeCellData();
+
+    PerTriangleVolume perTriVol;
+    CellFunctionPerTriangle volFunc(&perTriVol);
+    for (int i = 0; i < cells.size(); i++) {
+        CellValue cellVal(cells[i]);
+        volFunc.getValue(this, cellVal);
+//        std::cout << "Volume " << cellVal.value << std::endl;
+        if (cellVal.value < 1e-10) {
+            isValid = false;
+            break;
+        }
+    }
 
 //
 //    auto cmp = [](IV4 a, IV4 b) {
@@ -260,11 +287,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
 //    }
 }
 
-#include "../../include/Tessellation/CellFunctionPerTriangle.h"
-#include "../../include/Energy/PerTriangleVolume.h"
-
 void Tessellation::computeCellData() {
-    int n_cells = c.rows() / 4;
+    int n_cells = c.rows() / 4 - 8;
     cells.resize(n_cells);
 
     for (int f = 0; f < faces.size(); f++) {
@@ -276,12 +300,11 @@ void Tessellation::computeCellData() {
         }
     }
 
-    double totalv = 0;
-    PerTriangleVolume perTriVol;
+    int ic = 0;
+    for (Cell &cell: cells) {
+        cell.cellIndex = ic;
+        ic++;
 
-    CellFunctionPerTriangle volFunc;
-    volFunc.perTriangleFunction = &perTriVol;
-    for (Cell cell: cells) {
         int i = 0;
         auto func = [&](const int &f) {
             for (Node n: faces[f].nodes) {
@@ -293,13 +316,19 @@ void Tessellation::computeCellData() {
         };
         std::for_each(cell.facesPos.begin(), cell.facesPos.end(), func);
         std::for_each(cell.facesNeg.begin(), cell.facesNeg.end(), func);
-
-        CellValue cellVal(cell);
-        volFunc.addValue(this, cellVal);
-        volFunc.addGradient(this, cellVal);
-        volFunc.addHessian(this, cellVal);
-        totalv += cellVal.value;
-        std::cout << cellVal.value << std::endl;
     }
-    std::cout << "total " << totalv << std::endl;
+
+//    double totalv = 0;
+//    PerTriangleSurfaceArea perTriVol;
+//
+//    CellFunctionPerTriangle volFunc(&perTriVol);
+//    for (Cell cell: cells) {
+//        CellValue cellVal(cell);
+//        volFunc.getValue(this, cellVal);
+//        volFunc.getGradient(this, cellVal);
+//        volFunc.getHessian(this, cellVal);
+//        totalv += cellVal.value;
+//        std::cout << cellVal.value << std::endl;
+//    }
+//    std::cout << "total " << totalv << std::endl;
 }

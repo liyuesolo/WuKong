@@ -1,7 +1,7 @@
 #include <igl/triangle/triangulate.h>
 // libigl library must be included first
 #include "../../include/Tessellation/Power.h"
-#include "../../include/Tessellation/PerTriangleFunction.h"
+#include "Projects/Foam3D/include/Energy/PerTriangleFunction.h"
 #include <iostream>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -34,6 +34,7 @@ void Power::getDualGraph() {
     std::vector<Regular_triangulation::Weighted_point> wpoints;
     for (int i = 0; i < n_vtx; i++) {
         VectorXT v = c.segment<4>(i * 4);
+//        std::cout << "Dual " << v(0) << " " << v(1) << " " << v(2) << " " << v(3) << std::endl;
         Regular_triangulation::Weighted_point wp({v(0), v(1), v(2)}, wmul * v(3));
         wpoints.push_back(wp);
     }

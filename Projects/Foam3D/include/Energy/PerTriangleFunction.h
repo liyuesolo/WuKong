@@ -20,11 +20,13 @@ struct TriangleValue {
 class PerTriangleFunction {
 public:
     virtual void
-    addValue(TriangleValue &value) const = 0;
+    getValue(TriangleValue &value) const = 0;
 
     virtual void
-    addGradient(TriangleValue &value) const = 0;
+    getGradient(TriangleValue &value) const = 0;
 
     virtual void
-    addHessian(TriangleValue &value) const = 0;
+    getHessian(TriangleValue &value) const = 0;
+
+    virtual bool flipSignForBackface() const { return true; };
 };

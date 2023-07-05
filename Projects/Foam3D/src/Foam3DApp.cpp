@@ -1,3 +1,5 @@
+#include <igl/readOBJ.h>
+
 #include "../include/Foam3DApp.h"
 #include "../src/implot/implot.h"
 
@@ -48,8 +50,9 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Text("Simulation Setup");
 
         std::vector<std::string> scenarios;
-        scenarios.push_back("No Boundary");
         scenarios.push_back("Cube");
+        scenarios.push_back("Drosophila (Low Res)");
+        scenarios.push_back("Drosophila (High Res)");
 
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
 
@@ -107,6 +110,9 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
     viewer.callback_pre_draw =
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
+                if (optimize) {
+                    foam.energyMinimizationStep(optimizer);
+                }
                 updateViewerData(viewer);
                 return false;
             };
@@ -128,12 +134,23 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 void Foam3DApp::generateScenario() {
     switch (generate_scenario_type) {
         case 0:
+            scenarioCube();
+            break;
+        case 1:
+            scenarioDrosophilaLowRes();
+            break;
+        case 2:
+            scenarioDrosophilaHighRes();
             break;
         default:
             std::cout << "Error: scenario not implemented!";
             break;
     }
 
+    foam.tessellation.tessellate(foam.vertices, foam.params);
+}
+
+void Foam3DApp::scenarioCube() {
     double infp = 10;
     VectorXd infbox(8 * 3);
     infbox << -infp, -infp, -infp,
@@ -146,10 +163,6 @@ void Foam3DApp::generateScenario() {
             infp, infp, infp;
 
     srand(time(NULL));
-//    int bb = rand();
-//    std::cout << bb << std::endl;
-//    srand(bb);
-//    srand(1504356941);
     VectorXd vertices((8 + generate_scenario_num_sites) * 3);
     vertices << VectorXd::Random(generate_scenario_num_sites * 3), infbox;
     VectorXd params = VectorXd::Zero(8 + generate_scenario_num_sites);
@@ -190,8 +203,159 @@ void Foam3DApp::generateScenario() {
     for (int i = 0; i < btri.rows(); i++) {
         foam.tessellation.bf[i].vertices = btri.row(i);
     }
+}
 
-    foam.tessellation.tessellate(foam.vertices, foam.params);
+void Foam3DApp::scenarioDrosophilaLowRes() {
+    double infp = 10;
+    VectorXd infbox(8 * 3);
+    infbox << -infp, -infp, -infp,
+            -infp, -infp, infp,
+            -infp, infp, -infp,
+            -infp, infp, infp,
+            infp, -infp, -infp,
+            infp, -infp, infp,
+            infp, infp, -infp,
+            infp, infp, infp;
+
+    MatrixXT V, TC, N, V2;
+    MatrixXi F, FTC, FN, F2;
+    igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_lowres.obj", V, TC, N, F, FTC, FN);
+
+//    V = V.block(200, 0, 200, 3);
+    MatrixXT Vt = V.transpose();
+    VectorXd vertices((8 + V.rows()) * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
+    VectorXd params = VectorXd::Zero(8 + V.rows());
+
+    foam.vertices = vertices;
+    foam.params = params;
+
+    igl::readOBJ("../../../Projects/Foam3D/meshes/apical_surface_lowres.obj", V, TC, N, F, FTC, FN);
+    igl::readOBJ("../../../Projects/Foam3D/meshes/basal_surface_lowres.obj", V2, TC, N, F2, FTC, FN);
+    std::cout << V.rows() << std::endl;
+    std::cout << F.rows() << std::endl;
+
+    foam.tessellation.bv.resize(V.rows() + V2.rows());
+    foam.tessellation.bf.resize(F.rows() + F2.rows());
+    for (int i = 0; i < V.rows(); i++) {
+        foam.tessellation.bv[i].pos = V.row(i);
+    }
+    for (int i = 0; i < F.rows(); i++) {
+        foam.tessellation.bf[i].vertices = F.row(i);
+    }
+    for (int i = 0; i < V2.rows(); i++) {
+        foam.tessellation.bv[V.rows() + i].pos = V2.row(i);
+    }
+    for (int i = 0; i < F2.rows(); i++) {
+        foam.tessellation.bf[F.rows() + i].vertices = IV3(F2(i, 0), F2(i, 2), F2(i, 1)) + IV3::Constant(V.rows());
+    }
+
+//    double bound = 5;
+//    MatrixXd bbox(8, 3);
+//    bbox << -bound, -bound, -bound,
+//            bound, -bound, -bound,
+//            -bound, bound, -bound,
+//            bound, bound, -bound,
+//            -bound, -bound, bound,
+//            bound, -bound, bound,
+//            -bound, bound, bound,
+//            bound, bound, bound;
+//
+//    MatrixXi btri(12, 3);
+//    btri << 0, 2, 1,
+//            2, 3, 1,
+//            0, 1, 4,
+//            1, 5, 4,
+//            0, 4, 2,
+//            4, 6, 2,
+//            4, 5, 6,
+//            5, 7, 6,
+//            1, 3, 5,
+//            3, 7, 5,
+//            2, 6, 3,
+//            6, 7, 3;
+//
+//    foam.tessellation.bv.resize(bbox.rows());
+//    foam.tessellation.bf.resize(btri.rows());
+//    for (int i = 0; i < bbox.rows(); i++) {
+//        foam.tessellation.bv[i].pos = bbox.row(i);
+//    }
+//    for (int i = 0; i < btri.rows(); i++) {
+//        foam.tessellation.bf[i].vertices = btri.row(i);
+//    }
+}
+
+void Foam3DApp::scenarioDrosophilaHighRes() {
+    double infp = 10;
+    VectorXd infbox(8 * 3);
+    infbox << -infp, -infp, -infp,
+            -infp, -infp, infp,
+            -infp, infp, -infp,
+            -infp, infp, infp,
+            infp, -infp, -infp,
+            infp, -infp, infp,
+            infp, infp, -infp,
+            infp, infp, infp;
+
+    MatrixXT V, TC, N;
+    MatrixXi F, FTC, FN;
+    igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_lowres.obj", V, TC, N, F, FTC, FN);
+
+    V.resize(1, 3);
+    V << 0, 0, 0;
+    MatrixXT Vt = V.transpose();
+    VectorXd vertices((8 + V.rows()) * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
+    VectorXd params = VectorXd::Zero(8 + V.rows());
+
+    foam.vertices = vertices;
+    foam.params = params;
+
+//    igl::readOBJ("../../../Projects/Foam3D/meshes/basal_surface_highres.obj", V, TC, N, F, FTC, FN);
+    igl::readOBJ("../../../Projects/Foam3D/meshes/apical_surface_highres.obj", V, TC, N, F, FTC, FN);
+
+    foam.tessellation.bv.resize(V.rows());
+    foam.tessellation.bf.resize(F.rows());
+    for (int i = 0; i < V.rows(); i++) {
+        foam.tessellation.bv[i].pos = V.row(i);
+    }
+    for (int i = 0; i < F.rows(); i++) {
+        foam.tessellation.bf[i].vertices = F.row(i);
+    }
+
+//    double bound = 5;
+//    MatrixXd bbox(8, 3);
+//    bbox << -bound, -bound, -bound,
+//            bound, -bound, -bound,
+//            -bound, bound, -bound,
+//            bound, bound, -bound,
+//            -bound, -bound, bound,
+//            bound, -bound, bound,
+//            -bound, bound, bound,
+//            bound, bound, bound;
+//
+//    MatrixXi btri(12, 3);
+//    btri << 0, 2, 1,
+//            2, 3, 1,
+//            0, 1, 4,
+//            1, 5, 4,
+//            0, 4, 2,
+//            4, 6, 2,
+//            4, 5, 6,
+//            5, 7, 6,
+//            1, 3, 5,
+//            3, 7, 5,
+//            2, 6, 3,
+//            6, 7, 3;
+//
+//    foam.tessellation.bv.resize(bbox.rows());
+//    foam.tessellation.bf.resize(btri.rows());
+//    for (int i = 0; i < bbox.rows(); i++) {
+//        foam.tessellation.bv[i].pos = bbox.row(i);
+//    }
+//    for (int i = 0; i < btri.rows(); i++) {
+//        foam.tessellation.bf[i].vertices = btri.row(i);
+//    }
 }
 
 void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {

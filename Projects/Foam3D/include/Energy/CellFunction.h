@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 
 #include "Projects/Foam2D/include/VecMatDef.h"
-#include "Tessellation.h"
+#include "Projects/Foam3D/include/Tessellation/Tessellation.h"
 
 struct CellValue {
     Cell cell;
@@ -17,25 +17,25 @@ struct CellValue {
 
     CellValue(Cell &_cell) {
         cell = _cell;
-        
+
         int nvars = cell.nodeIndices.size() * 3 + 4;
 
         value = 0;
         gradient = VectorXT::Zero(nvars);
-        hessian = VectorXT::Zero(nvars, nvars);
+        hessian = MatrixXT::Zero(nvars, nvars);
     }
 };
 
 class CellFunction {
 public:
     virtual void
-    addValue(Tessellation *tessellation, CellValue &value) const = 0;
+    getValue(Tessellation *tessellation, CellValue &value) const = 0;
 
     virtual void
-    addGradient(Tessellation *tessellation, CellValue &value) const = 0;
+    getGradient(Tessellation *tessellation, CellValue &value) const = 0;
 
     virtual void
-    addHessian(Tessellation *tessellation, CellValue &value) const = 0;
+    getHessian(Tessellation *tessellation, CellValue &value) const = 0;
 
 public:
 };

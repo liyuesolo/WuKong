@@ -9,11 +9,11 @@
 #include <Eigen/Dense>
 
 #include "VecMatDef.h"
-#include "../src/optLib/GradientDescentMinimizer.h"
+#include "Tessellation/Power.h"
+#include "Energy/EnergyObjective.h"
+
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../src/optLib/FancyBFGSMinimizer.h"
-#include "../src/optLib/ParallelLineSearchMinimizers.h"
-#include "Tessellation/Power.h"
 
 class Foam3D {
 public:
@@ -21,8 +21,14 @@ public:
     VectorXT params;
 
     Power tessellation;
+    EnergyObjective energyObjective;
+
+    GradientDescentLineSearch *minimizerGradientDescent;
+    NewtonFunctionMinimizer *minimizerNewton;
+    FancyBFGSMinimizer *minimizerBFGS;
 
 public:
+    void energyMinimizationStep(int optimizer);
 
 public:
 

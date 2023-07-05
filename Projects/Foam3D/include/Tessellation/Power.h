@@ -4,7 +4,7 @@
 
 class Power : public Tessellation {
 private:
-    double wmul = 0.5;
+    double wmul = 1.0; // TODO: Changing this breaks search for closest site in TessellationClipFaces
 
 public:
     Power() {}

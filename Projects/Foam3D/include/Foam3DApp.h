@@ -22,7 +22,7 @@ public:
     int colormode = 0;
 
     int generate_scenario_type = 0;
-    int generate_scenario_num_sites = 50;
+    int generate_scenario_num_sites = 5;
 
     bool slice_visible = false;
     bool slice_follow = true;
@@ -35,6 +35,12 @@ public:
                    igl::opengl::glfw::imgui::ImGuiMenu &menu);
 
     void generateScenario();
+
+    void scenarioCube();
+
+    void scenarioDrosophilaLowRes();
+
+    void scenarioDrosophilaHighRes();
 
     void updateViewerData(igl::opengl::glfw::Viewer &viewer);
 

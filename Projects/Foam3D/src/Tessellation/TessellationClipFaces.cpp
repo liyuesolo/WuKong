@@ -4,7 +4,7 @@
 #include <igl/extract_manifold_patches.h>
 
 #include "../../include/Tessellation/Tessellation.h"
-#include "../../include/Tessellation/PerTriangleFunction.h"
+#include "Projects/Foam3D/include/Energy/PerTriangleFunction.h"
 #include <set>
 #include <chrono>
 
@@ -119,11 +119,14 @@ void Tessellation::clipFaces() {
     std::for_each(FF.data(), FF.data() + FF.size(), [&IM](int &a) { a = IM(a); });
     igl::remove_unreferenced(VV, FF, SV, SF, SIM, SJ);
 
-
     // Eliminate out-of-bounds triangles using winding number
     MatrixXT Q(SF.rows(), 3);
     for (int i = 0; i < SF.rows(); i++) {
-        Q.row(i) = (SV.row(SF(i, 0)) + SV.row(SF(i, 1)) + SV.row(SF(i, 2))) / 3.0;
+        // TODO: FP errors because these points are right on the surface...
+        TV3 v0 = SV.row(SF(i, 0));
+        TV3 v1 = SV.row(SF(i, 1));
+        TV3 v2 = SV.row(SF(i, 2));
+        Q.row(i) = (v0 + v1 + v2) / 3.0 - 1e-10 * (v1 - v0).cross(v2 - v0).normalized();
     }
     VectorXT W;
     MatrixXT WV = V.block(nodes.size(), 0, bv.size(), 3);
@@ -305,7 +308,8 @@ void Tessellation::clipFaces() {
             double dmin = 1e10;
             int jmin = -1;
             for (int j = 0; j < n_cells; j++) {
-                double dcurr = (c.segment<3>(j * 4) - avgPos).squaredNorm();
+                // TODO: This only works for Power with wmul == 1.0
+                double dcurr = (c.segment<3>(j * 4) - avgPos).squaredNorm() - 1.0 * c(j * 4 + 3);
                 if (dcurr < dmin) {
                     dmin = dcurr;
                     jmin = j;

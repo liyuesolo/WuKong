@@ -42,6 +42,7 @@ public:
         if (dx.dot(g) < 0) {
             std::cout << "Search direction is bad!!!" << std::endl;
         }
+        dx = dx.normalized();
     }
 
 public:

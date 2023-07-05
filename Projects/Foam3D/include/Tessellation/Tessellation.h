@@ -45,6 +45,7 @@ struct BoundaryFace {
 };
 
 struct Cell {
+    int cellIndex;
     std::vector<int> facesPos;
     std::vector<int> facesNeg;
     std::map<Node, int> nodeIndices;

@@ -1,6 +1,8 @@
-#include "../../include/Tessellation/CellFunctionPerTriangle.h"
+#include "Projects/Foam3D/include/Energy/CellFunctionPerTriangle.h"
 
-void CellFunctionPerTriangle::addValue(Tessellation *tessellation, CellValue &value) const {
+void CellFunctionPerTriangle::getValue(Tessellation *tessellation, CellValue &value) const {
+    value.value = 0;
+
     double mul = 1;
     auto func = [&](const int &iF) {
         Face f = tessellation->faces[iF];
@@ -10,17 +12,18 @@ void CellFunctionPerTriangle::addValue(Tessellation *tessellation, CellValue &va
             triValue.v1 = tessellation->nodes[f.nodes[i]].pos;
             triValue.v2 = tessellation->nodes[f.nodes[i + 1]].pos;
 
-            perTriangleFunction->addValue(triValue);
+            perTriangleFunction->getValue(triValue);
+            if (std::isnan(triValue.value) || std::isinf(triValue.value)) continue;
             value.value += mul * triValue.value;
         }
     };
     std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    mul = -1;
+    if (perTriangleFunction->flipSignForBackface()) mul = -1;
     std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
 }
 
-void CellFunctionPerTriangle::addGradient(Tessellation *tessellation, CellValue &value) const {
-    value.gradient = VectorXT::Zero(value.cell.nodeIndices.size() * 3);
+void CellFunctionPerTriangle::getGradient(Tessellation *tessellation, CellValue &value) const {
+    value.gradient.setZero();
 
     double mul = 1;
     auto func = [&](const int &iF) {
@@ -32,7 +35,8 @@ void CellFunctionPerTriangle::addGradient(Tessellation *tessellation, CellValue 
             triValue.v1 = tessellation->nodes[tempNodes[1]].pos;
             triValue.v2 = tessellation->nodes[tempNodes[2]].pos;
 
-            perTriangleFunction->addGradient(triValue);
+            perTriangleFunction->getGradient(triValue);
+            if (std::isnan(triValue.gradient.norm()) || std::isinf(triValue.gradient.norm())) continue;
             for (int ii = 0; ii < 3; ii++) {
                 value.gradient.segment<3>(value.cell.nodeIndices[tempNodes[ii]] * 3) +=
                         mul * triValue.gradient.segment<3>(ii * 3);
@@ -40,12 +44,12 @@ void CellFunctionPerTriangle::addGradient(Tessellation *tessellation, CellValue 
         }
     };
     std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    mul = -1;
+    if (perTriangleFunction->flipSignForBackface()) mul = -1;
     std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
 }
 
-void CellFunctionPerTriangle::addHessian(Tessellation *tessellation, CellValue &value) const {
-    value.hessian = MatrixXT::Zero(value.cell.nodeIndices.size() * 3, value.cell.nodeIndices.size() * 3);
+void CellFunctionPerTriangle::getHessian(Tessellation *tessellation, CellValue &value) const {
+    value.hessian.setZero();
 
     double mul = 1;
     auto func = [&](const int &iF) {
@@ -57,7 +61,8 @@ void CellFunctionPerTriangle::addHessian(Tessellation *tessellation, CellValue &
             triValue.v1 = tessellation->nodes[tempNodes[1]].pos;
             triValue.v2 = tessellation->nodes[tempNodes[2]].pos;
 
-            perTriangleFunction->addHessian(triValue);
+            perTriangleFunction->getHessian(triValue);
+            if (std::isnan(triValue.hessian.norm()) || std::isinf(triValue.hessian.norm())) continue;
             for (int ii = 0; ii < 3; ii++) {
                 for (int jj = 0; jj < 3; jj++) {
                     value.hessian.block<3, 3>(value.cell.nodeIndices[tempNodes[ii]] * 3,
@@ -68,6 +73,6 @@ void CellFunctionPerTriangle::addHessian(Tessellation *tessellation, CellValue &
         }
     };
     std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    mul = -1;
+    if (perTriangleFunction->flipSignForBackface()) mul = -1;
     std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
 }

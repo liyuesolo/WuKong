@@ -3,7 +3,7 @@
 #define NINPUTS 9
 
 // @formatter:off
-void PerTriangleVolume::addValue(TriangleValue &value) const {
+void PerTriangleVolume::getValue(TriangleValue &value) const {
     double x0 = value.v0(0);
     double y0 = value.v0(1);
     double z0 = value.v0(2);
@@ -17,7 +17,7 @@ void PerTriangleVolume::addValue(TriangleValue &value) const {
     value.value = (y1 * z2 - y2 * z1) * x0 / 0.6e1 + (-y0 * z2 + y2 * z0) * x1 / 0.6e1 + x2 * (y0 * z1 - y1 * z0) / 0.6e1;
 }
 
-void PerTriangleVolume::addGradient(TriangleValue &value) const {
+void PerTriangleVolume::getGradient(TriangleValue &value) const {
     double x0 = value.v0(0);
     double y0 = value.v0(1);
     double z0 = value.v0(2);
@@ -43,7 +43,7 @@ void PerTriangleVolume::addGradient(TriangleValue &value) const {
     value.gradient = Eigen::Map<Eigen::VectorXd>(&unknown[0], NINPUTS);
 }
 
-void PerTriangleVolume::addHessian(TriangleValue &value) const {
+void PerTriangleVolume::getHessian(TriangleValue &value) const {
     double x0 = value.v0(0);
     double y0 = value.v0(1);
     double z0 = value.v0(2);

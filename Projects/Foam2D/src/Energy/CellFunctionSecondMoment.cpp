@@ -102,7 +102,7 @@ CellFunctionSecondMoment::addHessian(const VectorXT &site, const VectorXT &nodes
                                      MatrixXT &hessian,
                                      const CellInfo *cellInfo) const {
     int n_nodes = nodes.rows() / nx;
-    VectorXT gradient_centroid = VectorXT::Zero(2);
+    VectorXT gradient_centroid = VectorXT::Zero(2); // TODO: It looks like I forgot to compute these values here?
 
     Eigen::Ref<MatrixXT> hess_xx = hessian.bottomRightCorner(nodes.rows(), nodes.rows());
     MatrixXT hess_Cx = MatrixXT::Zero(2, nodes.rows());
