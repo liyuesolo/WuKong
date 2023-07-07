@@ -8,6 +8,8 @@
 #include <opencv4/opencv2/core/eigen.hpp>
 
 #include "../include/Tessellation/Power.h"
+#include "../include/Boundary/SimpleBoundary.h"
+#include "../include/Boundary/CubeBoundary.h"
 
 void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
@@ -147,7 +149,7 @@ void Foam3DApp::generateScenario() {
             break;
     }
 
-    foam.tessellation.tessellate(foam.vertices, foam.params);
+    foam.tessellation.tessellate(foam.vertices, foam.params, foam.tessellation.boundary->get_p_free());
 }
 
 void Foam3DApp::scenarioCube() {
@@ -170,39 +172,10 @@ void Foam3DApp::scenarioCube() {
     foam.vertices = vertices;
     foam.params = params;
 
-    double bound = 1;
-    MatrixXd bbox(8, 3);
-    bbox << -bound, -bound, -bound,
-            bound, -bound, -bound,
-            -bound, bound, -bound,
-            bound, bound, -bound,
-            -bound, -bound, bound,
-            bound, -bound, bound,
-            -bound, bound, bound,
-            bound, bound, bound;
-
-    MatrixXi btri(12, 3);
-    btri << 0, 2, 1,
-            2, 3, 1,
-            0, 1, 4,
-            1, 5, 4,
-            0, 4, 2,
-            4, 6, 2,
-            4, 5, 6,
-            5, 7, 6,
-            1, 3, 5,
-            3, 7, 5,
-            2, 6, 3,
-            6, 7, 3;
-
-    foam.tessellation.bv.resize(bbox.rows());
-    foam.tessellation.bf.resize(btri.rows());
-    for (int i = 0; i < bbox.rows(); i++) {
-        foam.tessellation.bv[i].pos = bbox.row(i);
-    }
-    for (int i = 0; i < btri.rows(); i++) {
-        foam.tessellation.bf[i].vertices = btri.row(i);
-    }
+    VectorXi free(1);
+    free << 0;
+//    VectorXi free(0);
+    foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
 void Foam3DApp::scenarioDrosophilaLowRes() {
@@ -232,57 +205,16 @@ void Foam3DApp::scenarioDrosophilaLowRes() {
 
     igl::readOBJ("../../../Projects/Foam3D/meshes/apical_surface_lowres.obj", V, TC, N, F, FTC, FN);
     igl::readOBJ("../../../Projects/Foam3D/meshes/basal_surface_lowres.obj", V2, TC, N, F2, FTC, FN);
+    F2.col(1).swap(F2.col(2));
     std::cout << V.rows() << std::endl;
     std::cout << F.rows() << std::endl;
 
-    foam.tessellation.bv.resize(V.rows() + V2.rows());
-    foam.tessellation.bf.resize(F.rows() + F2.rows());
-    for (int i = 0; i < V.rows(); i++) {
-        foam.tessellation.bv[i].pos = V.row(i);
-    }
-    for (int i = 0; i < F.rows(); i++) {
-        foam.tessellation.bf[i].vertices = F.row(i);
-    }
-    for (int i = 0; i < V2.rows(); i++) {
-        foam.tessellation.bv[V.rows() + i].pos = V2.row(i);
-    }
-    for (int i = 0; i < F2.rows(); i++) {
-        foam.tessellation.bf[F.rows() + i].vertices = IV3(F2(i, 0), F2(i, 2), F2(i, 1)) + IV3::Constant(V.rows());
-    }
+    MatrixXT V3(V.rows() + V2.rows(), 3);
+    V3 << V, V2;
+    MatrixXi F3(F.rows() + F2.rows(), 3);
+    F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
 
-//    double bound = 5;
-//    MatrixXd bbox(8, 3);
-//    bbox << -bound, -bound, -bound,
-//            bound, -bound, -bound,
-//            -bound, bound, -bound,
-//            bound, bound, -bound,
-//            -bound, -bound, bound,
-//            bound, -bound, bound,
-//            -bound, bound, bound,
-//            bound, bound, bound;
-//
-//    MatrixXi btri(12, 3);
-//    btri << 0, 2, 1,
-//            2, 3, 1,
-//            0, 1, 4,
-//            1, 5, 4,
-//            0, 4, 2,
-//            4, 6, 2,
-//            4, 5, 6,
-//            5, 7, 6,
-//            1, 3, 5,
-//            3, 7, 5,
-//            2, 6, 3,
-//            6, 7, 3;
-//
-//    foam.tessellation.bv.resize(bbox.rows());
-//    foam.tessellation.bf.resize(btri.rows());
-//    for (int i = 0; i < bbox.rows(); i++) {
-//        foam.tessellation.bv[i].pos = bbox.row(i);
-//    }
-//    for (int i = 0; i < btri.rows(); i++) {
-//        foam.tessellation.bf[i].vertices = btri.row(i);
-//    }
+    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
 }
 
 void Foam3DApp::scenarioDrosophilaHighRes() {
@@ -297,12 +229,11 @@ void Foam3DApp::scenarioDrosophilaHighRes() {
             infp, infp, -infp,
             infp, infp, infp;
 
-    MatrixXT V, TC, N;
-    MatrixXi F, FTC, FN;
-    igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_lowres.obj", V, TC, N, F, FTC, FN);
+    MatrixXT V, TC, N, V2;
+    MatrixXi F, FTC, FN, F2;
+    igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_highres.obj", V, TC, N, F, FTC, FN);
 
-    V.resize(1, 3);
-    V << 0, 0, 0;
+//    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
     VectorXd vertices((8 + V.rows()) * 3);
     vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
@@ -311,51 +242,18 @@ void Foam3DApp::scenarioDrosophilaHighRes() {
     foam.vertices = vertices;
     foam.params = params;
 
-//    igl::readOBJ("../../../Projects/Foam3D/meshes/basal_surface_highres.obj", V, TC, N, F, FTC, FN);
     igl::readOBJ("../../../Projects/Foam3D/meshes/apical_surface_highres.obj", V, TC, N, F, FTC, FN);
+    igl::readOBJ("../../../Projects/Foam3D/meshes/basal_surface_highres.obj", V2, TC, N, F2, FTC, FN);
+    F2.col(1).swap(F2.col(2));
+    std::cout << V.rows() << std::endl;
+    std::cout << F.rows() << std::endl;
 
-    foam.tessellation.bv.resize(V.rows());
-    foam.tessellation.bf.resize(F.rows());
-    for (int i = 0; i < V.rows(); i++) {
-        foam.tessellation.bv[i].pos = V.row(i);
-    }
-    for (int i = 0; i < F.rows(); i++) {
-        foam.tessellation.bf[i].vertices = F.row(i);
-    }
+    MatrixXT V3(V.rows() + V2.rows(), 3);
+    V3 << V, V2;
+    MatrixXi F3(F.rows() + F2.rows(), 3);
+    F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
 
-//    double bound = 5;
-//    MatrixXd bbox(8, 3);
-//    bbox << -bound, -bound, -bound,
-//            bound, -bound, -bound,
-//            -bound, bound, -bound,
-//            bound, bound, -bound,
-//            -bound, -bound, bound,
-//            bound, -bound, bound,
-//            -bound, bound, bound,
-//            bound, bound, bound;
-//
-//    MatrixXi btri(12, 3);
-//    btri << 0, 2, 1,
-//            2, 3, 1,
-//            0, 1, 4,
-//            1, 5, 4,
-//            0, 4, 2,
-//            4, 6, 2,
-//            4, 5, 6,
-//            5, 7, 6,
-//            1, 3, 5,
-//            3, 7, 5,
-//            2, 6, 3,
-//            6, 7, 3;
-//
-//    foam.tessellation.bv.resize(bbox.rows());
-//    foam.tessellation.bf.resize(btri.rows());
-//    for (int i = 0; i < bbox.rows(); i++) {
-//        foam.tessellation.bv[i].pos = bbox.row(i);
-//    }
-//    for (int i = 0; i < btri.rows(); i++) {
-//        foam.tessellation.bf[i].vertices = btri.row(i);
-//    }
+    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
 }
 
 void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {

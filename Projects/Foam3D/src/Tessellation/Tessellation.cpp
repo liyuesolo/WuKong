@@ -6,12 +6,14 @@
 #include "Projects/Foam3D/include/Energy/CellFunctionPerTriangle.h"
 #include "../../include/Energy/PerTriangleVolume.h"
 
-void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) {
+void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free) {
     VectorXT c_new = combineVerticesParams(vertices, params);
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
     bool same = true;
-    same = same && (c_new.rows() == c.rows() && c_new.isApprox(c));
+    same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-10) &&
+           ((p_free - boundary->get_p_free()).norm() < 1e-10);
+    if (same) std::cout << "same" << std::endl;
     if (same) return;
 
     isValid = true;
@@ -27,6 +29,13 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
             isValid = false;
             break;
         }
+    }
+    if (!isValid) return;
+
+    boundary->compute(p_free);
+
+    if (!boundary->checkValid()) {
+        isValid = false;
     }
     if (!isValid) return;
 
@@ -72,9 +81,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
                         getNodeHessian(v0, v1, v2, v3, nodePosition);
                         break;
                     case B_FACE:
-                        b0 = bv[bf[node.gen[0]].vertices(0)].pos;
-                        b1 = bv[bf[node.gen[0]].vertices(1)].pos;
-                        b2 = bv[bf[node.gen[0]].vertices(2)].pos;
+                        b0 = boundary->v[boundary->f[node.gen[0]].vertices(0)].pos;
+                        b1 = boundary->v[boundary->f[node.gen[0]].vertices(1)].pos;
+                        b2 = boundary->v[boundary->f[node.gen[0]].vertices(2)].pos;
 
                         v0 = c.segment<4>(node.gen[1] * 4);
                         v1 = c.segment<4>(node.gen[2] * 4);
@@ -85,8 +94,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
                         getNodeBFaceHessian(b0, b1, b2, v0, v1, v2, nodePosition);
                         break;
                     case B_EDGE:
-                        b0 = bv[node.gen[0]].pos;
-                        b1 = bv[node.gen[1]].pos;
+                        b0 = boundary->v[node.gen[0]].pos;
+                        b1 = boundary->v[node.gen[1]].pos;
 
                         v0 = c.segment<4>(node.gen[2] * 4);
                         v1 = c.segment<4>(node.gen[3] * 4);
@@ -96,7 +105,11 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params) 
                         getNodeBEdgeHessian(b0, b1, v0, v1, nodePosition);
                         break;
                     case B_VERTEX:
-                        nodePosition.pos = bv[node.gen[0]].pos;
+                        nodePosition.pos = boundary->v[node.gen[0]].pos;
+                        nodePosition.grad = MatrixXT::Identity(3, 3);
+                        nodePosition.hess[0] = MatrixXT::Zero(3, 3);
+                        nodePosition.hess[1] = MatrixXT::Zero(3, 3);
+                        nodePosition.hess[2] = MatrixXT::Zero(3, 3);
                         break;
                     default:
                         assert(0);

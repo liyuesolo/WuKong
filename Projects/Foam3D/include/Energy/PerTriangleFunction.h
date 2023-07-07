@@ -5,7 +5,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 
-#include "Projects/Foam2D/include/VecMatDef.h"
+#include "Projects/Foam3D/include/VecMatDef.h"
 
 struct TriangleValue {
     TV3 v0;

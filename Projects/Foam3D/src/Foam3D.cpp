@@ -16,7 +16,8 @@ Foam3D::Foam3D() {
 
 void Foam3D::energyMinimizationStep(int optimizer) {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
-    VectorXT y = c.segment(0, c.rows() - 8 * 4);
+    VectorXT y(c.rows() - 8 * 4 + tessellation.boundary->nfree);
+    y << c.segment(0, c.rows() - 8 * 4), tessellation.boundary->get_p_free();
 
     bool optWeights = false;
 //    energyObjective.check_gradients(y, optWeights);
@@ -34,17 +35,9 @@ void Foam3D::energyMinimizationStep(int optimizer) {
             break;
     }
 
-    double infp = 10;
-    VectorXd infbox(8 * 4);
-    infbox << -infp, -infp, -infp, 0,
-            -infp, -infp, infp, 0,
-            -infp, infp, -infp, 0,
-            -infp, infp, infp, 0,
-            infp, -infp, -infp, 0,
-            infp, -infp, infp, 0,
-            infp, infp, -infp, 0,
-            infp, infp, infp, 0;
-    VectorXd y_with_infbox(y.rows() + infbox.rows());
-    y_with_infbox << y, infbox;
-    tessellation.separateVerticesParams(y_with_infbox, vertices, params);
+    c.segment(0, c.rows() - 8 * 4) = y.segment(0, c.rows() - 8 * 4);
+    VectorXT p_free = y.tail(tessellation.boundary->nfree);
+
+    tessellation.separateVerticesParams(c, vertices, params);
+    tessellation.tessellate(vertices, params, p_free);
 }

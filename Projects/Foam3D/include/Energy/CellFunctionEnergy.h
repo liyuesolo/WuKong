@@ -18,6 +18,13 @@ public:
     double wPenaltyWeight = 1;
     double secondMomentWeight = 100;
 
+//    double volumeTargetWeight = 100;
+//    double surfaceAreaTargetWeight = 0;
+//    double siteCentroidWeight = 0;
+//    double volumeBarrierWeight = 0;
+//    double wPenaltyWeight = 0;
+//    double secondMomentWeight = 0;
+
 public:
     virtual void
     getValue(Tessellation *tessellation, CellValue &value) const;

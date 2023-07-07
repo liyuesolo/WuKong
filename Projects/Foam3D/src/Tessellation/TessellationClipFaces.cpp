@@ -34,7 +34,7 @@ void Tessellation::clipFaces() {
         }
     }
 
-    MatrixXT V(nodes.size() + bv.size(), 3);
+    MatrixXT V(nodes.size() + boundary->v.size(), 3);
     std::vector<Node> nodeVector(V.rows());
     {
         int iCool = 0;
@@ -43,7 +43,7 @@ void Tessellation::clipFaces() {
             nodeVector[iCool] = n.first;
             iCool++;
         }
-        for (auto v: bv) {
+        for (auto v: boundary->v) {
             V.row(iCool) = v.pos;
             nodeVector[iCool].type = NodeType::B_VERTEX;
             nodeVector[iCool].gen[0] = iCool - nodes.size();
@@ -59,7 +59,7 @@ void Tessellation::clipFaces() {
         ntri_unclipped += face.nodes.size() - 2;
     }
 
-    MatrixXi F(ntri_unclipped + bf.size(), 3);
+    MatrixXi F(ntri_unclipped + boundary->f.size(), 3);
     VectorXi Fsource(F.rows());
     {
         int iCool = 0;
@@ -74,7 +74,7 @@ void Tessellation::clipFaces() {
             }
             source++;
         }
-        for (auto face: bf) {
+        for (auto face: boundary->f) {
             F.row(iCool) = face.vertices + IV3::Constant(nodes.size());
             Fsource(iCool) = source;
             source++;
@@ -129,8 +129,9 @@ void Tessellation::clipFaces() {
         Q.row(i) = (v0 + v1 + v2) / 3.0 - 1e-10 * (v1 - v0).cross(v2 - v0).normalized();
     }
     VectorXT W;
-    MatrixXT WV = V.block(nodes.size(), 0, bv.size(), 3);
-    MatrixXi WF = F.block(ntri_unclipped, 0, bf.size(), 3) - MatrixXi::Constant(bf.size(), 3, nodes.size());
+    MatrixXT WV = V.block(nodes.size(), 0, boundary->v.size(), 3);
+    MatrixXi WF =
+            F.block(ntri_unclipped, 0, boundary->f.size(), 3) - MatrixXi::Constant(boundary->f.size(), 3, nodes.size());
     igl::winding_number(WV, WF, Q, W);
     std::vector<int> rk;
     for (int i = 0; i < W.rows(); i++) {
@@ -215,7 +216,7 @@ void Tessellation::clipFaces() {
             int tupSource0 = std::get<2>(thisTuples[i]);
             int tupSource1 = std::get<2>(thisTuples[(i + 1) % thisTuples.size()]);
             int tupV = std::get<0>(thisTuples[i]);
-            if (tupSource0 != tupSource1 && SJ(tupV) >= nodes.size() + bv.size()) {
+            if (tupSource0 != tupSource1 && SJ(tupV) >= nodes.size() + boundary->v.size()) {
                 badVerts.insert(tupV);
             }
         }
@@ -253,8 +254,8 @@ void Tessellation::clipFaces() {
                         std::sort(std::begin(node.gen) + 1, std::end(node.gen));
                     } else {
                         node.type = NodeType::B_EDGE; // gen order (b0, b1, c0, c1)
-                        IV3 bf0 = bf[sources(0) - unclippedFaces.size()].vertices;
-                        IV3 bf1 = bf[sources(1) - unclippedFaces.size()].vertices;
+                        IV3 bf0 = boundary->f[sources(0) - unclippedFaces.size()].vertices;
+                        IV3 bf1 = boundary->f[sources(1) - unclippedFaces.size()].vertices;
                         int icv = 0;
                         for (int j = 0; j < 3; j++) {
                             int iv = bf0(j);

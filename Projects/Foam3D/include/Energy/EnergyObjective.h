@@ -11,18 +11,18 @@ class CellFunctionEnergy;
 class EnergyObjective : public ObjectiveFunction {
 
 public:
-    bool optimizeWeights = true;
-    int optDims = 4;
-    VectorXT paramsSave;
+    mutable bool optimizeWeights = true;
+    mutable int optDims = 4;
+    mutable VectorXT paramsSave;
 
     Tessellation *tessellation;
     CellFunctionEnergy energyFunction;
 
 public:
 
-    void minimize(GradientDescentLineSearch *minimizer, VectorXd &y, bool optimizeWeights_ = true);
+    void minimize(GradientDescentLineSearch *minimizer, VectorXd &y, bool optimizeWeights_ = true) const;
 
-    void check_gradients(const VectorXd &y, bool optimizeWeights_ = true);
+    void check_gradients(const VectorXd &y, bool optimizeWeights_ = true) const;
 
     void preProcess(const VectorXd &y) const;
 

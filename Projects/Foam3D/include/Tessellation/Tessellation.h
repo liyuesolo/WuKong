@@ -5,7 +5,8 @@
 #include <Eigen/Sparse>
 #include <Eigen/Dense>
 
-#include "Projects/Foam2D/include/VecMatDef.h"
+#include "Projects/Foam3D/include/VecMatDef.h"
+#include "../Boundary/Boundary.h"
 
 enum TessellationType {
     POWER
@@ -37,13 +38,6 @@ struct Face {
     std::vector<Node> nodes;
 };
 
-struct BoundaryVertex {
-    TV3 pos;
-};
-struct BoundaryFace {
-    IV3 vertices;
-};
-
 struct Cell {
     int cellIndex;
     std::vector<int> facesPos;
@@ -61,8 +55,7 @@ public:
     std::vector<Face> faces;
     std::map<Node, NodePosition> nodes;
 
-    std::vector<BoundaryVertex> bv;
-    std::vector<BoundaryFace> bf;
+    Boundary *boundary;
 
     bool isValid = false;
 private:
@@ -112,7 +105,7 @@ public:
     getNodeBEdgeHessian(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
                         const VectorXT &v1, NodePosition &nodePos) = 0;
 
-    void tessellate(const VectorXT &vertices, const VectorXT &params);
+    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free);
 
     virtual int getNumVertexParams() = 0;
 
