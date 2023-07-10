@@ -134,6 +134,7 @@ double EnergyObjective::evaluate(const VectorXd &y) const {
         energyFunction.getValue(tessellation, cellValue);
         value += cellValue.value;
     }
+    value += tessellation->boundary->computeEnergy();
 
     std::cout << "eval " << value << std::endl;
     return value;
@@ -221,6 +222,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
         gradient.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cellValue.gradient.rows() - 4,
                                                                                           optDims); // dFdc
     }
+    gradient.tail(tessellation->boundary->nfree) += tessellation->boundary->computeEnergyGradient(); // dFdp
 
     std::cout << "gradient norm " << gradient.norm() << std::endl;
     return gradient;
@@ -290,6 +292,17 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                                   tessellation->boundary->nfree) += d2Fdcdx_dxdv_dvdp;
                     hessian.block(hessian.rows() - tessellation->boundary->nfree, cell.cellIndex * optDims,
                                   tessellation->boundary->nfree, optDims) += d2Fdcdx_dxdv_dvdp.transpose();
+
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
+                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
+                                          tessellation->boundary->nfree) +=
+                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+                                    nodePos0.grad(i, cs0.nodepos_start_idx + j) *
+                                    tessellation->boundary->v[cs0.gen_idx].hess[j]; // dFdx * dxdv * d2vdp2
+                        }
+                    }
                 } else {
                     MatrixXT d2Fdcdx_dxdc = cellValue.hessian.block(numNodes * 3, cs0.cell_node_idx * 3, optDims, 3) *
                                             nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims); // d2Fdcdx * dxdc
@@ -408,6 +421,8 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                 cellValue.hessian.block(cellValue.hessian.rows() - 4, cellValue.hessian.cols() - 4, optDims,
                                         optDims); // d2Fdc2
     }
+    hessian.bottomRightCorner(tessellation->boundary->nfree,
+                              tessellation->boundary->nfree) += tessellation->boundary->computeEnergyHessian(); // d2Fdp2
 
     return hessian.sparseView();
 }

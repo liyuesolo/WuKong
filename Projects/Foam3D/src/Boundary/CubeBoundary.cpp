@@ -30,10 +30,36 @@ void CubeBoundary::computeVertices() {
         double sgny = (i % 4 < 2 ? -1 : 1);
         double sgnz = (i % 8 < 4 ? -1 : 1);
 
-        v[i].pos = {a * sgnx, a * sgny, a * sgnz};
-        setGradientEntry(i, 0, 0, sgnx);
-        setGradientEntry(i, 1, 0, sgny);
-        setGradientEntry(i, 2, 0, sgnz);
+        v[i].pos = {pow(a, 1.0 / 3.0) * sgnx, pow(a, 1.0 / 3.0) * sgny, pow(a, 1.0 / 3.0) * sgnz};
+        setGradientEntry(i, 0, 0, 1.0 / 3.0 * pow(a, -2.0 / 3.0) * sgnx);
+        setGradientEntry(i, 1, 0, 1.0 / 3.0 * pow(a, -2.0 / 3.0) * sgny);
+        setGradientEntry(i, 2, 0, 1.0 / 3.0 * pow(a, -2.0 / 3.0) * sgnz);
+        setHessianEntry(i, 0, 0, 0, -2.0 / 9.0 * pow(a, -5.0 / 3.0) * sgnx);
+        setHessianEntry(i, 1, 0, 0, -2.0 / 9.0 * pow(a, -5.0 / 3.0) * sgny);
+        setHessianEntry(i, 2, 0, 0, -2.0 / 9.0 * pow(a, -5.0 / 3.0) * sgnz);
     }
+}
+
+double CubeBoundary::computeEnergy() {
+    double a = p(0);
+    return (a - 2) * (a - 2);
+}
+
+VectorXT CubeBoundary::computeEnergyGradient() {
+    double a = p(0);
+
+    VectorXT gradient(nfree);
+    setEnergyGradientEntry(gradient, 0, 2 * (a - 2));
+
+    return gradient;
+}
+
+MatrixXT CubeBoundary::computeEnergyHessian() {
+    double a = p(0);
+
+    MatrixXT hessian(nfree, nfree);
+    setEnergyHessianEntry(hessian, 0, 0, 2);
+
+    return hessian;
 }
 

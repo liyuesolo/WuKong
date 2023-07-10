@@ -38,6 +38,8 @@ public:
 
     void scenarioCube();
 
+    void scenarioSphere();
+
     void scenarioDrosophilaLowRes();
 
     void scenarioDrosophilaHighRes();

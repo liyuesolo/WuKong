@@ -53,6 +53,7 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
 
         std::vector<std::string> scenarios;
         scenarios.push_back("Cube");
+        scenarios.push_back("Sphere");
         scenarios.push_back("Drosophila (Low Res)");
         scenarios.push_back("Drosophila (High Res)");
 
@@ -139,9 +140,12 @@ void Foam3DApp::generateScenario() {
             scenarioCube();
             break;
         case 1:
-            scenarioDrosophilaLowRes();
+            scenarioSphere();
             break;
         case 2:
+            scenarioDrosophilaLowRes();
+            break;
+        case 3:
             scenarioDrosophilaHighRes();
             break;
         default:
@@ -176,6 +180,47 @@ void Foam3DApp::scenarioCube() {
     free << 0;
 //    VectorXi free(0);
     foam.tessellation.boundary = new CubeBoundary(1, free);
+}
+
+void Foam3DApp::scenarioSphere() {
+    double infp = 10;
+    VectorXd infbox(8 * 3);
+    infbox << -infp, -infp, -infp,
+            -infp, -infp, infp,
+            -infp, infp, -infp,
+            -infp, infp, infp,
+            infp, -infp, -infp,
+            infp, -infp, infp,
+            infp, infp, -infp,
+            infp, infp, infp;
+
+    MatrixXT V, TC, N, V2;
+    MatrixXi F, FTC, FN, F2;
+    igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
+
+//    V = V.block(200, 0, 200, 3);
+    MatrixXT Vt = V.transpose();
+    VectorXd vertices((8 + V.rows()) * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
+    VectorXd params = VectorXd::Zero(8 + V.rows());
+
+    foam.vertices = vertices;
+    foam.params = params;
+
+    igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
+    igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V2, TC, N, F2, FTC, FN);
+    V *= 1.1;
+    V2 *= 0.9;
+    F2.col(1).swap(F2.col(2));
+    std::cout << V.rows() << std::endl;
+    std::cout << F.rows() << std::endl;
+
+    MatrixXT V3(V.rows() + V2.rows(), 3);
+    V3 << V, V2;
+    MatrixXi F3(F.rows() + F2.rows(), 3);
+    F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
+
+    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
 }
 
 void Foam3DApp::scenarioDrosophilaLowRes() {

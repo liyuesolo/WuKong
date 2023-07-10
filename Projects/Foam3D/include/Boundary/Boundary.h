@@ -68,6 +68,18 @@ protected:
         }
     }
 
+    inline void setEnergyGradientEntry(VectorXT &gradient, int ip, double value) {
+        if (free_map(ip) >= 0) {
+            gradient(ip) = value;
+        }
+    }
+
+    inline void setEnergyHessianEntry(MatrixXT &hessian, int ip0, int ip1, double value) {
+        if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
+            hessian(ip0, ip1) = value;
+        }
+    }
+
 public:
     Boundary(const VectorXT &p_, const VectorXi &free_);
 

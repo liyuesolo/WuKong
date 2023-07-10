@@ -11,9 +11,10 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
     bool same = true;
-    same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-10) &&
-           ((p_free - boundary->get_p_free()).norm() < 1e-10);
-    if (same) std::cout << "same" << std::endl;
+    same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-14) &&
+           ((p_free - boundary->get_p_free()).norm() < 1e-14);
+    if (same)
+        std::cout << "same " << (c_new - c).norm() << " " << (p_free - boundary->get_p_free()).norm() << std::endl;
     if (same) return;
 
     isValid = true;
