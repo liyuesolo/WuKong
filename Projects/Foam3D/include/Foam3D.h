@@ -11,6 +11,7 @@
 #include "VecMatDef.h"
 #include "Tessellation/Power.h"
 #include "Energy/EnergyObjective.h"
+#include "Energy/DynamicObjective.h"
 
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../src/optLib/FancyBFGSMinimizer.h"
@@ -22,6 +23,7 @@ public:
 
     Power tessellation;
     EnergyObjective energyObjective;
+    DynamicObjective dynamicObjective;
 
     GradientDescentLineSearch *minimizerGradientDescent;
     NewtonFunctionMinimizer *minimizerNewton;
@@ -29,6 +31,10 @@ public:
 
 public:
     void energyMinimizationStep(int optimizer);
+
+    void dynamicsStep(int optimizer);
+
+    void dynamicsInit();
 
 public:
 

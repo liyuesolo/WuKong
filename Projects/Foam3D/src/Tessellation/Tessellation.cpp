@@ -14,8 +14,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-14) &&
            ((p_free - boundary->get_p_free()).norm() < 1e-14);
     if (same)
-        std::cout << "same " << (c_new - c).norm() << " " << (p_free - boundary->get_p_free()).norm() << std::endl;
-    if (same) return;
+//        std::cout << "same " << (c_new - c).norm() << " " << (p_free - boundary->get_p_free()).norm() << std::endl;
+        if (same) return;
 
     isValid = true;
     c = c_new;

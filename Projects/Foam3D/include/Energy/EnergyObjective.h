@@ -20,9 +20,9 @@ public:
 
 public:
 
-    void minimize(GradientDescentLineSearch *minimizer, VectorXd &y, bool optimizeWeights_ = true) const;
+    void minimize(GradientDescentLineSearch *minimizer, VectorXd &y, bool optimizeWeights_) const;
 
-    void check_gradients(const VectorXd &y, bool optimizeWeights_ = true) const;
+    void check_gradients(const VectorXd &y, bool optimizeWeights_) const;
 
     void preProcess(const VectorXd &y) const;
 

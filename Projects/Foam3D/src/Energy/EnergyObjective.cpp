@@ -125,7 +125,7 @@ double EnergyObjective::evaluate(const VectorXd &y) const {
 
     double value = 0;
     if (!tessellation->isValid) {
-        std::cout << "eval invalid" << std::endl;
+//        std::cout << "eval invalid" << std::endl;
         return 1e10;
     }
 
@@ -136,7 +136,7 @@ double EnergyObjective::evaluate(const VectorXd &y) const {
     }
     value += tessellation->boundary->computeEnergy();
 
-    std::cout << "eval " << value << std::endl;
+//    std::cout << "energy value: " << value << std::endl;
     return value;
 }
 
@@ -163,7 +163,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
 
     VectorXT gradient = VectorXT::Zero(y.rows());
     if (!tessellation->isValid) {
-        std::cout << "grad invalid" << std::endl;
+//        std::cout << "grad invalid" << std::endl;
         return gradient;
     }
 
@@ -224,7 +224,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
     }
     gradient.tail(tessellation->boundary->nfree) += tessellation->boundary->computeEnergyGradient(); // dFdp
 
-    std::cout << "gradient norm " << gradient.norm() << std::endl;
+//    std::cout << "energy gradient norm: " << gradient.norm() << std::endl;
     return gradient;
 }
 

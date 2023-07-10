@@ -68,6 +68,9 @@ public:
     virtual void step(const ObjectiveFunction *function, const VectorXd &dx, VectorXd &x) {
         double alpha_nominal = alpha_start;
         double O0 = function->evaluate(x);
+        double gradnorm = function->getGradient(x).norm();
+        std::cout << "Optimization step gradient norm: " << gradnorm << ", Objective: " << O0 << ", Alpha: "
+                  << alpha_start << std::endl;
         VectorXd x_cand = x;
         for (int i = 0; i < maxLineSearchIterations; ++i) {
             double alpha = alpha_nominal * pow(.5, i);
@@ -80,7 +83,7 @@ public:
                 // TODO: Logan
                 x = x_cand;
                 alpha_start = std::min(2 * alpha, 1.0);
-                std::cout << "new alpha " << alpha_start << std::endl;
+//                std::cout << "new alpha " << alpha_start << std::endl;
                 return;
             }
         }

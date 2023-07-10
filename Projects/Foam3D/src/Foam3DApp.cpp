@@ -27,6 +27,13 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::Spacing();
         ImGui::Spacing();
 
+        if (ImGui::Checkbox("Dynamics", &dynamics)) {
+            foam.dynamicsInit();
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
         std::vector<std::string> colorModes;
         colorModes.push_back("Random");
         if (ImGui::Combo("Colors", &colormode, colorModes)) {
@@ -60,7 +67,7 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         if (ImGui::Combo("Scenario", &generate_scenario_type, scenarios)) {
 
         }
-        if (generate_scenario_type > -1) {
+        if (generate_scenario_type == 0) {
             ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
             ImGui::InputInt("Cells", &generate_scenario_num_sites, 10, 100);
         }
@@ -114,7 +121,11 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
     viewer.callback_pre_draw =
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
                 if (optimize) {
-                    foam.energyMinimizationStep(optimizer);
+                    if (dynamics) {
+                        foam.dynamicsStep(optimizer);
+                    } else {
+                        foam.energyMinimizationStep(optimizer);
+                    }
                 }
                 updateViewerData(viewer);
                 return false;

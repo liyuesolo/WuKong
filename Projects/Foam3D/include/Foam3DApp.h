@@ -17,6 +17,7 @@ public:
     Foam3D &foam;
 
     bool optimize = false;
+    bool dynamics = false;
     int optimizer = 0;
 
     int colormode = 0;
