@@ -2,7 +2,7 @@
 
 #include "Boundary.h"
 
-class SimpleBoundary : public Boundary {
+class MeshBoundary : public Boundary {
 
 private:
     virtual void computeVertices();
@@ -11,5 +11,5 @@ public:
     virtual bool checkValid();
 
 public:
-    SimpleBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_);
+    MeshBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_);
 };

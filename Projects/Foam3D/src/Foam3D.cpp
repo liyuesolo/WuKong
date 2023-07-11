@@ -11,7 +11,7 @@ Foam3D::Foam3D() {
     dynamicObjective.energyObjective = &energyObjective;
 
     minimizerGradientDescent = new GradientDescentLineSearch(1, 1e-6, 15);
-    minimizerNewton = new NewtonFunctionMinimizer(1, 1e-10, 15);
+    minimizerNewton = new NewtonFunctionMinimizer(1, 1e-2, 15);
     minimizerBFGS = new FancyBFGSMinimizer(1, 1e-10, 15);
 }
 
@@ -74,6 +74,9 @@ void Foam3D::dynamicsStep(int optimizer) {
     if ((y - y_prev).norm() < 1e-14) {
         std::cout << "New dynamics step" << std::endl;
         dynamicObjective.newStep(y, optWeights);
+        minimizerGradientDescent->alpha_start = 1;
+        minimizerNewton->alpha_start = 1;
+        minimizerBFGS->alpha_start = 1;
     }
 }
 

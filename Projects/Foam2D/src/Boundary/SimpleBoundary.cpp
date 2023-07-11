@@ -1,6 +1,6 @@
 #include "../../include/Boundary/SimpleBoundary.h"
 
-void SimpleBoundary::computeVertices() {
+void MeshBoundary::computeVertices() {
     v = p;
 
     int n_vtx = v.rows() / 2;
@@ -12,14 +12,14 @@ void SimpleBoundary::computeVertices() {
     }
 }
 
-void SimpleBoundary::computeGradient() {
+void MeshBoundary::computeGradient() {
     dvdp = MatrixXT::Zero(v.rows(), nfree);
     for (int i = 0; i < v.rows(); i++) {
         addGradientEntry(i, i, 1.0);
     }
 }
 
-void SimpleBoundary::computeHessian() {
+void MeshBoundary::computeHessian() {
     d2vdp2.resize(v.rows());
 
     MatrixXT zeroHessian = MatrixXT::Zero(nfree, nfree);

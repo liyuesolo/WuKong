@@ -67,7 +67,7 @@ void Foam2D::initRandomSitesInCircle(int n_free_in, int n_fixed_in) {
     vertices = VectorXT::Zero((info->n_free + info->n_fixed) * 2).unaryExpr([&](float dummy) { return dis(gen); });
     vertices.segment(info->n_free * 2, info->n_fixed * 2) = boundary_points;
 
-    info->boundary = new SimpleBoundary({}, {});
+    info->boundary = new MeshBoundary({}, {});
 
     resetVertexParams();
 }
@@ -79,7 +79,7 @@ void Foam2D::initBasicTestCase() {
     vertices.resize((info->n_free + info->n_fixed) * 2);
     vertices << -0.6, 0, 0.6, 0, 0, -0.5, 0, 0.5, -1, -1, 1, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, -1, 0, 1;
 
-    info->boundary = new SimpleBoundary({}, {});
+    info->boundary = new MeshBoundary({}, {});
 
     resetVertexParams();
 }
@@ -104,7 +104,7 @@ void Foam2D::initRandomCellsInBox(int n_free_in) {
 
     VectorXT v(4 * 2);
     v << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
-    info->boundary = new SimpleBoundary(v, {});
+    info->boundary = new MeshBoundary(v, {});
 
     resetVertexParams();
 }
@@ -661,7 +661,7 @@ void Foam2D::initImageMatch(MatrixXi &markers) {
 
     VectorXT v(4 * 2);
     v << -dx, -dy, dx, -dy, dx, dy, -dx, dy;
-    info->boundary = new SimpleBoundary(v, {});
+    info->boundary = new MeshBoundary(v, {});
 
     // Get only boundary pixel info in order to set objective function pixels.
     VectorXi countOuter = VectorXi::Zero(info->n_free);

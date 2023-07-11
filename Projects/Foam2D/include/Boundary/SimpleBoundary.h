@@ -2,7 +2,7 @@
 
 #include "Boundary.h"
 
-class SimpleBoundary : public Boundary {
+class MeshBoundary : public Boundary {
 
 public:
 
@@ -15,7 +15,7 @@ private:
     virtual void computeHessian();
 
 public:
-    SimpleBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
+    MeshBoundary(const VectorXT &p_, const VectorXi &free_) : Boundary(p_, free_) {
         computeVertices();
         computeGradient();
         computeHessian();

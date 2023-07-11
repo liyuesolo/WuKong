@@ -3,9 +3,11 @@
 
 int main() {
     igl::opengl::glfw::Viewer viewer;
+    // Attach a menu plugin
+    igl::opengl::glfw::imgui::ImGuiPlugin plugin;
+    viewer.plugins.push_back(&plugin);
     igl::opengl::glfw::imgui::ImGuiMenu menu;
-
-    viewer.plugins.push_back(&menu);
+    plugin.widgets.push_back(&menu);
 
 //    feenableexcept(FE_INVALID);
     Eigen::setNbThreads(1);

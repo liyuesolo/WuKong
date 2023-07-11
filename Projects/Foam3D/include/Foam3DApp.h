@@ -5,7 +5,7 @@
 #include <igl/unproject_on_plane.h>
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
-#include <imgui/imgui.h>
+#include <imgui.h>
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "Foam3D.h"

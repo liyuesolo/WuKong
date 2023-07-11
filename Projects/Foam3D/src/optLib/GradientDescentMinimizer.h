@@ -75,7 +75,10 @@ public:
         for (int i = 0; i < maxLineSearchIterations; ++i) {
             double alpha = alpha_nominal * pow(.5, i);
             x_cand = x - alpha * dx;
-            if (function->evaluate(x_cand) < O0) {
+            double O = function->evaluate(x_cand);
+            std::cout << "Line search iteration dx norm: " << dx.norm() << ", Objective: " << O << ", Previous: " << O0
+                      << std::endl;
+            if (O < O0) {
                 // TODO: Logan
 //                double alpha2 = alpha * .5;
 //                VectorXd x_cand2 = x - alpha2 * dx;

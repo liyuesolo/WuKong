@@ -5,6 +5,7 @@
 #include "../../include/Energy/CellFunctionWPenalty.h"
 #include "../../include/Energy/CellFunctionPerTriangle.h"
 #include "../../include/Energy/CellFunctionSecondMoment.h"
+#include "../../include/Energy/CellFunctionAdhesion.h"
 #include "../../include/Energy/PerTriangleVolume.h"
 #include "../../include/Energy/PerTriangleSurfaceArea.h"
 #include "../../include/Energy/PerTriangleWeightedMeanX.h"
@@ -13,7 +14,7 @@
 #include <iostream>
 
 #define CONDY (false)
-#define NTERMS 6
+#define NTERMS 7
 
 CellFunctionEnergy::CellFunctionEnergy() {
     CellFunction *vol = new CellFunctionPerTriangle(new PerTriangleVolume());
@@ -23,21 +24,23 @@ CellFunctionEnergy::CellFunctionEnergy() {
     CellFunction *cx = new CellFunctionCentroid(wmx, vol);
     CellFunction *cy = new CellFunctionCentroid(wmy, vol);
     CellFunction *cz = new CellFunctionCentroid(wmz, vol);
-    volumeTargetFunction = new CellFunctionConstantTarget(vol, 8.0 / 300);
+    volumeTargetFunction = new CellFunctionConstantTarget(vol, 0.3);
     surfaceAreaTargetFunction = new CellFunctionConstantTarget(
             new CellFunctionPerTriangle(new PerTriangleSurfaceArea()), 0);
     siteCentroidFunction = new CellFunctionCentroidTarget(wmx, wmy, wmz, vol);
     volumeBarrierFunction = new CellFunctionVolumeBarrier(vol);
     wPenaltyFunction = new CellFunctionWPenalty();
     secondMomentFunction = new CellFunctionSecondMoment(cx, cy, cz);
+    adhesionFunction = new CellFunctionConstantTarget(
+            new CellFunctionAdhesion(), 0);
 }
 
 void CellFunctionEnergy::getValue(Tessellation *tessellation, CellValue &value) const {
-    CellValue vals[NTERMS] = {value, value, value, value, value, value};
+    CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
     CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction};
+                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
-                              wPenaltyWeight, secondMomentWeight};
+                              wPenaltyWeight, secondMomentWeight, adhesionWeight};
 
     value.value = 0;
     for (int i = 0; i < NTERMS; i++) {
@@ -52,11 +55,11 @@ void CellFunctionEnergy::getValue(Tessellation *tessellation, CellValue &value) 
 }
 
 void CellFunctionEnergy::getGradient(Tessellation *tessellation, CellValue &value) const {
-    CellValue vals[NTERMS] = {value, value, value, value, value, value};
+    CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
     CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction};
+                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
-                              wPenaltyWeight, secondMomentWeight};
+                              wPenaltyWeight, secondMomentWeight, adhesionWeight};
 
     value.gradient.setZero();
     for (int i = 0; i < NTERMS; i++) {
@@ -69,11 +72,11 @@ void CellFunctionEnergy::getGradient(Tessellation *tessellation, CellValue &valu
 }
 
 void CellFunctionEnergy::getHessian(Tessellation *tessellation, CellValue &value) const {
-    CellValue vals[NTERMS] = {value, value, value, value, value, value};
+    CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
     CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction};
+                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
-                              wPenaltyWeight, secondMomentWeight};
+                              wPenaltyWeight, secondMomentWeight, adhesionWeight};
 
     value.hessian.setZero();
     for (int i = 0; i < NTERMS; i++) {

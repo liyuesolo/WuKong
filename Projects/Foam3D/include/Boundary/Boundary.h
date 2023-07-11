@@ -21,11 +21,12 @@ using VectorXi = Vector<int, Eigen::Dynamic>;
 
 struct BoundaryVertex {
     TV3 pos;
-    MatrixXT grad;
-    MatrixXT hess[3];
+    Eigen::SparseMatrix<double> grad;
+    Eigen::SparseMatrix<double> hess[3];
 };
 struct BoundaryFace {
     IV3 vertices;
+    double adhesion = 0;
 };
 
 class Boundary {
@@ -56,27 +57,27 @@ public:
 protected:
     void initialize(int nv, const MatrixXi &f_);
 
-    inline void setGradientEntry(int iv, int iCoord, int ip, double value) {
+    inline void addGradientEntry(int iv, int iCoord, int ip, double value) {
         if (free_map(ip) >= 0) {
-            v[iv].grad(iCoord, free_map(ip)) = value;
+            v[iv].grad.coeffRef(iCoord, free_map(ip)) += value;
         }
     }
 
-    inline void setHessianEntry(int iv, int iCoord, int ip0, int ip1, double value) {
+    inline void addHessianEntry(int iv, int iCoord, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            v[iv].hess[iCoord](free_map(ip0), free_map(ip1)) = value;
+            v[iv].hess[iCoord].coeffRef(free_map(ip0), free_map(ip1)) += value;
         }
     }
 
-    inline void setEnergyGradientEntry(VectorXT &gradient, int ip, double value) {
+    inline void addEnergyGradientEntry(Eigen::SparseVector<double> &gradient, int ip, double value) {
         if (free_map(ip) >= 0) {
-            gradient(ip) = value;
+            gradient.coeffRef(ip) += value;
         }
     }
 
-    inline void setEnergyHessianEntry(MatrixXT &hessian, int ip0, int ip1, double value) {
+    inline void addEnergyHessianEntry(Eigen::SparseMatrix<double> &hessian, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            hessian(ip0, ip1) = value;
+            hessian.coeffRef(ip0, ip1) += value;
         }
     }
 

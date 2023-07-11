@@ -35,6 +35,7 @@ struct NodePosition {
 struct Face {
     int site0;
     int site1;
+    int bface = -1;
     std::vector<Node> nodes;
 };
 
@@ -45,10 +46,15 @@ struct Cell {
     std::map<Node, int> nodeIndices;
 };
 
+struct CellInfo {
+    double adhesion = 0;
+};
+
 class Tessellation {
 
 public:
     VectorXT c;
+    std::vector<CellInfo> cellInfos;
 
     std::vector<Cell> cells;
 

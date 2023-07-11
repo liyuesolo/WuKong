@@ -240,7 +240,9 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
         return hessian.sparseView();
     }
 
+    int bbb = 0;
     for (Cell cell: tessellation->cells) {
+        std::cout << "hessian cell " << bbb++ << std::endl;
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
         energyFunction.getHessian(tessellation, cellValue);
@@ -319,8 +321,9 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                                           hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
                                           tessellation->boundary->nfree) +=
                                     tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
-                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3, 3) *
+                                    (cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+                                     nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3,
+                                                            3)).sparseView() *
                                     tessellation->boundary->v[cs1.gen_idx].grad; // dvdp^T * dFdx * d2xdv2 * dvdp
                         } else if (cs0.gen_is_boundary) {
                             hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
@@ -387,16 +390,17 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                             hessian.block(hessian.rows() - tessellation->boundary->nfree,
                                           hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
                                           tessellation->boundary->nfree) +=
-                                    (nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3) *
-                                     tessellation->boundary->v[cs0.gen_idx].grad).transpose() *
-                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
-                                    (nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3) *
-                                     tessellation->boundary->v[cs1.gen_idx].grad); // (dxdv * dvdp)^T * d2Fdx2 * (dxdv * dvdp)
+                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+                                    (nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
+                                     cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3,
+                                                                   cs1.cell_node_idx * 3) *
+                                     nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3)).sparseView() *
+                                    tessellation->boundary->v[cs1.gen_idx].grad; // (dxdv * dvdp)^T * d2Fdx2 * (dxdv * dvdp)
                         } else if (cs0.gen_is_boundary) {
                             hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
                                           tessellation->boundary->nfree, optDims) +=
-                                    (nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3) *
-                                     tessellation->boundary->v[cs0.gen_idx].grad).transpose() *
+                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
                                     cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
                                     nodePos1.grad.block(0, cs1.nodepos_start_idx, 3,
                                                         optDims); // (dxdv * dvdp)^T * d2Fdx2 * dxdc
@@ -405,8 +409,8 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                                           optDims, tessellation->boundary->nfree) +=
                                     nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *
                                     cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
-                                    (nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3) *
-                                     tessellation->boundary->v[cs1.gen_idx].grad); // dxdc^T * d2Fdx2 * (dxdv * dvdp) - transpose of previous case
+                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3) *
+                                    tessellation->boundary->v[cs1.gen_idx].grad; // dxdc^T * d2Fdx2 * (dxdv * dvdp) - transpose of previous case
                         } else {
                             hessian.block(cs0.gen_idx * optDims, cs1.gen_idx * optDims, optDims, optDims) +=
                                     nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *

@@ -10,6 +10,7 @@ public:
     CellFunction *volumeBarrierFunction;
     CellFunction *wPenaltyFunction;
     CellFunction *secondMomentFunction;
+    CellFunction *adhesionFunction;
 
     double volumeTargetWeight = 100;//100;
     double surfaceAreaTargetWeight = 0.0;
@@ -17,6 +18,7 @@ public:
     double volumeBarrierWeight = 1;
     double wPenaltyWeight = 1;
     double secondMomentWeight = 100;
+    double adhesionWeight = 5;
 
 //    double volumeTargetWeight = 100;
 //    double surfaceAreaTargetWeight = 0;
@@ -24,6 +26,7 @@ public:
 //    double volumeBarrierWeight = 0;
 //    double wPenaltyWeight = 0;
 //    double secondMomentWeight = 0;
+//    double adhesionWeight = 0;
 
 public:
     virtual void

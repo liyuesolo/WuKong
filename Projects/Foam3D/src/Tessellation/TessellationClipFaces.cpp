@@ -318,6 +318,8 @@ void Tessellation::clipFaces() {
             }
             thisFaceReal.site0 = jmin;
             thisFaceReal.site1 = -1;
+
+            thisFaceReal.bface = refFace - unclippedFaces.size();
         }
 
         faces.push_back(thisFaceReal);

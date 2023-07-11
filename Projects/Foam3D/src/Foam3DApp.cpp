@@ -8,7 +8,8 @@
 #include <opencv4/opencv2/core/eigen.hpp>
 
 #include "../include/Tessellation/Power.h"
-#include "../include/Boundary/SimpleBoundary.h"
+#include "../include/Boundary/MeshBoundary.h"
+#include "../include/Boundary/MeshSpringBoundary.h"
 #include "../include/Boundary/CubeBoundary.h"
 
 void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
@@ -191,6 +192,8 @@ void Foam3DApp::scenarioCube() {
     free << 0;
 //    VectorXi free(0);
     foam.tessellation.boundary = new CubeBoundary(1, free);
+
+    foam.tessellation.cellInfos.resize(foam.params.rows());
 }
 
 void Foam3DApp::scenarioSphere() {
@@ -231,7 +234,19 @@ void Foam3DApp::scenarioSphere() {
     MatrixXi F3(F.rows() + F2.rows(), 3);
     F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
 
-    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
+    VectorXi free(V3.rows() * 3);
+    for (int i = 0; i < free.rows(); i++) {
+        free(i) = i;
+    }
+    foam.tessellation.boundary = new MeshSpringBoundary(V3, F3, free);
+    for (int i = 0; i < foam.tessellation.boundary->f.size() / 2; i++) {
+        foam.tessellation.boundary->f[i].adhesion = 1.0;
+    }
+
+    foam.tessellation.cellInfos.resize(V.rows());
+    for (int i = 0; i < V.rows(); i++) {
+        if (V(i, 1) > 2.7) foam.tessellation.cellInfos[i].adhesion = 2 * (V(i, 1) - 2.7);
+    }
 }
 
 void Foam3DApp::scenarioDrosophilaLowRes() {
@@ -270,7 +285,9 @@ void Foam3DApp::scenarioDrosophilaLowRes() {
     MatrixXi F3(F.rows() + F2.rows(), 3);
     F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
 
-    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
+    foam.tessellation.boundary = new MeshBoundary(V3, F3, {});
+
+    foam.tessellation.cellInfos.resize(foam.params.rows());
 }
 
 void Foam3DApp::scenarioDrosophilaHighRes() {
@@ -309,7 +326,9 @@ void Foam3DApp::scenarioDrosophilaHighRes() {
     MatrixXi F3(F.rows() + F2.rows(), 3);
     F3 << F, F2 + MatrixXi::Constant(F2.rows(), F2.cols(), V.rows());
 
-    foam.tessellation.boundary = new SimpleBoundary(V3, F3, {});
+    foam.tessellation.boundary = new MeshBoundary(V3, F3, {});
+
+    foam.tessellation.cellInfos.resize(foam.params.rows());
 }
 
 void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
@@ -460,12 +479,14 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
                     F(f, 0) = nodeIndices.at(face.nodes[0]);
                     F(f, 1) = nodeIndices.at(face.nodes[i]);
                     F(f, 2) = nodeIndices.at(face.nodes[i + 1]);
-                    Fc.row(f) = colors.row(cell);
+//                    Fc.row(f) = colors.row(cell);
+                    Fc.row(f) = TV3(0.2, 0.2, 0.2) + foam.tessellation.cellInfos[cell].adhesion * TV3(0.6, 0.6, 0.6);
                 } else {
                     F(f, 0) = nodeIndices.at(face.nodes[0]);
                     F(f, 2) = nodeIndices.at(face.nodes[i]);
                     F(f, 1) = nodeIndices.at(face.nodes[i + 1]);
-                    Fc.row(f) = colors.row(cell);
+//                    Fc.row(f) = colors.row(cell);
+                    Fc.row(f) = TV3(0.2, 0.2, 0.2) + foam.tessellation.cellInfos[cell].adhesion * TV3(0.6, 0.6, 0.6);
                 }
                 f++;
             }

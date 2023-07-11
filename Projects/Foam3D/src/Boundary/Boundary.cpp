@@ -16,9 +16,9 @@ Boundary::Boundary(const VectorXT &p_, const VectorXi &free_) {
 void Boundary::initialize(int nv, const MatrixXi &f_) {
     v.resize(nv);
     for (BoundaryVertex &bv: v) {
-        bv.grad = MatrixXT::Zero(3, nfree);
+        bv.grad = Eigen::SparseMatrix<double>(3, nfree);
         for (int j = 0; j < 3; j++) {
-            bv.hess[j] = MatrixXT::Zero(nfree, nfree);
+            bv.hess[j] = Eigen::SparseMatrix<double>(nfree, nfree);
         }
     }
 
@@ -33,7 +33,12 @@ void Boundary::compute(const VectorXT &p_free) {
     for (int i = 0; i < nfree; i++) {
         p(free_idx(i)) = p_free(i);
     }
-
+    for (BoundaryVertex &bv: v) {
+        bv.grad.setZero();
+        for (int j = 0; j < 3; j++) {
+            bv.hess[j].setZero();
+        }
+    }
     computeVertices();
 }
 
