@@ -13,9 +13,10 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     bool same = true;
     same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-14) &&
            ((p_free - boundary->get_p_free()).norm() < 1e-14);
-    if (same)
+    if (same) {
 //        std::cout << "same " << (c_new - c).norm() << " " << (p_free - boundary->get_p_free()).norm() << std::endl;
-        if (same) return;
+        return;
+    }
 
     isValid = true;
     c = c_new;
@@ -60,7 +61,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
         }
     }
 
+    clipFaces2();
     clipFaces();
+    nodes.clear(); // TODO: hack here to remove the out-of-bounds nodes involving the convex hull cells pre-clip.
 
     for (int i = 0; i < faces.size(); i++) {
         for (Node node: faces[i].nodes) {
@@ -119,6 +122,11 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
             }
         }
     }
+    int ix = 0;
+    for (auto it = nodes.begin(); it != nodes.end(); it++) {
+        it->second.ix = ix;
+        ix++;
+    }
 
     computeCellData();
 
@@ -127,178 +135,16 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     for (int i = 0; i < cells.size(); i++) {
         CellValue cellVal(cells[i]);
         volFunc.getValue(this, cellVal);
-//        std::cout << "Volume " << cellVal.value << std::endl;
+        std::cout << "Volume " << cellVal.value << std::endl;
         if (cellVal.value < 1e-10) {
             isValid = false;
             break;
         }
     }
 
-//
-//    auto cmp = [](IV4 a, IV4 b) {
-//        for (int i = 0; i < 4; i++) {
-//            if (a(i) < b(i)) return true;
-//            if (a(i) > b(i)) return false;
-//        }
-//        return false;
-//    };
-//    std::set<IV4, decltype(cmp)> triplets(cmp);
-//
-//    for (int i = 0; i < n_free; i++) {
-//        Cell cell = cells[i];
-//        for (int j = 0; j < cell.edges.size(); j++) {
-//            int n1 = cell.edges[j].neighbor;
-//            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
-//            int flag = cell.edges[cell.edges[j].nextEdge].flag;
-//
-//            IV4 triplet(i, n1, n2, flag);
-//            std::sort(triplet.data(), triplet.data() + 3);
-//
-//            triplets.insert(triplet);
-//        }
-//    }
-//    std::vector<IV4> faces(triplets.begin(), triplets.end());
-//
-//    int dims = 2 + getNumVertexParams();
-//    int n_vtx = c.rows() / dims;
-//    int n_bdy = bdry->v.rows() / 2;
-//    for (int i = 0; i < n_free; i++) {
-//        Cell cell = cells[i];
-//        for (int j = 0; j < cell.edges.size(); j++) {
-//            int n1 = cell.edges[j].neighbor;
-//            int n2 = cell.edges[cell.edges[j].nextEdge].neighbor;
-//            int flag = cell.edges[cell.edges[j].nextEdge].flag;
-//
-//            IV4 triplet(i, n1, n2, flag);
-//            std::sort(triplet.data(), triplet.data() + 3);
-//
-//            auto lower = std::lower_bound(faces.begin(), faces.end(), triplet, cmp);
-//            assert(lower != faces.end() && *lower == triplet);
-//        }
-//    }
-//
-//    dual.resize(faces.size() * 4);
-//    for (int i = 0; i < faces.size(); i++) {
-//        dual.segment<4>(i * 4) = faces[i];
-//    }
-//
-//    x.resize(faces.size() * CellFunction::nx);
-//    x.setZero();
-//    MatrixXT dxdc_dense = MatrixXT::Zero(x.rows(), n_free * dims);
-//    MatrixXT dxdv_dense = MatrixXT::Zero(x.rows(), bdry->v.rows());
-//    MatrixXT dxdq_dense = MatrixXT::Zero(x.rows(), bdry->q.rows());
-//    d2xdy2.resize(x.rows());
-//    for (int i = 0; i < faces.size(); i++) {
-//        IV4 face = faces[i];
-//
-//        VectorXT node;
-//        MatrixXT nodeGrad;
-//        std::vector<MatrixXT> nodeHess;
-//        int type;
-//        getNodeWrapper(face[0], face[1], face[2], face[3], node, nodeGrad, nodeHess,
-//                       type);
-//
-//        x.segment<CellFunction::nx>(i * CellFunction::nx) = node;
-//
-//        for (int j = 0; j < CellFunction::nx; j++) {
-//            d2xdy2[i * CellFunction::nx + j] = nodeHess[j];
-//        }
-//
-//        // Assemble global Jacobian matrix dxdc.
-//        int n_sites = c.rows() / dims;
-//        switch (type) {
-//            case 0:
-//                for (int j = 0; j < 3; j++) {
-//                    if (face[j] >= n_free) {
-//                        continue;
-//                    }
-//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
-//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
-//                }
-//                break;
-//            case 1:
-//                for (int j = 0; j < 2; j++) {
-//                    if (face[j] >= n_free) {
-//                        continue;
-//                    }
-//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
-//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
-//                }
-//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
-//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
-//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
-//                                 2) =
-//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 2);
-//
-//                break;
-//            case 2:
-//                for (int j = 0; j < 2; j++) {
-//                    if (face[j] >= n_free) {
-//                        continue;
-//                    }
-//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
-//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
-//                }
-//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
-//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
-//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
-//                                 2) =
-//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 2);
-//
-//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
-//                        nodeGrad.block(0, 2 * dims + 4, CellFunction::nx, 1);
-//                break;
-//            case 3:
-//                for (int j = 0; j < 2; j++) {
-//                    if (face[j] >= n_free) {
-//                        continue;
-//                    }
-//                    dxdc_dense.block(i * CellFunction::nx, face[j] * dims, CellFunction::nx, dims) =
-//                            nodeGrad.block(0, j * dims, CellFunction::nx, dims);
-//                }
-//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
-//                        nodeGrad.block(0, 2 * dims + 0, CellFunction::nx, 2);
-//                dxdv_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].nextEdge * 2, CellFunction::nx,
-//                                 2) =
-//                        nodeGrad.block(0, 2 * dims + 3, CellFunction::nx, 2);
-//
-//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
-//                        nodeGrad.block(0, 2 * dims + 2, CellFunction::nx, 1);
-//                dxdq_dense.block(i * CellFunction::nx, bdry->edges[bdry->edges[face[2] - n_sites].nextEdge].q_idx,
-//                                 CellFunction::nx, 1) =
-//                        nodeGrad.block(0, 2 * dims + 5, CellFunction::nx, 1);
-//                break;
-//            case 4:
-//                dxdv_dense.block(i * CellFunction::nx, (face[1] - n_sites) * 2, CellFunction::nx, 2) =
-//                        nodeGrad.block(0, 0, CellFunction::nx, 2);
-//                dxdv_dense.block(i * CellFunction::nx, (face[2] - n_sites) * 2, CellFunction::nx, 2) =
-//                        nodeGrad.block(0, 3, CellFunction::nx, 2);
-//
-//                if (bdry->edges[face[1] - n_sites].q_idx >= 0) {
-//                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[1] - n_sites].q_idx, CellFunction::nx, 1) =
-//                            nodeGrad.block(0, 2, CellFunction::nx, 1);
-//                }
-//                if (bdry->edges[face[2] - n_sites].q_idx >= 0) {
-//                    dxdq_dense.block(i * CellFunction::nx, bdry->edges[face[2] - n_sites].q_idx, CellFunction::nx, 1) =
-//                            nodeGrad.block(0, 5, CellFunction::nx, 1);
-//                }
-//                break;
-//            default:
-//                assert(0);
-//                break;
-//        }
-//    }
-//
-//    dxdc = dxdc_dense.sparseView();
-//    dxdv = dxdv_dense.sparseView();
-//    dxdq = dxdq_dense.sparseView();
-//
-//    for (int i = 0; i < n_free; i++) {
-//        if (cells[i].edges.size() < 2) {
-//            isValid = false;
-//            return;
-//        }
-//    }
+    std::cout << "Num faccs " << faces.size() << std::endl;
+
+    computeMatrices();
 }
 
 void Tessellation::computeCellData() {
@@ -330,19 +176,182 @@ void Tessellation::computeCellData() {
         };
         std::for_each(cell.facesPos.begin(), cell.facesPos.end(), func);
         std::for_each(cell.facesNeg.begin(), cell.facesNeg.end(), func);
+
+        std::cout << "Cellsssss " << i << " has nodes: " << cell.nodeIndices.size() << std::endl;
+    }
+}
+
+struct CoolStructy {
+    bool gen_is_boundary;
+    int gen_idx;
+    int nodepos_start_idx;
+
+    CoolStructy(bool b, int i0, int i1) {
+        gen_is_boundary = b;
+        gen_idx = i0;
+        nodepos_start_idx = i1;
+    }
+};
+
+#define cdims 3
+
+void Tessellation::computeMatrices() {
+    int nc = cdims * cells.size();
+    int nx = 3 * nodes.size();
+    int nv = 3 * boundary->v.size();
+    int np = boundary->nfree;
+
+    std::vector<Eigen::Triplet<double>> tripletsDXDC;
+    std::vector<Eigen::Triplet<double>> tripletsDXDV;
+    std::vector<std::vector<Eigen::Triplet<double>>> tripletsD2XDC2(nx);
+    std::vector<std::vector<Eigen::Triplet<double>>> tripletsD2XDCDV(nx);
+    std::vector<std::vector<Eigen::Triplet<double>>> tripletsD2XDV2(nx);
+    std::vector<Eigen::Triplet<double>> tripletsDVDP;
+    std::vector<std::vector<Eigen::Triplet<double>>> tripletsD2VDP2(nv);
+
+    int nodeIdx = 0;
+    for (auto pair: nodes) {
+        Node node = pair.first;
+        NodePosition nodePos = pair.second;
+
+        std::vector<CoolStructy> coolStructs;
+        switch (node.type) {
+            case STANDARD:
+                for (int i = 0; i < 4; i++) {
+                    coolStructs.emplace_back(false, node.gen[i], i * 4);
+                }
+                break;
+            case B_FACE:
+                for (int i = 0; i < 3; i++) {
+                    coolStructs.emplace_back(false, node.gen[i + 1], i * 4);
+                }
+                for (int i = 0; i < 3; i++) {
+                    coolStructs.emplace_back(true, boundary->f[node.gen[0]].vertices(i),
+                                             3 * 4 + i * 3);
+                }
+                break;
+            case B_EDGE:
+                for (int i = 0; i < 2; i++) {
+                    coolStructs.emplace_back(false, node.gen[i + 2], i * 4);
+                }
+                for (int i = 0; i < 2; i++) {
+                    coolStructs.emplace_back(true, node.gen[i], 2 * 4 + i * 3);
+                }
+                break;
+            case B_VERTEX:
+                coolStructs.emplace_back(true, node.gen[0], 0);
+            default:
+                break;
+        }
+
+        for (CoolStructy cs0: coolStructs) {
+            if (cs0.gen_is_boundary) {
+                for (int i = 0; i < 3; i++) {
+                    for (int j = 0; j < 3; j++) {
+                        tripletsDXDV.emplace_back(nodeIdx * 3 + i, cs0.gen_idx * 3 + j,
+                                                  nodePos.grad(i, cs0.nodepos_start_idx + j));
+                    }
+                }
+            } else {
+                for (int i = 0; i < 3; i++) {
+                    for (int j = 0; j < cdims; j++) {
+                        tripletsDXDC.emplace_back(nodeIdx * 3 + i, cs0.gen_idx * cdims + j,
+                                                  nodePos.grad(i, cs0.nodepos_start_idx + j));
+                    }
+                }
+            }
+
+            for (CoolStructy cs1: coolStructs) {
+                if (cs0.gen_is_boundary && cs1.gen_is_boundary) {
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            for (int k = 0; k < 3; k++) {
+                                tripletsD2XDV2[nodeIdx * 3 + i].emplace_back(cs0.gen_idx * 3 + j,
+                                                                             cs1.gen_idx * 3 + k,
+                                                                             nodePos.hess[i](cs0.nodepos_start_idx + j,
+                                                                                             cs1.nodepos_start_idx +
+                                                                                             k));
+                            }
+                        }
+                    }
+                } else if (cs0.gen_is_boundary) {
+                    // Do nothing
+                } else if (cs1.gen_is_boundary) {
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < cdims; j++) {
+                            for (int k = 0; k < 3; k++) {
+                                tripletsD2XDCDV[nodeIdx * 3 + i].emplace_back(cs0.gen_idx * cdims + j,
+                                                                              cs1.gen_idx * 3 + k,
+                                                                              nodePos.hess[i](cs0.nodepos_start_idx + j,
+                                                                                              cs1.nodepos_start_idx +
+                                                                                              k));
+                            }
+                        }
+                    }
+                } else {
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < cdims; j++) {
+                            for (int k = 0; k < cdims; k++) {
+                                tripletsD2XDC2[nodeIdx * 3 + i].emplace_back(cs0.gen_idx * cdims + j,
+                                                                             cs1.gen_idx * cdims + k,
+                                                                             nodePos.hess[i](cs0.nodepos_start_idx + j,
+                                                                                             cs1.nodepos_start_idx +
+                                                                                             k));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        nodeIdx++;
     }
 
-//    double totalv = 0;
-//    PerTriangleSurfaceArea perTriVol;
-//
-//    CellFunctionPerTriangle volFunc(&perTriVol);
-//    for (Cell cell: cells) {
-//        CellValue cellVal(cell);
-//        volFunc.getValue(this, cellVal);
-//        volFunc.getGradient(this, cellVal);
-//        volFunc.getHessian(this, cellVal);
-//        totalv += cellVal.value;
-//        std::cout << cellVal.value << std::endl;
-//    }
-//    std::cout << "total " << totalv << std::endl;
+    int vertIdx = 0;
+    for (BoundaryVertex v: boundary->v) {
+        for (int i = 0; i < v.grad.outerSize(); i++) {
+            for (typename Eigen::SparseMatrix<double>::InnerIterator it(v.grad, i); it; ++it) {
+                tripletsDVDP.emplace_back(vertIdx * 3 + it.row(), it.col(), it.value());
+            }
+        }
+
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < v.hess[i].outerSize(); j++) {
+                for (typename Eigen::SparseMatrix<double>::InnerIterator it(v.hess[i], j); it; ++it) {
+                    // TODO: I think this is redundant, this basically reconstructs the same matrices again...
+                    tripletsD2VDP2[vertIdx * 3 + i].emplace_back(it.row(), it.col(), it.value());
+                }
+            }
+        }
+
+        vertIdx++;
+    }
+
+    dxdc.resize(nx, nc);
+    dxdv.resize(nx, nv);
+    d2xdc2.resize(nx);
+    d2xdcdv.resize(nx);
+    d2xdv2.resize(nx);
+    for (int i = 0; i < nx; i++) {
+        d2xdc2[i].resize(nc, nc);
+        d2xdcdv[i].resize(nc, nv);
+        d2xdv2[i].resize(nv, nv);
+    }
+    dvdp.resize(nv, np);
+    d2vdp2.resize(nv);
+    for (int i = 0; i < nv; i++) {
+        d2vdp2[i].resize(np, np);
+    }
+
+    dxdc.setFromTriplets(tripletsDXDC.begin(), tripletsDXDC.end());
+    dxdv.setFromTriplets(tripletsDXDV.begin(), tripletsDXDV.end());
+    for (int i = 0; i < nx; i++) {
+        d2xdc2[i].setFromTriplets(tripletsD2XDC2[i].begin(), tripletsD2XDC2[i].end());
+        d2xdcdv[i].setFromTriplets(tripletsD2XDCDV[i].begin(), tripletsD2XDCDV[i].end());
+        d2xdv2[i].setFromTriplets(tripletsD2XDV2[i].begin(), tripletsD2XDV2[i].end());
+    }
+    dvdp.setFromTriplets(tripletsDVDP.begin(), tripletsDVDP.end());
+    for (int i = 0; i < nv; i++) {
+        d2vdp2[i].setFromTriplets(tripletsD2VDP2[i].begin(), tripletsD2VDP2[i].end());
+    }
 }

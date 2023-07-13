@@ -180,20 +180,52 @@ void Foam3DApp::scenarioCube() {
             infp, infp, -infp,
             infp, infp, infp;
 
-    srand(time(NULL));
+//    srand(time(NULL));
+    srand(0);
     VectorXd vertices((8 + generate_scenario_num_sites) * 3);
     vertices << VectorXd::Random(generate_scenario_num_sites * 3), infbox;
     VectorXd params = VectorXd::Zero(8 + generate_scenario_num_sites);
 
     foam.vertices = vertices;
     foam.params = params;
+    foam.tessellation.cellInfos.resize(generate_scenario_num_sites);
 
-    VectorXi free(1);
-    free << 0;
-//    VectorXi free(0);
-    foam.tessellation.boundary = new CubeBoundary(1, free);
+    MatrixXi F(12, 3);
+    F << 0, 2, 1,
+            2, 3, 1,
+            0, 1, 4,
+            1, 5, 4,
+            0, 4, 2,
+            4, 6, 2,
+            4, 5, 6,
+            5, 7, 6,
+            1, 3, 5,
+            3, 7, 5,
+            2, 6, 3,
+            6, 7, 3;
+    F.col(1).swap(F.col(2));
 
-    foam.tessellation.cellInfos.resize(foam.params.rows());
+    MatrixXT V(8, 3);
+    double a = 1.0;
+    V << -a, -a, -a,
+            -a, -a, a,
+            -a, a, -a,
+            -a, a, a,
+            a, -a, -a,
+            a, -a, a,
+            a, a, -a,
+            a, a, a;
+
+    VectorXi free(V.rows() * 3);
+    for (int i = 0; i < free.rows(); i++) {
+        free(i) = i;
+    }
+    foam.tessellation.boundary = new MeshSpringBoundary(V, F, free);
+
+//    VectorXi free(1);
+//    free << 0;
+////    VectorXi free(0);
+//    foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
 void Foam3DApp::scenarioSphere() {

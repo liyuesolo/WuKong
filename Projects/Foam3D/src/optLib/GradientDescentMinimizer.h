@@ -85,7 +85,7 @@ public:
 //                if (function->evaluate(x_cand2) < function->evaluate(x_cand)) x_cand = x_cand2;
                 // TODO: Logan
                 x = x_cand;
-                alpha_start = std::min(2 * alpha, 1.0);
+//                alpha_start = std::min(2 * alpha, 1.0);
 //                std::cout << "new alpha " << alpha_start << std::endl;
                 return;
             }

@@ -72,7 +72,7 @@ void Foam3D::dynamicsStep(int optimizer) {
     tessellation.tessellate(vertices, params, p_free);
 
     if ((y - y_prev).norm() < 1e-14) {
-        std::cout << "New dynamics step" << std::endl;
+        std::cout << std::endl << "New dynamics step" << std::endl << std::endl;
         dynamicObjective.newStep(y, optWeights);
         minimizerGradientDescent->alpha_start = 1;
         minimizerNewton->alpha_start = 1;

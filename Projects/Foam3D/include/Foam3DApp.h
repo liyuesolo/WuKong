@@ -18,7 +18,7 @@ public:
 
     bool optimize = false;
     bool dynamics = false;
-    int optimizer = 0;
+    int optimizer = 1;
 
     int colormode = 0;
 

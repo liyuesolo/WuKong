@@ -64,7 +64,7 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
         xp(i) += eps;
         double fp2 = evaluate(xp);
 
-        std::cout << "f[" << i << "] " << f << " " << fp << " " << fp2 << " " << (fp - f) / eps << " "
+        std::cout << "f[" << i << "] " << f << " " << fp << " " << (fp - f) / eps << " "
                   << (fp2 - f) / (2 * eps) << " " << grad(i)
                   << " " << (fp - f - eps * grad(i)) << " " << (fp2 - f - 2 * eps * grad(i)) << " "
                   << (fp2 - f - 2 * eps * grad(i)) / (fp - f - eps * grad(i))
@@ -163,68 +163,38 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
 
     VectorXT gradient = VectorXT::Zero(y.rows());
     if (!tessellation->isValid) {
-//        std::cout << "grad invalid" << std::endl;
+        std::cout << "grad invalid" << std::endl;
         return gradient;
     }
+
+    int nc = tessellation->cells.size() * optDims;
+    int nx = tessellation->nodes.size() * 3;
+    int nv = tessellation->boundary->v.size() * 3;
+    int np = tessellation->boundary->nfree;
+
+    VectorXT dFdx = VectorXT::Zero(nx);
+    VectorXT dFdc = VectorXT::Zero(nc);
+    VectorXT dFdp = VectorXT::Zero(np);
 
     for (Cell cell: tessellation->cells) {
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
+
         for (auto n: cell.nodeIndices) {
             Node node = n.first;
-            int nodeIdx = n.second;
+            int nodeIdxInCell = n.second;
             NodePosition nodePos = tessellation->nodes[node];
 
-            std::vector<CoolStruct> coolStructs;
-            switch (node.type) {
-                case STANDARD:
-                    for (int i = 0; i < 4; i++) {
-                        coolStructs.emplace_back(false, node.gen[i], nodeIdx, i * 4);
-                    }
-                    break;
-                case B_FACE:
-                    for (int i = 0; i < 3; i++) {
-                        coolStructs.emplace_back(false, node.gen[i + 1], nodeIdx, i * 4);
-                    }
-                    for (int i = 0; i < 3; i++) {
-                        coolStructs.emplace_back(true, tessellation->boundary->f[node.gen[0]].vertices(i), nodeIdx,
-                                                 3 * 4 + i * 3);
-                    }
-                    break;
-                case B_EDGE:
-                    for (int i = 0; i < 2; i++) {
-                        coolStructs.emplace_back(false, node.gen[i + 2], nodeIdx, i * 4);
-                    }
-                    for (int i = 0; i < 2; i++) {
-                        coolStructs.emplace_back(true, node.gen[i], nodeIdx, 2 * 4 + i * 3);
-                    }
-                    break;
-                case B_VERTEX:
-                    coolStructs.emplace_back(true, node.gen[0], nodeIdx, 0);
-                default:
-                    break;
-            }
-
-            for (CoolStruct cs: coolStructs) {
-                if (cs.gen_is_boundary) {
-                    gradient.tail(tessellation->boundary->nfree) +=
-                            cellValue.gradient.segment<3>(cs.cell_node_idx * 3).transpose() *
-                            nodePos.grad.block(0, cs.nodepos_start_idx, 3, 3) *
-                            tessellation->boundary->v[cs.gen_idx].grad; // dFdx * dxdv * dvdp (transpose only because of eigen column vector convention)
-                } else {
-                    gradient.segment(cs.gen_idx * optDims, optDims) +=
-                            cellValue.gradient.segment<3>(cs.cell_node_idx * 3).transpose() *
-                            nodePos.grad.block(0, cs.nodepos_start_idx, 3,
-                                               optDims); // dFdx * dxdc (transpose only because of eigen column vector convention)
-                }
-            }
+            dFdx.segment<3>(nodePos.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell * 3);
         }
-        gradient.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cellValue.gradient.rows() - 4,
-                                                                                          optDims); // dFdc
+        dFdc.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cell.nodeIndices.size() * 3,
+                                                                                      optDims);
     }
-    gradient.tail(tessellation->boundary->nfree) += tessellation->boundary->computeEnergyGradient(); // dFdp
+    dFdp += tessellation->boundary->computeEnergyGradient();
 
-//    std::cout << "energy gradient norm: " << gradient.norm() << std::endl;
+    gradient.segment(0, nc) = dFdx.transpose() * tessellation->dxdc + dFdc.transpose();
+    gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->dvdp + dFdp.transpose();
+
     return gradient;
 }
 
@@ -240,193 +210,297 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
         return hessian.sparseView();
     }
 
-    int bbb = 0;
+    int nc = tessellation->cells.size() * optDims;
+    int nx = tessellation->nodes.size() * 3;
+    int nv = tessellation->boundary->v.size() * 3;
+    int np = tessellation->boundary->nfree;
+
+    VectorXT dFdx = VectorXT::Zero(nx);
+    MatrixXT d2Fdc2 = MatrixXT::Zero(nc, nc);
+    MatrixXT d2Fdcdx = MatrixXT::Zero(nc, nx);
+    MatrixXT d2Fdx2 = MatrixXT::Zero(nx, nx);
+    MatrixXT d2Fdp2 = MatrixXT::Zero(np, np);
+
     for (Cell cell: tessellation->cells) {
-        std::cout << "hessian cell " << bbb++ << std::endl;
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
         energyFunction.getHessian(tessellation, cellValue);
-        int numNodes = cell.nodeIndices.size();
 
         for (auto n0: cell.nodeIndices) {
             Node node0 = n0.first;
-            int nodeIdx0 = n0.second;
+            int nodeIdxInCell0 = n0.second;
             NodePosition nodePos0 = tessellation->nodes[node0];
 
-            std::vector<CoolStruct> coolStructs0;
-            switch (node0.type) {
-                case STANDARD:
-                    for (int i = 0; i < 4; i++) {
-                        coolStructs0.emplace_back(false, node0.gen[i], nodeIdx0, i * 4);
-                    }
-                    break;
-                case B_FACE:
-                    for (int i = 0; i < 3; i++) {
-                        coolStructs0.emplace_back(false, node0.gen[i + 1], nodeIdx0, i * 4);
-                    }
-                    for (int i = 0; i < 3; i++) {
-                        coolStructs0.emplace_back(true, tessellation->boundary->f[node0.gen[0]].vertices(i), nodeIdx0,
-                                                  3 * 4 + i * 3);
-                    }
-                    break;
-                case B_EDGE:
-                    for (int i = 0; i < 2; i++) {
-                        coolStructs0.emplace_back(false, node0.gen[i + 2], nodeIdx0, i * 4);
-                    }
-                    for (int i = 0; i < 2; i++) {
-                        coolStructs0.emplace_back(true, node0.gen[i], nodeIdx0, 2 * 4 + i * 3);
-                    }
-                    break;
-                case B_VERTEX:
-                    coolStructs0.emplace_back(true, node0.gen[0], nodeIdx0, 0);
-                default:
-                    break;
-            }
-
-            for (CoolStruct cs0: coolStructs0) {
-                if (cs0.gen_is_boundary) {
-                    MatrixXT d2Fdcdx_dxdv_dvdp =
-                            cellValue.hessian.block(numNodes * 3, cs0.cell_node_idx * 3, optDims, 3) *
-                            nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3) *
-                            tessellation->boundary->v[cs0.gen_idx].grad; // d2Fdcdx * dxdv * dvdp
-
-                    hessian.block(cell.cellIndex * optDims, hessian.rows() - tessellation->boundary->nfree, optDims,
-                                  tessellation->boundary->nfree) += d2Fdcdx_dxdv_dvdp;
-                    hessian.block(hessian.rows() - tessellation->boundary->nfree, cell.cellIndex * optDims,
-                                  tessellation->boundary->nfree, optDims) += d2Fdcdx_dxdv_dvdp.transpose();
-
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
-                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
-                                          tessellation->boundary->nfree) +=
-                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                    nodePos0.grad(i, cs0.nodepos_start_idx + j) *
-                                    tessellation->boundary->v[cs0.gen_idx].hess[j]; // dFdx * dxdv * d2vdp2
-                        }
-                    }
-                } else {
-                    MatrixXT d2Fdcdx_dxdc = cellValue.hessian.block(numNodes * 3, cs0.cell_node_idx * 3, optDims, 3) *
-                                            nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims); // d2Fdcdx * dxdc
-
-                    hessian.block(cell.cellIndex * optDims, cs0.gen_idx * optDims, optDims, optDims) += d2Fdcdx_dxdc;
-                    hessian.block(cs0.gen_idx * optDims, cell.cellIndex * optDims, optDims,
-                                  optDims) += d2Fdcdx_dxdc.transpose();
-                }
-
-                for (CoolStruct cs1: coolStructs0) {
-                    for (int i = 0; i < 3; i++) {
-                        if (cs0.gen_is_boundary && cs1.gen_is_boundary) {
-                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
-                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
-                                          tessellation->boundary->nfree) +=
-                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
-                                    (cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                     nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3,
-                                                            3)).sparseView() *
-                                    tessellation->boundary->v[cs1.gen_idx].grad; // dvdp^T * dFdx * d2xdv2 * dvdp
-                        } else if (cs0.gen_is_boundary) {
-                            hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
-                                          tessellation->boundary->nfree, optDims) +=
-                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
-                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3,
-                                                           optDims); // dvdp^T * dFdx * d2xdvdc
-                        } else if (cs1.gen_is_boundary) {
-                            hessian.block(cs0.gen_idx * optDims, hessian.rows() - tessellation->boundary->nfree,
-                                          optDims, tessellation->boundary->nfree) +=
-                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, optDims, 3) *
-                                    tessellation->boundary->v[cs1.gen_idx].grad; // dFdx * d2xdcdv * dvdp (transpose of previous case)
-                        } else {
-                            hessian.block(cs0.gen_idx * optDims, cs1.gen_idx * optDims, optDims, optDims) +=
-                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
-                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, optDims,
-                                                           optDims); // dFdx * d2xdc2
-                        }
-                    }
-                }
-            }
+            dFdx.segment<3>(nodePos0.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell0 * 3);
+            d2Fdcdx.block(cell.cellIndex * optDims, nodePos0.ix * 3, optDims, 3) += cellValue.hessian.block(
+                    cell.nodeIndices.size() * 3, nodeIdxInCell0 * 3, optDims, 3);
 
             for (auto n1: cell.nodeIndices) {
                 Node node1 = n1.first;
-                int nodeIdx1 = n1.second;
+                int nodeIdxInCell1 = n1.second;
                 NodePosition nodePos1 = tessellation->nodes[node1];
 
-                std::vector<CoolStruct> coolStructs1;
-                switch (node1.type) {
-                    case STANDARD:
-                        for (int i = 0; i < 4; i++) {
-                            coolStructs1.emplace_back(false, node1.gen[i], nodeIdx1, i * 4);
-                        }
-                        break;
-                    case B_FACE:
-                        for (int i = 0; i < 3; i++) {
-                            coolStructs1.emplace_back(false, node1.gen[i + 1], nodeIdx1, i * 4);
-                        }
-                        for (int i = 0; i < 3; i++) {
-                            coolStructs1.emplace_back(true, tessellation->boundary->f[node1.gen[0]].vertices(i),
-                                                      nodeIdx1,
-                                                      3 * 4 + i * 3);
-                        }
-                        break;
-                    case B_EDGE:
-                        for (int i = 0; i < 2; i++) {
-                            coolStructs1.emplace_back(false, node1.gen[i + 2], nodeIdx1, i * 4);
-                        }
-                        for (int i = 0; i < 2; i++) {
-                            coolStructs1.emplace_back(true, node1.gen[i], nodeIdx1, 2 * 4 + i * 3);
-                        }
-                        break;
-                    case B_VERTEX:
-                        coolStructs1.emplace_back(true, node1.gen[0], nodeIdx1, 0);
-                    default:
-                        break;
-                }
-
-                for (CoolStruct cs0: coolStructs0) {
-                    for (CoolStruct cs1: coolStructs1) {
-                        if (cs0.gen_is_boundary && cs1.gen_is_boundary) {
-                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
-                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
-                                          tessellation->boundary->nfree) +=
-                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
-                                    (nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
-                                     cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3,
-                                                                   cs1.cell_node_idx * 3) *
-                                     nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3)).sparseView() *
-                                    tessellation->boundary->v[cs1.gen_idx].grad; // (dxdv * dvdp)^T * d2Fdx2 * (dxdv * dvdp)
-                        } else if (cs0.gen_is_boundary) {
-                            hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
-                                          tessellation->boundary->nfree, optDims) +=
-                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
-                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
-                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
-                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3,
-                                                        optDims); // (dxdv * dvdp)^T * d2Fdx2 * dxdc
-                        } else if (cs1.gen_is_boundary) {
-                            hessian.block(cs0.gen_idx * optDims, hessian.rows() - tessellation->boundary->nfree,
-                                          optDims, tessellation->boundary->nfree) +=
-                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *
-                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
-                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3) *
-                                    tessellation->boundary->v[cs1.gen_idx].grad; // dxdc^T * d2Fdx2 * (dxdv * dvdp) - transpose of previous case
-                        } else {
-                            hessian.block(cs0.gen_idx * optDims, cs1.gen_idx * optDims, optDims, optDims) +=
-                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *
-                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
-                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, optDims); // dxdc^T * d2Fdx2 * dxdc
-                        }
-                    }
-                }
+                d2Fdx2.block(nodePos0.ix * 3, nodePos1.ix * 3, 3, 3) += cellValue.hessian.block(nodeIdxInCell0 * 3,
+                                                                                                nodeIdxInCell1 * 3, 3,
+                                                                                                3);
             }
         }
-        hessian.block(cell.cellIndex * optDims, cell.cellIndex * optDims, optDims, optDims) +=
-                cellValue.hessian.block(cellValue.hessian.rows() - 4, cellValue.hessian.cols() - 4, optDims,
-                                        optDims); // d2Fdc2
+
+        d2Fdc2.block(cell.cellIndex * optDims, cell.cellIndex * optDims, optDims, optDims) += cellValue.hessian.block(
+                cell.nodeIndices.size() * 3, cell.nodeIndices.size() * 3,
+                optDims, optDims);
     }
-    hessian.bottomRightCorner(tessellation->boundary->nfree,
-                              tessellation->boundary->nfree) += tessellation->boundary->computeEnergyHessian(); // d2Fdp2
+    d2Fdp2 = tessellation->boundary->computeEnergyHessian();
+
+    MatrixXT sum_dFdx_d2xdc2 = MatrixXT::Zero(nc, nc);
+    MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
+    MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
+    for (int i = 0; i < nx; i++) {
+        sum_dFdx_d2xdc2 += dFdx(i) * tessellation->d2xdc2[i];
+        sum_dFdx_d2xdcdv += dFdx(i) * tessellation->d2xdcdv[i];
+        sum_dFdx_d2xdv2 += dFdx(i) * tessellation->d2xdv2[i];
+    }
+    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
+    VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
+    for (int i = 0; i < nv; i++) {
+        sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
+    }
+
+    Eigen::SparseMatrix<double> dxdc = tessellation->dxdc;
+    Eigen::SparseMatrix<double> dxdcT = dxdc.transpose();
+    MatrixXT d2Fdxdc = d2Fdcdx.transpose();
+    Eigen::SparseMatrix<double> dvdp = tessellation->dvdp;
+    Eigen::SparseMatrix<double> dvdpT = dvdp.transpose();
+    Eigen::SparseMatrix<double> dxdv_dvdp = tessellation->dxdv * dvdp;
+    Eigen::SparseMatrix<double> dxdv_dvdpT = dxdv_dvdp.transpose();
+
+    MatrixXT D2FDC2 = dxdcT * d2Fdx2 * dxdc +
+                      dxdcT * d2Fdxdc +
+                      d2Fdcdx * dxdc +
+                      sum_dFdx_d2xdc2 +
+                      d2Fdc2;
+    MatrixXT D2FDCDP = dxdcT * d2Fdx2 * dxdv_dvdp +
+                       d2Fdcdx * dxdv_dvdp +
+                       sum_dFdx_d2xdcdv * dvdp;
+    MatrixXT D2FDP2 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp +
+                      dvdpT * sum_dFdx_d2xdv2 * dvdp +
+                      sum_dFdx_dxdv_d2vdp2 +
+                      d2Fdp2;
+
+    hessian.block(0, 0, nc, nc) = D2FDC2;
+    hessian.block(nc, 0, np, nc) = D2FDCDP.transpose();
+    hessian.block(0, nc, nc, np) = D2FDCDP;
+    hessian.block(nc, nc, np, np) = D2FDP2;
 
     return hessian.sparseView();
 }
+
+//Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const {
+//    preProcess(y);
+//
+//    MatrixXT hessian = MatrixXT::Zero(y.rows(), y.rows());
+//    if (!tessellation->isValid) {
+//        return hessian.sparseView();
+//    }
+//
+//    int nc = tessellation->cells.size() * optDims;
+//    int nx = tessellation->nodes.size() * 3;
+//    int nv = tessellation->boundary->v.size() * 3;
+//    int np = tessellation->boundary->nfree;
+//
+//    VectorXT dFdx = VectorXT::Zero(nx);
+//    MatrixXT d2Fdc2 = MatrixXT::Zero(nc, nc);
+//    MatrixXT d2Fdcdx = MatrixXT::Zero(nc, nx);
+//    MatrixXT d2Fdx2 = MatrixXT::Zero(nx, nx);
+//    MatrixXT d2Fdp2 = MatrixXT::Zero(np, np);
+//
+//    int bbb = 0;
+//    for (Cell cell: tessellation->cells) {
+//        std::cout << "hessian cell " << bbb++ << std::endl;
+//        CellValue cellValue(cell);
+//        energyFunction.getGradient(tessellation, cellValue);
+//        energyFunction.getHessian(tessellation, cellValue);
+//        int numNodes = cell.nodeIndices.size();
+//
+//        for (auto n0: cell.nodeIndices) {
+//            Node node0 = n0.first;
+//            int nodeIdx0 = n0.second;
+//            NodePosition nodePos0 = tessellation->nodes[node0];
+//
+//            std::vector<CoolStruct> coolStructs0;
+//            switch (node0.type) {
+//                case STANDARD:
+//                    for (int i = 0; i < 4; i++) {
+//                        coolStructs0.emplace_back(false, node0.gen[i], nodeIdx0, i * 4);
+//                    }
+//                    break;
+//                case B_FACE:
+//                    for (int i = 0; i < 3; i++) {
+//                        coolStructs0.emplace_back(false, node0.gen[i + 1], nodeIdx0, i * 4);
+//                    }
+//                    for (int i = 0; i < 3; i++) {
+//                        coolStructs0.emplace_back(true, tessellation->boundary->f[node0.gen[0]].vertices(i), nodeIdx0,
+//                                                  3 * 4 + i * 3);
+//                    }
+//                    break;
+//                case B_EDGE:
+//                    for (int i = 0; i < 2; i++) {
+//                        coolStructs0.emplace_back(false, node0.gen[i + 2], nodeIdx0, i * 4);
+//                    }
+//                    for (int i = 0; i < 2; i++) {
+//                        coolStructs0.emplace_back(true, node0.gen[i], nodeIdx0, 2 * 4 + i * 3);
+//                    }
+//                    break;
+//                case B_VERTEX:
+//                    coolStructs0.emplace_back(true, node0.gen[0], nodeIdx0, 0);
+//                default:
+//                    break;
+//            }
+//
+//            for (CoolStruct cs0: coolStructs0) {
+//                if (cs0.gen_is_boundary) {
+//                    MatrixXT d2Fdcdx_dxdv_dvdp =
+//                            cellValue.hessian.block(numNodes * 3, cs0.cell_node_idx * 3, optDims, 3) *
+//                            nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3) *
+//                            tessellation->boundary->v[cs0.gen_idx].grad; // d2Fdcdx * dxdv * dvdp
+//
+//                    hessian.block(cell.cellIndex * optDims, hessian.rows() - tessellation->boundary->nfree, optDims,
+//                                  tessellation->boundary->nfree) += d2Fdcdx_dxdv_dvdp;
+//                    hessian.block(hessian.rows() - tessellation->boundary->nfree, cell.cellIndex * optDims,
+//                                  tessellation->boundary->nfree, optDims) += d2Fdcdx_dxdv_dvdp.transpose();
+//
+//                    for (int i = 0; i < 3; i++) {
+//                        for (int j = 0; j < 3; j++) {
+//                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
+//                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
+//                                          tessellation->boundary->nfree) +=
+//                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+//                                    nodePos0.grad(i, cs0.nodepos_start_idx + j) *
+//                                    tessellation->boundary->v[cs0.gen_idx].hess[j]; // dFdx * dxdv * d2vdp2
+//                        }
+//                    }
+//                } else {
+//                    MatrixXT d2Fdcdx_dxdc = cellValue.hessian.block(numNodes * 3, cs0.cell_node_idx * 3, optDims, 3) *
+//                                            nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims); // d2Fdcdx * dxdc
+//
+//                    hessian.block(cell.cellIndex * optDims, cs0.gen_idx * optDims, optDims, optDims) += d2Fdcdx_dxdc;
+//                    hessian.block(cs0.gen_idx * optDims, cell.cellIndex * optDims, optDims,
+//                                  optDims) += d2Fdcdx_dxdc.transpose();
+//                }
+//
+//                for (CoolStruct cs1: coolStructs0) {
+//                    for (int i = 0; i < 3; i++) {
+//                        if (cs0.gen_is_boundary && cs1.gen_is_boundary) {
+//                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
+//                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
+//                                          tessellation->boundary->nfree) +=
+//                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+//                                    (cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+//                                     nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3,
+//                                                            3)).sparseView() *
+//                                    tessellation->boundary->v[cs1.gen_idx].grad; // dvdp^T * dFdx * d2xdv2 * dvdp
+//                        } else if (cs0.gen_is_boundary) {
+//                            hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
+//                                          tessellation->boundary->nfree, optDims) +=
+//                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+//                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+//                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, 3,
+//                                                           optDims); // dvdp^T * dFdx * d2xdvdc
+//                        } else if (cs1.gen_is_boundary) {
+//                            hessian.block(cs0.gen_idx * optDims, hessian.rows() - tessellation->boundary->nfree,
+//                                          optDims, tessellation->boundary->nfree) +=
+//                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+//                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, optDims, 3) *
+//                                    tessellation->boundary->v[cs1.gen_idx].grad; // dFdx * d2xdcdv * dvdp (transpose of previous case)
+//                        } else {
+//                            hessian.block(cs0.gen_idx * optDims, cs1.gen_idx * optDims, optDims, optDims) +=
+//                                    cellValue.gradient(cs0.cell_node_idx * 3 + i) *
+//                                    nodePos0.hess[i].block(cs0.nodepos_start_idx, cs1.nodepos_start_idx, optDims,
+//                                                           optDims); // dFdx * d2xdc2
+//                        }
+//                    }
+//                }
+//            }
+//
+//            for (auto n1: cell.nodeIndices) {
+//                Node node1 = n1.first;
+//                int nodeIdx1 = n1.second;
+//                NodePosition nodePos1 = tessellation->nodes[node1];
+//
+//                std::vector<CoolStruct> coolStructs1;
+//                switch (node1.type) {
+//                    case STANDARD:
+//                        for (int i = 0; i < 4; i++) {
+//                            coolStructs1.emplace_back(false, node1.gen[i], nodeIdx1, i * 4);
+//                        }
+//                        break;
+//                    case B_FACE:
+//                        for (int i = 0; i < 3; i++) {
+//                            coolStructs1.emplace_back(false, node1.gen[i + 1], nodeIdx1, i * 4);
+//                        }
+//                        for (int i = 0; i < 3; i++) {
+//                            coolStructs1.emplace_back(true, tessellation->boundary->f[node1.gen[0]].vertices(i),
+//                                                      nodeIdx1,
+//                                                      3 * 4 + i * 3);
+//                        }
+//                        break;
+//                    case B_EDGE:
+//                        for (int i = 0; i < 2; i++) {
+//                            coolStructs1.emplace_back(false, node1.gen[i + 2], nodeIdx1, i * 4);
+//                        }
+//                        for (int i = 0; i < 2; i++) {
+//                            coolStructs1.emplace_back(true, node1.gen[i], nodeIdx1, 2 * 4 + i * 3);
+//                        }
+//                        break;
+//                    case B_VERTEX:
+//                        coolStructs1.emplace_back(true, node1.gen[0], nodeIdx1, 0);
+//                    default:
+//                        break;
+//                }
+//
+//                for (CoolStruct cs0: coolStructs0) {
+//                    for (CoolStruct cs1: coolStructs1) {
+//                        if (cs0.gen_is_boundary && cs1.gen_is_boundary) {
+//                            hessian.block(hessian.rows() - tessellation->boundary->nfree,
+//                                          hessian.rows() - tessellation->boundary->nfree, tessellation->boundary->nfree,
+//                                          tessellation->boundary->nfree) +=
+//                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+//                                    (nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
+//                                     cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3,
+//                                                                   cs1.cell_node_idx * 3) *
+//                                     nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3)).sparseView() *
+//                                    tessellation->boundary->v[cs1.gen_idx].grad; // (dxdv * dvdp)^T * d2Fdx2 * (dxdv * dvdp)
+//                        } else if (cs0.gen_is_boundary) {
+//                            hessian.block(hessian.rows() - tessellation->boundary->nfree, cs1.gen_idx * optDims,
+//                                          tessellation->boundary->nfree, optDims) +=
+//                                    tessellation->boundary->v[cs0.gen_idx].grad.transpose() *
+//                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, 3).transpose() *
+//                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
+//                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3,
+//                                                        optDims); // (dxdv * dvdp)^T * d2Fdx2 * dxdc
+//                        } else if (cs1.gen_is_boundary) {
+//                            hessian.block(cs0.gen_idx * optDims, hessian.rows() - tessellation->boundary->nfree,
+//                                          optDims, tessellation->boundary->nfree) +=
+//                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *
+//                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
+//                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, 3) *
+//                                    tessellation->boundary->v[cs1.gen_idx].grad; // dxdc^T * d2Fdx2 * (dxdv * dvdp) - transpose of previous case
+//                        } else {
+//                            hessian.block(cs0.gen_idx * optDims, cs1.gen_idx * optDims, optDims, optDims) +=
+//                                    nodePos0.grad.block(0, cs0.nodepos_start_idx, 3, optDims).transpose() *
+//                                    cellValue.hessian.block<3, 3>(cs0.cell_node_idx * 3, cs1.cell_node_idx * 3) *
+//                                    nodePos1.grad.block(0, cs1.nodepos_start_idx, 3, optDims); // dxdc^T * d2Fdx2 * dxdc
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//        hessian.block(cell.cellIndex * optDims, cell.cellIndex * optDims, optDims, optDims) +=
+//                cellValue.hessian.block(cellValue.hessian.rows() - 4, cellValue.hessian.cols() - 4, optDims,
+//                                        optDims); // d2Fdc2
+//    }
+//    hessian.bottomRightCorner(tessellation->boundary->nfree,
+//                              tessellation->boundary->nfree) += tessellation->boundary->computeEnergyHessian(); // d2Fdp2
+//
+//    return hessian.sparseView();
+//}

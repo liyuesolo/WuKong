@@ -2,19 +2,12 @@
 
 #include "Boundary.h"
 
-struct BoundaryEdgeSpring {
-    int v0;
-    int v1;
-    double len;
-
-    BoundaryEdgeSpring(int v0_, int v1_, double len_) : v0(v0_), v1(v1_), len(len_) {}
-};
-
 class MeshSpringBoundary : public Boundary {
 
 private:
-    std::vector<BoundaryEdgeSpring> springs;
-    double k = 100;
+    double kEdge = 0.01;
+    double kVol = 1;
+    double volTarget = -40.6662;
 
 private:
     virtual void computeVertices();

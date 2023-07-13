@@ -73,7 +73,7 @@ void DynamicObjective::check_gradients(const VectorXd &y, bool optimizeWeights_)
         xp(i) += eps;
         double fp2 = evaluate(xp);
 
-        std::cout << "f[" << i << "] " << f << " " << fp << " " << fp2 << " " << (fp - f) / eps << " "
+        std::cout << "f[" << i << "] " << f << " " << fp << " " << (fp - f) / eps << " "
                   << (fp2 - f) / (2 * eps) << " " << grad(i)
                   << " " << (fp - f - eps * grad(i)) << " " << (fp2 - f - 2 * eps * grad(i)) << " "
                   << (fp2 - f - 2 * eps * grad(i)) / (fp - f - eps * grad(i))
@@ -111,6 +111,9 @@ void DynamicObjective::check_gradients(const VectorXd &y, bool optimizeWeights_)
 
 double DynamicObjective::evaluate(const VectorXd &y) const {
     double O = energyObjective->evaluate(y);
+    if (!energyObjective->tessellation->isValid) {
+        return 1e10;
+    }
 
     VectorXd a = get_a(y);
     O += .5 * pow(dt, 2) * a.transpose() * m * a;
@@ -125,6 +128,9 @@ double DynamicObjective::evaluate(const VectorXd &y) const {
 
 void DynamicObjective::addGradientTo(const VectorXd &y, VectorXd &grad) const {
     energyObjective->addGradientTo(y, grad);
+    if (!energyObjective->tessellation->isValid) {
+        return;
+    }
 
     grad += m * get_a(y);
     grad += eta * (y - y_prev) / dt;
@@ -134,6 +140,9 @@ void DynamicObjective::addGradientTo(const VectorXd &y, VectorXd &grad) const {
 
 void DynamicObjective::getHessian(const VectorXd &y, SparseMatrixd &hessian) const {
     energyObjective->getHessian(y, hessian);
+    if (!energyObjective->tessellation->isValid) {
+        return;
+    }
 
     for (int i = 0; i < y.size(); ++i) {
         hessian.coeffRef(i, i) += m / pow(dt, 2);

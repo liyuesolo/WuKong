@@ -27,6 +27,8 @@ struct Node {
 bool operator<(const Node &a, const Node &b);
 
 struct NodePosition {
+    int ix;
+
     TV3 pos;
     MatrixXT grad;
     MatrixXT hess[3];
@@ -64,14 +66,26 @@ public:
     Boundary *boundary;
 
     bool isValid = false;
-private:
+public:
+
+    Eigen::SparseMatrix<double> dxdc;
+    Eigen::SparseMatrix<double> dxdv;
+    std::vector<Eigen::SparseMatrix<double>> d2xdc2;
+    std::vector<Eigen::SparseMatrix<double>> d2xdcdv;
+    std::vector<Eigen::SparseMatrix<double>> d2xdv2;
+    Eigen::SparseMatrix<double> dvdp;
+    std::vector<Eigen::SparseMatrix<double>> d2vdp2;
 
 public:
     Tessellation() {}
 
     void clipFaces();
 
+    void clipFaces2();
+
     void computeCellData();
+
+    void computeMatrices();
 
     virtual void
     getDualGraph() = 0;
