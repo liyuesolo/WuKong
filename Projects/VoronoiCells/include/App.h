@@ -93,6 +93,9 @@ public:
     T x0, y0;
     bool step_along_search_direction = false;
     VectorXT search_direction;
+
+    VectorXT temporary_vector;
+    bool use_temp_vec = false;
 public:
     MassSpringApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
     ~MassSpringApp() {}

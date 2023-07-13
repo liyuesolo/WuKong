@@ -1,5 +1,7 @@
 
 #include <Eigen/CholmodSupport>
+
+
 // #include <Spectra/SymEigsShiftSolver.h>
 // #include <Spectra/MatOp/SparseSymShiftSolve.h>
 // #include <Spectra/SymEigsSolver.h>
@@ -36,6 +38,9 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
 
     SurfacePoint va_sub(sub_mesh->face(va.face.getIndex()), va.faceCoords);
     SurfacePoint vb_sub(sub_mesh->face(vb.face.getIndex()), vb.faceCoords);
+
+    // SurfacePoint va_sub = SurfacePoint(sub_mesh->vertex(0));
+    // SurfacePoint vb_sub = SurfacePoint(sub_mesh->vertex(1));
     
     mmp.propagate(va_sub);
     if (trace_path)
@@ -100,6 +105,127 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         dis = mmp.getDistance(vb_sub);
 }
 
+void IntrinsicSimulation::computeGeodesicHeatMethod(const SurfacePoint& va, const SurfacePoint& vb, 
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, 
+        bool trace_path)
+{
+    ixn_data.clear();
+    int n_tri = extrinsic_indices.rows() / 3;
+    std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
+    for (int i = 0; i < n_tri; i++)
+        for (int d = 0; d < 3; d++)
+            mesh_indices_gc[i][d] = extrinsic_indices[i * 3 + d];
+    int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+    std::vector<gc::Vector3> mesh_vertices_gc(n_vtx_extrinsic);
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+        mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+            extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+    // START_TIMING(contruct)
+    auto lvals = gcs::makeManifoldSurfaceMeshAndGeometry(mesh_indices_gc, mesh_vertices_gc);
+    // FINISH_TIMING_PRINT(contruct)
+    std::unique_ptr<gcs::ManifoldSurfaceMesh> sub_mesh;
+    std::unique_ptr<gcs::VertexPositionGeometry> sub_geometry;
+    std::tie(sub_mesh, sub_geometry) = std::tuple<std::unique_ptr<gcs::ManifoldSurfaceMesh>,
+                    std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
+                                                             std::move(std::get<1>(lvals))); // geometry
+    
+    
+    // std::unique_ptr<gcs::SignpostIntrinsicTriangulation> intTri(new gcs::SignpostIntrinsicTriangulation(*sub_mesh, *sub_geometry));
+
+    // SurfacePoint va_sub(sub_mesh->face(va.face.getIndex()), va.faceCoords);
+    // SurfacePoint vb_sub(sub_mesh->face(vb.face.getIndex()), vb.faceCoords);
+
+
+    SurfacePoint va_sub = SurfacePoint(sub_mesh->vertex(0));
+    SurfacePoint vb_sub = SurfacePoint(sub_mesh->vertex(1));
+
+    // SurfacePoint va_intrinsic = intTri->equivalentPointOnIntrinsic(va_sub);
+    // gcVertex va_vtx = intTri->insertVertex(va_intrinsic);
+    // SurfacePoint va_surface = SurfacePoint(va_vtx).inSomeFace();
+
+    // SurfacePoint vb_intrinsic = intTri->equivalentPointOnIntrinsic(vb_sub);
+    // gcVertex vb_vtx = intTri->insertVertex(vb_intrinsic);
+    // SurfacePoint vb_surface = SurfacePoint(vb_vtx).inSomeFace();
+
+    T h = 0.0;
+    for (gcs::Edge edge : sub_mesh->edges())
+        h += sub_geometry->edgeLength(edge);
+    h /= T(sub_mesh->nEdges());
+    
+    gcs::VectorHeatMethodSolver vhmSolver(*sub_geometry, h*h);
+
+    gcs::HeatMethodDistanceSolver hmSolver(*sub_geometry, h*h);    
+
+    gcs::VertexData<T> geo_dis = hmSolver.computeDistance({va_sub});
+
+    // std::vector<gcs::Vertex> vtx(3);
+    // vtx[0] = vb_sub.inSomeFace().face.halfedge().vertex();
+    // vtx[1] = vb_sub.inSomeFace().face.halfedge().next().vertex();
+    // vtx[2] = vb_sub.inSomeFace().face.halfedge().next().next().vertex();
+
+    dis = geo_dis[vb_sub.vertex];
+    // std::cout << dis << std::endl;
+    gcs::VertexData<gc::Vector2> logmap = vhmSolver.computeLogMap(va_sub);
+    
+    // gc::Vector2 pointCoord = logmap[vb_sub.vertex];
+    gc::Vector2 pointCoord = vb_sub.interpolate(logmap);
+    dis = pointCoord.norm();
+    std::cout << "(u, v) " << pointCoord << std::endl;
+    std::cout << "geodesic from log map " << pointCoord.norm() << std::endl;
+    // gc::Vector2 dir = pointCoord.normalize() * dis;
+    // gc::Vector2 dir = 
+    // gc::Vector2 pointCoord = vb_sub.interpolate(logmap);
+    // dis = pointCoord.norm();
+
+    gcs::TraceOptions options;
+    options.includePath = true; 
+    gcs::TraceGeodesicResult traceResult = traceGeodesic(*sub_geometry, va_sub, pointCoord, options);
+    SurfacePoint candidatePoint = traceResult.endPoint.inSomeFace();
+    path = traceResult.pathPoints;
+    for (auto& pt : path)
+    {
+        T edge_t = -1.0; TV start = TV::Zero(), end = TV::Zero();
+        bool is_edge_point = (pt.type == gcs::SurfacePointType::Edge);
+        if (is_edge_point)
+        {
+            auto he = pt.edge.halfedge();
+            SurfacePoint start_extrinsic = he.tailVertex();
+            SurfacePoint end_extrinsic = he.tipVertex();
+            start = toTV(start_extrinsic.interpolate(sub_geometry->vertexPositions));
+            end = toTV(end_extrinsic.interpolate(sub_geometry->vertexPositions));
+            TV ixn = toTV(pt.interpolate(sub_geometry->vertexPositions));
+            TV test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
+            if ((test_interp - ixn).norm() > 1e-6)
+                std::swap(start, end);
+            
+            TV dir0 = (end-start).normalized();
+            TV dir1 = (ixn-start).normalized();
+            if ((dir0.cross(dir1)).norm() > 1e-6)
+            {
+                std::cout << "error in cross product" << std::endl;
+                std::exit(0);
+            }
+            test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
+            if ((ixn - test_interp).norm() > 1e-6)
+            {
+                std::cout << "error in interpolation" << std::endl;
+                std::exit(0);
+            }
+            edge_t = pt.tEdge;
+            // std::cout << pt.tEdge << " " << " cross " << (dir0.cross(dir1)).norm() << std::endl;
+            // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
+            // std::getchar();
+        }
+        ixn_data.push_back(IxnData(start, end, (1.0-edge_t)));
+        pt.edge = mesh->edge(pt.edge.getIndex());
+        pt.vertex = mesh->vertex(pt.vertex.getIndex());
+        pt.face = mesh->face(pt.face.getIndex());
+        
+        pt = pt.inSomeFace();
+    }
+}
+
 bool IntrinsicSimulation::hasSmallSegment(const std::vector<SurfacePoint>& path)
 {
     for (int i = 0; i < path.size() - 1; i++)
@@ -112,6 +238,38 @@ bool IntrinsicSimulation::hasSmallSegment(const std::vector<SurfacePoint>& path)
         }
     }
     return false;
+}
+
+void IntrinsicSimulation::traceGeodesics()
+{
+    if (!retrace)
+        return;
+    int n_springs = spring_edges.size();
+    current_length.resize(n_springs);
+    paths.resize(n_springs);
+    ixn_data_list.resize(n_springs);
+#ifdef PARALLEL_GEODESIC
+    tbb::parallel_for(0, n_springs, [&](int i)
+#else
+	for(int i = 0; i < n_springs; i++)
+#endif
+    {
+        SurfacePoint vA = mass_surface_points[spring_edges[i][0]].first;
+        SurfacePoint vB = mass_surface_points[spring_edges[i][1]].first;
+        
+        T geo_dis = 0.0; std::vector<SurfacePoint> path;
+		std::vector<IxnData> ixn_data;
+        computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
+        // computeExactGeodesicEdgeFlip(vA, vB, geo_dis, path, ixn_data, true);
+        // computeGeodesicHeatMethod(vA, vB, geo_dis, path, ixn_data, true);
+        ixn_data_list[i] = ixn_data;
+        paths[i] = path;
+        current_length[i] = geo_dis;
+    }
+#ifdef PARALLEL_GEODESIC
+    );
+#endif
+    retrace = false;
 }
 
 void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
@@ -140,7 +298,7 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
     
     
     std::unique_ptr<gcs::FlipEdgeNetwork> sub_edgeNetwork = std::unique_ptr<gcs::FlipEdgeNetwork>(new gcs::FlipEdgeNetwork(*sub_mesh, *sub_geometry, {}));
-    sub_edgeNetwork->posGeom = sub_geometry.get();
+    // sub_edgeNetwork->posGeom = sub_geometry.get();
     
     // gcs::GeodesicAlgorithmExact mmp(*sub_mesh, *sub_geometry);
     
@@ -152,12 +310,14 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
 
     SurfacePoint vb_intrinsic = sub_edgeNetwork->tri->equivalentPointOnIntrinsic(vb_sub);
     gcVertex vb_vtx = sub_edgeNetwork->tri->insertVertex(vb_intrinsic);
+
+    sub_edgeNetwork->tri->flipToDelaunay();
     
     std::vector<gcs::Halfedge> path_geo = shortestEdgePath(*sub_edgeNetwork->tri, va_vtx, vb_vtx);
     sub_edgeNetwork->addPath(path_geo);
     sub_edgeNetwork->nFlips = 0;
     sub_edgeNetwork->nShortenIters = 0;
-    sub_edgeNetwork->EPS_ANGLE = 1e-5;
+    sub_edgeNetwork->EPS_ANGLE = 1e-8;
     sub_edgeNetwork->straightenAroundMarkedVertices = true;
     size_t iterLim = gc::INVALID_IND;
     double lengthLim = 0.;
@@ -237,7 +397,7 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
 
 void IntrinsicSimulation::getMarkerPointsPosition(VectorXT& positions)
 {
-    std::vector<int> marker_indices = {1, 5};
+    std::vector<int> marker_indices = {0};
     positions.resize(marker_indices.size() * 3);
     for (int i = 0; i < marker_indices.size(); i++)
     {
@@ -432,8 +592,10 @@ T IntrinsicSimulation::computeTotalEnergy()
     T total_energy = 0.0;
 
     addEdgeLengthEnergy(we, total_energy);
-    
-
+    T area_energy = 0.0;
+    addTriangleAreaEnergy(wa, area_energy);
+    // std::cout << area_energy << std::endl;
+    total_energy += area_energy;
     return total_energy;
 }
 
@@ -441,6 +603,7 @@ T IntrinsicSimulation::computeResidual(VectorXT& residual)
 {
 
     addEdgeLengthForceEntries(we, residual);
+    addTriangleAreaForceEntries(wa, residual);
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
@@ -456,7 +619,7 @@ void IntrinsicSimulation::buildSystemMatrix(StiffnessMatrix& K)
    
     std::vector<Entry> entries;
     addEdgeLengthHessianEntries(we, entries);
-
+    addTriangleAreaHessianEntries(wa, entries);
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     
@@ -542,9 +705,9 @@ bool IntrinsicSimulation::advanceOneStep(int step)
     // checkHessian();
     // FINISH_TIMING_PRINT(lineSearchNewton)
     FINISH_TIMING_PRINT(NewtonStep)
-    if(step == max_newton_iter || du_norm > 1e10 || du_norm < 1e-6)
+    if(step == max_newton_iter || du_norm > 1e10 || du_norm < 1e-8)
     {
-        std::cout << "ABNORMAL STOP with |du| " << du_norm << std::endl;
+        // std::cout << "ABNORMAL STOP with |du| " << du_norm << std::endl;
         return true;
     }
     
@@ -602,19 +765,19 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
                         std::cout << "-----line search max----- cnt > 15 switch to gradient" << std::endl;
                     else
                         std::cout << "-----line search max----- cnt > 15 along gradient [BUG ALERT]" << std::endl;
-                    // std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
-                    // std::ofstream out("search_direction.txt");
-                    // out << direction.rows() << std::endl;
-                    // for (int i = 0; i < direction.rows(); i++)
-                    //     out << direction[i] << " ";
-                    // out << mass_surface_points.size() << std::endl;
-                    // for (int i = 0; i < mass_surface_points.size(); i++)
-                    // {
-                    //     out << toTV(current_state[i].first.faceCoords).transpose() << std::endl;
-                    //     out << current_state[i].second.getIndex();
-                    //     out << std::endl;
-                    // }
-                    // out.close();
+                    std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
+                    std::ofstream out("search_direction.txt");
+                    out << direction.rows() << std::endl;
+                    for (int i = 0; i < direction.rows(); i++)
+                        out << direction[i] << " ";
+                    out << mass_surface_points.size() << std::endl;
+                    for (int i = 0; i < mass_surface_points.size(); i++)
+                    {
+                        out << toTV(current_state[i].first.faceCoords).transpose() << std::endl;
+                        out << current_state[i].second.getIndex();
+                        out << std::endl;
+                    }
+                    out.close();
                     // std::exit(0);
                     if (!using_gradient)
                         mass_surface_points = current_state;

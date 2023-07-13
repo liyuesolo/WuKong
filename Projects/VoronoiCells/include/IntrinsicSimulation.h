@@ -14,14 +14,18 @@
 #include <iomanip>
 
 #include "geometrycentral/surface/edge_length_geometry.h"
-#include "geometrycentral/surface/flip_geodesics.h"
-#include "geometrycentral/surface/trace_geodesic.h"
 #include "geometrycentral/surface/manifold_surface_mesh.h"
 #include "geometrycentral/surface/mesh_graph_algorithms.h"
 #include "geometrycentral/surface/surface_mesh_factories.h"
 #include "geometrycentral/surface/polygon_soup_mesh.h"
 #include "geometrycentral/surface/vertex_position_geometry.h"
+
+#include "geometrycentral/surface/flip_geodesics.h"
+#include "geometrycentral/surface/trace_geodesic.h"
 #include "geometrycentral/surface/exact_geodesics.h"
+#include "geometrycentral/surface/vector_heat_method.h"
+
+#include "geometrycentral/surface/poisson_disk_sampler.h"
 
 #include "VecMatDef.h"
 #include "Util.h"
@@ -31,6 +35,33 @@ namespace gcs = geometrycentral::surface;
 namespace gc = geometrycentral;
 
 #define PARALLEL_GEODESIC
+
+template <int dim>
+struct VectorHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const IV& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a(d)) + 0x9e3779b9 + (h << 6) + (h >> 2); 
+        }
+        return h;
+    }
+};
+
+template <int dim>
+struct VectorPairHash
+{
+    typedef Vector<int, dim> IV;
+    size_t operator()(const std::pair<IV, IV>& a) const{
+        std::size_t h = 0;
+        for (int d = 0; d < dim; ++d) {
+            h ^= std::hash<int>{}(a.first(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(a.second(d)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+};  
 
 class IntrinsicSimulation
 {
@@ -48,6 +79,7 @@ public:
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
     using Face = Vector<int, 3>;
+    using Triangle = Vector<int, 3>;
     using Edge = Vector<int, 2>;
     using FacePoint = std::pair<int, TV>;
 
@@ -82,6 +114,8 @@ public:
     bool use_Newton = true;
     T newton_tol = 1e-6;
 
+    bool two_way_coupling = false;
+
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points;
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points_undeformed;
     std::vector<Edge> spring_edges;
@@ -89,8 +123,10 @@ public:
     bool verbose = false;
     T we = 1.0;
     T ref_dis = 1.0;
+    T wa = 1.0;
     bool retrace = true;
     T IRREGULAR_EPSILON = 1e-6;
+    T w_reg = 0;
 
     std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
     std::unique_ptr<gcs::VertexPositionGeometry> geometry;
@@ -100,6 +136,11 @@ public:
     std::vector<T> current_length;
     std::vector<std::vector<SurfacePoint>> paths;
 	std::vector<std::vector<IxnData>> ixn_data_list;
+
+    std::vector<Triangle> triangles;
+    VectorXT rest_area;
+    std::unordered_map<Edge, int, VectorHash<2>> edge_map;
+    
 private:
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
@@ -172,8 +213,32 @@ private:
                 for (int k = 0; k < 2; k++)
                     for (int l = 0; l < 2; l++)
                     {
-                        if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
-                            triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                        // if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
+                        triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                    }
+            }
+        }
+    }
+
+    template<int dim>
+    void addHessianMatrixEntry(
+        MatrixXT& matrix_global,
+        const std::vector<int>& vtx_idx, 
+        const Matrix<T, dim, dim>& hessian)
+    {
+        if (vtx_idx.size() * 2 != dim)
+            std::cout << "wrong hessian block size" << std::endl;
+
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < 2; k++)
+                    for (int l = 0; l < 2; l++)
+                    {
+                        matrix_global(dof_i * 2 + k, dof_j * 2 + l) += hessian(i * 2 + k, j * 2 + l);
                     }
             }
         }
@@ -199,12 +264,37 @@ private:
     bool hasSmallSegment(const std::vector<SurfacePoint>& path);
 
     bool closeToIrregular(const SurfacePoint& point);
+
+    void areaLengthFormula(const Eigen::Matrix<double,3,1> & l, double& energy);
+    void areaLengthFormulaGradient(const Eigen::Matrix<double,3,1> & l, Eigen::Matrix<double, 3, 1>& energygradient);
+    void areaLengthFormulaHessian(const Eigen::Matrix<double,3,1> & l, Eigen::Matrix<double, 3, 3>& energyhessian);
+    
+    void getTriangleEdges(const Triangle& tri, Edge& e0, Edge& e1, Edge& e2)
+    {
+        Edge _e0(tri[0], tri[1]), _e1(tri[1], tri[2]), _e2(tri[0], tri[2]);
+        if ((spring_edges[edge_map[_e0]] - _e0).norm() < 1e-6)
+            e0 = _e0;
+        else
+            e0 = Edge(_e0[1], _e0[0]);
+        if ((spring_edges[edge_map[_e1]] - _e1).norm() < 1e-6)
+            e1 = _e1;
+        else
+            e1 = Edge(_e1[1], _e1[0]);
+        if ((spring_edges[edge_map[_e2]] - _e2).norm() < 1e-6)
+            e2 = _e2;
+        else
+            e2 = Edge(_e2[1], _e2[0]);
+    }
 public:
     void computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, 
         bool trace_path = false);
     void computeExactGeodesic(const SurfacePoint& va, const SurfacePoint& vb, 
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, 
+        bool trace_path = false);
+    void computeGeodesicHeatMethod(const SurfacePoint& va, const SurfacePoint& vb, 
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, 
         bool trace_path = false);
@@ -228,9 +318,18 @@ public:
     void checkInformation();
 
     // EdgeTerms.cpp
+    void computeGeodesicLengthGradient(const Edge& edge, Vector<T, 4>& dldw);
+    void computeGeodesicLengthHessian(const Edge& edge, Matrix<T, 4, 4>& d2ldw2);
+    void computeGeodesicLengthGradientAndHessian(const Edge& edge, Vector<T, 4>& dldw, Matrix<T, 4, 4>& d2ldw2);
     void addEdgeLengthEnergy(T w, T& energy);
     void addEdgeLengthForceEntries(T w, VectorXT& residual);
     void addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries);
+
+    // AreaTerms.cpp
+    void computeAllTriangleArea(VectorXT& area);
+    void addTriangleAreaEnergy(T w, T& energy);
+    void addTriangleAreaForceEntries(T w, VectorXT& residual);
+    void addTriangleAreaHessianEntries(T w, std::vector<Entry>& entries);
 
     // DerivativeTest.cpp    
     void checkTotalGradientScale(bool perturb = false);
@@ -241,6 +340,7 @@ public:
     // Scene.cpp
     void initializeMassSpringSceneExactGeodesic();
     void initializeMassSpringDebugScene();
+    void initializeTriangleDebugScene();
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
     void movePointsPlotEnergy();
 

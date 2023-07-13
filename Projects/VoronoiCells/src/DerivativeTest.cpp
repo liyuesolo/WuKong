@@ -30,14 +30,14 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
         delta_u(dof_i) -= 2.0 * epsilon;
         mass_surface_points = current;
         updateCurrentState();
-        
+        // return;
         T E1 = computeTotalEnergy();
         delta_u(dof_i) += epsilon;
         mass_surface_points = current;
         updateCurrentState();
         
         gradient_FD(dof_i) = (E0 - E1) / (2.0 * epsilon);
-        if( gradient_FD(dof_i) == 0 && gradient(dof_i) == 0)
+        if( std::abs(gradient_FD(dof_i)) < 1e-8 && std::abs(gradient(dof_i)) < 1e-8)
             continue;
         if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
             continue;
@@ -90,7 +90,7 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
         T E1 = computeTotalEnergy();
         T dE = E1 - E0;
         dE -= gradient.dot(dx);
-        std::cout << "dE " << dE << std::endl;
+        // std::cout << "dE " << dE << std::endl;
         if (i > 0)
         {
             std::cout << (previous/dE) << std::endl;

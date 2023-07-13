@@ -267,9 +267,9 @@ void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     simulation.getAllPointsPosition(sites);
     appendSpheresToPositions(sites, simulation.ref_dis * 0.05, TV::Ones(), V, F, C);
     
-    // VectorXT markers;
-    // simulation.getMarkerPointsPosition(markers);
-    // appendSpheresToPositions(markers, simulation.ref_dis * 0.03, TV(1.0, 0.0, 0.0), V, F, C);
+    VectorXT markers;
+    simulation.getMarkerPointsPosition(markers);
+    appendSpheresToPositions(markers, simulation.ref_dis * 0.07, TV(1.0, 0.0, 0.0), V, F, C);
 
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -288,6 +288,14 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 updateScreen(viewer);
             }
         }
+        if (ImGui::CollapsingHeader("Simulaiton", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("TwoWayCoupling", &simulation.two_way_coupling))
+            {
+                updateScreen(viewer);
+            }
+        }
+        
         // if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         // {
             
@@ -443,7 +451,6 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
                 simulation.delta_u = (static_solve_step) * search_direction;
                 simulation.updateCurrentState();
-                simulation.retrace = true;
                 T total_energy = simulation.computeTotalEnergy();
                 std::cout << "energy : " << total_energy << std::endl;
                 static_solve_step++;
@@ -456,7 +463,6 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
                 simulation.delta_u = (static_solve_step-1) * search_direction;
                 simulation.updateCurrentState();
-                simulation.retrace = true;
                 T total_energy = simulation.computeTotalEnergy();
                 std::cout << "energy : " << total_energy << std::endl;
                 static_solve_step--;
@@ -464,16 +470,57 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case 'd':
-            // simulation.checkTotalGradientScale(true);
-            simulation.checkTotalGradient(true);
-            // simulation.checkTotalHessianScale(true);
-            // simulation.checkTotalHessian(true);
+            simulation.checkTotalGradientScale(true);
+            // simulation.checkTotalGradient(true);
+            simulation.checkTotalHessianScale(true);
+            simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
             updateScreen(viewer);
             return true;
         case 'c':
             // simulation.checkHessian();
             simulation.checkInformation();
+            return true;
+        case 'g':
+            if (use_temp_vec)
+            {
+                static_solve_step++;
+                simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
+                simulation.delta_u = (static_solve_step*0.1) * temporary_vector;
+                simulation.updateCurrentState();
+                T total_energy = simulation.computeTotalEnergy();
+                std::cout << "energy : " << total_energy << std::endl;
+            }
+            else
+            {
+                use_temp_vec = true;
+                static_solve_step++;
+                temporary_vector.resize(simulation.undeformed.rows());
+                temporary_vector.setZero();
+                simulation.computeResidual(temporary_vector); temporary_vector *= -1.0;
+                T a = temporary_vector[2],
+                    b = temporary_vector[3];
+                temporary_vector[2] = -b;
+                temporary_vector[3] = a;
+                simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
+                simulation.delta_u = (static_solve_step*0.1) * temporary_vector;
+                simulation.updateCurrentState();
+                T total_energy = simulation.computeTotalEnergy();
+                std::cout << "energy : " << total_energy << std::endl;
+            }
+            updateScreen(viewer);
+            return true;
+        case 'h':
+            if (use_temp_vec)
+            {
+                static_solve_step--;
+                simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
+                simulation.delta_u = (static_solve_step*0.1) * temporary_vector;
+                simulation.updateCurrentState();
+                T total_energy = simulation.computeTotalEnergy();
+                std::cout << "energy : " << total_energy << std::endl;
+            }
+            updateScreen(viewer);
             return true;
         case 'r':
             simulation.reset();
