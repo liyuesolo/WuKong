@@ -575,6 +575,19 @@ void Foam3DApp::scenarioDrosophilaHighRes() {
 ////    }
 //}
 
+#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_TOTAL_TIME true
+
+static void
+printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
+    if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
+        const auto tcurr = std::chrono::high_resolution_clock::now();
+        std::cout << description << "Time: "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(tcurr - tstart).count() * 1.0e-6
+                  << std::endl;
+    }
+}
+
 void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
     Eigen::Matrix<float, 4, 1> eye;
     eye << viewer.core().camera_eye, 1.0f;

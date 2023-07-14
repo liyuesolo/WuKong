@@ -8,7 +8,8 @@
 #define PRINT_TOTAL_TIME true
 
 static void
-printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
+printTimeNewton(std::chrono::high_resolution_clock::time_point tstart, std::string description = "",
+                bool final = false) {
     if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
         const auto tcurr = std::chrono::high_resolution_clock::now();
         std::cout << description << "Time: "
@@ -38,7 +39,7 @@ public:
         auto tstart = std::chrono::high_resolution_clock::now();
         solver.compute(H);
         dx = solver.solve(g);
-        printTime(tstart, "Linear solve ", true);
+        printTimeNewton(tstart, "Linear solve ", true);
 
         if (dx.dot(g) <= 0) {
             double currStabValue = stabValue;

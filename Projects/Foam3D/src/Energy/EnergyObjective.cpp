@@ -194,7 +194,25 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
     VectorXT dFdc = VectorXT::Zero(nc);
     VectorXT dFdp = VectorXT::Zero(np);
 
-    for (Cell cell: tessellation->cells) {
+//    for (Cell cell: tessellation->cells) {
+//        CellValue cellValue(cell);
+//        energyFunction.getGradient(tessellation, cellValue);
+//
+//        for (auto n: cell.nodeIndices) {
+//            Node node = n.first;
+//            int nodeIdxInCell = n.second;
+//            NodePosition nodePos = tessellation->nodes[node];
+//
+//            dFdx.segment<3>(nodePos.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell * 3);
+//        }
+//        dFdc.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cell.nodeIndices.size() * 3,
+//                                                                                      optDims);
+//    }
+
+    tbb::concurrent_vector<double> dFdxBuilder(nx);
+    std::fill(dFdxBuilder.begin(), dFdxBuilder.end(), 0);
+
+    tbb::parallel_for_each(tessellation->cells.begin(), tessellation->cells.end(), [&](Cell cell) {
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
 
@@ -203,12 +221,15 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
             int nodeIdxInCell = n.second;
             NodePosition nodePos = tessellation->nodes[node];
 
-            dFdx.segment<3>(nodePos.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell * 3);
+            dFdxBuilder[nodePos.ix * 3 + 0] += cellValue.gradient(nodeIdxInCell * 3 + 0);
+            dFdxBuilder[nodePos.ix * 3 + 1] += cellValue.gradient(nodeIdxInCell * 3 + 1);
+            dFdxBuilder[nodePos.ix * 3 + 2] += cellValue.gradient(nodeIdxInCell * 3 + 2);
         }
         dFdc.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cell.nodeIndices.size() * 3,
-                                                                                      optDims);
-    }
-    dFdp += tessellation->boundary->computeEnergyGradient();
+                                                                                      optDims); // TODO: Should be threadsafe?
+    });
+    dFdx = Eigen::Map<VectorXT>(&dFdxBuilder[0], nx);
+    dFdp = tessellation->boundary->computeEnergyGradient();
 
     gradient.segment(0, nc) = dFdx.transpose() * tessellation->dxdc + dFdc.transpose();
     gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->dvdp + dFdp.transpose();
@@ -368,17 +389,35 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
 //            }
 //        }
 //    }
+    printTime(tstart, "Hessian iterate over cells ");
 
     Eigen::SparseMatrix<double> dFdx(nx, 1);
-    dFdx.setFromTriplets(tripletsdFdx.begin(), tripletsdFdx.end());
     Eigen::SparseMatrix<double> d2Fdc2(nc, nc);
-    d2Fdc2.setFromTriplets(tripletsd2Fdc2.begin(), tripletsd2Fdc2.end());
     Eigen::SparseMatrix<double> d2Fdcdx(nc, nx);
-    d2Fdcdx.setFromTriplets(tripletsd2Fdcdx.begin(), tripletsd2Fdcdx.end());
     Eigen::SparseMatrix<double> d2Fdx2(nx, nx);
-    d2Fdx2.setFromTriplets(tripletsd2Fdx2.begin(), tripletsd2Fdx2.end());
+//    dFdx.setFromTriplets(tripletsdFdx.begin(), tripletsdFdx.end());
+//    d2Fdc2.setFromTriplets(tripletsd2Fdc2.begin(), tripletsd2Fdc2.end());
+//    d2Fdcdx.setFromTriplets(tripletsd2Fdcdx.begin(), tripletsd2Fdcdx.end());
+//    d2Fdx2.setFromTriplets(tripletsd2Fdx2.begin(), tripletsd2Fdx2.end());
 
-    printTime(tstart, "Hessian iterate over cells ");
+    {
+        tbb::task_group g;
+        g.run([&] {
+            dFdx.setFromTriplets(tripletsdFdx.begin(), tripletsdFdx.end());
+        });
+        g.run([&] {
+            d2Fdc2.setFromTriplets(tripletsd2Fdc2.begin(), tripletsd2Fdc2.end());
+        });
+        g.run([&] {
+            d2Fdcdx.setFromTriplets(tripletsd2Fdcdx.begin(), tripletsd2Fdcdx.end());
+        });
+        g.run([&] {
+            d2Fdx2.setFromTriplets(tripletsd2Fdx2.begin(), tripletsd2Fdx2.end());
+        });
+        g.wait();
+    }
+
+    printTime(tstart, "Hessian build from triplets ");
 
     MatrixXT d2Fdp2 = tessellation->boundary->computeEnergyHessian();
 
@@ -397,6 +436,36 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
     for (int i = 0; i < nv; i++) {
         sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
     }
+
+//    MatrixXT sum_dFdx_d2xdc2 = MatrixXT::Zero(nc, nc);
+//    MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
+//    MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
+//    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
+//    {
+//        tbb::task_group g;
+//        g.run([&] {
+//            for (int i = 0; i < nx; i++) {
+//                sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
+//            }
+//        });
+//        g.run([&] {
+//            for (int i = 0; i < nx; i++) {
+//                sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
+//            }
+//        });
+//        g.run([&] {
+//            for (int i = 0; i < nx; i++) {
+//                sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
+//            }
+//        });
+//        g.run([&] {
+//            VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
+//            for (int i = 0; i < nv; i++) {
+//                sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
+//            }
+//        });
+//        g.wait();
+//    }
 
     printTime(tstart, "Hessian compute sums ");
 
@@ -427,26 +496,28 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
 //                      d2Fdp2;
 
     MatrixXT D2FDC2, D2FDCDP, D2FDP2;
-    tbb::task_group g;
-    g.run([&] {
-        D2FDC2 = dxdcT * d2Fdx2 * dxdc +
-                 dxdcT * d2Fdxdc +
-                 d2Fdcdx * dxdc +
-                 sum_dFdx_d2xdc2 +
-                 d2Fdc2;
-    });
-    g.run([&] {
-        D2FDCDP = dxdcT * d2Fdx2 * dxdv_dvdp +
-                  d2Fdcdx * dxdv_dvdp +
-                  sum_dFdx_d2xdcdv * dvdp;
-    });
-    g.run([&] {
-        D2FDP2 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp +
-                 dvdpT * sum_dFdx_d2xdv2 * dvdp +
-                 sum_dFdx_dxdv_d2vdp2 +
-                 d2Fdp2;
-    });
-    g.wait();
+    {
+        tbb::task_group g;
+        g.run([&] {
+            D2FDC2 = dxdcT * d2Fdx2 * dxdc +
+                     dxdcT * d2Fdxdc +
+                     d2Fdcdx * dxdc +
+                     sum_dFdx_d2xdc2 +
+                     d2Fdc2;
+        });
+        g.run([&] {
+            D2FDCDP = dxdcT * d2Fdx2 * dxdv_dvdp +
+                      d2Fdcdx * dxdv_dvdp +
+                      sum_dFdx_d2xdcdv * dvdp;
+        });
+        g.run([&] {
+            D2FDP2 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp +
+                     dvdpT * sum_dFdx_d2xdv2 * dvdp +
+                     sum_dFdx_dxdv_d2vdp2 +
+                     d2Fdp2;
+        });
+        g.wait();
+    }
 
     hessian.block(0, 0, nc, nc) = D2FDC2;
     hessian.block(nc, 0, np, nc) = D2FDCDP.transpose();
