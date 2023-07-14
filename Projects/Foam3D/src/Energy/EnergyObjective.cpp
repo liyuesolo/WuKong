@@ -236,15 +236,52 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
     int nv = tessellation->boundary->v.size() * 3;
     int np = tessellation->boundary->nfree;
 
-    VectorXT dFdx = VectorXT::Zero(nx);
-    MatrixXT d2Fdc2 = MatrixXT::Zero(nc, nc);
-    MatrixXT d2Fdcdx = MatrixXT::Zero(nc, nx);
-    MatrixXT d2Fdx2 = MatrixXT::Zero(nx, nx);
-    MatrixXT d2Fdp2 = MatrixXT::Zero(np, np);
+//    VectorXT dFdx = VectorXT::Zero(nx);
+//    MatrixXT d2Fdc2 = MatrixXT::Zero(nc, nc);
+//    MatrixXT d2Fdcdx = MatrixXT::Zero(nc, nx);
+//    MatrixXT d2Fdx2 = MatrixXT::Zero(nx, nx);
+//    MatrixXT d2Fdp2 = MatrixXT::Zero(np, np);
+
+//    printTime(tstart, "Hessian initialization ");
+
+//    for (Cell cell: tessellation->cells) {
+//        CellValue cellValue(cell);
+//        energyFunction.getGradient(tessellation, cellValue);
+//        energyFunction.getHessian(tessellation, cellValue);
+//
+//        for (auto n0: cell.nodeIndices) {
+//            Node node0 = n0.first;
+//            int nodeIdxInCell0 = n0.second;
+//            NodePosition nodePos0 = tessellation->nodes[node0];
+//
+//            dFdx.segment<3>(nodePos0.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell0 * 3);
+//            d2Fdcdx.block(cell.cellIndex * optDims, nodePos0.ix * 3, optDims, 3) += cellValue.hessian.block(
+//                    cell.nodeIndices.size() * 3, nodeIdxInCell0 * 3, optDims, 3);
+//
+//            for (auto n1: cell.nodeIndices) {
+//                Node node1 = n1.first;
+//                int nodeIdxInCell1 = n1.second;
+//                NodePosition nodePos1 = tessellation->nodes[node1];
+//
+//                d2Fdx2.block(nodePos0.ix * 3, nodePos1.ix * 3, 3, 3) += cellValue.hessian.block(nodeIdxInCell0 * 3,
+//                                                                                                nodeIdxInCell1 * 3, 3,
+//                                                                                                3);
+//            }
+//        }
+//
+//        d2Fdc2.block(cell.cellIndex * optDims, cell.cellIndex * optDims, optDims, optDims) += cellValue.hessian.block(
+//                cell.nodeIndices.size() * 3, cell.nodeIndices.size() * 3,
+//                optDims, optDims);
+//    }
+
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsdFdx;
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsd2Fdc2;
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsd2Fdcdx;
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsd2Fdx2;
 
     printTime(tstart, "Hessian initialization ");
 
-    for (Cell cell: tessellation->cells) {
+    tbb::parallel_for_each(tessellation->cells.begin(), tessellation->cells.end(), [&](Cell cell) {
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
         energyFunction.getHessian(tessellation, cellValue);
@@ -254,29 +291,96 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
             int nodeIdxInCell0 = n0.second;
             NodePosition nodePos0 = tessellation->nodes[node0];
 
-            dFdx.segment<3>(nodePos0.ix * 3) += cellValue.gradient.segment<3>(nodeIdxInCell0 * 3);
-            d2Fdcdx.block(cell.cellIndex * optDims, nodePos0.ix * 3, optDims, 3) += cellValue.hessian.block(
-                    cell.nodeIndices.size() * 3, nodeIdxInCell0 * 3, optDims, 3);
+            for (int ii = 0; ii < 3; ii++) {
+                tripletsdFdx.emplace_back(nodePos0.ix * 3 + ii, 0, cellValue.gradient(nodeIdxInCell0 * 3 + ii));
+            }
+            for (int ii = 0; ii < optDims; ii++) {
+                for (int jj = 0; jj < 3; jj++) {
+                    tripletsd2Fdcdx.emplace_back(cell.cellIndex * optDims + ii, nodePos0.ix * 3 + jj, cellValue.hessian(
+                            cell.nodeIndices.size() * 3 + ii, nodeIdxInCell0 * 3 + jj));
+                }
+            }
 
             for (auto n1: cell.nodeIndices) {
                 Node node1 = n1.first;
                 int nodeIdxInCell1 = n1.second;
                 NodePosition nodePos1 = tessellation->nodes[node1];
-
-                d2Fdx2.block(nodePos0.ix * 3, nodePos1.ix * 3, 3, 3) += cellValue.hessian.block(nodeIdxInCell0 * 3,
-                                                                                                nodeIdxInCell1 * 3, 3,
-                                                                                                3);
+                for (int ii = 0; ii < 3; ii++) {
+                    for (int jj = 0; jj < 3; jj++) {
+                        tripletsd2Fdx2.emplace_back(nodePos0.ix * 3 + ii, nodePos1.ix * 3 + jj,
+                                                    cellValue.hessian(nodeIdxInCell0 * 3 + ii,
+                                                                      nodeIdxInCell1 * 3 + jj));
+                    }
+                }
             }
         }
 
-        d2Fdc2.block(cell.cellIndex * optDims, cell.cellIndex * optDims, optDims, optDims) += cellValue.hessian.block(
-                cell.nodeIndices.size() * 3, cell.nodeIndices.size() * 3,
-                optDims, optDims);
-    }
+        for (int ii = 0; ii < optDims; ii++) {
+            for (int jj = 0; jj < optDims; jj++) {
+                tripletsd2Fdc2.emplace_back(cell.cellIndex * optDims + ii, cell.cellIndex * optDims + jj,
+                                            cellValue.hessian(
+                                                    cell.nodeIndices.size() * 3 + ii,
+                                                    cell.nodeIndices.size() * 3 + jj));
+            }
+        }
+    });
+
+//    for (Cell cell: tessellation->cells) {
+//        CellValue cellValue(cell);
+//        energyFunction.getGradient(tessellation, cellValue);
+//        energyFunction.getHessian(tessellation, cellValue);
+//
+//        for (auto n0: cell.nodeIndices) {
+//            Node node0 = n0.first;
+//            int nodeIdxInCell0 = n0.second;
+//            NodePosition nodePos0 = tessellation->nodes[node0];
+//
+//            for (int ii = 0; ii < 3; ii++) {
+//                tripletsdFdx.emplace_back(nodePos0.ix * 3 + ii, 0, cellValue.gradient(nodeIdxInCell0 * 3 + ii));
+//            }
+//            for (int ii = 0; ii < optDims; ii++) {
+//                for (int jj = 0; jj < 3; jj++) {
+//                    tripletsd2Fdcdx.emplace_back(cell.cellIndex * optDims + ii, nodePos0.ix * 3 + jj, cellValue.hessian(
+//                            cell.nodeIndices.size() * 3 + ii, nodeIdxInCell0 * 3 + jj));
+//                }
+//            }
+//
+//            for (auto n1: cell.nodeIndices) {
+//                Node node1 = n1.first;
+//                int nodeIdxInCell1 = n1.second;
+//                NodePosition nodePos1 = tessellation->nodes[node1];
+//                for (int ii = 0; ii < 3; ii++) {
+//                    for (int jj = 0; jj < 3; jj++) {
+//                        tripletsd2Fdx2.emplace_back(nodePos0.ix * 3 + ii, nodePos1.ix * 3 + jj,
+//                                                    cellValue.hessian(nodeIdxInCell0 * 3 + ii,
+//                                                                      nodeIdxInCell1 * 3 + jj));
+//                    }
+//                }
+//            }
+//        }
+//
+//        for (int ii = 0; ii < optDims; ii++) {
+//            for (int jj = 0; jj < optDims; jj++) {
+//                tripletsd2Fdc2.emplace_back(cell.cellIndex * optDims + ii, cell.cellIndex * optDims + jj,
+//                                            cellValue.hessian(
+//                                                    cell.nodeIndices.size() * 3 + ii,
+//                                                    cell.nodeIndices.size() * 3 + jj));
+//            }
+//        }
+//    }
+
+    Eigen::SparseMatrix<double> dFdx(nx, 1);
+    dFdx.setFromTriplets(tripletsdFdx.begin(), tripletsdFdx.end());
+    Eigen::SparseMatrix<double> d2Fdc2(nc, nc);
+    d2Fdc2.setFromTriplets(tripletsd2Fdc2.begin(), tripletsd2Fdc2.end());
+    Eigen::SparseMatrix<double> d2Fdcdx(nc, nx);
+    d2Fdcdx.setFromTriplets(tripletsd2Fdcdx.begin(), tripletsd2Fdcdx.end());
+    Eigen::SparseMatrix<double> d2Fdx2(nx, nx);
+    d2Fdx2.setFromTriplets(tripletsd2Fdx2.begin(), tripletsd2Fdx2.end());
 
     printTime(tstart, "Hessian iterate over cells ");
 
-    d2Fdp2 = tessellation->boundary->computeEnergyHessian();
+    MatrixXT d2Fdp2 = tessellation->boundary->computeEnergyHessian();
 
     printTime(tstart, "Hessian boundary ");
 
@@ -284,9 +388,9 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
     MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
     MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
     for (int i = 0; i < nx; i++) {
-        sum_dFdx_d2xdc2 += dFdx(i) * tessellation->d2xdc2[i];
-        sum_dFdx_d2xdcdv += dFdx(i) * tessellation->d2xdcdv[i];
-        sum_dFdx_d2xdv2 += dFdx(i) * tessellation->d2xdv2[i];
+        sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
+        sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
+        sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
     }
     MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
     VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;

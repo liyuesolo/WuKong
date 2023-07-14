@@ -692,9 +692,10 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
                         F(f, 0) = nodeIndices.at(face.nodes[0]);
                         F(f, 1) = nodeIndices.at(face.nodes[i]);
                         F(f, 2) = nodeIndices.at(face.nodes[i + 1]);
-//                        Fc.row(f) = colors.row(ic);
-                        Fc.row(f) =
-                                TV3(0.2, 0.2, 0.2) + foam.tessellation.cellInfos[cell].adhesion * TV3(0.6, 0.6, 0.6);
+//                        Fc.row(f) = colors.row(cell);
+//                        Fc.row(f) =
+//                                TV3(0.2, 0.2, 0.2) + foam.tessellation.cellInfos[cell].adhesion * TV3(0.6, 0.6, 0.6);
+                        Fc.row(f) = colors.row(cell) * (foam.tessellation.cellInfos[cell].adhesion > 0 ? 1.0 : 0.4);
                         f++;
                     }
                 }
