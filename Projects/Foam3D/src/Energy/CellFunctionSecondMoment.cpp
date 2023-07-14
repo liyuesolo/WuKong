@@ -7,9 +7,7 @@ void CellFunctionSecondMoment::getValue(Tessellation *tessellation, CellValue &v
         centroidFuncs[i]->getValue(tessellation, centroid);
     }
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         for (int i = 1; i < f.nodes.size() - 1; i++) {
             TriangleValue triValue;
             triValue.v0 = tessellation->nodes[f.nodes[0]].pos;
@@ -24,12 +22,9 @@ void CellFunctionSecondMoment::getValue(Tessellation *tessellation, CellValue &v
 
             perTriangleFunction.getValue(triValue, centroid);
             if (std::isnan(triValue.value) || std::isinf(triValue.value)) continue;
-            value.value += mul * triValue.value;
+            value.value += triValue.value;
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 }
 
 void CellFunctionSecondMoment::getGradient(Tessellation *tessellation, CellValue &value) const {
@@ -43,9 +38,7 @@ void CellFunctionSecondMoment::getGradient(Tessellation *tessellation, CellValue
     }
     VectorXT gradient_centroid = VectorXT::Zero(3);
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         for (int i = 1; i < f.nodes.size() - 1; i++) {
             TriangleValue triValue;
             Node tempNodes[3] = {f.nodes[0], f.nodes[i], f.nodes[i + 1]};
@@ -63,14 +56,11 @@ void CellFunctionSecondMoment::getGradient(Tessellation *tessellation, CellValue
             if (std::isnan(triValue.gradient.norm()) || std::isinf(triValue.gradient.norm())) continue;
             for (int ii = 0; ii < 3; ii++) {
                 value.gradient.segment<3>(value.cell.nodeIndices[tempNodes[ii]] * 3) +=
-                        mul * triValue.gradient.segment<3>(ii * 3);
+                        triValue.gradient.segment<3>(ii * 3);
             }
-            gradient_centroid += mul * triValue.gradient.segment<3>(9);
+            gradient_centroid += triValue.gradient.segment<3>(9);
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 
     MatrixXT d_centroid_d_x(3, value.gradient.rows());
     for (int i = 0; i < 3; i++) {
@@ -93,9 +83,7 @@ void CellFunctionSecondMoment::getHessian(Tessellation *tessellation, CellValue 
     MatrixXT hess_Cx = MatrixXT::Zero(3, value.gradient.rows());
     MatrixXT hess_CC = MatrixXT::Zero(3, 3);
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         for (int i = 1; i < f.nodes.size() - 1; i++) {
             TriangleValue triValue;
             Node tempNodes[3] = {f.nodes[0], f.nodes[i], f.nodes[i + 1]};
@@ -114,21 +102,18 @@ void CellFunctionSecondMoment::getHessian(Tessellation *tessellation, CellValue 
             if (std::isnan(triValue.hessian.norm()) || std::isinf(triValue.hessian.norm())) continue;
             for (int ii = 0; ii < 3; ii++) {
                 hess_Cx.block<3, 3>(0, value.cell.nodeIndices[tempNodes[ii]] * 3) +=
-                        mul * triValue.hessian.block<3, 3>(9, ii * 3);
+                        triValue.hessian.block<3, 3>(9, ii * 3);
                 for (int jj = 0; jj < 3; jj++) {
                     value.hessian.block<3, 3>(value.cell.nodeIndices[tempNodes[ii]] * 3,
                                               value.cell.nodeIndices[tempNodes[jj]] * 3) +=
-                            mul * triValue.hessian.block<3, 3>(ii * 3, jj * 3);
+                            triValue.hessian.block<3, 3>(ii * 3, jj * 3);
                 }
             }
-            hess_CC += mul * triValue.hessian.block<3, 3>(9, 9);
-            gradient_centroid += mul * triValue.gradient.segment<3>(9);
+            hess_CC += triValue.hessian.block<3, 3>(9, 9);
+            gradient_centroid += triValue.gradient.segment<3>(9);
 
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 
     MatrixXT d_centroid_d_x(3, value.gradient.rows());
     for (int i = 0; i < 3; i++) {

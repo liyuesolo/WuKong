@@ -27,6 +27,4 @@ public:
 
     virtual void
     getHessian(TriangleValue &value) const = 0;
-
-    virtual bool flipSignForBackface() const { return true; };
 };

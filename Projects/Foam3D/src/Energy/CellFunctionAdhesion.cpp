@@ -3,9 +3,7 @@
 void CellFunctionAdhesion::getValue(Tessellation *tessellation, CellValue &value) const {
     value.value = 0;
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         if (f.bface < 0) return;
 
         for (int i = 1; i < f.nodes.size() - 1; i++) {
@@ -16,21 +14,16 @@ void CellFunctionAdhesion::getValue(Tessellation *tessellation, CellValue &value
 
             perTriangleFunction.getValue(triValue);
             if (std::isnan(triValue.value) || std::isinf(triValue.value)) continue;
-            value.value += mul * tessellation->cellInfos[value.cell.cellIndex].adhesion *
+            value.value += tessellation->cellInfos[value.cell.cellIndex].adhesion *
                            tessellation->boundary->f[f.bface].adhesion * triValue.value;
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 }
 
 void CellFunctionAdhesion::getGradient(Tessellation *tessellation, CellValue &value) const {
     value.gradient.setZero();
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         if (f.bface < 0) return;
 
         for (int i = 1; i < f.nodes.size() - 1; i++) {
@@ -44,22 +37,17 @@ void CellFunctionAdhesion::getGradient(Tessellation *tessellation, CellValue &va
             if (std::isnan(triValue.gradient.norm()) || std::isinf(triValue.gradient.norm())) continue;
             for (int ii = 0; ii < 3; ii++) {
                 value.gradient.segment<3>(value.cell.nodeIndices[tempNodes[ii]] * 3) +=
-                        mul * tessellation->cellInfos[value.cell.cellIndex].adhesion *
+                        tessellation->cellInfos[value.cell.cellIndex].adhesion *
                         tessellation->boundary->f[f.bface].adhesion * triValue.gradient.segment<3>(ii * 3);
             }
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 }
 
 void CellFunctionAdhesion::getHessian(Tessellation *tessellation, CellValue &value) const {
     value.hessian.setZero();
 
-    double mul = 1;
-    auto func = [&](const int &iF) {
-        Face f = tessellation->faces[iF];
+    for (Face f: value.cell.faces) {
         if (f.bface < 0) return;
 
         for (int i = 1; i < f.nodes.size() - 1; i++) {
@@ -75,13 +63,10 @@ void CellFunctionAdhesion::getHessian(Tessellation *tessellation, CellValue &val
                 for (int jj = 0; jj < 3; jj++) {
                     value.hessian.block<3, 3>(value.cell.nodeIndices[tempNodes[ii]] * 3,
                                               value.cell.nodeIndices[tempNodes[jj]] * 3) +=
-                            mul * tessellation->cellInfos[value.cell.cellIndex].adhesion *
+                            tessellation->cellInfos[value.cell.cellIndex].adhesion *
                             tessellation->boundary->f[f.bface].adhesion * triValue.hessian.block<3, 3>(ii * 3, jj * 3);
                 }
             }
         }
-    };
-    std::for_each(value.cell.facesPos.begin(), value.cell.facesPos.end(), func);
-    if (perTriangleFunction.flipSignForBackface()) mul = -1;
-    std::for_each(value.cell.facesNeg.begin(), value.cell.facesNeg.end(), func);
+    }
 }

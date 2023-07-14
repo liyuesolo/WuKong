@@ -18,7 +18,7 @@ public:
     double volumeBarrierWeight = 1;
     double wPenaltyWeight = 1;
     double secondMomentWeight = 100;
-    double adhesionWeight = 10;
+    double adhesionWeight = 30;
 
 //    double volumeTargetWeight = 100;
 //    double surfaceAreaTargetWeight = 0;

@@ -28,7 +28,31 @@
 #include <set>
 #include <chrono>
 
+bool operator<(const Node &a, const Node &b) {
+    if (a.type != b.type) return a.type < b.type;
+    if (a.gen[0] != b.gen[0]) return a.gen[0] < b.gen[0];
+    if (a.gen[1] != b.gen[1]) return a.gen[1] < b.gen[1];
+    if (a.gen[2] != b.gen[2]) return a.gen[2] < b.gen[2];
+    if (a.gen[3] != b.gen[3]) return a.gen[3] < b.gen[3];
+    return false;
+}
+
+#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_TOTAL_TIME true
+
+static void
+printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
+    if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
+        const auto tcurr = std::chrono::high_resolution_clock::now();
+        std::cout << description << "Time: "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(tcurr - tstart).count() * 1.0e-6
+                  << std::endl;
+    }
+}
+
 void Tessellation::clipFaces2() {
+    const auto tstart = std::chrono::high_resolution_clock::now();
+
     GEO::initialize();
     GEO::CmdLine::import_arg_group("standard");
     GEO::CmdLine::import_arg_group("algo");
@@ -51,9 +75,41 @@ void Tessellation::clipFaces2() {
     dual.set_stores_cicl(true);
     dual.compute();
 
-    GEO::mesh_tetrahedralize(boundaryMesh);
+    printTime(tstart, "Delaunay");
+
+    GEO::mesh_tetrahedralize(boundaryMesh, false, false);
     GEO::RestrictedVoronoiDiagram_var rvd = GEO::RestrictedVoronoiDiagram::create(&dual, &boundaryMesh);
     rvd->set_volumetric(true);
+
+//    for (int i = 0; i < boundaryMesh.cells.nb(); i++) {
+//        std::cout << i << " find tet facet " << boundaryMesh.cells.find_tet_facet(i, 0, 2, 1) << std::endl;
+//        std::cout << i << " find tet facet " << boundaryMesh.cells.find_tet_facet(i, 0, 4, 2) << std::endl;
+//        std::cout << i << " find tet facet " << boundaryMesh.cells.find_tet_facet(i, 0, 1, 4) << std::endl;
+//        if (boundaryMesh.cells.find_tet_facet(i, 0, 2, 1) < 16) {
+//            std::cout << boundaryMesh.cells.facet(i, boundaryMesh.cells.find_tet_facet(i, 0, 2, 1)) << std::endl;
+//        }
+//        if (boundaryMesh.cells.find_tet_facet(i, 0, 4, 2) < 16) {
+//            std::cout << boundaryMesh.cells.facet(i, boundaryMesh.cells.find_tet_facet(i, 0, 4, 2)) << std::endl;
+//        }
+//        if (boundaryMesh.cells.find_tet_facet(i, 0, 1, 4) < 16) {
+//            std::cout << boundaryMesh.cells.facet(i, boundaryMesh.cells.find_tet_facet(i, 0, 1, 4)) << std::endl;
+//        }
+//    }
+
+    printTime(tstart, "RVD");
+
+    std::map<int, int> cellFacetToFacet;
+    for (int cc = 0; cc < boundaryMesh.cells.nb(); cc++) {
+        for (int ff = 0; ff < boundary->f.size(); ff++) {
+            IV3 v = boundary->f[ff].vertices;
+            int facet = boundaryMesh.cells.find_tet_facet(cc, v(0), v(2), v(1));
+            if (facet != GEO::NO_FACET) {
+                cellFacetToFacet[boundaryMesh.cells.facet(cc, facet)] = ff;
+            }
+        }
+    }
+
+    printTime(tstart, "CellFacetMap");
 
     GEO::Mesh clippedMesh;
     GEO::BuildRVDMesh rvdMeshBuilder(clippedMesh);
@@ -62,19 +118,27 @@ void Tessellation::clipFaces2() {
     rvdMeshBuilder.set_generate_ids(true);
     rvd->for_each_polyhedron(rvdMeshBuilder);
 
-    GEO::vector<std::string> names;
-    clippedMesh.facets.attributes().list_attribute_names(names);
-    for (auto s: names) {
-        std::cout << "Facet " << s << std::endl;
-    }
-    clippedMesh.vertices.attributes().list_attribute_names(names);
-    for (auto s: names) {
-        std::cout << "Vertex " << s << std::endl;
-    }
-    clippedMesh.cells.attributes().list_attribute_names(names);
-    for (auto s: names) {
-        std::cout << "Cell " << s << std::endl;
-    }
+    printTime(tstart, "RVDMeshBuilder");
+
+//    std::cout << "WOW NB FACETS " << rvd->mesh()->facets.nb() << std::endl;
+//    GEO::vector<std::string> names;
+//    clippedMesh.facets.attributes().list_attribute_names(names);
+//    for (auto s: names) {
+//        std::cout << "Facet " << s << std::endl;
+//    }
+//    clippedMesh.vertices.attributes().list_attribute_names(names);
+//    for (auto s: names) {
+//        std::cout << "Vertex " << s << std::endl;
+//    }
+//    clippedMesh.cells.attributes().list_attribute_names(names);
+//    for (auto s: names) {
+//        std::cout << "Cell " << s << std::endl;
+//    }
+//
+//    boundaryMesh.cell_facets.attributes().list_attribute_names(names);
+//    for (auto s: names) {
+//        std::cout << "Cell-facet " << s << std::endl;
+//    }
 
 //    GEO::Attribute<int> cell_id(clippedMesh.facets.attributes(), "cell_id");
 //    GEO::Attribute<int> facet_seed_id(clippedMesh.facets.attributes(), "facet_seed_id");
@@ -82,15 +146,107 @@ void Tessellation::clipFaces2() {
 //    for (GEO::index_t v: clippedMesh.facets) {
 //        std::cout << "Facet " << v << " " << cell_id[v] << " " << facet_seed_id[v] << " " << seed_id[v] << std::endl;
 //    }
-    GEO::Attribute<int> vertex_id(clippedMesh.vertices.attributes(), "vertex_id");
+
+//    GEO::Attribute<int> vertex_id(clippedMesh.vertices.attributes(), "vertex_id");
     GEO::Attribute<int> vertex_gen(clippedMesh.vertices.attributes(), "vertex_gen");
-    GEO::Attribute<double> point(clippedMesh.vertices.attributes(), "point");
-    for (GEO::index_t v: clippedMesh.vertices) {
-        std::cout << "Vertex " << v << " " << vertex_id[v] << " " << point[v * 3 + 0] << " " << point[v * 3 + 1] << " "
-                  << point[v * 3 + 2] << std::endl;
-        std::cout << "   gen " << vertex_gen[v * 6 + 0] << " " << vertex_gen[v * 6 + 1] << " " << vertex_gen[v * 6 + 2]
-                  << " " << vertex_gen[v * 6 + 3] << " " << vertex_gen[v * 6 + 4] << " " << vertex_gen[v * 6 + 5]
-                  << std::endl;
+//    GEO::Attribute<double> point(clippedMesh.vertices.attributes(), "point");
+//    for (GEO::index_t v: clippedMesh.vertices) {
+//        std::cout << "Vertex " << v << " " << vertex_id[v] << " " << point[v * 3 + 0] << " " << point[v * 3 + 1] << " "
+//                  << point[v * 3 + 2] << std::endl;
+//        std::cout << "   gen " << vertex_gen[v * 6 + 0] << " " << vertex_gen[v * 6 + 1] << " " << vertex_gen[v * 6 + 2]
+//                  << " " << vertex_gen[v * 6 + 3] << " " << vertex_gen[v * 6 + 4] << " " << vertex_gen[v * 6 + 5]
+//                  << std::endl;
+//    }
+
+    int n_cells = c.rows() / 4 - 8;
+    cells.resize(n_cells);
+
+    for (GEO::index_t f: clippedMesh.facets) {
+        int cellIdx = vertex_gen[clippedMesh.facets.vertex(f, 0) * 6 + 0];
+        Face face;
+
+        std::set<int> b_verts;
+
+        for (GEO::index_t lv = 0; lv < clippedMesh.facets.nb_vertices(f); ++lv) {
+            GEO::index_t v = clippedMesh.facets.vertex(f, lv);
+
+            int gen[6];
+            for (int i = 0; i < 6; i++) {
+                gen[i] = vertex_gen[v * 6 + i];
+            }
+
+            Node node;
+            if (gen[1] < 0 && gen[2] < 0 && gen[3] < 0) {
+                node.type = NodeType::B_VERTEX;
+                node.gen[0] = gen[4];
+                node.gen[1] = -1;
+                node.gen[2] = -1;
+                node.gen[3] = -1;
+                b_verts.insert(gen[4]);
+            } else if (gen[1] < 0 && gen[2] < 0) {
+                node.type = NodeType::B_EDGE;
+                node.gen[0] = gen[4];
+                node.gen[1] = gen[5];
+                node.gen[2] = gen[0];
+                node.gen[3] = gen[3] - 1;
+                std::sort(std::begin(node.gen), std::begin(node.gen) + 2);
+                std::sort(std::begin(node.gen) + 2, std::end(node.gen));
+                b_verts.insert(gen[4]);
+                b_verts.insert(gen[5]);
+            } else if (gen[1] < 0) {
+                node.type = NodeType::B_FACE;
+                node.gen[0] = cellFacetToFacet.at(-gen[1] - 1);
+                node.gen[1] = gen[0];
+                node.gen[2] = gen[2] - 1;
+                node.gen[3] = gen[3] - 1;
+                std::sort(std::begin(node.gen) + 1, std::end(node.gen));
+                b_verts.insert(boundary->f[node.gen[0]].vertices(0));
+                b_verts.insert(boundary->f[node.gen[0]].vertices(1));
+                b_verts.insert(boundary->f[node.gen[0]].vertices(2));
+            } else {
+                assert(gen[1] > 0 && gen[2] > 0 && gen[3] > 0);
+                node.type = NodeType::STANDARD;
+                node.gen[0] = gen[0];
+                node.gen[1] = gen[1] - 1;
+                node.gen[2] = gen[2] - 1;
+                node.gen[3] = gen[3] - 1;
+                std::sort(std::begin(node.gen), std::end(node.gen));
+            }
+
+            face.nodes.push_back(node);
+        }
+
+        if (b_verts.size() == 3) {
+            std::vector<int> bv(b_verts.begin(), b_verts.end());
+            for (int i = 0; i < boundary->f.size(); i++) {
+                IV3 tri = boundary->f[i].vertices;
+                std::sort(tri.data(), tri.data() + 3);
+                if (std::memcmp(bv.data(), tri.data(), 3) == 0) {
+                    face.bface = i;
+                    break;
+                }
+            }
+        }
+
+        cells[cellIdx].faces.push_back(face);
+    }
+
+    printTime(tstart, "Cell data extraction");
+
+    int ic = 0;
+    for (Cell &cell: cells) {
+        cell.cellIndex = ic;
+        ic++;
+
+        int i = 0;
+        for (Face face: cell.faces) {
+            for (Node n: face.nodes) {
+                if (cell.nodeIndices.find(n) == cell.nodeIndices.end()) {
+                    cell.nodeIndices[n] = i;
+                    i++;
+                }
+            }
+        }
     }
 
 //    GEO::Mesh clippedMesh;
@@ -123,5 +279,5 @@ void Tessellation::clipFaces2() {
 //        } while (H != v2h[v]);
 //    }
 
-    GEO::Mesh M_out;
+    printTime(tstart, "Clipped Voronoi Diagram Construction ", true);
 }

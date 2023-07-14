@@ -24,7 +24,7 @@ CellFunctionEnergy::CellFunctionEnergy() {
     CellFunction *cx = new CellFunctionCentroid(wmx, vol);
     CellFunction *cy = new CellFunctionCentroid(wmy, vol);
     CellFunction *cz = new CellFunctionCentroid(wmz, vol);
-    volumeTargetFunction = new CellFunctionConstantTarget(vol, 0.3);
+    volumeTargetFunction = new CellFunctionConstantTarget(vol, 0.35);
     surfaceAreaTargetFunction = new CellFunctionConstantTarget(
             new CellFunctionPerTriangle(new PerTriangleSurfaceArea()), 0);
     siteCentroidFunction = new CellFunctionCentroidTarget(wmx, wmy, wmz, vol);

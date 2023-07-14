@@ -35,16 +35,13 @@ struct NodePosition {
 };
 
 struct Face {
-    int site0;
-    int site1;
     int bface = -1;
     std::vector<Node> nodes;
 };
 
 struct Cell {
     int cellIndex;
-    std::vector<int> facesPos;
-    std::vector<int> facesNeg;
+    std::vector<Face> faces;
     std::map<Node, int> nodeIndices;
 };
 
@@ -60,7 +57,6 @@ public:
 
     std::vector<Cell> cells;
 
-    std::vector<Face> faces;
     std::map<Node, NodePosition> nodes;
 
     Boundary *boundary;

@@ -10,7 +10,7 @@ int main() {
     plugin.widgets.push_back(&menu);
 
 //    feenableexcept(FE_INVALID);
-    Eigen::setNbThreads(1);
+//    Eigen::setNbThreads(1);
 
     Foam3D foam;
     Foam3DApp foam3d_app(foam);

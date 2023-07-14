@@ -9,6 +9,4 @@ public:
     virtual void getGradient(TriangleValue &value) const;
 
     virtual void getHessian(TriangleValue &value) const;
-
-    virtual bool flipSignForBackface() const { return false; };
 };

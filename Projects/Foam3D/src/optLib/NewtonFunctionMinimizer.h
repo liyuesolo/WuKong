@@ -2,6 +2,20 @@
 
 #include "ObjectiveFunction.h"
 #include "GradientDescentMinimizer.h"
+#include <chrono>
+
+#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_TOTAL_TIME true
+
+static void
+printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
+    if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
+        const auto tcurr = std::chrono::high_resolution_clock::now();
+        std::cout << description << "Time: "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(tcurr - tstart).count() * 1.0e-6
+                  << std::endl;
+    }
+}
 
 class NewtonFunctionMinimizer : public GradientDescentLineSearch {
 
@@ -20,8 +34,12 @@ public:
         SparseMatrixd H;
         function->getHessian(x, H);
         VectorXd g = function->getGradient(x);
+
+        auto tstart = std::chrono::high_resolution_clock::now();
         solver.compute(H);
         dx = solver.solve(g);
+        printTime(tstart, "Linear solve ", true);
+
         if (dx.dot(g) <= 0) {
             double currStabValue = stabValue;
             for (int i = 0; i < nMaxStabSteps; ++i) {

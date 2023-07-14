@@ -5,9 +5,9 @@
 class MeshSpringBoundary : public Boundary {
 
 private:
-    double kEdge = 0.01;
+    double kEdge = 0.1;
     double kVol = 1;
-    double volTarget = -40.6662;
+    double volTarget = -48;
 
 private:
     virtual void computeVertices();
