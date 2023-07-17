@@ -480,6 +480,8 @@ void Tessellation::computeMatrices() {
         d2vdp2[i].resize(np, np);
     });
 
+    printTime(tstart, "Resize ", true);
+
     dxdc.setFromTriplets(tripletsDXDC.begin(), tripletsDXDC.end());
     dxdv.setFromTriplets(tripletsDXDV.begin(), tripletsDXDV.end());
     tbb::parallel_for(0, nx, [&](int i) {

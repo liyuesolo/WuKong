@@ -423,55 +423,55 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
 
     printTime(tstart, "Hessian boundary ");
 
-    MatrixXT sum_dFdx_d2xdc2 = MatrixXT::Zero(nc, nc);
-    MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
-    MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
-    for (int i = 0; i < nx; i++) {
-        sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
-        sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
-        sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
-    }
-    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
-    VectorXT temp_dFdx_dxdv = (dFdx.transpose() * tessellation->dxdv).transpose();
-    for (int i = 0; i < nv; i++) {
-        sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
-    }
-
 //    MatrixXT sum_dFdx_d2xdc2 = MatrixXT::Zero(nc, nc);
 //    MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
 //    MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
-//    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
-//    {
-//        tbb::task_group g;
-//        g.run([&] {
-//            for (int i = 0; i < nx; i++) {
-//                sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
-//            }
-//        });
-//        g.run([&] {
-//            for (int i = 0; i < nx; i++) {
-//                sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
-//            }
-//        });
-//        g.run([&] {
-//            for (int i = 0; i < nx; i++) {
-//                sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
-//            }
-//        });
-//        g.run([&] {
-//            VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
-//            for (int i = 0; i < nv; i++) {
-//                sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
-//            }
-//        });
-//        g.wait();
+//    for (int i = 0; i < nx; i++) {
+//        sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
+//        sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
+//        sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
 //    }
+//    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
+//    VectorXT temp_dFdx_dxdv = (dFdx.transpose() * tessellation->dxdv).transpose();
+//    for (int i = 0; i < nv; i++) {
+//        sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
+//    }
+
+    MatrixXT sum_dFdx_d2xdc2 = MatrixXT::Zero(nc, nc);
+    MatrixXT sum_dFdx_d2xdcdv = MatrixXT::Zero(nc, nv);
+    MatrixXT sum_dFdx_d2xdv2 = MatrixXT::Zero(nv, nv);
+    MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
+    {
+        tbb::task_group g;
+        g.run([&] {
+            for (int i = 0; i < nx; i++) {
+                sum_dFdx_d2xdc2 += dFdx.coeff(i, 0) * tessellation->d2xdc2[i];
+            }
+        });
+        g.run([&] {
+            for (int i = 0; i < nx; i++) {
+                sum_dFdx_d2xdcdv += dFdx.coeff(i, 0) * tessellation->d2xdcdv[i];
+            }
+        });
+        g.run([&] {
+            for (int i = 0; i < nx; i++) {
+                sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
+            }
+        });
+        g.run([&] {
+            VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
+            for (int i = 0; i < nv; i++) {
+                sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
+            }
+        });
+        g.wait();
+    }
 
     printTime(tstart, "Hessian compute sums ");
 
     Eigen::SparseMatrix<double> dxdc = tessellation->dxdc;
     Eigen::SparseMatrix<double> dxdcT = dxdc.transpose();
-    MatrixXT d2Fdxdc = d2Fdcdx.transpose();
+    Eigen::SparseMatrix<double> d2Fdxdc = d2Fdcdx.transpose();
     Eigen::SparseMatrix<double> dvdp = tessellation->dvdp;
     Eigen::SparseMatrix<double> dvdpT = dvdp.transpose();
     Eigen::SparseMatrix<double> dxdv_dvdp = tessellation->dxdv * dvdp;
@@ -497,7 +497,30 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
 
     MatrixXT D2FDC2, D2FDCDP, D2FDP2;
     {
+        SparseMatrixd dp20;
+        MatrixXd dp21;
         tbb::task_group g;
+//        g.run([&] {
+//            D2FDC2 = dxdcT * d2Fdx2 * dxdc +
+//                     dxdcT * d2Fdxdc +
+//                     d2Fdcdx * dxdc +
+//                     sum_dFdx_d2xdc2 +
+//                     d2Fdc2;
+//            printTime(tstart, "B0 ");
+//        });
+//        g.run([&] {
+//            D2FDCDP = dxdcT * d2Fdx2 * dxdv_dvdp +
+//                      d2Fdcdx * dxdv_dvdp +
+//                      sum_dFdx_d2xdcdv * dvdp;
+//            printTime(tstart, "B1 ");
+//        });
+//        g.run([&] {
+//            D2FDP2 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp +
+//                     dvdpT * sum_dFdx_d2xdv2 * dvdp +
+//                     sum_dFdx_dxdv_d2vdp2 +
+//                     d2Fdp2;
+//            printTime(tstart, "B2 ");
+//        });
         g.run([&] {
             D2FDC2 = dxdcT * d2Fdx2 * dxdc +
                      dxdcT * d2Fdxdc +
@@ -511,12 +534,13 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
                       sum_dFdx_d2xdcdv * dvdp;
         });
         g.run([&] {
-            D2FDP2 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp +
-                     dvdpT * sum_dFdx_d2xdv2 * dvdp +
-                     sum_dFdx_dxdv_d2vdp2 +
-                     d2Fdp2;
+            dp20 = dxdv_dvdpT * d2Fdx2 * dxdv_dvdp;
+        });
+        g.run([&] {
+            dp21 = dvdpT * sum_dFdx_d2xdv2 * dvdp;
         });
         g.wait();
+        D2FDP2 = dp20 + dp21 + sum_dFdx_dxdv_d2vdp2 + d2Fdp2;
     }
 
     hessian.block(0, 0, nc, nc) = D2FDC2;

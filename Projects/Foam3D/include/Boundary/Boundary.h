@@ -71,13 +71,13 @@ protected:
 
     inline void addEnergyGradientEntry(Eigen::SparseVector<double> &gradient, int ip, double value) {
         if (free_map(ip) >= 0) {
-            gradient.coeffRef(ip) += value;
+            gradient.coeffRef(free_map(ip)) += value;
         }
     }
 
     inline void addEnergyHessianEntry(Eigen::SparseMatrix<double> &hessian, int ip0, int ip1, double value) {
         if (free_map(ip0) >= 0 && free_map(ip1) >= 0) {
-            hessian.coeffRef(ip0, ip1) += value;
+            hessian.coeffRef(free_map(ip0), free_map(ip1)) += value;
         }
     }
 

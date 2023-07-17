@@ -27,6 +27,7 @@
 #include "Projects/Foam3D/include/Energy/PerTriangleFunction.h"
 #include <set>
 #include <chrono>
+#include <tbb/tbb.h>
 
 bool operator<(const Node &a, const Node &b) {
     if (a.type != b.type) return a.type < b.type;
@@ -98,16 +99,19 @@ void Tessellation::clipFaces2() {
 
     printTime(tstart, "RVD");
 
-    std::map<int, int> cellFacetToFacet;
-    for (int cc = 0; cc < boundaryMesh.cells.nb(); cc++) {
-        for (int ff = 0; ff < boundary->f.size(); ff++) {
-            IV3 v = boundary->f[ff].vertices;
+    tbb::concurrent_vector<std::pair<int, int>> cellFacetToFacetPairs;
+    tbb::parallel_for(size_t(0), boundary->f.size(), [&](size_t ff) {
+        IV3 v = boundary->f[ff].vertices;
+        for (int cc = 0; cc < boundaryMesh.cells.nb(); cc++) {
             int facet = boundaryMesh.cells.find_tet_facet(cc, v(0), v(2), v(1));
             if (facet != GEO::NO_FACET) {
-                cellFacetToFacet[boundaryMesh.cells.facet(cc, facet)] = ff;
+                cellFacetToFacetPairs.emplace_back(boundaryMesh.cells.facet(cc, facet), ff);
+                break;
             }
         }
-    }
+    });
+    std::map<int, int> cellFacetToFacet(cellFacetToFacetPairs.begin(), cellFacetToFacetPairs.end());
+
 
     printTime(tstart, "CellFacetMap");
 
@@ -116,7 +120,7 @@ void Tessellation::clipFaces2() {
     rvdMeshBuilder.set_simplify_internal_tet_facets(true);
     rvdMeshBuilder.set_simplify_voronoi_facets(true);
     rvdMeshBuilder.set_generate_ids(true);
-    rvd->for_each_polyhedron(rvdMeshBuilder);
+    rvd->for_each_polyhedron(rvdMeshBuilder, true, true, false); // Parallel=true causes crash :(
 
     printTime(tstart, "RVDMeshBuilder");
 

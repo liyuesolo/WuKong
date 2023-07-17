@@ -1,4 +1,5 @@
 #include <igl/fast_find_self_intersections.h>
+#include <igl/slice.h>
 #include "../../include/Boundary/MeshSpringBoundary.h"
 #include "../../include/Energy/PerTriangleVolume.h"
 
@@ -65,10 +66,10 @@ double MeshSpringBoundary::computeEnergy() {
 }
 
 VectorXT MeshSpringBoundary::computeEnergyGradient() {
-    Eigen::SparseVector<double> gradient(nfree);
+    VectorXT gradient = VectorXT::Zero(nfree);
 
     double volume = 0;
-    Eigen::SparseVector<double> volGradient(nfree);
+    VectorXT volGradient = VectorXT::Zero(nfree);
 
     PerTriangleVolume volFunc;
     for (int iF = 0; iF < f.size(); iF++) {
@@ -80,12 +81,12 @@ VectorXT MeshSpringBoundary::computeEnergyGradient() {
             int v1 = verts[(i + 1) % 3];
 
             TV3 d = v[v1].pos - v[v0].pos;
-            addEnergyGradientEntry(gradient, v0 * 3 + 0, -kEdge * d(0));
-            addEnergyGradientEntry(gradient, v0 * 3 + 1, -kEdge * d(1));
-            addEnergyGradientEntry(gradient, v0 * 3 + 2, -kEdge * d(2));
-            addEnergyGradientEntry(gradient, v1 * 3 + 0, kEdge * d(0));
-            addEnergyGradientEntry(gradient, v1 * 3 + 1, kEdge * d(1));
-            addEnergyGradientEntry(gradient, v1 * 3 + 2, kEdge * d(2));
+            gradient(v0 * 3 + 0) += -kEdge * d(0);
+            gradient(v0 * 3 + 1) += -kEdge * d(1);
+            gradient(v0 * 3 + 2) += -kEdge * d(2);
+            gradient(v1 * 3 + 0) += kEdge * d(0);
+            gradient(v1 * 3 + 1) += kEdge * d(1);
+            gradient(v1 * 3 + 2) += kEdge * d(2);
         }
 
         if (iF < f.size() / 2) continue;
@@ -99,21 +100,27 @@ VectorXT MeshSpringBoundary::computeEnergyGradient() {
         volume += vol.value;
         for (int i = 0; i < 3; i++) {
             for (int ii = 0; ii < 3; ii++) {
-                addEnergyGradientEntry(volGradient, verts[i] * 3 + ii, vol.gradient(i * 3 + ii));
+                volGradient(verts[i] * 3 + ii) += vol.gradient(i * 3 + ii);
             }
         }
     }
     gradient += kVol * 2 * (volume - volTarget) * volGradient;
 
-    return gradient;
+    if (nfree < np) {
+        VectorXT gradient2;
+        igl::slice(gradient, free_map, gradient2);
+        return gradient2;
+    } else {
+        return gradient;
+    }
 }
 
 MatrixXT MeshSpringBoundary::computeEnergyHessian() {
-    Eigen::SparseMatrix<double> hessian(nfree, nfree);
+    MatrixXT hessian = MatrixXT::Zero(np, np);
 
     double volume = 0;
-    Eigen::SparseVector<double> volGradient(nfree);
-    Eigen::SparseMatrix<double> volHessian(nfree, nfree);
+    VectorXT volGradient = VectorXT::Zero(np);
+    MatrixXT volHessian = MatrixXT::Zero(np, np);
 
     PerTriangleVolume volFunc;
     for (int iF = 0; iF < f.size(); iF++) {
@@ -131,18 +138,18 @@ MatrixXT MeshSpringBoundary::computeEnergyHessian() {
             int i11 = v1 * 3 + 1;
             int i12 = v1 * 3 + 2;
 
-            addEnergyHessianEntry(hessian, i00, i00, kEdge);
-            addEnergyHessianEntry(hessian, i00, i10, -kEdge);
-            addEnergyHessianEntry(hessian, i10, i00, -kEdge);
-            addEnergyHessianEntry(hessian, i10, i10, kEdge);
-            addEnergyHessianEntry(hessian, i01, i01, kEdge);
-            addEnergyHessianEntry(hessian, i01, i11, -kEdge);
-            addEnergyHessianEntry(hessian, i11, i01, -kEdge);
-            addEnergyHessianEntry(hessian, i11, i11, kEdge);
-            addEnergyHessianEntry(hessian, i02, i02, kEdge);
-            addEnergyHessianEntry(hessian, i02, i12, -kEdge);
-            addEnergyHessianEntry(hessian, i12, i02, -kEdge);
-            addEnergyHessianEntry(hessian, i12, i12, kEdge);
+            hessian(i00, i00) += kEdge;
+            hessian(i00, i10) += -kEdge;
+            hessian(i10, i00) += -kEdge;
+            hessian(i10, i10) += kEdge;
+            hessian(i01, i01) += kEdge;
+            hessian(i01, i11) += -kEdge;
+            hessian(i11, i01) += -kEdge;
+            hessian(i11, i11) += kEdge;
+            hessian(i02, i02) += kEdge;
+            hessian(i02, i12) += -kEdge;
+            hessian(i12, i02) += -kEdge;
+            hessian(i12, i12) += kEdge;
         }
 
         if (iF < f.size() / 2) continue;
@@ -157,11 +164,11 @@ MatrixXT MeshSpringBoundary::computeEnergyHessian() {
         volume += vol.value;
         for (int i = 0; i < 3; i++) {
             for (int ii = 0; ii < 3; ii++) {
-                addEnergyGradientEntry(volGradient, verts[i] * 3 + ii, vol.gradient(i * 3 + ii));
+                volGradient(verts[i] * 3 + ii) = vol.gradient(i * 3 + ii);
                 for (int j = 0; j < 3; j++) {
                     for (int jj = 0; jj < 3; jj++) {
-                        addEnergyHessianEntry(volHessian, verts[i] * 3 + ii, verts[j] * 3 + jj,
-                                              vol.hessian(i * 3 + ii, j * 3 + jj));
+                        volHessian(verts[i] * 3 + ii, verts[j] * 3 + jj) +=
+                                vol.hessian(i * 3 + ii, j * 3 + jj);
                     }
                 }
             }
@@ -169,6 +176,12 @@ MatrixXT MeshSpringBoundary::computeEnergyHessian() {
     }
     hessian += kVol * (2 * (volume - volTarget) * volHessian + 2 * volGradient * volGradient.transpose());
 
-    return hessian;
+    if (nfree < np) {
+        MatrixXT hessian2;
+        igl::slice(hessian, free_map, free_map, hessian2);
+        return hessian2;
+    } else {
+        return hessian;
+    }
 }
 
