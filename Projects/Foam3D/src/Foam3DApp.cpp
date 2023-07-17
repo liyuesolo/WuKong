@@ -169,86 +169,65 @@ void Foam3DApp::generateScenario() {
 }
 
 void Foam3DApp::scenarioCube() {
-    double infp = 10;
-    VectorXd infbox(8 * 3);
-    infbox << -infp, -infp, -infp,
-            -infp, -infp, infp,
-            -infp, infp, -infp,
-            -infp, infp, infp,
-            infp, -infp, -infp,
-            infp, -infp, infp,
-            infp, infp, -infp,
-            infp, infp, infp;
-
     srand(time(NULL));
 //    srand(0);
-    VectorXd vertices((8 + generate_scenario_num_sites) * 3);
-    vertices << VectorXd::Random(generate_scenario_num_sites * 3), infbox;
-    VectorXd params = VectorXd::Zero(8 + generate_scenario_num_sites);
+    VectorXd vertices = VectorXd::Random(generate_scenario_num_sites * 3);
+    VectorXd params = VectorXd::Zero(generate_scenario_num_sites);
 
     foam.vertices = vertices;
     foam.params = params;
     foam.tessellation.cellInfos.resize(generate_scenario_num_sites);
 
-    MatrixXi F(12, 3);
-    F << 0, 2, 1,
-            2, 3, 1,
-            0, 1, 4,
-            1, 5, 4,
-            0, 4, 2,
-            4, 6, 2,
-            4, 5, 6,
-            5, 7, 6,
-            1, 3, 5,
-            3, 7, 5,
-            2, 6, 3,
-            6, 7, 3;
-    F.col(1).swap(F.col(2)); // TODO: Why?
-
-    MatrixXT V(8, 3);
-    double a = 1.0;
-    V << -a, -a, -a,
-            -a, -a, a,
-            -a, a, -a,
-            -a, a, a,
-            a, -a, -a,
-            a, -a, a,
-            a, a, -a,
-            a, a, a;
-
-    VectorXi free(V.rows() * 3);
-    for (int i = 0; i < free.rows(); i++) {
-        free(i) = i;
+    {
+//    MatrixXi F(12, 3);
+//    F << 0, 2, 1,
+//            2, 3, 1,
+//            0, 1, 4,
+//            1, 5, 4,
+//            0, 4, 2,
+//            4, 6, 2,
+//            4, 5, 6,
+//            5, 7, 6,
+//            1, 3, 5,
+//            3, 7, 5,
+//            2, 6, 3,
+//            6, 7, 3;
+//    F.col(1).swap(F.col(2)); // TODO: Why?
+//
+//    MatrixXT V(8, 3);
+//    double a = 1.0;
+//    V << -a, -a, -a,
+//            -a, -a, a,
+//            -a, a, -a,
+//            -a, a, a,
+//            a, -a, -a,
+//            a, -a, a,
+//            a, a, -a,
+//            a, a, a;
+//
+//    VectorXi free(V.rows() * 3);
+//    for (int i = 0; i < free.rows(); i++) {
+//        free(i) = i;
+//    }
+//    foam.tessellation.boundary = new MeshSpringBoundary(V, F, free);
     }
-    foam.tessellation.boundary = new MeshSpringBoundary(V, F, free);
 
-//    VectorXi free(1);
-//    free << 0;
-////    VectorXi free(0);
-//    foam.tessellation.boundary = new CubeBoundary(1, free);
+    VectorXi free(1);
+    free << 0;
+//    VectorXi free(0);
+    foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
 void Foam3DApp::scenarioSphere() {
-    double infp = 10;
-    VectorXd infbox(8 * 3);
-    infbox << -infp, -infp, -infp,
-            -infp, -infp, infp,
-            -infp, infp, -infp,
-            -infp, infp, infp,
-            infp, -infp, -infp,
-            infp, -infp, infp,
-            infp, infp, -infp,
-            infp, infp, infp;
-
     MatrixXT V, TC, N, V2;
     MatrixXi F, FTC, FN, F2;
     igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
 
 //    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
-    VectorXd vertices((8 + V.rows()) * 3);
-    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
-    VectorXd params = VectorXd::Zero(8 + V.rows());
+    VectorXd vertices(V.rows() * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size());
+    VectorXd params = VectorXd::Zero(V.rows());
 
     foam.vertices = vertices;
     foam.params = params;
@@ -280,26 +259,15 @@ void Foam3DApp::scenarioSphere() {
 }
 
 void Foam3DApp::scenarioDrosophilaLowRes() {
-    double infp = 10;
-    VectorXd infbox(8 * 3);
-    infbox << -infp, -infp, -infp,
-            -infp, -infp, infp,
-            -infp, infp, -infp,
-            -infp, infp, infp,
-            infp, -infp, -infp,
-            infp, -infp, infp,
-            infp, infp, -infp,
-            infp, infp, infp;
-
     MatrixXT V, TC, N, V2;
     MatrixXi F, FTC, FN, F2;
     igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_lowres.obj", V, TC, N, F, FTC, FN);
 
 //    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
-    VectorXd vertices((8 + V.rows()) * 3);
-    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
-    VectorXd params = VectorXd::Zero(8 + V.rows());
+    VectorXd vertices(V.rows() * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size());
+    VectorXd params = VectorXd::Zero(V.rows());
 
     foam.vertices = vertices;
     foam.params = params;
@@ -319,26 +287,15 @@ void Foam3DApp::scenarioDrosophilaLowRes() {
 }
 
 void Foam3DApp::scenarioDrosophilaHighRes() {
-    double infp = 10;
-    VectorXd infbox(8 * 3);
-    infbox << -infp, -infp, -infp,
-            -infp, -infp, infp,
-            -infp, infp, -infp,
-            -infp, infp, infp,
-            infp, -infp, -infp,
-            infp, -infp, infp,
-            infp, infp, -infp,
-            infp, infp, infp;
-
     MatrixXT V, TC, N, V2;
     MatrixXi F, FTC, FN, F2;
     igl::readOBJ("../../../Projects/Foam3D/meshes/cell_centroid_highres.obj", V, TC, N, F, FTC, FN);
 
 //    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
-    VectorXd vertices((8 + V.rows()) * 3);
-    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size()), infbox;
-    VectorXd params = VectorXd::Zero(8 + V.rows());
+    VectorXd vertices(V.rows() * 3);
+    vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size());
+    VectorXd params = VectorXd::Zero(V.rows());
 
     foam.vertices = vertices;
     foam.params = params;

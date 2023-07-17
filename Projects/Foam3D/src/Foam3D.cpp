@@ -17,8 +17,8 @@ Foam3D::Foam3D() {
 
 void Foam3D::energyMinimizationStep(int optimizer) {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
-    VectorXT y(c.rows() - 8 * 4 + tessellation.boundary->nfree);
-    y << c.segment(0, c.rows() - 8 * 4), tessellation.boundary->get_p_free();
+    VectorXT y(c.rows() + tessellation.boundary->nfree);
+    y << c, tessellation.boundary->get_p_free();
 
     bool optWeights = false;
 //    energyObjective.check_gradients(y, optWeights);
@@ -36,7 +36,7 @@ void Foam3D::energyMinimizationStep(int optimizer) {
             break;
     }
 
-    c.segment(0, c.rows() - 8 * 4) = y.segment(0, c.rows() - 8 * 4);
+    c = y.segment(0, c.rows());
     VectorXT p_free = y.tail(tessellation.boundary->nfree);
 
     tessellation.separateVerticesParams(c, vertices, params);
@@ -45,8 +45,8 @@ void Foam3D::energyMinimizationStep(int optimizer) {
 
 void Foam3D::dynamicsStep(int optimizer) {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
-    VectorXT y(c.rows() - 8 * 4 + tessellation.boundary->nfree);
-    y << c.segment(0, c.rows() - 8 * 4), tessellation.boundary->get_p_free();
+    VectorXT y(c.rows() + tessellation.boundary->nfree);
+    y << c, tessellation.boundary->get_p_free();
     VectorXT y_prev = y;
 
     bool optWeights = false;
@@ -65,7 +65,7 @@ void Foam3D::dynamicsStep(int optimizer) {
             break;
     }
 
-    c.segment(0, c.rows() - 8 * 4) = y.segment(0, c.rows() - 8 * 4);
+    c = y.segment(0, c.rows());
     VectorXT p_free = y.tail(tessellation.boundary->nfree);
 
     tessellation.separateVerticesParams(c, vertices, params);
@@ -82,8 +82,8 @@ void Foam3D::dynamicsStep(int optimizer) {
 
 void Foam3D::dynamicsInit() {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
-    VectorXT y(c.rows() - 8 * 4 + tessellation.boundary->nfree);
-    y << c.segment(0, c.rows() - 8 * 4), tessellation.boundary->get_p_free();
+    VectorXT y(c.rows() + tessellation.boundary->nfree);
+    y << c, tessellation.boundary->get_p_free();
 
     bool optWeights = false;
     dynamicObjective.newStep(y, optWeights);

@@ -158,7 +158,7 @@ void Tessellation::clipFaces2() {
 //                  << std::endl;
 //    }
 
-    int n_cells = c.rows() / 4 - 8;
+    int n_cells = c.rows() / 4;
     cells.resize(n_cells);
 
     for (GEO::index_t f: clippedMesh.facets) {

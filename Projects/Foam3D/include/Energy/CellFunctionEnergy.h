@@ -12,13 +12,13 @@ public:
     CellFunction *secondMomentFunction;
     CellFunction *adhesionFunction;
 
-    double volumeTargetWeight = 200;//100;
+    double volumeTargetWeight = 100;//100;
     double surfaceAreaTargetWeight = 0.0;
     double siteCentroidWeight = 1;//1;
     double volumeBarrierWeight = 1;
     double wPenaltyWeight = 1;
     double secondMomentWeight = 100;
-    double adhesionWeight = 30;
+    double adhesionWeight = 20;
 
 //    double volumeTargetWeight = 100;
 //    double surfaceAreaTargetWeight = 0;

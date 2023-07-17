@@ -132,7 +132,7 @@ void EnergyObjective::preProcess(const VectorXd &y) const {
     c_with_infbox << c, infbox;
 
     VectorXT vertices, params;
-    tessellation->separateVerticesParams(c_with_infbox, vertices, params);
+    tessellation->separateVerticesParams(c, vertices, params);
     tessellation->tessellate(vertices, params, y.tail(tessellation->boundary->nfree));
 }
 
@@ -432,7 +432,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
         sum_dFdx_d2xdv2 += dFdx.coeff(i, 0) * tessellation->d2xdv2[i];
     }
     MatrixXT sum_dFdx_dxdv_d2vdp2 = MatrixXT::Zero(np, np);
-    VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
+    VectorXT temp_dFdx_dxdv = (dFdx.transpose() * tessellation->dxdv).transpose();
     for (int i = 0; i < nv; i++) {
         sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
     }

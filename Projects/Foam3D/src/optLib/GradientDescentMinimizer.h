@@ -72,6 +72,8 @@ public:
         std::cout << "Optimization step gradient norm: " << gradnorm << ", Objective: " << O0 << ", Alpha: "
                   << alpha_start << std::endl;
         VectorXd x_cand = x;
+
+        double Omin = O0;
         for (int i = 0; i < maxLineSearchIterations; ++i) {
             double alpha = alpha_nominal * pow(.5, i);
             x_cand = x - alpha * dx;
@@ -89,6 +91,10 @@ public:
 //                std::cout << "new alpha " << alpha_start << std::endl;
                 return;
             }
+//            if (O < Omin) {
+//                Omin = O;
+//                x = x_cand;
+//            }
         }
     }
 
