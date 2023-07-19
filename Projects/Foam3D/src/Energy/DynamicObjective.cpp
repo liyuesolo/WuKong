@@ -1,5 +1,7 @@
 #include "../../include/Energy/DynamicObjective.h"
 
+#include "../../include/Globals.h"
+
 void DynamicObjective::minimize(GradientDescentLineSearch *minimizer, VectorXd &y, bool optimizeWeights_) const {
     energyObjective->optimizeWeights = optimizeWeights_;
     energyObjective->optDims = energyObjective->optimizeWeights ? 4 : 3;

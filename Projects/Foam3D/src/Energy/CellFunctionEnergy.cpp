@@ -13,36 +13,39 @@
 #include "../../include/Energy/PerTriangleWeightedMeanZ.h"
 #include <iostream>
 
-//#include "../../include/Globals.h"
+#include "../../include/Globals.h"
 
 #define CONDY (false)
 #define NTERMS 7
 
-CellFunctionEnergy::CellFunctionEnergy() {
-    CellFunction *vol = new CellFunctionPerTriangle(new PerTriangleVolume());
-    CellFunction *wmx = new CellFunctionPerTriangle(new PerTriangleWeightedMeanX());
-    CellFunction *wmy = new CellFunctionPerTriangle(new PerTriangleWeightedMeanY());
-    CellFunction *wmz = new CellFunctionPerTriangle(new PerTriangleWeightedMeanZ());
-    CellFunction *cx = new CellFunctionCentroid(wmx, vol);
-    CellFunction *cy = new CellFunctionCentroid(wmy, vol);
-    CellFunction *cz = new CellFunctionCentroid(wmz, vol);
-    volumeTargetFunction = new CellFunctionConstantTarget(vol, 4.0 / 3.0 * M_PI * pow(cellRadiusTarget, 3.0));
-    surfaceAreaTargetFunction = new CellFunctionConstantTarget(
-            new CellFunctionPerTriangle(new PerTriangleSurfaceArea()), 0);
-    siteCentroidFunction = new CellFunctionCentroidTarget(wmx, wmy, wmz, vol);
-    volumeBarrierFunction = new CellFunctionVolumeBarrier(vol);
-    wPenaltyFunction = new CellFunctionWPenalty();
-//    secondMomentFunction = new CellFunctionConstantTarget(new CellFunctionSecondMoment(cx, cy, cz),
-//                                                          4.0 / 5.0 * M_PI * pow(cellRadiusTarget, 5.0));
-    secondMomentFunction = new CellFunctionSecondMoment(cx, cy, cz);
-    adhesionFunction = new CellFunctionConstantTarget(
-            new CellFunctionAdhesion(), 0);
+CellFunctionEnergy::CellFunctionEnergy() :
+        cellFunctionVolume(&perTriangleVolume),
+        cellFunctionSurfaceArea(&perTriangleSurfaceArea),
+        cellFunctionWMX(&perTriangleWMX),
+        cellFunctionWMY(&perTriangleWMY),
+        cellFunctionWMZ(&perTriangleWMZ),
+        cellFunctionVolumeTarget(&cellFunctionVolume, 0),
+        cellFunctionSurfaceAreaTarget(&cellFunctionSurfaceArea, 0),
+        cellFunctionCX(&cellFunctionWMX, &cellFunctionVolume),
+        cellFunctionCY(&cellFunctionWMY, &cellFunctionVolume),
+        cellFunctionCZ(&cellFunctionWMZ, &cellFunctionVolume),
+        cellFunctionCentroidTarget(&cellFunctionWMX, &cellFunctionWMY, &cellFunctionWMZ, &cellFunctionVolume),
+        cellFunctionVolumeBarrier(&cellFunctionVolume),
+        cellFunctionSecondMoment(&cellFunctionCX, &cellFunctionCY, &cellFunctionCZ),
+        cellFunctionAdhesionTarget(&cellFunctionAdhesion, 0) {}
+
+void CellFunctionEnergy::getParameters() const {
+    cellFunctionVolumeTarget.target = 4.0 / 3.0 * M_PI * pow(cellRadiusTarget, 3.0);
 }
 
 void CellFunctionEnergy::getValue(Tessellation *tessellation, CellValue &value) const {
+    getParameters();
+
     CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
-    CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
+    const CellFunction *funcs[NTERMS] = {&cellFunctionVolumeTarget, &cellFunctionSurfaceAreaTarget,
+                                         &cellFunctionCentroidTarget,
+                                         &cellFunctionVolumeBarrier, &cellFunctionWPenalty, &cellFunctionSecondMoment,
+                                         &cellFunctionAdhesionTarget};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
                               wPenaltyWeight, secondMomentWeight, adhesionWeight};
 
@@ -60,9 +63,13 @@ void CellFunctionEnergy::getValue(Tessellation *tessellation, CellValue &value) 
 }
 
 void CellFunctionEnergy::getGradient(Tessellation *tessellation, CellValue &value) const {
+    getParameters();
+
     CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
-    CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
+    const CellFunction *funcs[NTERMS] = {&cellFunctionVolumeTarget, &cellFunctionSurfaceAreaTarget,
+                                         &cellFunctionCentroidTarget,
+                                         &cellFunctionVolumeBarrier, &cellFunctionWPenalty, &cellFunctionSecondMoment,
+                                         &cellFunctionAdhesionTarget};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
                               wPenaltyWeight, secondMomentWeight, adhesionWeight};
 
@@ -77,9 +84,13 @@ void CellFunctionEnergy::getGradient(Tessellation *tessellation, CellValue &valu
 }
 
 void CellFunctionEnergy::getHessian(Tessellation *tessellation, CellValue &value) const {
+    getParameters();
+
     CellValue vals[NTERMS] = {value, value, value, value, value, value, value};
-    CellFunction *funcs[NTERMS] = {volumeTargetFunction, surfaceAreaTargetFunction, siteCentroidFunction,
-                                   volumeBarrierFunction, wPenaltyFunction, secondMomentFunction, adhesionFunction};
+    const CellFunction *funcs[NTERMS] = {&cellFunctionVolumeTarget, &cellFunctionSurfaceAreaTarget,
+                                         &cellFunctionCentroidTarget,
+                                         &cellFunctionVolumeBarrier, &cellFunctionWPenalty, &cellFunctionSecondMoment,
+                                         &cellFunctionAdhesionTarget};
     double weights[NTERMS] = {volumeTargetWeight, surfaceAreaTargetWeight, siteCentroidWeight, volumeBarrierWeight,
                               wPenaltyWeight, secondMomentWeight, adhesionWeight};
 

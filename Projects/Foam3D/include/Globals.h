@@ -11,3 +11,16 @@ extern double secondMomentWeight;//100;
 extern double adhesionWeight;
 
 extern double cellRadiusTarget;
+
+// GastrulationBoundary
+
+extern double kNeighborhood;
+extern double kVol;
+extern double volTarget;
+extern double outerRadius;
+
+// DynamicObjective
+
+extern double dt;
+extern double m;
+extern double eta;

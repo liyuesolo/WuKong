@@ -4,7 +4,7 @@
 #include <tbb/tbb.h>
 
 #define PRINT_INTERMEDIATE_TIMES false
-#define PRINT_TOTAL_TIME true
+#define PRINT_TOTAL_TIME false
 
 static void
 printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
@@ -92,7 +92,7 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
     for (int i = 0; i < x.rows(); i++) {
         VectorXd gradCheck = get_dOdc(x);
         if ((gradCheck - grad).norm() > 1e-10) {
-            std::cout << "GRADIENT DISCREPANCY :(" << std::endl;
+            std::cout << "GRADIENT DISCREPANCY :( " << (gradCheck - grad).norm() << std::endl;
         }
         VectorXd xp = x;
         xp(i) = x(i) + eps;
@@ -105,10 +105,11 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
         VectorXd gradm2 = get_dOdc(xp);
 
         for (int j = 0; j < grad.rows(); j++) {
-//            if (fabs(hess(j, i)) < 1e-10 ||
-//                fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-2 * fabs(hess(j, i)))
-//                continue;
-            hessFD(j, i) = (gradp[j] - grad[j]) / eps;
+            hessFD(j, i) = (gradp[j] - gradm[j]) / (2 * eps);
+            if ((fabs(hess(j, i)) < 1e-10 && fabs((gradp[j] - grad[j]) / eps) < 1e-10) ||
+                fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-4 * fabs(hess(j, i)))
+                continue;
+
             double a = (gradp[j] - gradm[j]) - (2 * eps) * hess(j, i);
             double b = (gradp2[j] - gradm2[j]) - (4 * eps) * hess(j, i);
             std::cout << "check hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " " << hess(j, i)
@@ -117,7 +118,7 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
         }
     }
 
-    std::cout << "Hessian error norm: " << (hessFD - hess).norm();
+    std::cout << "Hessian error max: " << (hessFD - hess).maxCoeff() << " " << (hessFD - hess).minCoeff() << std::endl;
 }
 
 void EnergyObjective::preProcess(const VectorXd &y) const {
@@ -198,10 +199,9 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
     int nv = tessellation->boundary->v.size() * 3;
     int np = tessellation->boundary->nfree;
 
-    VectorXT dFdx = VectorXT::Zero(nx);
-    VectorXT dFdc = VectorXT::Zero(nc);
-    VectorXT dFdp = VectorXT::Zero(np);
-
+//    VectorXT dFdx = VectorXT::Zero(nx);
+//    VectorXT dFdc = VectorXT::Zero(nc);
+//    VectorXT dFdp = tessellation->boundary->computeEnergyGradient();
 //    for (Cell cell: tessellation->cells) {
 //        CellValue cellValue(cell);
 //        energyFunction.getGradient(tessellation, cellValue);
@@ -217,9 +217,8 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
 //                                                                                      optDims);
 //    }
 
-    tbb::concurrent_vector<double> dFdxBuilder(nx);
-    std::fill(dFdxBuilder.begin(), dFdxBuilder.end(), 0);
-
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsdFdx;
+    tbb::concurrent_vector<Eigen::Triplet<double>> tripletsdFdc;
     tbb::parallel_for_each(tessellation->cells.begin(), tessellation->cells.end(), [&](Cell cell) {
         CellValue cellValue(cell);
         energyFunction.getGradient(tessellation, cellValue);
@@ -229,15 +228,22 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
             int nodeIdxInCell = n.second;
             NodePosition nodePos = tessellation->nodes[node];
 
-            dFdxBuilder[nodePos.ix * 3 + 0] += cellValue.gradient(nodeIdxInCell * 3 + 0);
-            dFdxBuilder[nodePos.ix * 3 + 1] += cellValue.gradient(nodeIdxInCell * 3 + 1);
-            dFdxBuilder[nodePos.ix * 3 + 2] += cellValue.gradient(nodeIdxInCell * 3 + 2);
+            for (int i = 0; i < 3; i++) {
+                tripletsdFdx.emplace_back(nodePos.ix * 3 + i, 0, cellValue.gradient(nodeIdxInCell * 3 + i));
+            }
         }
-        dFdc.segment(cell.cellIndex * optDims, optDims) += cellValue.gradient.segment(cell.nodeIndices.size() * 3,
-                                                                                      optDims); // TODO: Should be threadsafe?
+        for (int i = 0; i < optDims; i++) {
+            tripletsdFdc.emplace_back(cell.cellIndex * optDims + i, 0,
+                                      cellValue.gradient(cell.nodeIndices.size() * 3 + i));
+        }
     });
-    dFdx = Eigen::Map<VectorXT>(&dFdxBuilder[0], nx);
-    dFdp = tessellation->boundary->computeEnergyGradient();
+    Eigen::SparseMatrix<double> dFdx_sp(nx, 1);
+    dFdx_sp.setFromTriplets(tripletsdFdx.begin(), tripletsdFdx.end());
+    Eigen::SparseMatrix<double> dFdc_sp(nc, 1);
+    dFdc_sp.setFromTriplets(tripletsdFdc.begin(), tripletsdFdc.end());
+    VectorXT dFdx = dFdx_sp;
+    VectorXT dFdc = dFdc_sp;
+    VectorXT dFdp = tessellation->boundary->computeEnergyGradient();
 
     gradient.segment(0, nc) = dFdx.transpose() * tessellation->dxdc + dFdc.transpose();
     gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->dvdp + dFdp.transpose();

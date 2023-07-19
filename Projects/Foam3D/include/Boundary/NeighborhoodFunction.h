@@ -13,7 +13,7 @@ struct NeighborhoodValue {
     int ic;
     std::vector<int> iv;
 
-    double value;
+    double value = 0;
     VectorXT gradient;
     MatrixXT hessian;
 };

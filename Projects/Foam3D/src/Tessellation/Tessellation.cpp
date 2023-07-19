@@ -8,7 +8,7 @@
 #include "../../include/Energy/PerTriangleVolume.h"
 
 #define PRINT_INTERMEDIATE_TIMES false
-#define PRINT_TOTAL_TIME true
+#define PRINT_TOTAL_TIME false
 
 static void
 printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {

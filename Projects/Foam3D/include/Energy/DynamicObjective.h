@@ -11,9 +11,9 @@ public:
     VectorXd y_prev;
     VectorXd v_prev;
 
-    double dt = 0.003;
-    double m = 0.001;
-    double eta = 0.1;
+//    double dt = 0.003;
+//    double m = 0.001;
+//    double eta = 0.1;
 
 public:
 

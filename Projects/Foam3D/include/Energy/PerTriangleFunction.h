@@ -12,7 +12,7 @@ struct TriangleValue {
     TV3 v1;
     TV3 v2;
 
-    double value;
+    double value = 0;
     VectorXT gradient;
     MatrixXT hessian;
 };

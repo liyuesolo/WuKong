@@ -4,6 +4,9 @@
 #include "../../include/Boundary/BoundaryEnergyPerNeighborhood.h"
 #include "../../include/Boundary/NeighborhoodLaplacian.h"
 #include "../../include/Boundary/BoundaryEnergyVolumeTarget.h"
+#include "../../include/Boundary/BoundaryEnergySphericalBarrier.h"
+
+#include "../../include/Globals.h"
 
 GastrulationBoundary::GastrulationBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_) : Boundary(
         Eigen::Map<VectorXT>(MatrixXT(v_.transpose()).data(), v_.size()), free_) {
@@ -14,6 +17,9 @@ bool GastrulationBoundary::checkValid() {
     MatrixXT V(v.size(), 3);
     for (int i = 0; i < v.size(); i++) {
         V.row(i) = v[i].pos;
+        if (v[i].pos.squaredNorm() > pow(outerRadius, 2.0)) {
+            return false;
+        }
     }
     MatrixXi F(f.size(), 3);
     for (int i = 0; i < f.size(); i++) {
@@ -37,7 +43,7 @@ void GastrulationBoundary::computeVertices() {
     }
 
     averagePos /= v.size();
-    std::cout << "Boundary Centroid " << averagePos(0) << " " << averagePos(1) << " " << averagePos(2) << std::endl;
+//    std::cout << "Boundary Centroid " << averagePos(0) << " " << averagePos(1) << " " << averagePos(2) << std::endl;
 }
 
 double GastrulationBoundary::computeEnergy() {
@@ -48,13 +54,16 @@ double GastrulationBoundary::computeEnergy() {
         innerFaces.push_back(iF);
     }
     BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
     double laplacianEnergy = 0;
     laplacianEnergyFunc.getValue(this, laplacianEnergy);
     double volumeEnergy = 0;
     volumeEnergyFunc.getValue(this, volumeEnergy);
+    double sphericalBarrierEnergy = 0;
+    sphericalBarrierEnergyFunc.getValue(this, sphericalBarrierEnergy);
 
-    return kNeighborhood * laplacianEnergy + kVol * volumeEnergy;
+    return kNeighborhood * laplacianEnergy + kVol * volumeEnergy + sphericalBarrierEnergy;
 }
 
 VectorXT GastrulationBoundary::computeEnergyGradient() {
@@ -65,13 +74,16 @@ VectorXT GastrulationBoundary::computeEnergyGradient() {
         innerFaces.push_back(iF);
     }
     BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
     VectorXT laplacianGrad;
     laplacianEnergyFunc.getGradient(this, laplacianGrad);
     VectorXT volumeGrad;
     volumeEnergyFunc.getGradient(this, volumeGrad);
+    VectorXT sphericalBarrierGrad;
+    sphericalBarrierEnergyFunc.getGradient(this, sphericalBarrierGrad);
 
-    return kNeighborhood * laplacianGrad + kVol * volumeGrad;
+    return kNeighborhood * laplacianGrad + kVol * volumeGrad + sphericalBarrierGrad;
 }
 
 MatrixXT GastrulationBoundary::computeEnergyHessian() {
@@ -82,13 +94,16 @@ MatrixXT GastrulationBoundary::computeEnergyHessian() {
         innerFaces.push_back(iF);
     }
     BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
     MatrixXT laplacianHess;
     laplacianEnergyFunc.getHessian(this, laplacianHess);
     MatrixXT volumeHess;
     volumeEnergyFunc.getHessian(this, volumeHess);
+    MatrixXT sphericalBarrierHess;
+    sphericalBarrierEnergyFunc.getHessian(this, sphericalBarrierHess);
 
-    return kNeighborhood * laplacianHess + kVol * volumeHess;
+    return kNeighborhood * laplacianHess + kVol * volumeHess + sphericalBarrierHess;
 }
 
 //double GastrulationBoundary::computeEnergy() {

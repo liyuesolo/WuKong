@@ -12,6 +12,8 @@
 #include "../include/Boundary/GastrulationBoundary.h"
 #include "../include/Boundary/CubeBoundary.h"
 
+#include "../include/Globals.h"
+
 void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
     menu.callback_draw_viewer_menu = [&]() {
@@ -76,6 +78,52 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             generateScenario();
             updateViewerData(viewer);
         }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Text("Cell Energy");
+
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("Cell Radius", &cellRadiusTarget, 0.001f, 0.001f, "%.4f");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("volumeTargetWeight", &volumeTargetWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("surfaceAreaTargetWeight", &surfaceAreaTargetWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("siteCentroidWeight", &siteCentroidWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("volumeBarrierWeight", &volumeBarrierWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("wPenaltyWeight", &wPenaltyWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("secondMomentWeight", &secondMomentWeight, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("adhesionWeight", &adhesionWeight, 0.001f, 0.001f, "%.4f");
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Text("Boundary Energy");
+
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("kNeighborhood", &kNeighborhood, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("kVol", &kVol, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("volTarget", &volTarget, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("outerRadius", &outerRadius, 0.001f, 0.001f, "%.4f");
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Text("Dynamics");
+
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("dt", &dt, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("m", &m, 0.001f, 0.001f, "%.4f");
+        ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
+        ImGui::InputDouble("eta", &eta, 0.001f, 0.001f, "%.4f");
     };
 
     // Draw additional windows
@@ -222,6 +270,7 @@ void Foam3DApp::scenarioSphere() {
     MatrixXT V, TC, N, V2;
     MatrixXi F, FTC, FN, F2;
     igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
+    V -= TV3(0, 0.5, 0).transpose().replicate(V.rows(), 1);
 
 //    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
@@ -231,9 +280,11 @@ void Foam3DApp::scenarioSphere() {
 
     foam.vertices = vertices;
     foam.params = params;
+    
 
-    igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
-    igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V2, TC, N, F2, FTC, FN);
+    V2 = V;
+    F2 = F;
+
     V *= 1.1;
     V2 *= 0.9;
     F2.col(1).swap(F2.col(2));
@@ -254,7 +305,7 @@ void Foam3DApp::scenarioSphere() {
 
     foam.tessellation.cellInfos.resize(V.rows());
     for (int i = 0; i < V.rows(); i++) {
-        if (V(i, 1) > 2.7) foam.tessellation.cellInfos[i].adhesion = 2 * (V(i, 1) - 2.7);
+        if (V(i, 1) > 2.2) foam.tessellation.cellInfos[i].adhesion = 2 * (V(i, 1) - 2.2);
     }
 }
 

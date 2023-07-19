@@ -5,9 +5,9 @@
 class GastrulationBoundary : public Boundary {
 
 private:
-    double kNeighborhood = 2;
-    double kVol = 2;
-    double volTarget = -40.666;
+//    double kNeighborhood = 2;
+//    double kVol = 2;
+//    double volTarget = -40.666;
 
 private:
     virtual void computeVertices();
