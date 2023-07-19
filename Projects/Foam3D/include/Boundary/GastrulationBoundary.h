@@ -2,12 +2,12 @@
 
 #include "Boundary.h"
 
-class MeshSpringBoundary : public Boundary {
+class GastrulationBoundary : public Boundary {
 
 private:
-    double kEdge = 0.1;
-    double kVol = 1;
-    double volTarget = -40;
+    double kNeighborhood = 2;
+    double kVol = 2;
+    double volTarget = -40.666;
 
 private:
     virtual void computeVertices();
@@ -22,5 +22,5 @@ public:
     virtual MatrixXT computeEnergyHessian();
 
 public:
-    MeshSpringBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_);
+    GastrulationBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_);
 };

@@ -9,7 +9,7 @@
 
 #include "../include/Tessellation/Power.h"
 #include "../include/Boundary/MeshBoundary.h"
-#include "../include/Boundary/MeshSpringBoundary.h"
+#include "../include/Boundary/GastrulationBoundary.h"
 #include "../include/Boundary/CubeBoundary.h"
 
 void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
@@ -179,43 +179,43 @@ void Foam3DApp::scenarioCube() {
     foam.tessellation.cellInfos.resize(generate_scenario_num_sites);
 
     {
-//    MatrixXi F(12, 3);
-//    F << 0, 2, 1,
-//            2, 3, 1,
-//            0, 1, 4,
-//            1, 5, 4,
-//            0, 4, 2,
-//            4, 6, 2,
-//            4, 5, 6,
-//            5, 7, 6,
-//            1, 3, 5,
-//            3, 7, 5,
-//            2, 6, 3,
-//            6, 7, 3;
-//    F.col(1).swap(F.col(2)); // TODO: Why?
-//
-//    MatrixXT V(8, 3);
-//    double a = 1.0;
-//    V << -a, -a, -a,
-//            -a, -a, a,
-//            -a, a, -a,
-//            -a, a, a,
-//            a, -a, -a,
-//            a, -a, a,
-//            a, a, -a,
-//            a, a, a;
-//
-//    VectorXi free(V.rows() * 3);
-//    for (int i = 0; i < free.rows(); i++) {
-//        free(i) = i;
-//    }
-//    foam.tessellation.boundary = new MeshSpringBoundary(V, F, free);
+        MatrixXi F(12, 3);
+        F << 0, 2, 1,
+                2, 3, 1,
+                0, 1, 4,
+                1, 5, 4,
+                0, 4, 2,
+                4, 6, 2,
+                4, 5, 6,
+                5, 7, 6,
+                1, 3, 5,
+                3, 7, 5,
+                2, 6, 3,
+                6, 7, 3;
+        F.col(1).swap(F.col(2)); // TODO: Why?
+
+        MatrixXT V(8, 3);
+        double a = 1.0;
+        V << -a, -a, -a,
+                -a, -a, a,
+                -a, a, -a,
+                -a, a, a,
+                a, -a, -a,
+                a, -a, a,
+                a, a, -a,
+                a, a, a;
+
+        VectorXi free(V.rows() * 3);
+        for (int i = 0; i < free.rows(); i++) {
+            free(i) = i;
+        }
+        foam.tessellation.boundary = new GastrulationBoundary(V, F, free);
     }
 
-    VectorXi free(1);
-    free << 0;
-//    VectorXi free(0);
-    foam.tessellation.boundary = new CubeBoundary(1, free);
+//    VectorXi free(1);
+//    free << 0;
+////    VectorXi free(0);
+//    foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
 void Foam3DApp::scenarioSphere() {
@@ -247,7 +247,7 @@ void Foam3DApp::scenarioSphere() {
     for (int i = 0; i < free.rows(); i++) {
         free(i) = i;
     }
-    foam.tessellation.boundary = new MeshSpringBoundary(V3, F3, free);
+    foam.tessellation.boundary = new GastrulationBoundary(V3, F3, free);
     for (int i = 0; i < foam.tessellation.boundary->f.size() / 2; i++) {
         foam.tessellation.boundary->f[i].adhesion = 1.0;
     }

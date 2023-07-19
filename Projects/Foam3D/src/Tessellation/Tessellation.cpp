@@ -7,7 +7,7 @@
 #include "Projects/Foam3D/include/Energy/CellFunctionPerTriangle.h"
 #include "../../include/Energy/PerTriangleVolume.h"
 
-#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_INTERMEDIATE_TIMES false
 #define PRINT_TOTAL_TIME true
 
 static void
@@ -49,7 +49,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
     auto tstart = std::chrono::high_resolution_clock::now();
     boundary->compute(p_free);
-    printTime(tstart, "Boundary compute time ", true);
+    printTime(tstart, "Boundary compute time ");
 
     if (!boundary->checkValid()) {
         isValid = false;
@@ -117,7 +117,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
             }
         }
     }
-    printTime(tstart, "Node gradients ", true);
+    printTime(tstart, "Node gradients ");
     int ix = 0;
     for (auto it = nodes.begin(); it != nodes.end(); it++) {
         it->second.ix = ix;
@@ -462,7 +462,7 @@ void Tessellation::computeMatrices() {
         vertIdx++;
     }
 
-    printTime(tstart, "Triplets ", true);
+    printTime(tstart, "Triplets ");
 
     dxdc.resize(nx, nc);
     dxdv.resize(nx, nv);
@@ -480,7 +480,7 @@ void Tessellation::computeMatrices() {
         d2vdp2[i].resize(np, np);
     });
 
-    printTime(tstart, "Resize ", true);
+    printTime(tstart, "Resize ");
 
     dxdc.setFromTriplets(tripletsDXDC.begin(), tripletsDXDC.end());
     dxdv.setFromTriplets(tripletsDXDV.begin(), tripletsDXDV.end());

@@ -3,7 +3,7 @@
 #include <chrono>
 #include <tbb/tbb.h>
 
-#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_INTERMEDIATE_TIMES false
 #define PRINT_TOTAL_TIME true
 
 static void
@@ -88,7 +88,12 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
     }
 
     MatrixXT hess = get_d2Odc2(x);
+    MatrixXT hessFD = 0 * hess;
     for (int i = 0; i < x.rows(); i++) {
+        VectorXd gradCheck = get_dOdc(x);
+        if ((gradCheck - grad).norm() > 1e-10) {
+            std::cout << "GRADIENT DISCREPANCY :(" << std::endl;
+        }
         VectorXd xp = x;
         xp(i) = x(i) + eps;
         VectorXd gradp = get_dOdc(xp);
@@ -103,6 +108,7 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
 //            if (fabs(hess(j, i)) < 1e-10 ||
 //                fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-2 * fabs(hess(j, i)))
 //                continue;
+            hessFD(j, i) = (gradp[j] - grad[j]) / eps;
             double a = (gradp[j] - gradm[j]) - (2 * eps) * hess(j, i);
             double b = (gradp2[j] - gradm2[j]) - (4 * eps) * hess(j, i);
             std::cout << "check hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " " << hess(j, i)
@@ -110,6 +116,8 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
                       << std::endl;
         }
     }
+
+    std::cout << "Hessian error norm: " << (hessFD - hess).norm();
 }
 
 void EnergyObjective::preProcess(const VectorXd &y) const {
@@ -459,7 +467,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
             }
         });
         g.run([&] {
-            VectorXT temp_dFdx_dxdv = dFdx.transpose() * tessellation->dxdv;
+            VectorXT temp_dFdx_dxdv = (dFdx.transpose() * tessellation->dxdv).transpose();
             for (int i = 0; i < nv; i++) {
                 sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
             }

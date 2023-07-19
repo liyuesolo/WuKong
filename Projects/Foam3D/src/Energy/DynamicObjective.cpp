@@ -83,6 +83,7 @@ void DynamicObjective::check_gradients(const VectorXd &y, bool optimizeWeights_)
     SparseMatrixd hess_sp;
     getHessian(x, hess_sp);
     MatrixXT hess = hess_sp;
+    MatrixXT hessFD = 0 * hess;
     for (int i = 0; i < x.rows(); i++) {
         VectorXd gradp = 0 * x, gradp2 = 0 * x, gradm = 0 * x, gradm2 = 0 * x;
 
@@ -100,6 +101,7 @@ void DynamicObjective::check_gradients(const VectorXd &y, bool optimizeWeights_)
 //            if (fabs(hess(j, i)) < 1e-10 ||
 //                fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-2 * fabs(hess(j, i)))
 //                continue;
+            hessFD(j, i) = (gradp[j] - grad[j]) / eps;
             double a = (gradp[j] - gradm[j]) - (2 * eps) * hess(j, i);
             double b = (gradp2[j] - gradm2[j]) - (4 * eps) * hess(j, i);
             std::cout << "check hess[" << j << "," << i << "] " << (gradp[j] - grad[j]) / eps << " " << hess(j, i)
@@ -107,6 +109,8 @@ void DynamicObjective::check_gradients(const VectorXd &y, bool optimizeWeights_)
                       << std::endl;
         }
     }
+
+    std::cout << "Hessian error norm: " << (hessFD - hess).norm();
 }
 
 double DynamicObjective::evaluate(const VectorXd &y) const {

@@ -13,6 +13,8 @@
 #include "../../include/Energy/PerTriangleWeightedMeanZ.h"
 #include <iostream>
 
+//#include "../../include/Globals.h"
+
 #define CONDY (false)
 #define NTERMS 7
 
@@ -24,12 +26,14 @@ CellFunctionEnergy::CellFunctionEnergy() {
     CellFunction *cx = new CellFunctionCentroid(wmx, vol);
     CellFunction *cy = new CellFunctionCentroid(wmy, vol);
     CellFunction *cz = new CellFunctionCentroid(wmz, vol);
-    volumeTargetFunction = new CellFunctionConstantTarget(vol, 0.3);
+    volumeTargetFunction = new CellFunctionConstantTarget(vol, 4.0 / 3.0 * M_PI * pow(cellRadiusTarget, 3.0));
     surfaceAreaTargetFunction = new CellFunctionConstantTarget(
             new CellFunctionPerTriangle(new PerTriangleSurfaceArea()), 0);
     siteCentroidFunction = new CellFunctionCentroidTarget(wmx, wmy, wmz, vol);
     volumeBarrierFunction = new CellFunctionVolumeBarrier(vol);
     wPenaltyFunction = new CellFunctionWPenalty();
+//    secondMomentFunction = new CellFunctionConstantTarget(new CellFunctionSecondMoment(cx, cy, cz),
+//                                                          4.0 / 5.0 * M_PI * pow(cellRadiusTarget, 5.0));
     secondMomentFunction = new CellFunctionSecondMoment(cx, cy, cz);
     adhesionFunction = new CellFunctionConstantTarget(
             new CellFunctionAdhesion(), 0);
@@ -46,7 +50,8 @@ void CellFunctionEnergy::getValue(Tessellation *tessellation, CellValue &value) 
     for (int i = 0; i < NTERMS; i++) {
         if (CONDY) continue;
         funcs[i]->getValue(tessellation, vals[i]);
-//        std::cout << "val " << i << " " << vals[i].value << std::endl;
+//        if (tessellation->cellInfos[value.cell.cellIndex].adhesion > 0)
+//            std::cout << "val " << i << " " << vals[i].value << std::endl;
 //        if (std::isnan(vals[i].value) || std::isinf(vals[i].value)) continue;
 //        std::cout << weights[i] * vals[i].value << ", ";
         value.value += weights[i] * vals[i].value;

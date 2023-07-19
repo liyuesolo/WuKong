@@ -38,7 +38,7 @@ bool operator<(const Node &a, const Node &b) {
     return false;
 }
 
-#define PRINT_INTERMEDIATE_TIMES true
+#define PRINT_INTERMEDIATE_TIMES false
 #define PRINT_TOTAL_TIME true
 
 static void
