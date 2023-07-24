@@ -22,9 +22,18 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
             mesh_indices_gc[i][d] = extrinsic_indices[i * 3 + d];
     int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
     std::vector<gc::Vector3> mesh_vertices_gc(n_vtx_extrinsic);
-    for (int i = 0; i < n_vtx_extrinsic; i++)
-        mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
-            extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+    if (two_way_coupling)
+        for (int i = 0; i < n_vtx_extrinsic; i++)
+            mesh_vertices_gc[i] = gc::Vector3{
+                deformed(i * 3 + 0 + shell_dof_start), 
+                deformed(i * 3 + 1 + shell_dof_start), 
+                deformed(i * 3 + 2 + shell_dof_start)};
+    else 
+        for (int i = 0; i < n_vtx_extrinsic; i++)
+            mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+                extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+
+
     // START_TIMING(contruct)
     auto lvals = gcs::makeManifoldSurfaceMeshAndGeometry(mesh_indices_gc, mesh_vertices_gc);
     // FINISH_TIMING_PRINT(contruct)
@@ -39,9 +48,7 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
     SurfacePoint va_sub(sub_mesh->face(va.face.getIndex()), va.faceCoords);
     SurfacePoint vb_sub(sub_mesh->face(vb.face.getIndex()), vb.faceCoords);
 
-    // SurfacePoint va_sub = SurfacePoint(sub_mesh->vertex(0));
-    // SurfacePoint vb_sub = SurfacePoint(sub_mesh->vertex(1));
-    
+
     mmp.propagate(va_sub);
     if (trace_path)
     {
@@ -51,6 +58,7 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         {
             T edge_t = -1.0; TV start = TV::Zero(), end = TV::Zero();
             bool is_edge_point = (pt.type == gcs::SurfacePointType::Edge);
+            Edge start_end; start_end.setConstant(-1);
             if (is_edge_point)
             {
                 auto he = pt.edge.halfedge();
@@ -58,10 +66,15 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 SurfacePoint end_extrinsic = he.tipVertex();
                 start = toTV(start_extrinsic.interpolate(sub_geometry->vertexPositions));
                 end = toTV(end_extrinsic.interpolate(sub_geometry->vertexPositions));
+                start_end[0] = start_extrinsic.vertex.getIndex();
+                start_end[1] = end_extrinsic.vertex.getIndex();
                 TV ixn = toTV(pt.interpolate(sub_geometry->vertexPositions));
                 TV test_interp = pt.tEdge * start + (1.0 - pt.tEdge) * end;
                 if ((test_interp - ixn).norm() > 1e-6)
+                {
                     std::swap(start, end);
+                    std::swap(start_end[0], start_end[1]);
+                }
                 
                 TV dir0 = (end-start).normalized();
                 TV dir1 = (ixn-start).normalized();
@@ -81,7 +94,7 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
                 // std::getchar();
             }
-            ixn_data.push_back(IxnData(start, end, (1.0-edge_t)));
+            ixn_data.push_back(IxnData(start, end, (1.0-edge_t), start_end[0], start_end[1]));
             pt.edge = mesh->edge(pt.edge.getIndex());
             pt.vertex = mesh->vertex(pt.vertex.getIndex());
             pt.face = mesh->face(pt.face.getIndex());
@@ -94,10 +107,10 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         TV ixn1 = toTV(path[path.size() - 2].interpolate(geometry->vertexPositions));
         
         if (path.size() > 2)
-            if ((v0 - ixn0).norm() < 1e-5)
+            if ((v0 - ixn0).norm() < 1e-6)
                 path.erase(path.begin() + 1);
         if (path.size() > 2)
-            if ((v1 - ixn1).norm() < 1e-5)
+            if ((v1 - ixn1).norm() < 1e-6)
                 path.erase(path.end() - 2);
         
     }
@@ -452,6 +465,23 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
             delta_u[offset] = target;
         });
     }
+    
+    if (two_way_coupling)
+    {
+        deformed += delta_u;
+        geometry->requireVertexPositions();
+        int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+        for (int i = 0; i < n_vtx_extrinsic; i++)
+        {
+            geometry->vertexPositions[mesh->vertex(i)] = 
+                gc::Vector3{deformed(i * 3 + 0 + shell_dof_start), 
+                deformed(i * 3 + 1 + shell_dof_start), 
+                deformed(i * 3 + 2 + shell_dof_start)};
+        }
+        geometry->unrequireVertexPositions();
+        geometry->refreshQuantities();
+    
+    }
 
     for (int i = 0; i < mass_surface_points.size(); i++)
     {
@@ -498,6 +528,7 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
         retrace = true;
         traceGeodesics();
     }
+    
 }
 
 
@@ -596,6 +627,28 @@ T IntrinsicSimulation::computeTotalEnergy()
     addTriangleAreaEnergy(wa, area_energy);
     // std::cout << area_energy << std::endl;
     total_energy += area_energy;
+    if (two_way_coupling)
+    {
+        T elastic_energy = 0.0;
+        addShellEnergy(elastic_energy);
+        total_energy += elastic_energy;
+    }
+
+    if (add_geo_elasticity)
+    {
+        T geo_elastic_energy = 0.0;
+        addGeodesicNHEnergy(geo_elastic_energy);
+        total_energy += geo_elastic_energy;    
+        // std::cout << geo_elastic_energy << std::endl;
+    }
+
+    if (add_volume)
+    {
+        T volume_term = 0.0;
+        addVolumePreservationEnergy(wv, volume_term);
+        total_energy += volume_term;
+    }
+
     return total_energy;
 }
 
@@ -604,7 +657,12 @@ T IntrinsicSimulation::computeResidual(VectorXT& residual)
 
     addEdgeLengthForceEntries(we, residual);
     addTriangleAreaForceEntries(wa, residual);
-
+    if (add_geo_elasticity)
+        addGeodesicNHForceEntry(residual);
+    if (two_way_coupling)
+        addShellForceEntry(residual);
+    if (add_volume)
+        addVolumePreservationForceEntries(wv, residual);
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
@@ -620,6 +678,15 @@ void IntrinsicSimulation::buildSystemMatrix(StiffnessMatrix& K)
     std::vector<Entry> entries;
     addEdgeLengthHessianEntries(we, entries);
     addTriangleAreaHessianEntries(wa, entries);
+    if (add_geo_elasticity)
+        addGeodesicNHHessianEntry(entries);
+    if (two_way_coupling)
+        addShellHessianEntries(entries);
+    if (add_volume)
+    {
+        MatrixXT Woodbury_matrix;
+        addVolumePreservationHessianEntries(wv, entries, Woodbury_matrix);
+    }
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     
@@ -748,6 +815,7 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
         T alpha = 1.0;
         int cnt = 0;
         std::vector<std::pair<SurfacePoint, gcFace>> current_state = mass_surface_points;
+        VectorXT current_state_x = deformed;
         while (true)
         {
             delta_u = alpha * direction;
@@ -779,8 +847,11 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
                     }
                     out.close();
                     // std::exit(0);
-                    if (!using_gradient)
+                    if (!using_gradient && use_Newton)
+                    {
                         mass_surface_points = current_state;
+                        deformed = current_state_x;
+                    }
                     return false;
                     // Eigen::EigenSolver<MatrixXT> es(K);
                     // std::cout << es.eigenvalues().real().maxCoeff() << std::endl;
@@ -791,11 +862,12 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
             alpha *= 0.5;
             cnt += 1;
             mass_surface_points = current_state;
+            deformed = current_state_x;
         }
     };
 
     bool ls_succeed = lineSearchInDirection(du, false);
-    if (!ls_succeed)
+    if (!ls_succeed && use_Newton)
         ls_succeed = lineSearchInDirection(residual, true);
 
     return delta_u.norm();
@@ -805,6 +877,7 @@ void IntrinsicSimulation::reset()
 {
     mass_surface_points = mass_surface_points_undeformed;
     delta_u.setZero();
+    deformed = undeformed;
     updateCurrentState();
 }
 

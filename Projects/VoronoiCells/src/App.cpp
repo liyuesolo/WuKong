@@ -470,10 +470,10 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case 'd':
-            simulation.checkTotalGradientScale(true);
-            // simulation.checkTotalGradient(true);
-            simulation.checkTotalHessianScale(true);
-            simulation.checkTotalHessian(true);
+            // simulation.checkTotalGradientScale(true);
+            simulation.checkTotalGradient(true);
+            // simulation.checkTotalHessianScale(true);
+            // simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
             updateScreen(viewer);
             return true;

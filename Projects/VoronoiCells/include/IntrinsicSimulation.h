@@ -73,6 +73,7 @@ public:
     using VtxList = std::vector<int>;
     using TV = Vector<T, 3>;
     using TV2 = Vector<T, 2>;
+    using TM2 = Matrix<T, 2, 2>;
     using TV3 = Vector<T, 3>;
     using IV = Vector<int, 3>;
     using TM = Matrix<T, 3, 3>;
@@ -94,8 +95,13 @@ public:
     {
         TV start, end;
         T t;
+        int start_vtx_idx, end_vtx_idx;
+        IxnData(const TV& _start, const TV& _end, T _t, int idx0, int idx1) 
+            : start(_start), end(_end), t(_t), start_vtx_idx(idx0),
+            end_vtx_idx(idx1) {};
         IxnData(const TV& _start, const TV& _end, T _t) 
-            : start(_start), end(_end), t(_t) {};
+            : start(_start), end(_end), t(_t), start_vtx_idx(-1),
+            end_vtx_idx(-1) {};
     };
     
 
@@ -120,6 +126,7 @@ public:
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points_undeformed;
     std::vector<Edge> spring_edges;
     std::vector<T> rest_length;
+    VectorXT undeformed_length;
     bool verbose = false;
     T we = 1.0;
     T ref_dis = 1.0;
@@ -139,7 +146,40 @@ public:
 
     std::vector<Triangle> triangles;
     VectorXT rest_area;
+    VectorXT undeformed_area;
     std::unordered_map<Edge, int, VectorHash<2>> edge_map;
+
+    // geodesic triangle 
+    bool add_geo_elasticity = false;
+    std::vector<TM2> X_inv_geodesic;
+    
+    // volume term
+    T wv = 1e3;
+    T rest_volume;
+    bool add_volume = false;
+    bool woodbury = false;
+
+    // ====================== discrete shell ==========================
+    using Hinges = Matrix<int, Eigen::Dynamic, 4>;
+    
+    using FaceVtx = Matrix<T, 3, 3>;
+    using FaceIdx = Vector<int, 3>;
+    using HingeIdx = Vector<int, 4>;
+    using HingeVtx = Matrix<T, 4, 3>;
+    T E = 1e3;
+    T nu = 0.48;
+
+    T E_shell = 1e3;
+    T nu_shell = 0.48;
+    T lambda, mu;
+
+    T lambda_shell, mu_shell;
+    int shell_dof_start = 0;
+    Hinges hinges;
+    std::vector<TM2> Xinv;
+    VectorXT shell_rest_area;
+    VectorXT thickness;
+    VectorXi faces;
     
 private:
     template <class OP>
@@ -167,81 +207,149 @@ private:
         std::cout << vec.x << " " << vec.y << " " << vec.z << std::endl;
     }
 
-    template<int dim>
+    template<int dim = 2>
     void addForceEntry(VectorXT& residual, 
         const std::vector<int>& vtx_idx, 
-        const Vector<T, dim>& gradent)
+        const VectorXT& gradent, int shift = 0)
     {
-        if (vtx_idx.size() * 2 != dim)
-            std::cout << "wrong gradient block size in addForceEntry" << std::endl;
-
         for (int i = 0; i < vtx_idx.size(); i++)
-            residual.segment<2>(vtx_idx[i] * 2) += gradent.template segment<2>(i * 2);
+            residual.template segment<dim>(vtx_idx[i] * dim + shift) += gradent.template segment<dim>(i * dim);
     }
 
-    template<int dim>
+    template<int dim = 2>
     void getSubVector(const VectorXT& _vector, 
         const std::vector<int>& vtx_idx, 
-        Vector<T, dim>& sub_vec)
+        VectorXT& sub_vec, int shift = 0)
     {
-        if (vtx_idx.size() * 2 != dim)
-            std::cout << "wrong gradient block size in getSubVector" << std::endl;
-
-        sub_vec = Vector<T, dim>::Zero(vtx_idx.size() * 2);
+        sub_vec.resize(vtx_idx.size() * dim);
+        sub_vec.setZero();
         for (int i = 0; i < vtx_idx.size(); i++)
         {
-            sub_vec.template segment<2>(i * 2) = _vector.segment<2>(vtx_idx[i] * 2);
+            sub_vec.template segment<dim>(i * dim) = _vector.template segment<dim>(vtx_idx[i] * dim + shift);
         }
     }
 
     
-    template<int dim>
+    template<int dim_row=2, int dim_col=2>
     void addHessianEntry(
         std::vector<Entry>& triplets,
         const std::vector<int>& vtx_idx, 
-        const Matrix<T, dim, dim>& hessian)
+        const MatrixXT& hessian, 
+        int shift_row = 0, int shift_col=0)
     {
-        if (vtx_idx.size() * 2 != dim)
-            std::cout << "wrong hessian block size" << std::endl;
-
+        
         for (int i = 0; i < vtx_idx.size(); i++)
         {
             int dof_i = vtx_idx[i];
             for (int j = 0; j < vtx_idx.size(); j++)
             {
                 int dof_j = vtx_idx[j];
-                for (int k = 0; k < 2; k++)
-                    for (int l = 0; l < 2; l++)
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
+                        triplets.push_back(
+                            Entry(
+                                dof_i * dim_row + k + shift_row, 
+                                dof_j * dim_col + l + shift_col, 
+                                hessian(i * dim_row + k, j * dim_col + l)
+                            ));                
+            }
+        }
+    }
+
+    template<int dim_row=2, int dim_col=2>
+    void addJacobianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx,
+        const std::vector<int>& vtx_idx2, 
+        const MatrixXT& jacobian, 
+        int shift_row = 0, int shift_col=0)
+    {
+        
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx2.size(); j++)
+            {
+                int dof_j = vtx_idx2[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
+                        triplets.push_back(
+                            Entry(
+                                dof_i * dim_row + k + shift_row, 
+                                dof_j * dim_col + l + shift_col, 
+                                jacobian(i * dim_row + k, j * dim_col + l)
+                            ));                
+            }
+        }
+    }
+
+    template<int dim_row=2, int dim_col=2>
+    void addHessianMatrixEntry(
+        MatrixXT& matrix_global,
+        const std::vector<int>& vtx_idx, 
+        const MatrixXT& hessian,
+        int shift_row = 0, int shift_col=0)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
                     {
-                        // if (std::abs(hessian(i * 2 + k, j * 2 + l)) > 1e-8)
-                        triplets.push_back(Entry(dof_i * 2 + k, dof_j * 2 + l, hessian(i * 2 + k, j * 2 + l)));                
+                        matrix_global(dof_i * dim_row + k + shift_row, 
+                        dof_j * dim_col + l + shift_col) 
+                            += hessian(i * dim_row + k, j * dim_col + l);
                     }
             }
         }
     }
 
-    template<int dim>
-    void addHessianMatrixEntry(
+    template<int dim_row=2, int dim_col=2>
+    void addJacobianMatrixEntry(
         MatrixXT& matrix_global,
         const std::vector<int>& vtx_idx, 
-        const Matrix<T, dim, dim>& hessian)
+        const std::vector<int>& vtx_idx2, 
+        const MatrixXT& hessian,
+        int shift_row = 0, int shift_col=0)
     {
-        if (vtx_idx.size() * 2 != dim)
-            std::cout << "wrong hessian block size" << std::endl;
-
         for (int i = 0; i < vtx_idx.size(); i++)
         {
             int dof_i = vtx_idx[i];
-            for (int j = 0; j < vtx_idx.size(); j++)
+            for (int j = 0; j < vtx_idx2.size(); j++)
             {
-                int dof_j = vtx_idx[j];
-                for (int k = 0; k < 2; k++)
-                    for (int l = 0; l < 2; l++)
+                int dof_j = vtx_idx2[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
                     {
-                        matrix_global(dof_i * 2 + k, dof_j * 2 + l) += hessian(i * 2 + k, j * 2 + l);
+                        matrix_global(dof_i * dim_row + k + shift_row, 
+                        dof_j * dim_col + l + shift_col) 
+                            += hessian(i * dim_row + k, j * dim_col + l);
                     }
             }
         }
+    }
+
+    template<int dim0=2, int dim1=2>
+    void addHessianBlock(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const MatrixXT& hessian_block,
+        int shift_row = 0, int shift_col=0)
+    {
+
+        int dof_i = vtx_idx[0];
+        int dof_j = vtx_idx[1];
+        
+        for (int k = 0; k < dim0; k++)
+            for (int l = 0; l < dim1; l++)
+            {
+                triplets.push_back(Entry(dof_i * dim0 + k + shift_row, 
+                    dof_j * dim1 + l + shift_col, 
+                    hessian_block(k, l)));
+            }
     }
 
     template<int size>
@@ -285,6 +393,152 @@ private:
         else
             e2 = Edge(_e2[1], _e2[0]);
     }
+
+    void getTriangleIndex(const gcFace& fi, IV& tri)
+    {
+        tri[0] = fi.halfedge().vertex().getIndex();
+        tri[1] = fi.halfedge().next().vertex().getIndex();
+        tri[2] = fi.halfedge().next().next().vertex().getIndex();
+    }
+
+    void findCorrectOrderTriangle(const Triangle& tri0, 
+        int start, int end, Vector<int, 3>& tri_order)
+    {
+        
+        if (tri0[0] == start && tri0[1] == end)
+        {
+            tri_order = Vector<int, 3>(0, 1, 2);
+        }
+        else if (tri0[0] == end && tri0[1] == start)
+        {
+            tri_order = Vector<int, 3>(1, 0, 2);
+            // tri_correct[0] = tri0[1];
+            // tri_correct[1] = tri0[0];
+            // tri_correct[2] = tri0[2];
+        }
+        else if (tri0[0] == start && tri0[2] == end)
+        {
+            tri_order = Vector<int, 3>(0, 2, 1);
+            // tri_correct[0] = tri0[0];
+            // tri_correct[1] = tri0[2];
+            // tri_correct[2] = tri0[1];
+        }
+        else if (tri0[0] == end && tri0[2] == start)
+        {
+            tri_order = Vector<int, 3>(2, 0, 1);
+            // tri_correct[0] = tri0[2];
+            // tri_correct[1] = tri0[0];
+            // tri_correct[2] = tri0[1];
+        }
+        else if (tri0[1] == start && tri0[2] == end)
+        {
+            tri_order = Vector<int, 3>(1, 2, 0);
+            // tri_correct[0] = tri0[1];
+            // tri_correct[1] = tri0[2];
+            // tri_correct[2] = tri0[0];
+        }
+        else if (tri0[1] == end && tri0[2] == start)
+        {
+            // tri_correct[0] = tri0[2];
+            // tri_correct[1] = tri0[1];
+            // tri_correct[2] = tri0[0];
+            tri_order = Vector<int, 3>(2, 1, 0);
+        }
+    }
+
+    template <typename _type>
+    void reorderVec3(const Vector<int, 3>& a, Vector<_type, 3>& b)
+    {
+        Vector<_type, 3> _b = b;
+        for (int i = 0; i < 3; i++)
+            b[i] = _b[a[i]];
+    }
+    void reorderTVVector(const Vector<int, 3>& a, std::vector<TV>& b)
+    {
+        std::vector<TV> _b = b;
+        for (int i = 0; i < 3; i++)
+            b[i] = _b[a[i]];
+    }
+
+    // ====================== discrete shell ==========================
+    void updateLameParameters()
+    {
+        lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);
+        mu = E / 2.0 / (1.0 + nu);
+    }
+
+    void updateShellLameParameters()
+    {
+        lambda_shell = E_shell * nu_shell / (1.0 + nu_shell) / (1.0 - 2.0 * nu_shell);
+        mu_shell = E_shell / 2.0 / (1.0 + nu_shell);
+    }
+    HingeVtx getHingeVtxDeformed(const HingeIdx& hi)
+    {
+        HingeVtx cellx;
+        for (int i = 0; i < 4; i++)
+        {
+            cellx.row(i) = deformed.segment<3>(hi[i]*3 + shell_dof_start);
+        }
+        return cellx;
+    }
+
+    HingeVtx getHingeVtxUndeformed(const HingeIdx& hi)
+    {
+        HingeVtx cellx;
+        for (int i = 0; i < 4; i++)
+        {
+            cellx.row(i) = undeformed.segment<3>(hi[i]*3 + shell_dof_start);
+        }
+        return cellx;
+    }
+
+    FaceVtx getFaceVtxDeformed(int face)
+    {
+        FaceVtx cellx;
+        FaceIdx nodal_indices = faces.segment<3>(face * 3);
+        for (int i = 0; i < 3; i++)
+        {
+            cellx.row(i) = deformed.segment<3>(nodal_indices[i]*3 + shell_dof_start);
+        }
+        return cellx;
+    }
+
+    FaceVtx getFaceVtxUndeformed(int face)
+    {
+        FaceVtx cellx;
+        FaceIdx nodal_indices = faces.segment<3>(face * 3);
+        for (int i = 0; i < 3; i++)
+        {
+            cellx.row(i) = undeformed.segment<3>(nodal_indices[i]*3 + shell_dof_start);
+        }
+        return cellx;
+    }
+
+    template <typename OP>
+    void iterateFaceSerial(const OP& f)
+    {
+        for (int i = 0; i < faces.rows()/3; i++)
+            f(i);
+    }
+
+    template <typename OP>
+    void iterateTriangleSerial(const OP& f)
+    {
+        for (int i = 0; i < triangles.size(); i++)
+            f(triangles[i], i);
+    }
+
+    template <typename OP>
+    void iterateHingeSerial(const OP& f)
+    {
+        for (int i = 0; i < hinges.rows(); i++)
+        {
+            const Vector<int, 4> nodes = hinges.row(i);
+            f(nodes);   
+        }
+    }
+    // ================================================================
+
 public:
     void computeExactGeodesicEdgeFlip(const SurfacePoint& va, const SurfacePoint& vb, 
         T& dis, std::vector<SurfacePoint>& path, 
@@ -320,7 +574,14 @@ public:
     // EdgeTerms.cpp
     void computeGeodesicLengthGradient(const Edge& edge, Vector<T, 4>& dldw);
     void computeGeodesicLengthHessian(const Edge& edge, Matrix<T, 4, 4>& d2ldw2);
-    void computeGeodesicLengthGradientAndHessian(const Edge& edge, Vector<T, 4>& dldw, Matrix<T, 4, 4>& d2ldw2);
+    void computeGeodesicLengthGradientAndHessian(const Edge& edge, 
+        Vector<T, 4>& dldw, Matrix<T, 4, 4>& d2ldw2);
+
+    void computeGeodesicLengthGradientCoupled(const Edge& edge, VectorXT& dldq, 
+        std::vector<int>& dof_indices);
+    void computeGeodesicLengthGradientAndHessianCoupled(const Edge& edge, 
+        VectorXT& dldq, MatrixXT& d2qdw2, std::vector<int>& dof_indices);
+
     void addEdgeLengthEnergy(T w, T& energy);
     void addEdgeLengthForceEntries(T w, VectorXT& residual);
     void addEdgeLengthHessianEntries(T w, std::vector<Entry>& entries);
@@ -350,6 +611,31 @@ public:
     void getMarkerPointsPosition(VectorXT& positions);
     
     void getCurrentMassPointConfiguration(std::vector<std::pair<SurfacePoint, gcFace>>& configuration);
+
+
+    // GeoElasticity.cpp
+    void computeGeodesicTriangleRestShape();
+    void addGeodesicNHEnergy(T& energy);
+    void addGeodesicNHForceEntry(VectorXT& residual);
+    void addGeodesicNHHessianEntry(std::vector<Entry>& entries);
+
+    // ====================== DiscreteShell.cpp ==========================
+    void buildHingeStructure();
+    void computeRestShape();
+    int nFaces () { return faces.rows() / 3; }
+    void updateRestshape() { computeRestShape(); }
+    void addShellEnergy(T& energy);
+    void addShellForceEntry(VectorXT& residual);
+    void addShellHessianEntries(std::vector<Entry>& entries);
+
+    // Volume.cpp
+    void addVolumePreservationEnergy(T w, T& energy);
+    void addVolumePreservationForceEntries(T w, VectorXT& residual);
+    void addVolumePreservationHessianEntries(T w, std::vector<Entry>& entries,
+        MatrixXT& WoodBuryMatrix);
+    T computeVolume();
+
+
 public:
     IntrinsicSimulation() {}
     ~IntrinsicSimulation() {}

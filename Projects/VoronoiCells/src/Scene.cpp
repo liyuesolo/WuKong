@@ -8,7 +8,11 @@
 void IntrinsicSimulation::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C)
 {
     vectorToIGLMatrix<int, 3>(extrinsic_indices, F);
-    vectorToIGLMatrix<T, 3>(extrinsic_vertices, V);
+    int n_vtx_dof = extrinsic_vertices.rows();
+    if (two_way_coupling)
+        vectorToIGLMatrix<T, 3>(deformed.segment(deformed.rows() - n_vtx_dof, n_vtx_dof), V);
+    else
+        vectorToIGLMatrix<T, 3>(extrinsic_vertices, V);
     C.resize(F.rows(), 3);
     C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
 }
@@ -178,8 +182,8 @@ void IntrinsicSimulation::initializeMassSpringDebugScene()
     
     VectorXT mass_point_Euclidean(n_faces * 3);
     int valid_cnt = 0;
-    
-    for (int face_idx : {1, 5})
+    // 1, 5 is a discontinuity
+    for (int face_idx : {1, 2})
     {
         T alpha = 0.2, beta = 0.5;
         TV vi = extrinsic_vertices.segment<3>(extrinsic_indices[face_idx * 3 + 0] * 3);
@@ -259,17 +263,71 @@ void IntrinsicSimulation::initializeMassSpringDebugScene()
 
     ref_dis = ref_lengths.sum() / ref_lengths.rows();
 
+    current_length = rest_length;
+    for (int i = 0; i < n_springs; i++)
+    {
+        edge_map[spring_edges[i]] = i;
+        edge_map[Edge(spring_edges[i][1], spring_edges[i][0])] = i;
+    }
+
+    two_way_coupling = true;
+ 
+    if (two_way_coupling)
+    {
+        int n_dof = undeformed.rows();
+        shell_dof_start = n_dof;
+        undeformed.conservativeResize(n_dof + extrinsic_vertices.rows());
+        undeformed.segment(n_dof, extrinsic_vertices.rows()) = extrinsic_vertices;
+        deformed = undeformed;
+        u.resize(undeformed.rows()); u.setZero();
+        delta_u.resize(undeformed.rows()); delta_u.setZero();
+        faces = extrinsic_indices;
+        computeRestShape();
+        buildHingeStructure();
+
+        E_shell = 0;
+        updateShellLameParameters();
+    }
+
+    computeAllTriangleArea(rest_area);
+    undeformed_area = rest_area;
+    rest_area.setZero();
+    wa = 0.0;
+    // we = 0;
+
+    add_geo_elasticity = false;
+    if (add_geo_elasticity)
+    {
+        E = 1e6;
+        updateLameParameters();
+        computeGeodesicTriangleRestShape();
+        
+    }
+
+    add_volume = false && two_way_coupling;
+    if (add_volume)
+    {
+        rest_volume = computeVolume();
+        wv = 1e3;
+        woodbury = false;
+    }
+    // std::cout << "rest volume " << rest_volume << std::endl;
+    
     updateCurrentState();
     mass_surface_points_undeformed = mass_surface_points;
-    verbose = true;
+    verbose = false;
 }
 
 void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 {
     use_Newton = true;
+    two_way_coupling = true;
+    
     MatrixXT V; MatrixXi F;
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", 
         V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", 
+    //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere2562.obj", 
     //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", 
@@ -342,6 +400,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 
     gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
     std::vector<SurfacePoint> samples = poissonSampler.sample(5.0);
+    // std::vector<SurfacePoint> samples = poissonSampler.sample();
     intrinsic_vertices_barycentric_coords.resize(samples.size() * 2);
     mass_point_Euclidean.resize(samples.size() * 3);
     int cnt = 0;
@@ -393,6 +452,30 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     std::cout << "#triangles " << igl_tri.rows() << std::endl;
     // formEdgesFromConnection(F, igl_edges);
 
+
+    if (two_way_coupling)
+    {
+        int n_dof = undeformed.rows();
+        shell_dof_start = n_dof;
+        undeformed.conservativeResize(n_dof + extrinsic_vertices.rows());
+        undeformed.segment(n_dof, extrinsic_vertices.rows()) = extrinsic_vertices;
+        deformed = undeformed;
+        u.resize(undeformed.rows()); u.setZero();
+        delta_u.resize(undeformed.rows()); delta_u.setZero();
+        faces = extrinsic_indices;
+        computeRestShape();
+        buildHingeStructure();
+
+        E_shell = 1e3;
+        updateShellLameParameters();
+
+        for (int d = 0; d < 3; d++)
+        {
+            dirichlet_data[shell_dof_start + d] = 0.0;
+        }
+        
+    }
+
     all_intrinsic_edges.resize(0);
 
     int n_springs = igl_edges.rows();
@@ -428,6 +511,8 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 #ifdef PARALLEL_GEODESIC
     );
 #endif
+
+    undeformed_length = ref_lengths;
     for (int i = 0; i < igl_edges.rows(); i++)
     {
         all_intrinsic_edges.insert(all_intrinsic_edges.end(), sub_pairs[i].begin(), sub_pairs[i].end());
@@ -442,13 +527,34 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         edge_map[Edge(spring_edges[i][1], spring_edges[i][0])] = i;
     }
 
+    
+    computeAllTriangleArea(rest_area);
+    undeformed_area = rest_area;
+    rest_area.setZero();
+    wa = 0.0;
+    // we = 0;
+
+    add_geo_elasticity = false;
+    if (add_geo_elasticity)
+    {
+        E = 1e6;
+        updateLameParameters();
+        computeGeodesicTriangleRestShape();
+        
+    }
+
+    add_volume = false && two_way_coupling;
+    if (add_volume)
+    {
+        rest_volume = computeVolume();
+        wv = 1e3;
+        woodbury = false;
+    }
+    // std::cout << "rest volume " << rest_volume << std::endl;
+    
     updateCurrentState();
     mass_surface_points_undeformed = mass_surface_points;
     verbose = false;
-    computeAllTriangleArea(rest_area);
-    // rest_area.setZero();
-    wa = 1e2;
-    // we = 0;
 }
 
 

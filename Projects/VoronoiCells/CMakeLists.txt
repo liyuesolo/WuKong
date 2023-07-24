@@ -6,13 +6,15 @@ set(DEPS lbfgsb_solver solver boost_filesystem tbb
 
 
 
-file(GLOB HEADERS "include/*.h")
-file(GLOB SOURCES "src/*.cpp")
+file(GLOB HEADERS "include/*.h" "autodiff/*.h")
+file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
 
 
 # == Deps
 add_subdirectory(deps/geometry-central)
 
 add_executable(VoronoiCells ${HEADERS} ${SOURCES})
+
+target_include_directories(VoronoiCells PUBLIC ../../Libs/spectra/include)
 
 target_link_libraries(VoronoiCells ${DEPS} geometry-central)

@@ -85,7 +85,7 @@ class MassSpringApp : public SimulationApp
 public:
     virtual void updateScreen(igl::opengl::glfw::Viewer& viewer);
     virtual void setViewer(igl::opengl::glfw::Viewer& viewer,
-        igl::opengl::glfw::imgui::ImGuiMenu& menu);
+        igl::opengl::glfw::imgui::ImGuiMenu& menu) override;
 
     IntrinsicSimulation& simulation;
     bool all_edges = false;

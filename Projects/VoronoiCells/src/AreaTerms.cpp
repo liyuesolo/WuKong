@@ -216,9 +216,9 @@ void IntrinsicSimulation::addTriangleAreaForceEntries(T w, VectorXT& residual)
         computeGeodesicLengthGradient(e1, dl1dw1);
         computeGeodesicLengthGradient(e2, dl2dw2);
 
-		addForceEntry<4>(residual, {e0[0], e0[1]}, -dadl[0] * dl0dw0 * coeff);
-		addForceEntry<4>(residual, {e1[0], e1[1]}, -dadl[1] * dl1dw1 * coeff);
-		addForceEntry<4>(residual, {e2[0], e2[1]}, -dadl[2] * dl2dw2 * coeff);
+		addForceEntry(residual, {e0[0], e0[1]}, -dadl[0] * dl0dw0 * coeff);
+		addForceEntry(residual, {e1[0], e1[1]}, -dadl[1] * dl1dw1 * coeff);
+		addForceEntry(residual, {e2[0], e2[1]}, -dadl[2] * dl2dw2 * coeff);
 
 		// std::unordered_map<int, int> index_map;
 		// index_map[tri[0]] = 0; index_map[tri[1]] = 1; index_map[tri[2]] = 2;
@@ -226,9 +226,9 @@ void IntrinsicSimulation::addTriangleAreaForceEntries(T w, VectorXT& residual)
 		// VectorXT row0(6); row0.setZero();
 		// VectorXT row1(6); row1.setZero();
 		// VectorXT row2(6); row2.setZero();
-		// addForceEntry<4>(row0, {index_map[e0[0]], index_map[e0[1]]}, dl0dw0);
-		// addForceEntry<4>(row1, {index_map[e1[0]], index_map[e1[1]]}, dl1dw1);
-		// addForceEntry<4>(row2, {index_map[e2[0]], index_map[e2[1]]}, dl2dw2);
+		// AaddForceEntry(row0, {index_map[e0[0]], index_map[e0[1]]}, dl0dw0);
+		// AaddForceEntry(row1, {index_map[e1[0]], index_map[e1[1]]}, dl1dw1);
+		// AaddForceEntry(row2, {index_map[e2[0]], index_map[e2[1]]}, dl2dw2);
 		// dldw.row(0) = row0; dldw.row(1) = row1; dldw.row(2) = row2;
 
 		// addForceEntry<6>(residual, {tri[0], tri[1], tri[2]}, -coeff * dadl.transpose() * dldw);
@@ -265,15 +265,15 @@ void IntrinsicSimulation::addTriangleAreaHessianEntries(T w, std::vector<Entry>&
 		VectorXT row0(6); row0.setZero();
 		VectorXT row1(6); row1.setZero();
 		VectorXT row2(6); row2.setZero();
-		addForceEntry<4>(row0, {index_map[e0[0]], index_map[e0[1]]}, dl0dw0);
-		addForceEntry<4>(row1, {index_map[e1[0]], index_map[e1[1]]}, dl1dw1);
-		addForceEntry<4>(row2, {index_map[e2[0]], index_map[e2[1]]}, dl2dw2);
+		addForceEntry(row0, {index_map[e0[0]], index_map[e0[1]]}, dl0dw0);
+		addForceEntry(row1, {index_map[e1[0]], index_map[e1[1]]}, dl1dw1);
+		addForceEntry(row2, {index_map[e2[0]], index_map[e2[1]]}, dl2dw2);
 		dldw.row(0) = row0; dldw.row(1) = row1; dldw.row(2) = row2;
 
 		MatrixXT dadld2ldw2(6, 6); dadld2ldw2.setZero();
-		addHessianMatrixEntry<4>(dadld2ldw2, {index_map[e0[0]], index_map[e0[1]]}, dadl[0] * d2l0dw02);
-		addHessianMatrixEntry<4>(dadld2ldw2, {index_map[e1[0]], index_map[e1[1]]}, dadl[1] * d2l1dw12);
-		addHessianMatrixEntry<4>(dadld2ldw2, {index_map[e2[0]], index_map[e2[1]]}, dadl[2] * d2l2dw22);
+		addHessianMatrixEntry(dadld2ldw2, {index_map[e0[0]], index_map[e0[1]]}, dadl[0] * d2l0dw02);
+		addHessianMatrixEntry(dadld2ldw2, {index_map[e1[0]], index_map[e1[1]]}, dadl[1] * d2l1dw12);
+		addHessianMatrixEntry(dadld2ldw2, {index_map[e2[0]], index_map[e2[1]]}, dadl[2] * d2l2dw22);
 
 		Matrix<T, 6, 6> tensor_term; tensor_term.setZero();
 		tensor_term += 2.0 * w * da * dadld2ldw2;
@@ -283,7 +283,7 @@ void IntrinsicSimulation::addTriangleAreaHessianEntries(T w, std::vector<Entry>&
 		hessian += 2.0 * w * (dadw * dadw.transpose());
 		hessian += 2.0 * w * da * (dldw.transpose() * d2adl2 * dldw);
 		hessian += tensor_term;
-		addHessianEntry<6>(entries, {tri[0], tri[1], tri[2]}, hessian);
+		addHessianEntry(entries, {tri[0], tri[1], tri[2]}, hessian);
 		cnt++;
     }
 }

@@ -3,11 +3,13 @@
 
 void IntrinsicSimulation::checkTotalGradient(bool perturb)
 {
+    std::cout << "shell dof start " << shell_dof_start << std::endl;
     run_diff_test = true;
     int n_dof = undeformed.rows();
     VectorXT gradient(n_dof); gradient.setZero();
     T epsilon = 1e-6;
     delta_u = VectorXT::Zero(undeformed.rows());
+    VectorXT dof_current = deformed;
     updateCurrentState();
     std::vector<std::pair<SurfacePoint, gcFace>> current = mass_surface_points;
     
@@ -24,16 +26,20 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
         // std::cout << mass_surface_points[std::floor(dof_i/2.0)].first.faceCoords << std::endl;
         delta_u(dof_i) += epsilon;
         mass_surface_points = current;
+        deformed = dof_current;
         updateCurrentState();
+        
         T E0 = computeTotalEnergy();
         // return;
         delta_u(dof_i) -= 2.0 * epsilon;
         mass_surface_points = current;
+        deformed = dof_current;
         updateCurrentState();
-        // return;
+        
         T E1 = computeTotalEnergy();
         delta_u(dof_i) += epsilon;
         mass_surface_points = current;
+        deformed = dof_current;
         updateCurrentState();
         
         gradient_FD(dof_i) = (E0 - E1) / (2.0 * epsilon);
@@ -42,6 +48,11 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
         if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
             continue;
         cnt++;
+        delta_u(dof_i) += epsilon;
+        mass_surface_points = current;
+        deformed = dof_current;
+        updateCurrentState();
+        return;
         std::cout << " dof " << dof_i << " vtx " << std::floor(dof_i/2.0) << " FD " << gradient_FD(dof_i) << " symbolic " << gradient(dof_i) << std::endl;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         
@@ -50,12 +61,14 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
     if (cnt != n_dof)
         std::cout << "all gradients are correct" << std::endl;
     mass_surface_points = current;
+    deformed = dof_current;
     updateCurrentState();
     run_diff_test = false;
 }
 
 void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
 {
+    
     std::cout << "================CHECK GRADIENT SCALE==============" <<std::endl;
     run_diff_test = true;
     int n_dof = deformed.rows();
@@ -70,6 +83,7 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
     }
     VectorXT delta_u_backup = delta_u;
     std::vector<std::pair<SurfacePoint, gcFace>> current = mass_surface_points;
+    VectorXT dof_current = deformed;
     mass_surface_points = current;
     updateCurrentState();
     computeResidual(gradient);
@@ -81,11 +95,13 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
     dx.setRandom();
     dx *= 1.0 / dx.norm();
     dx *= 0.01;
+    // dx.segment(shell_dof_start, extrinsic_vertices.rows()).setZero();
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
     {    
         delta_u = delta_u_backup + dx;
         mass_surface_points = current;
+        deformed = dof_current;
         updateCurrentState();
         T E1 = computeTotalEnergy();
         T dE = E1 - E0;
@@ -100,6 +116,7 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
     }
     delta_u = delta_u_backup;
     mass_surface_points = current;
+    deformed = dof_current;
     updateCurrentState();
 
     run_diff_test = false;
@@ -109,6 +126,7 @@ void IntrinsicSimulation::checkTotalGradientScale(bool perturb)
 
 void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
 {
+    
     std::cout << "================CHECK HESSIAN SCALE==============" <<std::endl;
     run_diff_test = true;
     int n_dof = deformed.rows();
@@ -124,6 +142,7 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
     std::vector<std::pair<SurfacePoint, gcFace>> current = mass_surface_points;
     delta_u = delta_u_backup;
     mass_surface_points = current;
+    VectorXT dof_current = deformed;
     updateCurrentState();
     StiffnessMatrix A(n_dof, n_dof);
     buildSystemMatrix(A);
@@ -138,6 +157,7 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
     dx *= 1.0 / dx.norm();
     
     dx *= 0.01;
+    // dx.segment(0, shell_dof_start).setZero();
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
     {
@@ -146,11 +166,13 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
         f1.setZero();
         delta_u = delta_u_backup + dx;
         mass_surface_points = current;
+        deformed = dof_current;
         updateCurrentState();
         computeResidual(f1);
-        f1 *= -1;
+        f1 *= -1.0;
         T df_norm = (f0 + (A * dx) - f1).norm();
-        // std::cout << "df_norm " << df_norm << std::endl;
+        
+        // std::cout << "\tdf_norm " << df_norm << std::endl;
         if (i > 0)
         {
             std::cout << (previous/df_norm) << std::endl;
@@ -160,6 +182,7 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
     }
     run_diff_test = false;
     delta_u = delta_u_backup;
+    deformed = dof_current;
     mass_surface_points = current;
     updateCurrentState();
     std::cout << "================ DONE ==============" <<std::endl;
@@ -167,6 +190,7 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
 
 void IntrinsicSimulation::checkTotalHessian(bool perturb)
 {
+    std::cout << "shell_dof_start " << shell_dof_start << std::endl;
     T epsilon = 1e-6;
     run_diff_test = true;
     int n_dof = deformed.rows();
@@ -178,6 +202,7 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
     }
     std::vector<std::pair<SurfacePoint, gcFace>> current = mass_surface_points;
     delta_u = VectorXT::Zero(undeformed.rows());
+    VectorXT dof_current = deformed;
     updateCurrentState();
     StiffnessMatrix A(n_dof, n_dof);
     buildSystemMatrix(A);
@@ -189,14 +214,16 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
         g0.setZero(); g1.setZero();
 
         delta_u(dof_i) += epsilon;
+        deformed = dof_current;
         mass_surface_points = current;     
         updateCurrentState();
+        
 
         computeResidual(g0);
         g0 *= -1.0; 
         
         delta_u(dof_i) -= 2.0 * epsilon;
-        
+        deformed = dof_current;
         mass_surface_points = current;
         updateCurrentState();
         
@@ -206,6 +233,7 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
         // std::cout << "gradient x + dx " << g0.transpose() << std::endl;
         // std::cout << "gradient x - dx " << g1.transpose() << std::endl;
         delta_u(dof_i) += epsilon;
+        deformed = dof_current;
         mass_surface_points = current;
         updateCurrentState();
 
@@ -215,8 +243,8 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
         {
             if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
                 continue;
-            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
-                continue;
+            // if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+            //     continue;
             // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
             //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;
@@ -225,6 +253,7 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
         }
     }
     mass_surface_points = current;
+    deformed = dof_current;
     updateCurrentState();
     std::cout << "Hessian Diff Test Passed" << std::endl;
     run_diff_test = false;
