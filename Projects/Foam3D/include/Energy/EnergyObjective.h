@@ -24,7 +24,7 @@ public:
 
     void check_gradients(const VectorXd &y, bool optimizeWeights_) const;
 
-    void preProcess(const VectorXd &y) const;
+    void preProcess(const VectorXd &y, bool needGradients = true) const;
 
     virtual double evaluate(const VectorXd &y) const;
 

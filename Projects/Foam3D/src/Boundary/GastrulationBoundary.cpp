@@ -1,5 +1,6 @@
 #include <igl/fast_find_self_intersections.h>
 #include <igl/slice.h>
+#include <tbb/tbb.h>
 #include "../../include/Boundary/GastrulationBoundary.h"
 #include "../../include/Boundary/BoundaryEnergyPerNeighborhood.h"
 #include "../../include/Boundary/NeighborhoodLaplacian.h"
@@ -8,102 +9,176 @@
 
 #include "../../include/Globals.h"
 
-GastrulationBoundary::GastrulationBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_) : Boundary(
-        Eigen::Map<VectorXT>(MatrixXT(v_.transpose()).data(), v_.size()), free_) {
-    initialize(v_.rows(), f_);
+#define PRINT_INTERMEDIATE_TIMES false
+#define PRINT_TOTAL_TIME false
+
+static void
+printTime(std::chrono::high_resolution_clock::time_point tstart, std::string description = "", bool final = false) {
+    if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
+        const auto tcurr = std::chrono::high_resolution_clock::now();
+        std::cout << description << "Time: "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(tcurr - tstart).count() * 1.0e-6
+                  << std::endl;
+    }
+}
+
+
+//GastrulationBoundary::GastrulationBoundary(MatrixXT &v_, MatrixXi &f_, const VectorXi &free_) : MeshBoundary(
+//        v_, f_, free_) {
+//    if (nfree < np) {
+//        dvdp_is_identity = false;
+//    }
+//}
+
+GastrulationBoundary::GastrulationBoundary(MatrixXT &v_, MatrixXi &f_, const VectorXi &free_) : SubdivisionMeshBoundary(
+        v_, f_, free_, 2) {
+    dvdp_is_identity = false;
 }
 
 bool GastrulationBoundary::checkValid() {
-    MatrixXT V(v.size(), 3);
     for (int i = 0; i < v.size(); i++) {
-        V.row(i) = v[i].pos;
         if (v[i].pos.squaredNorm() > pow(outerRadius, 2.0)) {
             return false;
         }
     }
-    MatrixXi F(f.size(), 3);
-    for (int i = 0; i < f.size(); i++) {
-        F.row(i) = f[i].vertices;
-    }
-    MatrixXi I;
 
-    return !igl::fast_find_self_intersections(V, F, I);
-}
-
-void GastrulationBoundary::computeVertices() {
-    TV3 averagePos = TV3::Zero();
-
-    for (int i = 0; i < v.size(); i++) {
-        v[i].pos = p.segment<3>(i * 3);
-        averagePos += v[i].pos;
-
-        for (int j = 0; j < 3; j++) {
-            addGradientEntry(i, j, i * 3 + j, 1.0);
-        }
-    }
-
-    averagePos /= v.size();
-//    std::cout << "Boundary Centroid " << averagePos(0) << " " << averagePos(1) << " " << averagePos(2) << std::endl;
+    return MeshBoundary::checkValid();
 }
 
 double GastrulationBoundary::computeEnergy() {
     NeighborhoodLaplacian laplacian;
     BoundaryEnergyPerNeighborhood laplacianEnergyFunc(&laplacian);
+    std::vector<int> outerFaces;
+    for (int iF = 0; iF < f.size() / 2; iF++) {
+        outerFaces.push_back(iF);
+    }
+    BoundaryEnergyVolumeTarget outerFluidVolumeEnergyFunc(4.0 / 3.0 * M_PI * pow(outerRadius, 3.0) - outerFluidTarget,
+                                                          outerFaces);
     std::vector<int> innerFaces;
     for (int iF = f.size() / 2; iF < f.size(); iF++) {
         innerFaces.push_back(iF);
     }
-    BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergyVolumeTarget yolkVolumeEnergyFunc(-yolkTarget, innerFaces);
     BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
     double laplacianEnergy = 0;
     laplacianEnergyFunc.getValue(this, laplacianEnergy);
-    double volumeEnergy = 0;
-    volumeEnergyFunc.getValue(this, volumeEnergy);
+    double outerFluidVolumeEnergy = 0;
+    outerFluidVolumeEnergyFunc.getValue(this, outerFluidVolumeEnergy);
+    double yolkVolumeEnergy = 0;
+    yolkVolumeEnergyFunc.getValue(this, yolkVolumeEnergy);
     double sphericalBarrierEnergy = 0;
     sphericalBarrierEnergyFunc.getValue(this, sphericalBarrierEnergy);
 
-    return kNeighborhood * laplacianEnergy + kVol * volumeEnergy + sphericalBarrierEnergy;
+    return kNeighborhood * laplacianEnergy + kOuterFluid * outerFluidVolumeEnergy + kYolk * yolkVolumeEnergy +
+           sphericalBarrierEnergy;
 }
 
 VectorXT GastrulationBoundary::computeEnergyGradient() {
     NeighborhoodLaplacian laplacian;
     BoundaryEnergyPerNeighborhood laplacianEnergyFunc(&laplacian);
+    std::vector<int> outerFaces;
+    for (int iF = 0; iF < f.size() / 2; iF++) {
+        outerFaces.push_back(iF);
+    }
+    BoundaryEnergyVolumeTarget outerFluidVolumeEnergyFunc(4.0 / 3.0 * M_PI * pow(outerRadius, 3.0) - outerFluidTarget,
+                                                          outerFaces);
     std::vector<int> innerFaces;
     for (int iF = f.size() / 2; iF < f.size(); iF++) {
         innerFaces.push_back(iF);
     }
-    BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergyVolumeTarget yolkVolumeEnergyFunc(-yolkTarget, innerFaces);
     BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
     VectorXT laplacianGrad;
     laplacianEnergyFunc.getGradient(this, laplacianGrad);
-    VectorXT volumeGrad;
-    volumeEnergyFunc.getGradient(this, volumeGrad);
+    VectorXT outerFluidVolumeGrad;
+    outerFluidVolumeEnergyFunc.getGradient(this, outerFluidVolumeGrad);
+    VectorXT yolkVolumeGrad;
+    yolkVolumeEnergyFunc.getGradient(this, yolkVolumeGrad);
     VectorXT sphericalBarrierGrad;
     sphericalBarrierEnergyFunc.getGradient(this, sphericalBarrierGrad);
 
-    return kNeighborhood * laplacianGrad + kVol * volumeGrad + sphericalBarrierGrad;
+    VectorXT dFdv = kNeighborhood * laplacianGrad + kOuterFluid * outerFluidVolumeGrad + kYolk * yolkVolumeGrad +
+                    sphericalBarrierGrad;
+    if (dvdp_is_identity) {
+        return dFdv;
+    } else {
+        return dvdp.transpose() * dFdv;
+    }
 }
 
 MatrixXT GastrulationBoundary::computeEnergyHessian() {
+    const auto tstart = std::chrono::high_resolution_clock::now();
+
     NeighborhoodLaplacian laplacian;
     BoundaryEnergyPerNeighborhood laplacianEnergyFunc(&laplacian);
+    std::vector<int> outerFaces;
+    for (int iF = 0; iF < f.size() / 2; iF++) {
+        outerFaces.push_back(iF);
+    }
+    BoundaryEnergyVolumeTarget outerFluidVolumeEnergyFunc(4.0 / 3.0 * M_PI * pow(outerRadius, 3.0) - outerFluidTarget,
+                                                          outerFaces);
     std::vector<int> innerFaces;
     for (int iF = f.size() / 2; iF < f.size(); iF++) {
         innerFaces.push_back(iF);
     }
-    BoundaryEnergyVolumeTarget volumeEnergyFunc(volTarget, innerFaces);
+    BoundaryEnergyVolumeTarget yolkVolumeEnergyFunc(-yolkTarget, innerFaces);
     BoundaryEnergySphericalBarrier sphericalBarrierEnergyFunc(outerRadius, TV3::Zero());
 
-    MatrixXT laplacianHess;
-    laplacianEnergyFunc.getHessian(this, laplacianHess);
-    MatrixXT volumeHess;
-    volumeEnergyFunc.getHessian(this, volumeHess);
-    MatrixXT sphericalBarrierHess;
-    sphericalBarrierEnergyFunc.getHessian(this, sphericalBarrierHess);
+    Eigen::SparseMatrix<double> laplacianHess;
+    MatrixXT outerFluidVolumeHess, yolkVolumeHess, sphericalBarrierHess;
+    tbb::task_group g;
+    g.run([&] {
+        laplacianEnergyFunc.getHessian(this, laplacianHess);
+    });
+    g.run([&] {
+        outerFluidVolumeEnergyFunc.getHessian(this, outerFluidVolumeHess);
+    });
+    g.run([&] {
+        yolkVolumeEnergyFunc.getHessian(this, yolkVolumeHess);
+    });
+    g.run([&] {
+        sphericalBarrierEnergyFunc.getHessian(this, sphericalBarrierHess);
+    });
+    g.wait();
 
-    return kNeighborhood * laplacianHess + kVol * volumeHess + sphericalBarrierHess;
+//    laplacianEnergyFunc.getHessian(this, laplacianHess);
+//    outerFluidVolumeEnergyFunc.getHessian(this, outerFluidVolumeHess);
+//    yolkVolumeEnergyFunc.getHessian(this, yolkVolumeHess);
+//    sphericalBarrierEnergyFunc.getHessian(this, sphericalBarrierHess);
+
+    MatrixXT d2Fdv2 = kNeighborhood * laplacianHess + kOuterFluid * outerFluidVolumeHess + kYolk * yolkVolumeHess +
+                      sphericalBarrierHess;
+
+    printTime(tstart, "Boundary energy partial hessian");
+
+    if (dvdp_is_identity) {
+        return d2Fdv2;
+    } else {
+        VectorXT laplacianGrad;
+        laplacianEnergyFunc.getGradient(this, laplacianGrad);
+        VectorXT outerFluidVolumeGrad;
+        outerFluidVolumeEnergyFunc.getGradient(this, outerFluidVolumeGrad);
+        VectorXT yolkVolumeGrad;
+        yolkVolumeEnergyFunc.getGradient(this, yolkVolumeGrad);
+        VectorXT sphericalBarrierGrad;
+        sphericalBarrierEnergyFunc.getGradient(this, sphericalBarrierGrad);
+
+        VectorXT dFdv = kNeighborhood * laplacianGrad + kOuterFluid * outerFluidVolumeGrad + kYolk * yolkVolumeGrad +
+                        sphericalBarrierGrad;
+
+        printTime(tstart, "Boundary energy hessian before sums");
+
+        MatrixXT sum_dFdv_d2vdp2 = MatrixXT::Zero(nfree, nfree);
+        for (int i = 0; i < dFdv.rows(); i++) {
+            sum_dFdv_d2vdp2 += dFdv(i) * d2vdp2[i];
+        }
+
+        printTime(tstart, "Boundary energy hessian after sums");
+
+        return dvdp.transpose() * d2Fdv2 * dvdp + sum_dFdv_d2vdp2;
+    }
 }
 
 //double GastrulationBoundary::computeEnergy() {

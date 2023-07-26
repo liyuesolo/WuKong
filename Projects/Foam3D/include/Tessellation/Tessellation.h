@@ -62,6 +62,7 @@ public:
     Boundary *boundary;
 
     bool isValid = false;
+    bool hasGradients = false;
 public:
 
     Eigen::SparseMatrix<double> dxdc;
@@ -69,8 +70,6 @@ public:
     std::vector<Eigen::SparseMatrix<double>> d2xdc2;
     std::vector<Eigen::SparseMatrix<double>> d2xdcdv;
     std::vector<Eigen::SparseMatrix<double>> d2xdv2;
-    Eigen::SparseMatrix<double> dvdp;
-    std::vector<Eigen::SparseMatrix<double>> d2vdp2;
 
 public:
     Tessellation() {}
@@ -121,7 +120,7 @@ public:
     getNodeBEdgeHessian(const TV3 &b0, const TV3 &b1, const VectorXT &v0,
                         const VectorXT &v1, NodePosition &nodePos) = 0;
 
-    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free);
+    void tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free, bool needGradients);
 
     virtual int getNumVertexParams() = 0;
 

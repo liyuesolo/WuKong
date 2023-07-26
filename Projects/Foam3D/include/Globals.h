@@ -15,8 +15,10 @@ extern double cellRadiusTarget;
 // GastrulationBoundary
 
 extern double kNeighborhood;
-extern double kVol;
-extern double volTarget;
+extern double kYolk;
+extern double kOuterFluid;
+extern double yolkTarget;
+extern double outerFluidTarget;
 extern double outerRadius;
 
 // DynamicObjective

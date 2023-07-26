@@ -1,4 +1,6 @@
 #include <igl/readOBJ.h>
+#include <igl/png/writePNG.h>
+#include <igl/loop.h>
 
 #include "../include/Foam3DApp.h"
 #include "../src/implot/implot.h"
@@ -13,6 +15,9 @@
 #include "../include/Boundary/CubeBoundary.h"
 
 #include "../include/Globals.h"
+
+int iPNG = 0;
+VectorXi cellVisibleFixed = VectorXi::Zero(0);
 
 void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
                           igl::opengl::glfw::imgui::ImGuiMenu &menu) {
@@ -108,9 +113,9 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("kNeighborhood", &kNeighborhood, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("kVol", &kVol, 0.001f, 0.001f, "%.4f");
+        ImGui::InputDouble("kVol", &kYolk, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
-        ImGui::InputDouble("volTarget", &volTarget, 0.001f, 0.001f, "%.4f");
+        ImGui::InputDouble("volTarget", &yolkTarget, 0.001f, 0.001f, "%.4f");
         ImGui::SetNextItemWidth(ImGui::GetWindowWidth() * 0.5);
         ImGui::InputDouble("outerRadius", &outerRadius, 0.001f, 0.001f, "%.4f");
 
@@ -171,7 +176,27 @@ void Foam3DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
             [&](igl::opengl::glfw::Viewer &viewer) -> bool {
                 if (optimize) {
                     if (dynamics) {
-                        foam.dynamicsStep(optimizer);
+                        if (foam.dynamicsStep(optimizer)) {
+                            // Allocate temporary buffers
+                            Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(1280, 800);
+                            Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> G(1280, 800);
+                            Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> B(1280, 800);
+                            Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> A(1280, 800);
+
+                            // Draw the scene in the buffers
+                            viewer.core().draw_buffer(
+                                    viewer.data(0), false, R, G, B, A);
+                            A.setConstant(255);
+
+                            // Save it to a PNG
+//                            igl::png::writePNG(R, G, B, A,
+//                                               std::string("image") + std::to_string(iPNG) + std::string(".png"));
+                            iPNG++;
+
+                            if (cellRadiusTarget < 0.485) {
+                                cellRadiusTarget += 0.005;
+                            }
+                        }
                     } else {
                         foam.energyMinimizationStep(optimizer);
                     }
@@ -213,7 +238,7 @@ void Foam3DApp::generateScenario() {
             break;
     }
 
-    foam.tessellation.tessellate(foam.vertices, foam.params, foam.tessellation.boundary->get_p_free());
+    foam.tessellation.tessellate(foam.vertices, foam.params, foam.tessellation.boundary->get_p_free(), true);
 }
 
 void Foam3DApp::scenarioCube() {
@@ -226,53 +251,53 @@ void Foam3DApp::scenarioCube() {
     foam.params = params;
     foam.tessellation.cellInfos.resize(generate_scenario_num_sites);
 
-    {
-        MatrixXi F(12, 3);
-        F << 0, 2, 1,
-                2, 3, 1,
-                0, 1, 4,
-                1, 5, 4,
-                0, 4, 2,
-                4, 6, 2,
-                4, 5, 6,
-                5, 7, 6,
-                1, 3, 5,
-                3, 7, 5,
-                2, 6, 3,
-                6, 7, 3;
-        F.col(1).swap(F.col(2)); // TODO: Why?
-
-        MatrixXT V(8, 3);
-        double a = 1.0;
-        V << -a, -a, -a,
-                -a, -a, a,
-                -a, a, -a,
-                -a, a, a,
-                a, -a, -a,
-                a, -a, a,
-                a, a, -a,
-                a, a, a;
-
-        VectorXi free(V.rows() * 3);
-        for (int i = 0; i < free.rows(); i++) {
-            free(i) = i;
-        }
-        foam.tessellation.boundary = new GastrulationBoundary(V, F, free);
-    }
+//    {
+//        MatrixXi F(12, 3);
+//        F << 0, 2, 1,
+//                2, 3, 1,
+//                0, 1, 4,
+//                1, 5, 4,
+//                0, 4, 2,
+//                4, 6, 2,
+//                4, 5, 6,
+//                5, 7, 6,
+//                1, 3, 5,
+//                3, 7, 5,
+//                2, 6, 3,
+//                6, 7, 3;
+//        F.col(1).swap(F.col(2)); // TODO: Why?
+//
+//        MatrixXT V(8, 3);
+//        double a = 1.0;
+//        V << -a, -a, -a,
+//                -a, -a, a,
+//                -a, a, -a,
+//                -a, a, a,
+//                a, -a, -a,
+//                a, -a, a,
+//                a, a, -a,
+//                a, a, a;
+//
+//        VectorXi free(V.rows() * 3);
+//        for (int i = 0; i < free.rows(); i++) {
+//            free(i) = i;
+//        }
+//        foam.tessellation.boundary = new GastrulationBoundary(V, F, free);
+//    }
 
 //    VectorXi free(1);
 //    free << 0;
-////    VectorXi free(0);
-//    foam.tessellation.boundary = new CubeBoundary(1, free);
+    VectorXi free(0);
+    foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
 void Foam3DApp::scenarioSphere() {
     MatrixXT V, TC, N, V2;
     MatrixXi F, FTC, FN, F2;
+
     igl::readOBJ("../../../Projects/Foam3D/meshes/sphere.obj", V, TC, N, F, FTC, FN);
     V -= TV3(0, 0.5, 0).transpose().replicate(V.rows(), 1);
 
-//    V = V.block(200, 0, 200, 3);
     MatrixXT Vt = V.transpose();
     VectorXd vertices(V.rows() * 3);
     vertices << Eigen::Map<const VectorXd>(Vt.data(), V.size());
@@ -280,13 +305,29 @@ void Foam3DApp::scenarioSphere() {
 
     foam.vertices = vertices;
     foam.params = params;
-    
 
-    V2 = V;
-    F2 = F;
+    MatrixXT V_ico(12, 3);
+    MatrixXi F_ico(20, 3);
+    double f = (1.0 + sqrt(5.0)) / 2;
+    V_ico << -1, f, 0, 1, f, 0, -1, -f, 0, 1, -f, 0,
+            0, -1, f, 0, 1, f, 0, -1, -f, 0, 1, -f,
+            f, 0, -1, f, 0, 1, -f, 0, -1, -f, 0, 1;
+    F_ico << 0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11,
+            11, 10, 2, 5, 11, 4, 1, 5, 9, 7, 1, 8, 10, 7, 6,
+            3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9,
+            9, 8, 1, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7;
+    igl::loop(V_ico, F_ico, V2, F2, 1);
 
-    V *= 1.1;
-    V2 *= 0.9;
+//    V2 = V;
+//    F2 = F;
+
+    for (int i = 0; i < V2.rows(); i++) {
+        V2.row(i) *= 2.54558068998 / V2.row(i).norm();
+    }
+
+    V = V2 * 1.1;
+    V2 = V2 * 0.9;
+    F = F2;
     F2.col(1).swap(F2.col(2));
 
     MatrixXT V3(V.rows() + V2.rows(), 3);
@@ -303,9 +344,9 @@ void Foam3DApp::scenarioSphere() {
         foam.tessellation.boundary->f[i].adhesion = 1.0;
     }
 
-    foam.tessellation.cellInfos.resize(V.rows());
-    for (int i = 0; i < V.rows(); i++) {
-        if (V(i, 1) > 2.2) foam.tessellation.cellInfos[i].adhesion = 2 * (V(i, 1) - 2.2);
+    foam.tessellation.cellInfos.resize(vertices.rows() / 3);
+    for (int i = 0; i < vertices.rows() / 3; i++) {
+        if (vertices(i * 3 + 1) > 2.2) foam.tessellation.cellInfos[i].adhesion = 2 * (vertices(i * 3 + 1) - 2.2);
     }
 }
 
@@ -661,6 +702,19 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
             }
         }
 
+        if (nc > 1000) {
+            if (cellVisibleFixed.rows() == 0) {
+                cellVisibleFixed.resize(nc);
+                for (int i = 0; i < nc; i++) {
+                    cellVisibleFixed(i) = cellVisible[i];
+                }
+            } else {
+                for (int i = 0; i < nc; i++) {
+                    cellVisible[i] = cellVisibleFixed(i);
+                }
+            }
+        }
+
         points.resize(nc, 3);
         for (int i = 0; i < nc; i++) {
             points.row(i) = foam.tessellation.c.segment<3>(i * 4);
@@ -713,10 +767,10 @@ void Foam3DApp::updateViewerData(igl::opengl::glfw::Viewer &viewer) {
                         F(f, 0) = nodeIndices.at(face.nodes[0]);
                         F(f, 1) = nodeIndices.at(face.nodes[i]);
                         F(f, 2) = nodeIndices.at(face.nodes[i + 1]);
-//                        Fc.row(f) = colors.row(cell);
+                        Fc.row(f) = colors.row(cell);
 //                        Fc.row(f) =
 //                                TV3(0.2, 0.2, 0.2) + foam.tessellation.cellInfos[cell].adhesion * TV3(0.6, 0.6, 0.6);
-                        Fc.row(f) = colors.row(cell) * (foam.tessellation.cellInfos[cell].adhesion > 0 ? 1.0 : 0.4);
+//                        Fc.row(f) = colors.row(cell) * (foam.tessellation.cellInfos[cell].adhesion > 0 ? 1.0 : 0.4);
                         f++;
                     }
                 }

@@ -32,7 +32,7 @@ public:
 public:
     void energyMinimizationStep(int optimizer);
 
-    void dynamicsStep(int optimizer);
+    bool dynamicsStep(int optimizer);
 
     void dynamicsInit();
 

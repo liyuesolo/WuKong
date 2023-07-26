@@ -20,18 +20,20 @@ printTime(std::chrono::high_resolution_clock::time_point tstart, std::string des
     }
 }
 
-void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free) {
+void
+Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free, bool needGradients) {
     VectorXT c_new = combineVerticesParams(vertices, params);
 
     // Check if inputs are the same as previous tessellation, do nothing if so.
     bool same = true;
     same = same && (c_new.rows() == c.rows() && (c_new - c).norm() < 1e-14) &&
-           ((p_free - boundary->get_p_free()).norm() < 1e-14);
+           ((p_free - boundary->get_p_free()).norm() < 1e-14) && (hasGradients || !needGradients);
     if (same) {
 //        std::cout << "same " << (c_new - c).norm() << " " << (p_free - boundary->get_p_free()).norm() << std::endl;
         return;
     }
 
+    hasGradients = false;
     isValid = true;
     c = c_new;
     nodes.clear();
@@ -138,7 +140,9 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     }
     printTime(tstart, "Volume check ", false);
 
-    computeMatrices();
+    if (needGradients) {
+        computeMatrices();
+    }
 }
 
 //void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, const VectorXT &p_free) {
@@ -474,10 +478,10 @@ void Tessellation::computeMatrices() {
         d2xdcdv[i].resize(nc, nv);
         d2xdv2[i].resize(nv, nv);
     });
-    dvdp.resize(nv, np);
-    d2vdp2.resize(nv);
+    boundary->dvdp.resize(nv, np);
+    boundary->d2vdp2.resize(nv);
     tbb::parallel_for(0, nv, [&](int i) {
-        d2vdp2[i].resize(np, np);
+        boundary->d2vdp2[i].resize(np, np);
     });
 
     printTime(tstart, "Resize ");
@@ -489,10 +493,11 @@ void Tessellation::computeMatrices() {
         d2xdcdv[i].setFromTriplets(tripletsD2XDCDV[i].begin(), tripletsD2XDCDV[i].end());
         d2xdv2[i].setFromTriplets(tripletsD2XDV2[i].begin(), tripletsD2XDV2[i].end());
     });
-    dvdp.setFromTriplets(tripletsDVDP.begin(), tripletsDVDP.end());
+    boundary->dvdp.setFromTriplets(tripletsDVDP.begin(), tripletsDVDP.end());
     tbb::parallel_for(0, nv, [&](int i) {
-        d2vdp2[i].setFromTriplets(tripletsD2VDP2[i].begin(), tripletsD2VDP2[i].end());
+        boundary->d2vdp2[i].setFromTriplets(tripletsD2VDP2[i].begin(), tripletsD2VDP2[i].end());
     });
 
     printTime(tstart, "Tessellation Gradients ", true);
+    hasGradients = true;
 }

@@ -19,7 +19,7 @@ public:
     getGradient(Boundary *boundary, VectorXT &gradient) const;
 
     virtual void
-    getHessian(Boundary *boundary, MatrixXT &hessian) const;
+    getHessian(Boundary *boundary, Eigen::SparseMatrix<double> &hessian) const;
 
     BoundaryEnergyPerNeighborhood(NeighborhoodFunction *internal) : internalFunction(internal) {}
 };

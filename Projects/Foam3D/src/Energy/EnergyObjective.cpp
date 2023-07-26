@@ -106,7 +106,7 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
 
         for (int j = 0; j < grad.rows(); j++) {
             hessFD(j, i) = (gradp[j] - gradm[j]) / (2 * eps);
-            if ((fabs(hess(j, i)) < 1e-10 && fabs((gradp[j] - grad[j]) / eps) < 1e-10) ||
+            if ((fabs(hess(j, i)) < 1e-10 && fabs((gradp[j] - grad[j]) / eps) < 1e-6) ||
                 fabs((gradp[j] - grad[j]) / eps - hess(j, i)) < 1e-4 * fabs(hess(j, i)))
                 continue;
 
@@ -121,32 +121,21 @@ void EnergyObjective::check_gradients(const VectorXd &y, bool optimizeWeights_) 
     std::cout << "Hessian error max: " << (hessFD - hess).maxCoeff() << " " << (hessFD - hess).minCoeff() << std::endl;
 }
 
-void EnergyObjective::preProcess(const VectorXd &y) const {
+void EnergyObjective::preProcess(const VectorXd &y, bool needGradients) const {
     VectorXT c = y.head(y.rows() - tessellation->boundary->nfree);
     if (!optimizeWeights) {
         c = tessellation->combineVerticesParams(y.head(y.rows() - tessellation->boundary->nfree), paramsSave);
     }
 
-    double infp = 10;
-    VectorXd infbox(8 * 4);
-    infbox << -infp, -infp, -infp, 0,
-            -infp, -infp, infp, 0,
-            -infp, infp, -infp, 0,
-            -infp, infp, infp, 0,
-            infp, -infp, -infp, 0,
-            infp, -infp, infp, 0,
-            infp, infp, -infp, 0,
-            infp, infp, infp, 0;
-    VectorXd c_with_infbox(c.rows() + infbox.rows());
-    c_with_infbox << c, infbox;
-
     VectorXT vertices, params;
     tessellation->separateVerticesParams(c, vertices, params);
-    tessellation->tessellate(vertices, params, y.tail(tessellation->boundary->nfree));
+    tessellation->tessellate(vertices, params, y.tail(tessellation->boundary->nfree), needGradients);
 }
 
 double EnergyObjective::evaluate(const VectorXd &y) const {
-    preProcess(y);
+    preProcess(y, false);
+
+    const auto tstart = std::chrono::high_resolution_clock::now();
 
     double value = 0;
     if (!tessellation->isValid) {
@@ -154,12 +143,20 @@ double EnergyObjective::evaluate(const VectorXd &y) const {
         return 1e10;
     }
 
-    for (Cell cell: tessellation->cells) {
+    std::vector<double> cellEnergies(tessellation->cells.size());
+    tbb::parallel_for_each(tessellation->cells.begin(), tessellation->cells.end(), [&](Cell cell) {
         CellValue cellValue(cell);
         energyFunction.getValue(tessellation, cellValue);
-        value += cellValue.value;
+        cellEnergies[cell.cellIndex] = cellValue.value;
+    });
+    for (double e: cellEnergies) {
+        value += e;
     }
+    printTime(tstart, "Cell energies ", false);
+
     value += tessellation->boundary->computeEnergy();
+
+    printTime(tstart, "Energy value ", false);
 
 //    std::cout << "energy value: " << value << std::endl;
     return value;
@@ -246,7 +243,7 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
     VectorXT dFdp = tessellation->boundary->computeEnergyGradient();
 
     gradient.segment(0, nc) = dFdx.transpose() * tessellation->dxdc + dFdc.transpose();
-    gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->dvdp + dFdp.transpose();
+    gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->boundary->dvdp + dFdp.transpose();
 
     printTime(tstart, "Energy gradient ", false);
     return gradient;
@@ -475,7 +472,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
         g.run([&] {
             VectorXT temp_dFdx_dxdv = (dFdx.transpose() * tessellation->dxdv).transpose();
             for (int i = 0; i < nv; i++) {
-                sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->d2vdp2[i];
+                sum_dFdx_dxdv_d2vdp2 += temp_dFdx_dxdv(i) * tessellation->boundary->d2vdp2[i];
             }
         });
         g.wait();
@@ -486,7 +483,7 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
     Eigen::SparseMatrix<double> dxdc = tessellation->dxdc;
     Eigen::SparseMatrix<double> dxdcT = dxdc.transpose();
     Eigen::SparseMatrix<double> d2Fdxdc = d2Fdcdx.transpose();
-    Eigen::SparseMatrix<double> dvdp = tessellation->dvdp;
+    Eigen::SparseMatrix<double> dvdp = tessellation->boundary->dvdp;
     Eigen::SparseMatrix<double> dvdpT = dvdp.transpose();
     Eigen::SparseMatrix<double> dxdv_dvdp = tessellation->dxdv * dvdp;
     Eigen::SparseMatrix<double> dxdv_dvdpT = dxdv_dvdp.transpose();

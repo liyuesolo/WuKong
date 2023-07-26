@@ -1,16 +1,15 @@
 #pragma once
 
-#include "Boundary.h"
+#include "SubdivisionMeshBoundary.h"
 
-class GastrulationBoundary : public Boundary {
+class GastrulationBoundary : public SubdivisionMeshBoundary {
 
 private:
 //    double kNeighborhood = 2;
 //    double kVol = 2;
 //    double volTarget = -40.666;
 
-private:
-    virtual void computeVertices();
+    bool dvdp_is_identity = true;
 
 public:
     virtual bool checkValid();
@@ -22,5 +21,5 @@ public:
     virtual MatrixXT computeEnergyHessian();
 
 public:
-    GastrulationBoundary(MatrixXT &v_, const MatrixXi &f_, const VectorXi &free_);
+    GastrulationBoundary(MatrixXT &v_, MatrixXi &f_, const VectorXi &free_);
 };

@@ -4,13 +4,13 @@
 #include "GradientDescentMinimizer.h"
 #include <chrono>
 
-#define PRINT_INTERMEDIATE_TIMES true
-#define PRINT_TOTAL_TIME true
+#define PRINT_INTERMEDIATE_TIMES_NEWTON true
+#define PRINT_TOTAL_TIME_NEWTON true
 
 static void
 printTimeNewton(std::chrono::high_resolution_clock::time_point tstart, std::string description = "",
                 bool final = false) {
-    if (PRINT_INTERMEDIATE_TIMES || (final && PRINT_TOTAL_TIME)) {
+    if (PRINT_INTERMEDIATE_TIMES_NEWTON || (final && PRINT_TOTAL_TIME_NEWTON)) {
         const auto tcurr = std::chrono::high_resolution_clock::now();
         std::cout << description << "Time: "
                   << std::chrono::duration_cast<std::chrono::microseconds>(tcurr - tstart).count() * 1.0e-6
@@ -50,6 +50,7 @@ public:
                 dx = solver.solve(g);
                 if (dx.dot(g) > 0) { break; }
             }
+            std::cout << "Regularizer " << currStabValue << std::endl;
         }
     }
 

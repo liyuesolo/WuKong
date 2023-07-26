@@ -14,9 +14,11 @@ double cellRadiusTarget = 0.4;
 
 // GastrulationBoundary
 
-double kNeighborhood = 2;
-double kVol = 2;
-double volTarget = -40.666;
+double kNeighborhood = 10;
+double kYolk = 2;
+double kOuterFluid = 5;
+double yolkTarget = 40.666;
+double outerFluidTarget = 10;
 double outerRadius = 2.81;
 
 // DynamicObjective

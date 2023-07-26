@@ -36,7 +36,7 @@ void NeighborhoodLaplacian::getHessian(NeighborhoodValue &value) const {
         averagePosFunc[i].getGradient(averagePosValues[i]);
         // averagePos hessian is zero
         VectorXT siteGrad = VectorXT::Zero(nvars);
-        siteGrad(siteGrad.rows() - 3 + i) = 2;
+        siteGrad(siteGrad.rows() - 3 + i) = 1;
         value.hessian += (siteGrad - averagePosValues[i].gradient) * (siteGrad - averagePosValues[i].gradient).transpose();
     }
 }

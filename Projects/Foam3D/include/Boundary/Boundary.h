@@ -42,6 +42,9 @@ public:
     std::vector<BoundaryVertex> v;
     std::vector<BoundaryFace> f;
 
+    Eigen::SparseMatrix<double> dvdp;
+    std::vector<Eigen::SparseMatrix<double>> d2vdp2;
+
 private:
     virtual void computeVertices() = 0;
 

@@ -15,6 +15,7 @@ Foam3D::Foam3D() {
     minimizerBFGS = new FancyBFGSMinimizer(1, 1e-10, 15);
 }
 
+
 void Foam3D::energyMinimizationStep(int optimizer) {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
     VectorXT y(c.rows() + tessellation.boundary->nfree);
@@ -40,10 +41,10 @@ void Foam3D::energyMinimizationStep(int optimizer) {
     VectorXT p_free = y.tail(tessellation.boundary->nfree);
 
     tessellation.separateVerticesParams(c, vertices, params);
-    tessellation.tessellate(vertices, params, p_free);
+    tessellation.tessellate(vertices, params, p_free, true);
 }
 
-void Foam3D::dynamicsStep(int optimizer) {
+bool Foam3D::dynamicsStep(int optimizer) {
     VectorXT c = tessellation.combineVerticesParams(vertices, params);
     VectorXT y(c.rows() + tessellation.boundary->nfree);
     y << c, tessellation.boundary->get_p_free();
@@ -69,7 +70,7 @@ void Foam3D::dynamicsStep(int optimizer) {
     VectorXT p_free = y.tail(tessellation.boundary->nfree);
 
     tessellation.separateVerticesParams(c, vertices, params);
-    tessellation.tessellate(vertices, params, p_free);
+    tessellation.tessellate(vertices, params, p_free, true);
 
     if ((y - y_prev).norm() < 1e-14) {
         std::cout << std::endl << "New dynamics step" << std::endl << std::endl;
@@ -77,6 +78,10 @@ void Foam3D::dynamicsStep(int optimizer) {
         minimizerGradientDescent->alpha_start = 1;
         minimizerNewton->alpha_start = 1;
         minimizerBFGS->alpha_start = 1;
+
+        return true;
+    } else {
+        return false;
     }
 }
 
