@@ -285,9 +285,9 @@ void Foam3DApp::scenarioCube() {
 //        foam.tessellation.boundary = new GastrulationBoundary(V, F, free);
 //    }
 
-//    VectorXi free(1);
-//    free << 0;
-    VectorXi free(0);
+    VectorXi free(1);
+    free << 0;
+//    VectorXi free(0);
     foam.tessellation.boundary = new CubeBoundary(1, free);
 }
 
@@ -316,7 +316,7 @@ void Foam3DApp::scenarioSphere() {
             11, 10, 2, 5, 11, 4, 1, 5, 9, 7, 1, 8, 10, 7, 6,
             3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9,
             9, 8, 1, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7;
-    igl::loop(V_ico, F_ico, V2, F2, 1);
+    igl::loop(V_ico, F_ico, V2, F2, 2);
 
 //    V2 = V;
 //    F2 = F;

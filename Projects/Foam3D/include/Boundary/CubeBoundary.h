@@ -13,9 +13,9 @@ public:
 
     virtual double computeEnergy();
 
-    virtual VectorXT computeEnergyGradient();
+    virtual void computeEnergyGradient(VectorXT &gradient);
 
-    virtual MatrixXT computeEnergyHessian();
+    virtual void computeEnergyHessian(MatrixXT &hessian);
 
 public:
     CubeBoundary(double r, const VectorXi &free_);

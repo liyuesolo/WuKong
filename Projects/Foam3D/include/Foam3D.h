@@ -12,6 +12,7 @@
 #include "Tessellation/Power.h"
 #include "Energy/EnergyObjective.h"
 #include "Energy/DynamicObjective.h"
+#include "Energy/EnergyMinimizer.h"
 
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../src/optLib/FancyBFGSMinimizer.h"
@@ -24,6 +25,7 @@ public:
     Power tessellation;
     EnergyObjective energyObjective;
     DynamicObjective dynamicObjective;
+    EnergyMinimizer energyMinimizer;
 
     GradientDescentLineSearch *minimizerGradientDescent;
     NewtonFunctionMinimizer *minimizerNewton;

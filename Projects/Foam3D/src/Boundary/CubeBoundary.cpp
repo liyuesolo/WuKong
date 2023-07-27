@@ -45,21 +45,21 @@ double CubeBoundary::computeEnergy() {
     return (a - 2) * (a - 2);
 }
 
-VectorXT CubeBoundary::computeEnergyGradient() {
+void CubeBoundary::computeEnergyGradient(VectorXT &gradient) {
     double a = p(0);
 
-    Eigen::SparseVector<double> gradient(nfree);
-    addEnergyGradientEntry(gradient, 0, 2 * (a - 2));
+    Eigen::SparseVector<double> grad_sp(nfree);
+    addEnergyGradientEntry(grad_sp, 0, 2 * (a - 2));
 
-    return gradient;
+    gradient = grad_sp;
 }
 
-MatrixXT CubeBoundary::computeEnergyHessian() {
+void CubeBoundary::computeEnergyHessian(MatrixXT &hessian) {
     double a = p(0);
 
-    Eigen::SparseMatrix<double> hessian(nfree, nfree);
-    addEnergyHessianEntry(hessian, 0, 0, 2);
+    Eigen::SparseMatrix<double> hess_sp(nfree, nfree);
+    addEnergyHessianEntry(hess_sp, 0, 0, 2);
 
-    return hessian;
+    hessian = hess_sp;
 }
 

@@ -53,9 +53,17 @@ public:
 
     virtual double computeEnergy() { return 0; };
 
-    virtual VectorXT computeEnergyGradient() { return VectorXT::Zero(nfree); };
+    virtual void computeEnergyGradient(VectorXT &gradient) { gradient = VectorXT::Zero(nfree); };
 
-    virtual MatrixXT computeEnergyHessian() { return MatrixXT::Zero(nfree, nfree); };
+    virtual void computeEnergyHessian(MatrixXT &hessian) { hessian = MatrixXT::Zero(nfree, nfree); };
+
+    virtual void computeEnergyHessianWoodbury(Eigen::SparseMatrix<double> &K, MatrixXT &UV) {
+        MatrixXT hess;
+        computeEnergyHessian(hess);
+        K = hess.sparseView();
+        
+        UV = MatrixXT::Zero(nfree, 1);
+    };
 
 protected:
     void initialize(int nv, const MatrixXi &f_);

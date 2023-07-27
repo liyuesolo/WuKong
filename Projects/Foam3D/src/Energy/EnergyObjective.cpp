@@ -240,7 +240,8 @@ VectorXd EnergyObjective::get_dOdc(const VectorXd &y) const {
     dFdc_sp.setFromTriplets(tripletsdFdc.begin(), tripletsdFdc.end());
     VectorXT dFdx = dFdx_sp;
     VectorXT dFdc = dFdc_sp;
-    VectorXT dFdp = tessellation->boundary->computeEnergyGradient();
+    VectorXT dFdp;
+    tessellation->boundary->computeEnergyGradient(dFdp);
 
     gradient.segment(0, nc) = dFdx.transpose() * tessellation->dxdc + dFdc.transpose();
     gradient.tail(np) = dFdx.transpose() * tessellation->dxdv * tessellation->boundary->dvdp + dFdp.transpose();
@@ -430,7 +431,8 @@ Eigen::SparseMatrix<double> EnergyObjective::get_d2Odc2(const VectorXd &y) const
 
     printTime(tstart, "Hessian build from triplets ");
 
-    MatrixXT d2Fdp2 = tessellation->boundary->computeEnergyHessian();
+    MatrixXT d2Fdp2;
+    tessellation->boundary->computeEnergyHessian(d2Fdp2);
 
     printTime(tstart, "Hessian boundary ");
 

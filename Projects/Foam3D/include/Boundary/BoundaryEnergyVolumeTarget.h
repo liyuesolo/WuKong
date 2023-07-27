@@ -21,5 +21,8 @@ public:
     virtual void
     getHessian(Boundary *boundary, MatrixXT &hessian) const;
 
+    virtual void
+    getHessianWoodbury(Boundary *boundary, Eigen::SparseMatrix<double> &K, VectorXT &UV) const;
+
     BoundaryEnergyVolumeTarget(double target_, std::vector<int> faces_) : target(target_), faces(faces_) {}
 };

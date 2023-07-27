@@ -16,9 +16,11 @@ public:
 
     virtual double computeEnergy();
 
-    virtual VectorXT computeEnergyGradient();
+    virtual void computeEnergyGradient(VectorXT &gradient);
 
-    virtual MatrixXT computeEnergyHessian();
+    virtual void computeEnergyHessian(MatrixXT &hessian);
+
+    virtual void computeEnergyHessianWoodbury(Eigen::SparseMatrix<double> &K, MatrixXT &UV);
 
 public:
     GastrulationBoundary(MatrixXT &v_, MatrixXi &f_, const VectorXi &free_);
