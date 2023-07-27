@@ -5,6 +5,8 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
 {
     std::cout << "shell dof start " << shell_dof_start << std::endl;
     run_diff_test = true;
+
+    
     int n_dof = undeformed.rows();
     VectorXT gradient(n_dof); gradient.setZero();
     T epsilon = 1e-6;
@@ -48,11 +50,11 @@ void IntrinsicSimulation::checkTotalGradient(bool perturb)
         if (std::abs( gradient_FD(dof_i) - gradient(dof_i)) < 1e-3 * std::abs(gradient(dof_i)))
             continue;
         cnt++;
-        delta_u(dof_i) += epsilon;
-        mass_surface_points = current;
-        deformed = dof_current;
-        updateCurrentState();
-        return;
+        // delta_u(dof_i) += 0.001;
+        // mass_surface_points = current;
+        // deformed = dof_current;
+        // updateCurrentState();
+        // return;
         std::cout << " dof " << dof_i << " vtx " << std::floor(dof_i/2.0) << " FD " << gradient_FD(dof_i) << " symbolic " << gradient(dof_i) << std::endl;
         // std::cout << "E1 " << E1 << " E0 " << E0 << std::endl;
         
@@ -145,7 +147,17 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
     VectorXT dof_current = deformed;
     updateCurrentState();
     StiffnessMatrix A(n_dof, n_dof);
-    buildSystemMatrix(A);
+
+    if (woodbury)
+    {
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(A, UV);
+        Eigen::MatrixXd UVT  = UV * UV.transpose();
+        UVT += A;
+        A = UVT.sparseView();
+    }
+    else
+        buildSystemMatrix(A);
 
     VectorXT f0(n_dof);
     f0.setZero();
@@ -190,6 +202,7 @@ void IntrinsicSimulation::checkTotalHessianScale(bool perturb)
 
 void IntrinsicSimulation::checkTotalHessian(bool perturb)
 {
+
     std::cout << "shell_dof_start " << shell_dof_start << std::endl;
     T epsilon = 1e-6;
     run_diff_test = true;
@@ -205,7 +218,16 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
     VectorXT dof_current = deformed;
     updateCurrentState();
     StiffnessMatrix A(n_dof, n_dof);
-    buildSystemMatrix(A);
+    if (woodbury)
+    {
+        MatrixXT UV;
+        buildSystemMatrixWoodbury(A, UV);
+        Eigen::MatrixXd UVT  = UV * UV.transpose();
+        UVT += A;
+        A = UVT.sparseView();
+    }
+    else
+        buildSystemMatrix(A);
     
     for(int dof_i = 0; dof_i < n_dof; dof_i++)
     {
@@ -241,10 +263,10 @@ void IntrinsicSimulation::checkTotalHessian(bool perturb)
 
         for(int i = 0; i < n_dof; i++)
         {
-            if(A.coeff(i, dof_i) == 0 && row_FD(i) == 0)
+            if(std::abs(A.coeff(i, dof_i)) < 1e-9 && std::abs(row_FD(i) < 1e-9))
                 continue;
-            // if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
-            //     continue;
+            if (std::abs( A.coeff(i, dof_i) - row_FD(i)) < 1e-3 * std::abs(row_FD(i)))
+                continue;
             // std::cout << "node i: "  << std::floor(dof_i / T(dof)) << " dof " << dof_i%dof 
             //     << " node j: " << std::floor(i / T(dof)) << " dof " << i%dof 
             //     << " FD: " <<  row_FD(i) << " symbolic: " << A.coeff(i, dof_i) << std::endl;

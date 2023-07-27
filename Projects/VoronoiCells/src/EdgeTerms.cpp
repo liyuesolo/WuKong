@@ -77,6 +77,7 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
 
             MatrixXT hessian = 
                 2.0 * w * (dldq * dldq.transpose() + (l - l0) * d2ldq2);
+            
             addHessianEntry(entries, {eij[0], eij[1]}, hessian.block(0, 0, 4, 4));
             
             addHessianEntry<3, 3>(entries, dof_indices, 

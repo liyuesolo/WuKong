@@ -114,7 +114,10 @@ public:
     VectorXT deformed, undeformed;
     VectorXT delta_u;
     VectorXT u;
+
+    std::vector<int> dirichlet_vertices;
     std::unordered_map<int, T> dirichlet_data;
+
     bool run_diff_test = false;
     int max_newton_iter = 500;
     bool use_Newton = true;
@@ -131,6 +134,7 @@ public:
     T we = 1.0;
     T ref_dis = 1.0;
     T wa = 1.0;
+    bool add_area_term = false;
     bool retrace = true;
     T IRREGULAR_EPSILON = 1e-6;
     T w_reg = 0;
@@ -401,64 +405,6 @@ private:
         tri[2] = fi.halfedge().next().next().vertex().getIndex();
     }
 
-    void findCorrectOrderTriangle(const Triangle& tri0, 
-        int start, int end, Vector<int, 3>& tri_order)
-    {
-        
-        if (tri0[0] == start && tri0[1] == end)
-        {
-            tri_order = Vector<int, 3>(0, 1, 2);
-        }
-        else if (tri0[0] == end && tri0[1] == start)
-        {
-            tri_order = Vector<int, 3>(1, 0, 2);
-            // tri_correct[0] = tri0[1];
-            // tri_correct[1] = tri0[0];
-            // tri_correct[2] = tri0[2];
-        }
-        else if (tri0[0] == start && tri0[2] == end)
-        {
-            tri_order = Vector<int, 3>(0, 2, 1);
-            // tri_correct[0] = tri0[0];
-            // tri_correct[1] = tri0[2];
-            // tri_correct[2] = tri0[1];
-        }
-        else if (tri0[0] == end && tri0[2] == start)
-        {
-            tri_order = Vector<int, 3>(2, 0, 1);
-            // tri_correct[0] = tri0[2];
-            // tri_correct[1] = tri0[0];
-            // tri_correct[2] = tri0[1];
-        }
-        else if (tri0[1] == start && tri0[2] == end)
-        {
-            tri_order = Vector<int, 3>(1, 2, 0);
-            // tri_correct[0] = tri0[1];
-            // tri_correct[1] = tri0[2];
-            // tri_correct[2] = tri0[0];
-        }
-        else if (tri0[1] == end && tri0[2] == start)
-        {
-            // tri_correct[0] = tri0[2];
-            // tri_correct[1] = tri0[1];
-            // tri_correct[2] = tri0[0];
-            tri_order = Vector<int, 3>(2, 1, 0);
-        }
-    }
-
-    template <typename _type>
-    void reorderVec3(const Vector<int, 3>& a, Vector<_type, 3>& b)
-    {
-        Vector<_type, 3> _b = b;
-        for (int i = 0; i < 3; i++)
-            b[i] = _b[a[i]];
-    }
-    void reorderTVVector(const Vector<int, 3>& a, std::vector<TV>& b)
-    {
-        std::vector<TV> _b = b;
-        for (int i = 0; i < 3; i++)
-            b[i] = _b[a[i]];
-    }
 
     // ====================== discrete shell ==========================
     void updateLameParameters()
@@ -556,12 +502,15 @@ public:
     T computeTotalEnergy();
     T computeResidual(VectorXT& residual);
     void buildSystemMatrix(StiffnessMatrix& K);
+    void buildSystemMatrixWoodbury(StiffnessMatrix& K, MatrixXT& UV);
     T lineSearchNewton(const VectorXT& residual);
     void updateCurrentState(bool trace = true);
     void traceGeodesics();
     void reset();
 
     bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);
+    bool linearSolveWoodbury(StiffnessMatrix& K, const MatrixXT& UV,
+         const VectorXT& residual, VectorXT& du);
 
     void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data);
 
@@ -599,6 +548,8 @@ public:
     void checkTotalHessianScale(bool perturb = false);
 
     // Scene.cpp
+    void initializeNetworkData(const std::vector<Edge>& edges);
+    void initializeSceneCheckingSmoothness();
     void initializeMassSpringSceneExactGeodesic();
     void initializeMassSpringDebugScene();
     void initializeTriangleDebugScene();
@@ -633,7 +584,7 @@ public:
     void addVolumePreservationForceEntries(T w, VectorXT& residual);
     void addVolumePreservationHessianEntries(T w, std::vector<Entry>& entries,
         MatrixXT& WoodBuryMatrix);
-    T computeVolume();
+    T computeVolume(bool use_rest_shape = false);
 
 
 public:

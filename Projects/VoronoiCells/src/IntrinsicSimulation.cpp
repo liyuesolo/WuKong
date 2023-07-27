@@ -58,6 +58,7 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         {
             T edge_t = -1.0; TV start = TV::Zero(), end = TV::Zero();
             bool is_edge_point = (pt.type == gcs::SurfacePointType::Edge);
+            bool is_vtx_point = (pt.type == gcs::SurfacePointType::Vertex);
             Edge start_end; start_end.setConstant(-1);
             if (is_edge_point)
             {
@@ -93,6 +94,37 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 // std::cout << pt.tEdge << " " << " cross " << (dir0.cross(dir1)).norm() << std::endl;
                 // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
                 // std::getchar();
+            }
+            
+            if (is_vtx_point)
+            {
+                // std::cout << "is vertex point" << std::endl;
+                
+                auto he = pt.vertex.halfedge();
+                SurfacePoint start_extrinsic = he.tailVertex();
+                SurfacePoint end_extrinsic = he.tipVertex();
+                start = toTV(start_extrinsic.interpolate(sub_geometry->vertexPositions));
+                end = toTV(end_extrinsic.interpolate(sub_geometry->vertexPositions));
+                // std::cout << start.transpose() << " " << end.transpose() << std::endl;
+                start_end[0] = start_extrinsic.vertex.getIndex();
+                start_end[1] = end_extrinsic.vertex.getIndex();
+                // std::cout << start_end[0] << " " << start_end[1] << std::endl;
+                TV ixn = toTV(pt.interpolate(sub_geometry->vertexPositions));
+                // std::cout << ixn.transpose() << std::endl;
+                TV test_interp = start;
+                if ((test_interp - ixn).norm() > 1e-6)
+                {
+                    std::swap(start, end);
+                    std::swap(start_end[0], start_end[1]);
+                }
+                TV dir0 = (end-start).normalized();
+                TV dir1 = (ixn-start).normalized();
+                if ((dir0.cross(dir1)).norm() > 1e-6)
+                {
+                    std::cout << "error in cross product" << std::endl;
+                    std::exit(0);
+                }
+                edge_t = 1.0;
             }
             ixn_data.push_back(IxnData(start, end, (1.0-edge_t), start_end[0], start_end[1]));
             pt.edge = mesh->edge(pt.edge.getIndex());
@@ -354,6 +386,7 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
             // std::cout << pt.inSomeFace().face.halfedge().getIndex() << std::endl;
             T edge_t = -1.0; TV start = TV::Zero(), end = TV::Zero();
             bool is_edge_point = (pt.type == gcs::SurfacePointType::Edge);
+            bool is_vtx_point = (pt.type == gcs::SurfacePointType::Vertex);
             if (is_edge_point)
             {
                 auto he = pt.edge.halfedge();
@@ -384,6 +417,36 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
                 // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
                 // std::getchar();
             }
+            // if (is_vtx_point)
+            // {
+            //     // std::cout << "is vertex point" << std::endl;
+                
+            //     auto he = pt.vertex.halfedge();
+            //     SurfacePoint start_extrinsic = he.tailVertex();
+            //     SurfacePoint end_extrinsic = he.tipVertex();
+            //     start = toTV(start_extrinsic.interpolate(sub_geometry->vertexPositions));
+            //     end = toTV(end_extrinsic.interpolate(sub_geometry->vertexPositions));
+            //     // std::cout << start.transpose() << " " << end.transpose() << std::endl;
+            //     start_end[0] = start_extrinsic.vertex.getIndex();
+            //     start_end[1] = end_extrinsic.vertex.getIndex();
+            //     // std::cout << start_end[0] << " " << start_end[1] << std::endl;
+            //     TV ixn = toTV(pt.interpolate(sub_geometry->vertexPositions));
+            //     // std::cout << ixn.transpose() << std::endl;
+            //     TV test_interp = start;
+            //     if ((test_interp - ixn).norm() > 1e-6)
+            //     {
+            //         std::swap(start, end);
+            //         std::swap(start_end[0], start_end[1]);
+            //     }
+            //     TV dir0 = (end-start).normalized();
+            //     TV dir1 = (ixn-start).normalized();
+            //     if ((dir0.cross(dir1)).norm() > 1e-6)
+            //     {
+            //         std::cout << "error in cross product" << std::endl;
+            //         std::exit(0);
+            //     }
+            //     edge_t = 1.0;
+            // }
             ixn_data.push_back(IxnData(start, end, (1.0-edge_t)));
             pt.face = mesh->face(pt.face.getIndex());
             pt.edge = mesh->edge(pt.edge.getIndex());
@@ -410,7 +473,7 @@ void IntrinsicSimulation::computeExactGeodesicEdgeFlip(const SurfacePoint& va, c
 
 void IntrinsicSimulation::getMarkerPointsPosition(VectorXT& positions)
 {
-    std::vector<int> marker_indices = {0};
+    std::vector<int> marker_indices = {};
     positions.resize(marker_indices.size() * 3);
     for (int i = 0; i < marker_indices.size(); i++)
     {
@@ -498,7 +561,7 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
         // trace geodesic on the extrinsic mesh
         gcs::TraceGeodesicResult result = gcs::traceGeodesic(*geometry, fi, start_bc, trace_vec, options);
         // std::cout << std::setprecision(10) << "trace length " << result.length << std::endl;
-        // while (closeToIrregular(result.endPoint) && !run_diff_test)
+        // while (closeToIrregular(result.endPoint))
         // {
         //     std::cout << "close to irregular" << std::endl;
         //     Vector3 trace_vec_unit = trace_vec.normalize();
@@ -529,6 +592,114 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
         traceGeodesics();
     }
     
+}
+
+bool IntrinsicSimulation::linearSolveWoodbury(StiffnessMatrix& K, const MatrixXT& UV,
+        const VectorXT& residual, VectorXT& du)
+{
+    MatrixXT UVT= UV.transpose();
+    
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix> solver;
+    
+    T alpha = 10e-6;
+    solver.analyzePattern(K);
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
+    int i = 0;
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    for (; i < 50; i++)
+    {
+        // std::cout << i << std::endl;
+        solver.factorize(K);
+        // T time_factorize = t.elapsed_sec() - time_analyze;
+        // std::cout << "\t factorize takes " << time_factorize << "s" << std::endl;
+        // std::cout << "-----factorization takes " << t.elapsed_sec() << "s----" << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            K.diagonal().array() += alpha;
+            alpha *= 10;
+            indefinite_count_reg_cnt++;
+            continue;
+        }
+
+        // sherman morrison
+        if (UV.cols() == 1)
+        {
+            VectorXT v = UV.col(0);
+            MatrixXT rhs(K.rows(), 2); rhs.col(0) = residual; rhs.col(1) = v;
+            // VectorXT A_inv_g = solver.solve(residual);
+            // VectorXT A_inv_u = solver.solve(v);
+            MatrixXT A_inv_gu = solver.solve(rhs);
+
+            T dem = 1.0 + v.dot(A_inv_gu.col(1));
+
+            du.noalias() = A_inv_gu.col(0) - (A_inv_gu.col(0).dot(v)) * A_inv_gu.col(1) / dem;
+        }
+        // UV is actually only U, since UV is the same in the case
+        // C is assume to be Identity
+        else // Woodbury https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+        {
+            VectorXT A_inv_g = solver.solve(residual);
+
+            MatrixXT A_inv_U(UV.rows(), UV.cols());
+            // for (int col = 0; col < UV.cols(); col++)
+                // A_inv_U.col(col) = solver.solve(UV.col(col));
+            A_inv_U = solver.solve(UV);
+
+            MatrixXT C(UV.cols(), UV.cols());
+            C.setIdentity();
+            C += UVT * A_inv_U;
+            du = A_inv_g - A_inv_U * C.inverse() * UVT * A_inv_g;
+        }
+        
+
+        T dot_dx_g = du.normalized().dot(residual.normalized());
+
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-3;
+        if (!search_dir_correct_sign)
+            invalid_search_dir_cnt++;
+        
+        bool solve_success = true;//(K * du + UV * UV.transpose()*du - residual).norm() < 1e-6 && solver.info() == Eigen::Success;
+        
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+        if (positive_definte && search_dir_correct_sign && solve_success)
+        {
+            
+            if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                // std::cout << (K.selfadjointView<Eigen::Lower>() * du + UV * UV.transpose()*du - residual).norm() << std::endl;
+                std::cout << "\t======================== " << std::endl;
+            }
+            return true;
+        }
+        else
+        {
+            // K = H + alpha * I;       
+            // tbb::parallel_for(0, (int)K.rows(), [&](int row)    
+            // {
+            //     K.coeffRef(row, row) += alpha;
+            // });  
+            K.diagonal().array() += alpha;
+            alpha *= 10;
+        }
+    }
+    return false;
 }
 
 
@@ -624,7 +795,8 @@ T IntrinsicSimulation::computeTotalEnergy()
 
     addEdgeLengthEnergy(we, total_energy);
     T area_energy = 0.0;
-    addTriangleAreaEnergy(wa, area_energy);
+    if (add_area_term)
+        addTriangleAreaEnergy(wa, area_energy);
     // std::cout << area_energy << std::endl;
     total_energy += area_energy;
     if (two_way_coupling)
@@ -656,7 +828,8 @@ T IntrinsicSimulation::computeResidual(VectorXT& residual)
 {
 
     addEdgeLengthForceEntries(we, residual);
-    addTriangleAreaForceEntries(wa, residual);
+    if (add_area_term)
+        addTriangleAreaForceEntries(wa, residual);
     if (add_geo_elasticity)
         addGeodesicNHForceEntry(residual);
     if (two_way_coupling)
@@ -672,12 +845,37 @@ T IntrinsicSimulation::computeResidual(VectorXT& residual)
     return residual.norm();
 }
 
+void IntrinsicSimulation::buildSystemMatrixWoodbury(StiffnessMatrix& K, MatrixXT& UV)
+{
+    std::vector<Entry> entries;
+    addEdgeLengthHessianEntries(we, entries);
+    if (add_area_term)
+        addTriangleAreaHessianEntries(wa, entries);
+    if (add_geo_elasticity)
+        addGeodesicNHHessianEntry(entries);
+    if (two_way_coupling)
+        addShellHessianEntries(entries);
+    if (add_volume)
+    {
+        addVolumePreservationHessianEntries(wv, entries, UV);
+    }
+    int n_dof = deformed.rows();
+    K.resize(n_dof, n_dof);
+    
+    K.setFromTriplets(entries.begin(), entries.end());
+    if (!run_diff_test)
+        projectDirichletDoFMatrix(K, dirichlet_data);
+    
+    K.makeCompressed();
+}
+
 void IntrinsicSimulation::buildSystemMatrix(StiffnessMatrix& K)
 {
    
     std::vector<Entry> entries;
     addEdgeLengthHessianEntries(we, entries);
-    addTriangleAreaHessianEntries(wa, entries);
+    if (add_area_term)
+        addTriangleAreaHessianEntries(wa, entries);
     if (add_geo_elasticity)
         addGeodesicNHHessianEntry(entries);
     if (two_way_coupling)
@@ -792,12 +990,24 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
     StiffnessMatrix K(residual.rows(), residual.rows());
     if (use_Newton)
     {
-        // Timer ti(true);
-        // START_TIMING(buildSystemMatrix)
-        buildSystemMatrix(K);
-        // FINISH_TIMING_PRINT(buildSystemMatrix)
-        // // std::cout << "\tbuild system takes " <<  ti.elapsed_sec() << std::endl;
-        bool success = linearSolve(K, residual, du);
+        bool success = false;
+        if (woodbury)
+        {
+            MatrixXT UV;
+            buildSystemMatrixWoodbury(K, UV);
+            
+            success = linearSolveWoodbury(K, UV, residual, du);
+        }
+        else
+        {
+
+            buildSystemMatrix(K);
+            // std::ofstream out("matrix.txt");
+            // out << K << std::endl;
+            // out.close();
+            // std::exit(0);
+            success = linearSolve(K, residual, du);
+        }
         if (!success)
         {
             std::cout << "Linear Solve Failed" << std::endl;
@@ -835,9 +1045,17 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
                         std::cout << "-----line search max----- cnt > 15 along gradient [BUG ALERT]" << std::endl;
                     std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
                     std::ofstream out("search_direction.txt");
+                    out << std::setprecision(16);
                     out << direction.rows() << std::endl;
                     for (int i = 0; i < direction.rows(); i++)
                         out << direction[i] << " ";
+                    out << std::endl;
+                    out << spring_edges.size() << std::endl;
+                    for (const Edge& edges : spring_edges)
+                    {
+                        out << edges[0] << " " << edges[1] << std::endl;
+                    }
+                    out << std::endl;
                     out << mass_surface_points.size() << std::endl;
                     for (int i = 0; i < mass_surface_points.size(); i++)
                     {
@@ -845,8 +1063,16 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
                         out << current_state[i].second.getIndex();
                         out << std::endl;
                     }
+                    if (two_way_coupling)
+                    {
+                        out << deformed.rows() << std::endl;
+                        for (int i = 0; i < current_state_x.rows(); i++)
+                            out << current_state_x[i] << " ";
+                        out << std::endl;
+                    }
                     out.close();
-                    // std::exit(0);
+                    
+                    std::exit(0);
                     if (!using_gradient && use_Newton)
                     {
                         mass_surface_points = current_state;

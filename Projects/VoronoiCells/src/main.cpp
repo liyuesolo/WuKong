@@ -38,9 +38,8 @@ int main(int argc, char** argv)
     // intrinsic_simulation.initializeTriangleDebugScene();
     // intrinsic_simulation.movePointsPlotEnergy();
     intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
-    // intrinsic_simulation.checkTotalGradientScale();
-    // intrinsic_simulation.checkTotalGradient();
-    // intrinsic_simulation.checkTotalHessianScale(true);
+    // intrinsic_simulation.initializeSceneCheckingSmoothness();
+    // intrinsic_simulation.movePointsPlotEnergy();
 
     if (with_viewer)
     {

@@ -310,18 +310,46 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             search_direction.resize(length);
             for (int i = 0; i < length; i++)
                 in >> search_direction[i];
+            
+            int n_springs; in >> n_springs;
+            std::vector<Vector<int, 2>> edges(n_springs, Vector<int, 2>());
+            for (int i = 0; i < n_springs; i++)
+            {
+                in >> edges[i][0] >> edges[i][1];
+            }
+            
             int n_pts; in >> n_pts;
+            simulation.mass_surface_points.resize(n_pts);
             for (int i = 0; i < n_pts; i++)
             {
                 TV bary; in >> bary[0] >> bary[1] >> bary[2];
                 int face_idx; in >> face_idx;
                 gcs::Face f = simulation.mesh->face(face_idx);
                 simulation.mass_surface_points[i].second = f;
-                simulation.mass_surface_points[i].first = gcs::SurfacePoint(f, gc::Vector3{bary[0],bary[1], bary[2]});
+                simulation.mass_surface_points[i].first = 
+                    gcs::SurfacePoint(f, gc::Vector3{bary[0],bary[1], bary[2]});
             }
+            if (simulation.two_way_coupling)
+            {
+                simulation.undeformed.conservativeResize(length);
+                simulation.shell_dof_start = n_pts * 2;
+                simulation.undeformed.segment(simulation.shell_dof_start, 
+                    length - simulation.shell_dof_start)
+                = simulation.extrinsic_vertices;
+                simulation.deformed = simulation.undeformed;
+                simulation.delta_u = simulation.undeformed; 
+                simulation.delta_u.setZero();
+                int n_dof; in >> n_dof;
+                for (int i = 0; i < n_dof; i++)
+                    in >> simulation.deformed[i];
+            }
+            
+            in.close();
+            simulation.initializeNetworkData(edges);
+            
             simulation.updateCurrentState();
             simulation.mass_surface_points_undeformed = simulation.mass_surface_points;
-            simulation.retrace = true;
+            temporary_vector = simulation.deformed;
             updateScreen(viewer);
         }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
@@ -450,6 +478,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             {
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
                 simulation.delta_u = (static_solve_step) * search_direction;
+                simulation.deformed = temporary_vector;
                 simulation.updateCurrentState();
                 T total_energy = simulation.computeTotalEnergy();
                 std::cout << "energy : " << total_energy << std::endl;
@@ -462,6 +491,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             {
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
                 simulation.delta_u = (static_solve_step-1) * search_direction;
+                simulation.deformed = temporary_vector;
                 simulation.updateCurrentState();
                 T total_energy = simulation.computeTotalEnergy();
                 std::cout << "energy : " << total_energy << std::endl;
@@ -470,9 +500,9 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case 'd':
-            // simulation.checkTotalGradientScale(true);
-            simulation.checkTotalGradient(true);
-            // simulation.checkTotalHessianScale(true);
+            simulation.checkTotalGradientScale(true);
+            simulation.checkTotalHessianScale(true);
+            // simulation.checkTotalGradient(true);
             // simulation.checkTotalHessian(true);
             // simulation.checkLengthDerivativesScale();
             updateScreen(viewer);
@@ -493,20 +523,28 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             }
             else
             {
-                use_temp_vec = true;
+                // use_temp_vec = true;
+                simulation.run_diff_test = true;
                 static_solve_step++;
                 temporary_vector.resize(simulation.undeformed.rows());
-                temporary_vector.setZero();
-                simulation.computeResidual(temporary_vector); temporary_vector *= -1.0;
-                T a = temporary_vector[2],
-                    b = temporary_vector[3];
-                temporary_vector[2] = -b;
-                temporary_vector[3] = a;
+                temporary_vector << 0.0260971, -0.0127193, -0.0143727, 0.00148369;
+                // temporary_vector.setZero();
+                // simulation.computeResidual(temporary_vector); temporary_vector *= -1.0;
+                // T a = temporary_vector[2],
+                //     b = temporary_vector[3];
+                // temporary_vector[2] = -b;
+                // temporary_vector[3] = a;
+                // a = temporary_vector[0],
+                // b = temporary_vector[1];
+                // temporary_vector[0] = b;
+                // temporary_vector[1] = -a;
+                // std::cout << temporary_vector.transpose() << std::endl;
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
-                simulation.delta_u = (static_solve_step*0.1) * temporary_vector;
+                simulation.delta_u = (static_solve_step*0.5) * temporary_vector;
                 simulation.updateCurrentState();
-                T total_energy = simulation.computeTotalEnergy();
-                std::cout << "energy : " << total_energy << std::endl;
+                // T total_energy = simulation.computeTotalEnergy();
+                T total_energy = simulation.current_length[0];
+                std::cout << "length : " << total_energy << " " << static_solve_step * 0.5 << std::endl;
             }
             updateScreen(viewer);
             return true;

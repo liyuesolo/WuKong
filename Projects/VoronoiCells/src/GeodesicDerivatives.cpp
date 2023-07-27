@@ -292,6 +292,12 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
     
     MatrixXT dxdtd2gdx2dxdt;
 
+    if (hasSmallSegment(path))
+    {
+        std::cout << "has small segment" << std::endl;
+        // std::getchar();
+    }
+
     if (length == 2)
     {
         dgdc0 = -(v1 - v0).normalized();   
@@ -414,6 +420,24 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
             - dxdt.transpose() * d2gdx2 * dxdv // 
             );
         // check
+
+        for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
+        {
+            T t = ixn_data[ixn_id + 1].t;
+            // for legacy reason t is 0 not 1 here
+            if (t < 1e-8)
+            {
+                dtdv.row(ixn_id).setZero();
+                dtdc.row(ixn_id).setZero();
+            }
+        }
+
+        // dtdc.setZero(); 
+        // dtdv.setZero();
+        // std::cout << dtdc << std::endl;
+        // std::cout << "-------------" << std::endl;
+        // std::cout << dtdv << std::endl;
+        // std::cout << "-------------" << std::endl;
         d2ldq2.block(4, 4, nv, nv) += dcdv.transpose() * p2gpc2 * dcdv;
 
         MatrixXT dxdvT_d2gdxdc_dcdv = dxdv.transpose() * d2gdxdc * dcdv;
@@ -488,11 +512,11 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
         d2ldq2.block(0, 4, 4, nv) += dgdc_plus_dgdx_dxdt_dtdc_tensor_product_d2cdvdw;
         d2ldq2.block(4, 0, nv, 4) += dgdc_plus_dgdx_dxdt_dtdc_tensor_product_d2cdvdw.transpose();
         
-        // if ((d2ldq2 - d2ldq2.transpose()).norm() > 1e-8)
-        // {
-        //     std::cout << "unsymmetric hessian" << std::endl;
-        //     std::exit(0);
-        // }
+        if ((d2ldq2 - d2ldq2.transpose()).norm() > 1e-8)
+        {
+            // std::cout << "unsymmetric hessian" << std::endl;
+            // std::exit(0);
+        }
     }
 }
 

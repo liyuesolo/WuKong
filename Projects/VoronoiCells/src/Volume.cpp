@@ -1,7 +1,7 @@
 #include "../autodiff/CST3DShell.h"
 #include "../include/IntrinsicSimulation.h"
 
-T IntrinsicSimulation::computeVolume()
+T IntrinsicSimulation::computeVolume(bool use_rest_shape)
 {
     auto computeTetVolume = [&](const TV& a, const TV& b, const TV& c, const TV& d)->T
     {
@@ -11,7 +11,11 @@ T IntrinsicSimulation::computeVolume()
     T volume = 0.0;
     iterateFaceSerial([&](int face_idx)
     {
-        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx vertices;
+        if (use_rest_shape)
+            vertices = getFaceVtxUndeformed(face_idx);
+        else
+            vertices = getFaceVtxDeformed(face_idx);
         volume += computeTetVolume(TV::Zero(), vertices.row(0), vertices.row(1), vertices.row(2));
 
     });
