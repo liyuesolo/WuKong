@@ -10,7 +10,7 @@
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef CGAL::Regular_triangulation_2<K> Regular_triangulation;
 
-void Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &node) {
+void Power::getStandardNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &node) {
     assert(v1.rows() == 3 && v2.rows() == 3 && v3.rows() == 3);
 
     double x1 = v1(0);
@@ -51,7 +51,7 @@ void Power::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, 
 }
 
 void
-Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
+Power::getStandardNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
     double x1 = v1(0);
     double y1 = v1(1);
     double z1 = v1(2);
@@ -151,7 +151,8 @@ Power::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v
 }
 
 void
-Power::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, std::vector<MatrixXT> &nodeHess) {
+Power::getStandardNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
+                              std::vector<MatrixXT> &nodeHess) {
     double x1 = v1(0);
     double y1 = v1(1);
     double z1 = v1(2);

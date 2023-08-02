@@ -4,7 +4,7 @@
 #include "Projects/Foam2D/include/Tessellation/CellFunction.h"
 #include <iostream>
 
-void Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &node) {
+void Voronoi::getStandardNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, VectorXT &node) {
     double x1 = v1(0);
     double y1 = v1(1);
     double x2 = v2(0);
@@ -28,7 +28,7 @@ void Voronoi::getNode(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3
 }
 
 void
-Voronoi::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
+Voronoi::getStandardNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, MatrixXT &nodeGrad) {
     double x1 = v1(0);
     double y1 = v1(1);
     double x2 = v2(0);
@@ -86,7 +86,8 @@ Voronoi::getNodeGradient(const VectorXT &v1, const VectorXT &v2, const VectorXT 
 }
 
 void
-Voronoi::getNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3, std::vector<MatrixXT> &nodeHess) {
+Voronoi::getStandardNodeHessian(const VectorXT &v1, const VectorXT &v2, const VectorXT &v3,
+                                std::vector<MatrixXT> &nodeHess) {
     double x1 = v1(0);
     double y1 = v1(1);
     double x2 = v2(0);

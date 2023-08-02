@@ -12,14 +12,14 @@ public:
 
     virtual VectorXi getDualGraph(const VectorXT &vertices, const VectorXT &params);
 
-    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node);
+    virtual void getStandardNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node);
 
     virtual void
-    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad);
+    getStandardNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad);
 
     virtual void
-    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
-                   std::vector<MatrixXT> &nodeHess);
+    getStandardNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
+                           std::vector<MatrixXT> &nodeHess);
 
     virtual void
     getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node);

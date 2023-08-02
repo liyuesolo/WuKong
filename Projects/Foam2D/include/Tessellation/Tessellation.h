@@ -43,6 +43,28 @@ struct Cell {
     std::vector<CellEdge> edges;
 };
 
+enum NodeType {
+    STANDARD,
+    B_EDGE_LINEAR,
+    B_EDGE_ARC,
+    B_EDGE_BEZIER,
+    B_VERTEX,
+    LSQ,
+};
+
+struct Node {
+    NodeType type;
+    int bezier_flag = 0;
+
+    std::vector<int> gen;
+};
+
+struct NodePosition {
+    VectorXT pos;
+    MatrixXT grad;
+    std::vector<MatrixXT> hess;
+};
+
 class Tessellation {
 
 public:
@@ -70,58 +92,62 @@ private:
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
 
     // Get the tessellation node at the intersection of three cells.
-    virtual void getNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node) = 0;
+    virtual void getStandardNode(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, VectorXT &node) {
+        assert(0);
+    };
 
     virtual void
-    getNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad) = 0;
+    getStandardNodeGradient(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2, MatrixXT &nodeGrad) {
+        assert(0);
+    };
 
     virtual void
-    getNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
-                   std::vector<MatrixXT> &nodeHess) = 0;
+    getStandardNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
+                           std::vector<MatrixXT> &nodeHess) { assert(0); };
 
-    void getNodeWrapper(int i0, int i1, int i2, int flag, VectorXT &node, MatrixXT &nodeGrad,
-                        std::vector<MatrixXT> &nodeHess, int &mode);
+    virtual void getNodeWrapper(Node &node, NodePosition &nodePos);
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void
-    getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node) = 0;
+    getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node) { assert(0); };
 
     virtual void
-    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, MatrixXT &nodeGrad) = 0;
+    getBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1,
+                            MatrixXT &nodeGrad) { assert(0); };
 
     virtual void
     getBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1,
-                           std::vector<MatrixXT> &nodeHess) = 0;
+                           std::vector<MatrixXT> &nodeHess) { assert(0); };
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void
     getArcBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                       VectorXT &node) = 0;
+                       VectorXT &node) { assert(0); };
 
     virtual void
     getArcBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                               MatrixXT &nodeGrad) = 0;
+                               MatrixXT &nodeGrad) { assert(0); };
 
     virtual void
     getArcBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double r, int flag,
-                              std::vector<MatrixXT> &nodeHess) = 0;
+                              std::vector<MatrixXT> &nodeHess) { assert(0); };
 
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void
     getBezierBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0, double q1,
                           int flag,
-                          VectorXT &node) = 0;
+                          VectorXT &node) { assert(0); };
 
     virtual void
     getBezierBoundaryNodeGradient(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0,
                                   double q1,
                                   int flag,
-                                  MatrixXT &nodeGrad) = 0;
+                                  MatrixXT &nodeGrad) { assert(0); };
 
     virtual void
     getBezierBoundaryNodeHessian(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, double q0,
                                  double q1, int flag,
-                                 std::vector<MatrixXT> &nodeHess) = 0;
+                                 std::vector<MatrixXT> &nodeHess) { assert(0); };
 
 public:
     Tessellation() {}
