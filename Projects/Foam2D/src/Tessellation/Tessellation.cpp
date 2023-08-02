@@ -1132,6 +1132,8 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                             nodePos.grad.block(0, 5, CellFunction::nx, 1);
                 }
                 break;
+            case LSQ:
+                break;
             default:
                 assert(0);
                 break;

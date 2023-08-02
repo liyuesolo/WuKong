@@ -9,7 +9,8 @@
 
 enum TessellationType {
     VORONOI,
-    POWER
+    POWER,
+    SMOOTH_VORONOI
 };
 
 using TV = Vector<double, 2>;
@@ -57,6 +58,7 @@ struct Node {
     int bezier_flag = 0;
 
     std::vector<int> gen;
+    std::vector<double> genw;
 };
 
 struct NodePosition {
@@ -105,8 +107,10 @@ private:
     getStandardNodeHessian(const VectorXT &v0, const VectorXT &v1, const VectorXT &v2,
                            std::vector<MatrixXT> &nodeHess) { assert(0); };
 
+protected:
     virtual void getNodeWrapper(Node &node, NodePosition &nodePos);
 
+private:
     // Get the tessellation node at the intersection of two cells and a domain boundary.
     virtual void
     getBoundaryNode(const VectorXT &v0, const VectorXT &v1, const TV &b0, const TV &b1, VectorXT &node) { assert(0); };

@@ -15,7 +15,7 @@
 class Foam2DInfo {
 public:
     std::vector<Tessellation *> tessellations;
-    int tessellation = 0;
+    int tessellation = 2;
 
     int n_free;
     int n_fixed;

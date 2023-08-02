@@ -28,6 +28,7 @@ void Foam2DApp::setViewer(igl::opengl::glfw::Viewer &viewer,
         std::vector<std::string> tesselationTypes;
         tesselationTypes.push_back("Voronoi");
         tesselationTypes.push_back("Power");
+        tesselationTypes.push_back("Smooth Voronoi");
         if (ImGui::Combo("Tessellation Type", &foam.info->tessellation, tesselationTypes)) {
             foam.resetVertexParams();
             updateViewerData(viewer);

@@ -3,6 +3,7 @@
 #include "../include/Foam2D.h"
 #include "Projects/Foam2D/include/Tessellation/Voronoi.h"
 #include "Projects/Foam2D/include/Tessellation/Power.h"
+#include "Projects/Foam2D/include/Tessellation/SmoothVoronoi.h"
 #include "../src/optLib/NewtonFunctionMinimizer.h"
 #include "../src/optLib/FancyBFGSMinimizer.h"
 #include <random>
@@ -28,6 +29,7 @@ Foam2D::Foam2D() {
     info = new Foam2DInfo();
     info->tessellations.push_back(new Voronoi());
     info->tessellations.push_back(new Power());
+    info->tessellations.push_back(new SmoothVoronoi());
 
     energyObjective.info = info;
     dynamicObjective.info = info;

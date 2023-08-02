@@ -17,14 +17,14 @@ class Foam2DApp {
 public:
     Foam2D &foam;
 
-    int drag_mode = 0;
+    int drag_mode = 1;
     bool dragging = false;
     bool optimize = false;
     bool show_dual = false;
 
     int colormode = 0;
 
-    int generate_scenario_type = 9;
+    int generate_scenario_type = 1;
     int generate_scenario_free_sites = 40;
     int generate_scenario_fixed_sites = 40;
 
