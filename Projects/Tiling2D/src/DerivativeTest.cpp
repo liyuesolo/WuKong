@@ -6,7 +6,7 @@ void FEMSolver::checkTotalGradient(bool perturb)
     // pbc_strain_w = 0;
     // pbc_w = 0;
 
-    VectorXT du(num_nodes * 3);
+    VectorXT du(num_nodes * 2);
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
@@ -14,7 +14,7 @@ void FEMSolver::checkTotalGradient(bool perturb)
         u += du;
 
     std::cout << "======================== CHECK GRADIENT ========================" << std::endl;
-    int n_dof = num_nodes * 2;
+    int n_dof = reduced_dof.rows();
     T epsilon = 1e-6;
     VectorXT gradient(n_dof);
     gradient.setZero();
@@ -55,15 +55,15 @@ void FEMSolver::checkTotalGradientScale(bool perturb)
     run_diff_test = true;
     
     std::cout << "======================== CHECK GRADIENT 2nd Scale ========================" << std::endl;
-    T epsilon = 1e-7;
-    VectorXT du(num_nodes * 2);
+    
+    VectorXT du(reduced_dof.rows());
     du.setRandom();
     du *= 1.0 / du.norm();
     du *= 0.001;
     if (perturb)
         u += du;
     
-    int n_dof = num_nodes * 2;
+    int n_dof = reduced_dof.rows();
 
     VectorXT gradient(n_dof);
     gradient.setZero();
@@ -74,7 +74,7 @@ void FEMSolver::checkTotalGradientScale(bool perturb)
     VectorXT dx(n_dof);
     dx.setRandom();
     dx *= 1.0 / dx.norm();
-    dx *= 0.001;
+    dx *= 0.01;
     T previous = 0.0;
     for (int i = 0; i < 10; i++)
     {
@@ -259,7 +259,7 @@ void FEMSolver::checkTotalHessianScale(bool perturb)
     std::cout << "===================== check Hessian 2nd Scale =====================" << std::endl;
     run_diff_test = true;
     project_block_PD = false;
-    int n_dof = num_nodes * 2;
+    int n_dof = reduced_dof.rows();
 
     VectorXT du(num_nodes * 2);
     du.setRandom();

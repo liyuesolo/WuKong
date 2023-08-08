@@ -20,6 +20,7 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
     T total_energy = 0.0;
 
     VectorXT projected = _u;
+
     if (!run_diff_test)
     {
         iterateDirichletDoF([&](int offset, T target)
@@ -27,6 +28,9 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
             projected[offset] = target;
         });
     }
+    
+    projected = jac_full2reduced * projected;
+
     deformed = undeformed + projected;
 
     T e_NH = 0.0;
@@ -47,21 +51,21 @@ T FEMSolver::computeTotalEnergy(const VectorXT& _u)
         total_energy += ipc;
     }
 
-    if (unilateral_qubic)
-    {
-        T uni_qubic = 0.0;
-        addUnilateralQubicPenaltyEnergy(penalty_weight, uni_qubic);
-        total_energy += uni_qubic;
-    }
+    // if (unilateral_qubic)
+    // {
+    //     T uni_qubic = 0.0;
+    //     addUnilateralQubicPenaltyEnergy(penalty_weight, uni_qubic);
+    //     total_energy += uni_qubic;
+    // }
 
-    if (penalty_pairs.size())
-    {
-        T penalty = 0.0;
-        addBCPenaltyEnergy(penalty_weight, penalty);
-        total_energy += penalty;
-    }
+    // if (penalty_pairs.size())
+    // {
+    //     T penalty = 0.0;
+    //     addBCPenaltyEnergy(penalty_weight, penalty);
+    //     total_energy += penalty;
+    // }
     // total_energy *= thickness;
-    total_energy -= _u.dot(f);
+    // total_energy -= _u.dot(f);
 
 
     return total_energy;
@@ -81,10 +85,11 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
         });
     }
     
-
+    projected = jac_full2reduced * projected;
+    
     deformed = undeformed + projected;
 
-    residual = f;
+    residual.resize(deformed.rows());
     residual.setZero();
     
     VectorXT residual_backup = residual;
@@ -117,34 +122,37 @@ T FEMSolver::computeResidual(const VectorXT& _u, VectorXT& residual)
         }
     }
 
-    if (unilateral_qubic)
-    {
-        addUnilateralQubicPenaltyForceEntries(penalty_weight, residual);
-        if (verbose)
-        {
-            std::cout << "qubic penalty force " << (residual - residual_backup).norm() << std::endl;
-            residual_backup = residual;
-        }
-    }
+    // if (unilateral_qubic)
+    // {
+    //     addUnilateralQubicPenaltyForceEntries(penalty_weight, residual);
+    //     if (verbose)
+    //     {
+    //         std::cout << "qubic penalty force " << (residual - residual_backup).norm() << std::endl;
+    //         residual_backup = residual;
+    //     }
+    // }
 
-    if (penalty_pairs.size())
-    {
-        addBCPenaltyForceEntries(penalty_weight, residual);
-        if (verbose)
-        {
-            std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
-            residual_backup = residual;
-        }
-    }
-    // residual *= thickness;
-    residual += f;
+    // if (penalty_pairs.size())
+    // {
+    //     addBCPenaltyForceEntries(penalty_weight, residual);
+    //     if (verbose)
+    //     {
+    //         std::cout << "penalty force " << (residual - residual_backup).norm() << std::endl;
+    //         residual_backup = residual;
+    //     }
+    // }
+
+    // residual += f;
     // std::getchar();
+    
+    residual = jac_full2reduced.transpose() * residual;
+    
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
             residual[offset] = 0;
         });
-        
+
     return residual.norm();
 }
 
@@ -264,6 +272,7 @@ void FEMSolver::builddfdX(const VectorXT& _u, StiffnessMatrix& dfdX)
 void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
 {
     VectorXT projected = _u;
+
     if (!run_diff_test)
     {
         iterateDirichletDoF([&](int offset, T target)
@@ -271,8 +280,12 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
             projected[offset] = target;
         });
     }
+    
+    projected = jac_full2reduced * projected;
+
     deformed = undeformed + projected;
     
+    K.resize(deformed.rows(), deformed.rows());
     std::vector<Entry> entries;
 
     addElasticHessianEntries(entries, project_block_PD);
@@ -281,16 +294,21 @@ void FEMSolver::buildSystemMatrix(const VectorXT& _u, StiffnessMatrix& K)
         addPBCHessianEntries(entries, project_block_PD);
     if (use_ipc)
         addIPCHessianEntries(entries, project_block_PD);
-    if (unilateral_qubic)
-        addUnilateralQubicPenaltyHessianEntries(penalty_weight, entries);
-    if (penalty_pairs.size())
-        addBCPenaltyHessianEntries(penalty_weight, entries);
+
+    // if (unilateral_qubic)
+    //     addUnilateralQubicPenaltyHessianEntries(penalty_weight, entries);
+    // if (penalty_pairs.size())
+    //     addBCPenaltyHessianEntries(penalty_weight, entries);
 
     K.setFromTriplets(entries.begin(), entries.end());
     // K *= thickness;
+
+    K = jac_full2reduced.transpose() * K * jac_full2reduced;
+
     if (!run_diff_test)
         projectDirichletDoFMatrix(K, dirichlet_data);
     
+    // std::cout << "K " << K.rows() << " " << K.cols() << std::endl;
     K.makeCompressed();
 
 }
@@ -445,28 +463,33 @@ bool FEMSolver::staticSolveStep(int step)
     
     if (step == 0)
     {
-        iterateDirichletDoF([&](int offset, T target)
-        {
-            f[offset] = 0;
-        });
+        // iterateDirichletDoF([&](int offset, T target)
+        // {
+        //     f[offset] = 0;
+        // });
         if (use_ipc) 
             computeIPCRestData();
     }
 
-    VectorXT residual(deformed.rows());
+    VectorXT residual(reduced_dof.rows());
     residual.setZero();
 
-    T residual_norm = computeResidual(u, residual);
     if (use_ipc)
     {
         updateBarrierInfo(step == 0);
-        std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
+        // std::cout << "ipc barrier stiffness " << barrier_weight << std::endl;
         // std::getchar();
         updateIPCVertices(u);
     }
+
+    T residual_norm = computeResidual(u, residual);
+
+    // std::cout << residual.rows() << " " << u.rows() << " " << reduced_dof.rows() << std::endl;
     std::cout << "[NEWTON] iter " << step << "/" << max_newton_iter << ": residual_norm " << residual_norm << " tol: " << newton_tol << std::endl;
 
-    if (residual_norm < newton_tol || step == max_newton_iter)
+    T dq_norm = lineSearchNewton(u, residual);
+
+    if (residual_norm < newton_tol || step == max_newton_iter || dq_norm < 1e-12)
     {
         if (add_pbc_strain)
         {
@@ -480,25 +503,18 @@ bool FEMSolver::staticSolveStep(int step)
 
             TM secondPK_stress, Green_strain;
             T psi;
+            std::cout << std::setprecision(10) << std::endl;
             computeHomogenizationData(secondPK_stress, Green_strain, psi);
             std::cout << "strain " << Green_strain << std::endl << std::endl;
             std::cout << "stress " << secondPK_stress << std::endl << std::endl;
             // std::cout << std::setprecision(8) << "energy density " << psi << std::endl << std::endl;
             std::cout << "energy density " << psi << std::endl << std::endl;
             
-            // TM avg_2ndPK, avg_Cauchy_strain, avg_Green_strain;
-            // Matrix<T, 3, 3> elasticity_tensor;
-            // computeAveragedHomogenizationData(avg_2ndPK, avg_Cauchy_strain, avg_Green_strain, elasticity_tensor);
-            // std::cout << "Cauchy strain " << avg_Cauchy_strain << std::endl << std::endl;
-            // std::cout << "Green strain " << avg_Green_strain << std::endl << std::endl;
-            // std::cout << "2nd PK stress " << avg_2ndPK << std::endl << std::endl;
-            // std::cout << "elasticity tensor " << elasticity_tensor << std::endl << std::endl;
         }
         return true;
     }
     
 
-    T dq_norm = lineSearchNewton(u, residual);
     
     // iterateDirichletDoF([&](int offset, T target)
     // {
@@ -508,7 +524,7 @@ bool FEMSolver::staticSolveStep(int step)
 
     if(step == max_newton_iter || dq_norm > 1e10 || dq_norm < 1e-12)
     {
-        
+        // std::cout << "|u| " << dq_norm << std::endl;
         return true;
     }
     
@@ -530,7 +546,7 @@ bool FEMSolver::staticSolve()
     while (true)
     {
         
-        VectorXT residual(deformed.rows());
+        VectorXT residual(reduced_dof.rows());
         residual.setZero();
 
         residual_norm = computeResidual(u, residual);
@@ -561,37 +577,16 @@ bool FEMSolver::staticSolve()
     {
         u[offset] = target;
     });
-    deformed = undeformed + u;
-    if (verbose)
-    {
-        T E_bc = 0.0, E_pbc = 0.0;
-        addBCPenaltyEnergy(penalty_weight, E_bc);
-        addPBCEnergy(E_pbc);
-        std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
-    }
-    // if (add_pbc_strain)
+    deformed = undeformed + jac_full2reduced * u;
+    // if (verbose)
     // {
-    //     // if (verbose)
-    //     {
-    //         T E_bc = 0.0, E_pbc = 0.0;
-    //         addBCPenaltyEnergy(penalty_weight, E_bc);
-    //         addPBCEnergy(E_pbc);
-    //         std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
-    //     }
-
-    //     TM secondPK_stress, Green_strain;
-    //     T psi;
-    //     computeHomogenizationData(secondPK_stress, Green_strain, psi);
-    //     std::cout << "strain " << Green_strain << std::endl << std::endl;
-    //     std::cout << "stress " << secondPK_stress << std::endl << std::endl;
-    //     std::cout << "energy density " << psi << std::endl << std::endl;
+    //     T E_bc = 0.0, E_pbc = 0.0;
+    //     addBCPenaltyEnergy(penalty_weight, E_bc);
+    //     addPBCEnergy(E_pbc);
+    //     std::cout << "penalty BC " << E_bc << " PBC " << E_pbc << std::endl;
     // }
-    // TM secondPK_stress, Green_strain;
-    // T psi;
-    // computeHomogenizationData(secondPK_stress, Green_strain, psi);
-    // std::cout << "strain " << Green_strain << std::endl << std::endl;
-    // std::cout << "stress " << secondPK_stress << std::endl << std::endl;
-    // std::cout << std::setprecision(8) << "energy density " << psi << std::endl << std::endl;
+    
+
     std::cout << "# of newton solve: " << cnt << " exited with |g|: " 
         << residual_norm << "|ddu|: " << du_norm  << std::endl;
     // std::cout << u.norm() << std::endl;
@@ -600,4 +595,134 @@ bool FEMSolver::staticSolve()
         return false;
     return true;
     
+}
+
+void FEMSolver::constructReducedJacobian()
+{
+    int full_dof = deformed.rows() + 4;
+                    
+    bool bottom_left_corner_match = pbc_pairs[0][0][0] == pbc_pairs[1][0][0];
+    bool top_left_corner_match = pbc_pairs[0][pbc_pairs[0].size()-1][0] == pbc_pairs[1][0][1];
+    std::vector<int> duplicated_entries;
+    if (bottom_left_corner_match && top_left_corner_match)
+    {
+        std::cout << " match " << std::endl;
+        for (int i = 0; i < (int)pbc_pairs[0].size(); i++)
+            duplicated_entries.push_back(pbc_pairs[0][i][1]);
+        for (int i = 1; i < (int)pbc_pairs[1].size()-1; i++)
+            duplicated_entries.push_back(pbc_pairs[1][i][1]);
+    }
+    std::vector<bool> is_boundary_vtx(num_nodes, false);
+    int check_cnt = 0;
+    for (int dir = 0; dir < 2; dir++)
+        for (IV& pbc_pair : pbc_pairs[dir])
+        {
+            int idx0 = pbc_pair[0], idx1 = pbc_pair[1];
+            is_boundary_vtx[idx0] = true;
+            is_boundary_vtx[idx1] = true;
+        }
+    
+    int n_reduced_dof = full_dof - duplicated_entries.size() * 2;
+    
+    reduced_dof.resize(n_reduced_dof);
+    int translation_dof_start = n_reduced_dof - 4;
+    jac_full2reduced.resize(full_dof, n_reduced_dof);
+    
+
+    deformed.conservativeResize(num_nodes * 2 + 4);
+    undeformed.conservativeResize(num_nodes * 2 + 4);
+    u.conservativeResize(num_nodes * 2 + 4);
+    f.conservativeResize(num_nodes * 2 + 4);
+    f.segment<4>(num_nodes * 2).setZero();
+
+    deformed.segment<2>(full_dof-4) = 
+        deformed.segment<2>(pbc_pairs[0][0][1] * 2) - 
+        deformed.segment<2>(pbc_pairs[0][0][0] * 2);
+    
+    deformed.segment<2>(full_dof-2) = 
+        deformed.segment<2>(pbc_pairs[1][0][1] * 2) - 
+        deformed.segment<2>(pbc_pairs[1][0][0] * 2);
+    
+    undeformed = deformed;
+
+    TV tij = deformed.segment<2>(full_dof-4);
+    TV tkl = deformed.segment<2>(full_dof-2);
+    
+    std::vector<Entry> jac_entries;
+    int valid_cnt = 0;
+    for (int i = 0; i < num_nodes; i++)
+    {
+        if (!is_boundary_vtx[i])
+        {
+            reduced_dof.segment<2>(valid_cnt * 2) = deformed.segment<2>(i*2);
+            jac_entries.push_back(Entry(i * 2 + 0, valid_cnt * 2 + 0, 1.0));
+            jac_entries.push_back(Entry(i * 2 + 1, valid_cnt * 2 + 1, 1.0));
+            valid_cnt++;
+        }
+    }
+
+    for (int i = 0; i < pbc_pairs[0].size(); i++)
+    {
+        reduced_dof.segment<2>(valid_cnt * 2) = 
+            deformed.segment<2>(pbc_pairs[0][i][0] * 2);
+        
+        if (i == 0)
+        {
+            dirichlet_data[valid_cnt * 2 + 0] = 0;
+            dirichlet_data[valid_cnt * 2 + 1] = 0;
+        }
+        // std::cout << reduced_dof.segment<2>(valid_cnt * 2).transpose() << std::endl;
+
+        jac_entries.push_back(Entry(pbc_pairs[0][i][0] * 2 + 0, valid_cnt * 2 + 0, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[0][i][0] * 2 + 1, valid_cnt * 2 + 1, 1.0));
+
+        // xi_x + Tij_x
+        jac_entries.push_back(Entry(pbc_pairs[0][i][1]*2+0, valid_cnt*2+0, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[0][i][1]*2+0, translation_dof_start, 1.0));
+
+        // xi_y + Tij_y
+        jac_entries.push_back(Entry(pbc_pairs[0][i][1]*2+1, valid_cnt*2+1, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[0][i][1]*2+1, translation_dof_start+1, 1.0));
+
+        valid_cnt++;
+    }
+    for (int i = 1; i < pbc_pairs[1].size()-1; i++)
+    {
+        reduced_dof.segment<2>(valid_cnt * 2) = 
+            deformed.segment<2>(pbc_pairs[1][i][0] * 2);
+        // std::cout << reduced_dof.segment<2>(valid_cnt * 2).transpose() << std::endl;
+
+        jac_entries.push_back(Entry(pbc_pairs[1][i][0]*2+0, valid_cnt*2+0, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[1][i][0]*2+1, valid_cnt*2+1, 1.0));
+
+        jac_entries.push_back(Entry(pbc_pairs[1][i][1]*2+0, valid_cnt*2+0, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[1][i][1] * 2 + 0, translation_dof_start+2, 1.0));
+
+        jac_entries.push_back(Entry(pbc_pairs[1][i][1]*2+1, valid_cnt*2+1, 1.0));
+        jac_entries.push_back(Entry(pbc_pairs[1][i][1] * 2 + 1, translation_dof_start+3, 1.0));
+
+
+        valid_cnt++;
+    }
+    
+    reduced_dof.segment<2>(valid_cnt * 2) = tij;
+    valid_cnt ++;
+    reduced_dof.segment<2>(valid_cnt * 2) = tkl;
+    valid_cnt ++;
+    for (int i = 0; i < 4; i++)
+        jac_entries.push_back(Entry(full_dof - (4-i), n_reduced_dof - (4-i), 1.0));
+
+    jac_full2reduced.setFromTriplets(jac_entries.begin(), jac_entries.end());
+
+    VectorXT prediction = jac_full2reduced * reduced_dof;
+    T error = (prediction - deformed).norm();
+    if (std::abs(error) > 1e-8)
+    {
+        deformed = prediction;
+        std::cout << " line 720 dof matching error " << error << std::endl;
+        std::cout << __FILE__ << std::endl;
+        // std::exit(0);
+    }
+   
+    u.resize(reduced_dof.rows()); u.setZero();
 }

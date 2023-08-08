@@ -16,6 +16,11 @@
 #include "VecMatDef.h"
 
 #include "../include/Util.h"
+
+enum PBCType
+{
+    PBC_XY, PBC_X, PBC_None
+};
 class FEMSolver
 {
 public:
@@ -30,9 +35,7 @@ public:
     using TM = Matrix<T, 2, 2>;
     using TM3 = Matrix<T, 3, 3>;
 
-    // using StiffnessMatrix = Eigen::SparseMatrix<T>;
-    typedef int StorageIndex;
-    using StiffnessMatrix = Eigen::SparseMatrix<T, Eigen::ColMajor, StorageIndex>;
+    using StiffnessMatrix = Eigen::SparseMatrix<T>;
 
     using Entry = Eigen::Triplet<T>;
 
@@ -55,11 +58,13 @@ public:
     VectorXT u;
     VectorXT f;
     VectorXT deformed, undeformed;
+    VectorXT reduced_dof;
     VectorXi indices, surface_indices;
 
     bool use_quadratic_triangle = false;
 
     // PBC
+    PBCType pbc_type = PBC_None;
     std::string pbc_translation_file = "";
     bool add_pbc = false;
     T pbc_w = 1e6;
@@ -79,8 +84,8 @@ public:
     std::unordered_map<int, T> dirichlet_data;
     std::unordered_map<int, T> penalty_pairs;
 
-    int num_nodes;   
-    int num_ele;
+    int num_nodes = 0;   
+    int num_ele = 0;
 
     bool project_block_PD = false;
     bool verbose = false;
@@ -106,10 +111,18 @@ public:
     T barrier_weight = 1.0;
     T ipc_min_dis = 1e-6;
     Eigen::MatrixXd ipc_vertices;
+    Eigen::MatrixXd ipc_vertices_2x2;
     Eigen::MatrixXi ipc_edges;
+    Eigen::MatrixXi ipc_edges_2x2;
     Eigen::MatrixXi ipc_faces;
     VectorXT coarse_to_fine;
     std::unordered_map<int, int> fine_to_coarse;
+    StiffnessMatrix jacobian;
+    StiffnessMatrix jac_full2reduced;
+    std::vector<bool> is_pbc_vtx;
+    std::vector<bool> is_interior_vtx;
+    int translation_dof_offset = 0;
+
 
     template <class OP>
     void iterateDirichletDoF(const OP& f) {
@@ -440,7 +453,12 @@ private:
         });
         deformed = undeformed;
     }
+
+    
 public:
+
+    void constructReducedJacobian();
+    void fullDoFFromReduced(VectorXT& full_dof, const VectorXT& reduced);
 
     // DerivativeTest.cpp
     void checkTotalGradient(bool perturb);
@@ -502,6 +520,9 @@ public:
     void addIPCForceEntries(VectorXT& residual);
     void addIPCHessianEntries(std::vector<Entry>& entries, 
         bool project_PD = false);
+    void constructPeriodicContactPatch(
+        const MatrixXT& ipc_vertices_unit, 
+        MatrixXT& ipc_vertices_2x2, const VectorXT& position);
 
     // BoundaryCondition.cpp
     void addForceBox(const TV& min_corner, const TV& max_corner, const TV& force);

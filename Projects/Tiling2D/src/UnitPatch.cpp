@@ -946,8 +946,8 @@ void Tiling2D::generateOneStructureSquarePatch(int IH, const std::vector<T>& par
         }
     T dx = max_x - min_x;
     T dy = max_y - min_y;
-    T scale_x = 0.08, scale_y = 0.4;
-    // T scale_x = 0.38, scale_y = 0.38;
+    // T scale_x = 0.08, scale_y = 0.4;
+    T scale_x = 0.38, scale_y = 0.38;
     Vector<T, 8> periodic;
     periodic << min_x + scale_x * dx, min_y + scale_y * dy, max_x - scale_x * dx, 
                 min_y + scale_y * dy, max_x - scale_x * dx, max_y - scale_y * dy, 
@@ -957,6 +957,7 @@ void Tiling2D::generateOneStructureSquarePatch(int IH, const std::vector<T>& par
     periodicToBase(periodic, eigen_base);
     generateNonPeriodicMesh(eigen_polygons, eigen_base, true, data_folder + "a_structure");
     initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_None);
+    
 }
 
 void Tiling2D::generateToyExampleStructure(const std::vector<T>& params,
@@ -1184,8 +1185,8 @@ void Tiling2D::generateOnePerodicUnit()
     //     data_folder + "a_structure.vtk");   
     solver.pbc_translation_file = data_folder + "a_structure_translation.txt";
     initializeSimulationDataFromFiles(data_folder + "a_structure.vtk", PBC_XY);
-    if (tiling_idx == 0)
-        solver.pbc_strain_w = 1e7;
+    // if (tiling_idx == 0)
+    //     solver.pbc_strain_w = 1e7;
 }
 
 void Tiling2D::generateOneStructureWithRotation()
@@ -2023,10 +2024,10 @@ void Tiling2D::generateHomogenousMesh(std::vector<std::vector<TV2>>& polygons,
 
     gmsh::model::mesh::field::add("Threshold", 2);
     gmsh::model::mesh::field::setNumber(2, "InField", 1);
-    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.05);
-    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.1);
-    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1);
-    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.2);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.05);
+    // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.1);
+    gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.2);
     // gmsh::model::mesh::field::setNumber(2, "SizeMin", 0.3);
     // gmsh::model::mesh::field::setNumber(2, "SizeMax", 0.8);
     // gmsh::model::mesh::field::setNumber(2, "SizeMin", 1.0);

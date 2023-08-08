@@ -363,8 +363,17 @@ Matrix<T, 2, 2> rotMat(T angle)
 T angleToXaxis(Vector<T, 2>& vec)
 {
     Vector<T, 2> unit_vec = vec.normalized();
-    T theta_to_x = -std::acos(unit_vec.dot(Vector<T, 2>(1, 0)));
+    T theta_to_x = std::acos(unit_vec.dot(Vector<T, 2>(1, 0)));
     if (Vector<T, 3>(unit_vec[0], unit_vec[1], 0).cross(Vector<T, 3>(1, 0, 0)).dot(Vector<T, 3>(0, 0, 1)) > 0.0)
         theta_to_x *= -1.0;
     return theta_to_x;
+}
+
+T angleToYaxis(Vector<T, 2>& vec)
+{
+    Vector<T, 2> unit_vec = vec.normalized();
+    T theta = std::acos(unit_vec.dot(Vector<T, 2>(0, 1)));
+    if (Vector<T, 3>(unit_vec[0], unit_vec[1], 0).cross(Vector<T, 3>(0, 1, 0)).dot(Vector<T, 3>(0, 0, 1)) > 0.0)
+        theta *= -1.0;
+    return theta;
 }

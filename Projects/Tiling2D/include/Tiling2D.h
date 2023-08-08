@@ -12,6 +12,7 @@
 #include <Eigen/Dense>
 #include <tbb/tbb.h>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "VecMatDef.h"
 #include "Util.h"
@@ -35,10 +36,6 @@ struct VectorHash
     }
 };
 
-enum PBCType
-{
-    PBC_XY, PBC_X, PBC_None
-};
 
 class Tiling2D
 {
@@ -60,6 +57,7 @@ public:
     using Edge = Vector<int, 2>;
     using EdgeList = std::vector<Edge>;
     using VectorXT = Matrix<T, Eigen::Dynamic, 1>;
+    using Entry = Eigen::Triplet<T>;
     
     FEMSolver& solver;
 

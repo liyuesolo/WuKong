@@ -71,6 +71,7 @@ public:
     bool tile_in_x_only = false;
     bool tile_XY = false;
     bool thicken_edges = false;
+    bool show_ipc_mesh = false;
     
     void updateScreen(igl::opengl::glfw::Viewer& viewer);
     void setViewer(igl::opengl::glfw::Viewer& viewer,

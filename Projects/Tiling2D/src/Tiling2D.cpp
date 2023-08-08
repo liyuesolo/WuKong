@@ -33,6 +33,7 @@ v
 */
 bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PBCType pbc_type)
 {
+    solver.pbc_type = pbc_type;
     Eigen::MatrixXd V; Eigen::MatrixXi F, V_quad;
     // loadMeshFromVTKFile(data_folder + filename + ".vtk", V, F);
     // loadMeshFromVTKFile(filename, V, F);
@@ -92,26 +93,41 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
 
     solver.dirichlet_data.clear();
 
-    
-
     TV min_corner, max_corner;
     solver.computeBoundingBox(min_corner, max_corner);
+    std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
+    tbb::parallel_for(0, n_vtx, [&](int i)
+    {
+        solver.undeformed.segment<2>(i * 2) += TV::Zero() - min_corner;
+        solver.deformed.segment<2>(i * 2) += TV::Zero() - min_corner;
+    });
 
-    T scale = max_corner[0] - min_corner[0];
-
-    solver.deformed /= scale;
-    solver.undeformed /= scale;
-    solver.thickness = 1.0;
+    // T scale = max_corner[0] - min_corner[0];
+    T scale = 0.1;
+    solver.deformed *= scale;
+    solver.undeformed *= scale;
+    solver.thickness = 20.0;
     
-    solver.scale = 50;
-    solver.deformed *= solver.scale;
-    solver.undeformed *= solver.scale; // use milimeters
-    solver.thickness = solver.scale;
+    // solver.scale = 50;
+    // solver.deformed *= solver.scale;
+    // solver.undeformed *= solver.scale; // use milimeters
+    // solver.thickness = solver.scale;
+
+    // solver.deformed.conservativeResize(solver.num_nodes * 2 + 4);
+    // solver.undeformed.conservativeResize(solver.num_nodes * 2 + 4);
+
+    // solver.u.conservativeResize(solver.num_nodes * 2 + 4);
+    // solver.f.conservativeResize(solver.num_nodes * 2 + 4);
+
+    // solver.translation_dof_offset = solver.num_nodes * 2;
+
+    
     solver.computeBoundingBox(min_corner, max_corner);
-    if (solver.verbose)
+    // if (solver.verbose)
         std::cout << "BBOX " << min_corner.transpose() << " " << max_corner.transpose() << std::endl;
     // std::getchar();
-    solver.E = 2.6 * 1e1;
+    solver.E = 2.6 * 1e1; // N/mm2 -> TPU 26M Pa
+    solver.nu = 0.38;
 
     tbb::parallel_for(0, n_ele, [&](int i)
     {
@@ -122,25 +138,16 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             solver.indices.segment<3>(i * 3) = F.row(i);
     });
     
-    // int n_surface_triangles = n_ele;
-    // VectorXT areas(n_surface_triangles);
-    // tbb::parallel_for(0, n_surface_triangles, [&](int i)
-    // {
-    //     IV3 tri_idx = solver.surface_indices.segment<3>(i * 3);
-    //     TV v0 = solver.deformed.segment<2>(tri_idx[0] * 2);
-    //     TV v1 = solver.deformed.segment<2>(tri_idx[1] * 2);
-    //     TV v2 = solver.deformed.segment<2>(tri_idx[2] * 2);
-    //     TV e0 = v1 - v0;
-    //     TV e1 = v2 - v0;
-    //     areas[i] = 0.5 * TV3(e0[0], e0[1], 0.0).cross(TV3(e1[0], e1[1], 0.0))[2];
-    // });
-    // T area = areas.sum();
-
-    // solver.deformed /= std::sqrt(area);
-    // solver.undeformed /= std::sqrt(area);
 
     if (pbc_type == PBC_None)
+    {
         solver.add_pbc = false;
+        solver.jac_full2reduced.resize(solver.deformed.rows(), solver.deformed.rows());
+        solver.jac_full2reduced.setIdentity();
+        solver.reduced_dof = solver.undeformed;
+        solver.dirichlet_data[0] = 0;
+        solver.dirichlet_data[1] = 0;
+    }
     else
     {
         solver.add_pbc = true;
@@ -153,28 +160,24 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
             if (!valid_structure)
                 return false;
             solver.add_pbc_strain = true;
-            solver.strain_theta = 0. * M_PI;
-            solver.uniaxial_strain = 1.2;
+            solver.strain_theta = 0.0 * M_PI;
+            solver.uniaxial_strain = 0.9;
             // solver.strain_theta = 0.5 * M_PI;
-            // solver.uniaxial_strain = 0.9;
-            solver.uniaxial_strain_ortho = 0.8;
-            // solver.biaxial = true;
+            // solver.uniaxial_strain = 0.5;
+            // solver.uniaxial_strain_ortho = 0.8;
+            solver.biaxial = false;
             // solver.pbc_strain_w = 1e7; //IH01
-            solver.pbc_strain_w = 1e6; //IH
-            solver.pbc_w = 1e6;
+            solver.pbc_strain_w = 1e7; //IH
+            solver.pbc_w = 0.0;
             solver.prescribe_strain_tensor = false;
             solver.target_strain = TV3(-0.0432069, 0.0512492, 2.0* -9.5e-10);
             // solver.target_strain = TV3(0.44765, -0.0656891, 0.0956651);
             
-            // solver.computeMarcoBoundaryIndices();
+            solver.constructReducedJacobian();
         }
     }
-    if (pbc_type == PBC_XY)
-    {
-        for (int i = 0; i < 2; i++)
-            solver.dirichlet_data[solver.pbc_pairs[0][0][0]* 2 + i] = 0.0;
-    }
-    else if (pbc_type == PBC_X)
+    
+    if (pbc_type == PBC_X)
     {
         TV min0(min_corner[0] - 1e-6, min_corner[1] - 1e-6);
         TV max0(max_corner[0] + 1e-6, min_corner[1] + 1e-6);
@@ -209,16 +212,17 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
     T total_area = solver.computeTotalArea();
     T bbox_area = (max_corner[0] - min_corner[0]) * (max_corner[1] - min_corner[1]);
     
+    std::cout << total_area << "/" << bbox_area << std::endl;
+
     solver.use_ipc = true;
     solver.add_friction = false;
     solver.barrier_distance = 1e-4;
     
-    // if (solver.use_quadratic_triangle)
-        solver.use_ipc = true;
+    
     if (solver.use_ipc)
     {
         solver.computeIPCRestData();
-        VectorXT contact_force(solver.num_nodes * 2); contact_force.setZero();
+        VectorXT contact_force(solver.num_nodes * 2 + 4); contact_force.setZero();
         solver.addIPCForceEntries(contact_force);
         if (contact_force.norm() > 1e-8)
         {
@@ -227,11 +231,13 @@ bool Tiling2D::initializeSimulationDataFromFiles(const std::string& filename, PB
         }
     }
     // std::cout << solver.num_nodes * 3 << std::endl;
-    solver.project_block_PD = true;
+    solver.project_block_PD = false;
     solver.verbose = false;
     solver.max_newton_iter = 500;
     return true;
 }
+
+
 
 void Tiling2D::initializeSimulationDataFromVTKFile(const std::string& filename)
 {
@@ -289,8 +295,7 @@ void Tiling2D::generateMeshForRendering(Eigen::MatrixXd& V,
 {
     
     
-    int n_vtx = solver.deformed.rows() / 2;
-    
+    int n_vtx = solver.num_nodes;
     int n_ele = solver.surface_indices.rows() / 3;
     V.resize(n_vtx, 3); V.setZero();
     F.resize(n_ele, 3); C.resize(n_ele, 3);
@@ -2604,7 +2609,8 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
     solver.prescribe_strain_tensor = false;
 
     std::vector<T> timings(n_samples);
-
+    T acc_error = 0.0;
+    T acc_cnt = 0;
     auto runSim = [&](T _theta, T strain, T strain_ortho, int _fail_cnt, int idx) -> bool
     {
         if (_fail_cnt < 3)
@@ -2617,10 +2623,31 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
             TM secondPK_stress, Green_strain;
             T psi;
             solver.computeHomogenizationData(secondPK_stress, Green_strain, psi);
+            TV d(std::cos(theta), std::sin(theta));
+            T strain_sim =  d.transpose() * Green_strain * d;
+            T strain_target = strain-1.0 + 0.5 * (strain-1.0) * (strain-1.0);
+            T epbc = 0.0;
+            solver.addPBCEnergy(epbc);
+            TV xi_ref = solver.deformed.segment<2>(solver.pbc_pairs[0][0][0] * 2);
+            TV xj_ref = solver.deformed.segment<2>(solver.pbc_pairs[0][0][1] * 2);
+
+            T violation = std::sqrt(epbc * 2.0 / solver.pbc_w) / (solver.pbc_pairs[0].size() + solver.pbc_pairs[1].size()) / (xj_ref-xi_ref).norm();
+            acc_error += violation * 100;
+            // std::cout << strain_sim << " " << strain-1.0 << std::endl;
+            // if (strain > 1.0)
+            //     acc_error += std::abs(strain_target-strain_sim) / strain_target * 100.0;
+            // else
+            // {
+            //     strain_target = strain-1.0 + 0.5 * (strain-1.0) * (strain-1.0);
+            //     acc_error += std::abs(strain_target-strain_sim) / strain_target * 100.0;
+            // }
+            acc_cnt++;
+            // std::cout << std::setprecision(10) << std::abs(strain_target-strain_sim) / strain_target * 100.0 << std::endl;
+            
             std::cout << timer.elapsed_sec() << std::endl;
             timings[idx] = timer.elapsed_sec();
             std::string obj_file = result_folder + "/obj/IH_" + std::to_string(IH) + "_strain_stress_"+suffix+"_"+std::to_string(idx)+".obj";
-            solver.saveToOBJ(obj_file, false);
+            // solver.saveToOBJ(obj_file, false);
             // for (int m = 0; m < params.size(); m++)
             // {
             //     out << params[m] << " ";
@@ -2646,7 +2673,7 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
             return false;
         }
     };
-
+    
     int min_strain_idx = 0;
     int cnt = 0;
     T min_strain = 1e10;
@@ -2690,6 +2717,8 @@ void Tiling2D::generateStrainStressDataFromParams(const std::string& result_fold
         else
             fail_cnt = 0;
     }
+
+    std::cout << "error "<<acc_error / T(acc_cnt) << std::endl;
     // std::ofstream out(result_folder + "/" + "IH_" + std::to_string(IH) + "_strain_stress_timing.txt");
     // for (T time : timings)
     //     out << time << " ";

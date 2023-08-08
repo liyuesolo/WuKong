@@ -85,6 +85,33 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     if (tile_XY)
         tiling.tileUnitCell(V, F, C, 9);
 
+    if (show_ipc_mesh)
+    {
+        Eigen::MatrixXd vertices;
+        tiling.solver.constructPeriodicContactPatch(tiling.solver.ipc_vertices, 
+            vertices, tiling.solver.deformed);
+        std::vector<std::pair<TV3, TV3>> end_points;
+        T ref_dis = 0.0;
+        for (int i = 0; i< tiling.solver.ipc_edges_2x2.rows(); i++)
+        {
+            // std::cout <<vertices.row(edges(i, 1))<< " " << vertices.row(edges(i, 0)) << std::endl;
+            ref_dis += (vertices.row(tiling.solver.ipc_edges_2x2(i, 1)) - vertices.row(tiling.solver.ipc_edges_2x2(i, 0))).norm();
+        }
+        
+        ref_dis /= T(tiling.solver.ipc_edges_2x2.rows());
+        end_points.resize(tiling.solver.ipc_edges_2x2.rows());
+        tbb::parallel_for(0, (int)tiling.solver.ipc_edges_2x2.rows(), [&](int i)
+        {
+            TV start = vertices.row(tiling.solver.ipc_edges_2x2(i, 1));
+            TV end = vertices.row(tiling.solver.ipc_edges_2x2(i, 0));
+           end_points[i] = std::make_pair(TV3(start[0], start[1], 0.0),  TV3(end[0], end[1], 0.0));
+        });
+        // std::cout << end_points.size() << " " << ref_dis << std::endl;
+        std::vector<TV3> colors;
+        for (int i = 0; i < end_points.size(); i++)
+            colors.push_back(TV3(0.3, 1.0, 0.0));
+        appendCylindersToEdges(end_points, colors, 0.03 * ref_dis, V, F, C);
+    }
 
     if (connect_pbc_pairs)
     {
@@ -93,7 +120,10 @@ void SimulationApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
         T ref_dis = (end_points[0].first - end_points[1].second).norm();
         std::vector<TV3> colors;
         for (int i = 0; i < end_points.size(); i++)
+        {
+            // end_points[i].second =  end_points[i].first + (end_points[i].second - end_points[i].first) * 0.5;
             colors.push_back(TV3(1.0, 0.3, 0.0));
+        }
         appendCylindersToEdges(end_points, colors, 0.001 * ref_dis, V, F, C);
     }
 
@@ -201,6 +231,11 @@ void SimulationApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             {
                 updateScreen(viewer);
             }
+            if (ImGui::Checkbox("ShowIPCEdges", &show_ipc_mesh))
+            {
+                updateScreen(viewer);
+            }
+            
         }
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen))
         {

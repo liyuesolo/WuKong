@@ -12,11 +12,23 @@ void FEMSolver::updateBarrierInfo(bool first_step)
     for (int i = 0; i < num_ipc_vtx; i++) 
         ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
 
+    MatrixXT ipc_vertices_2x2_deformed;
+    constructPeriodicContactPatch(ipc_vertices_deformed, ipc_vertices_2x2_deformed, deformed);
+
     ipc::Constraints ipc_constraints;
-    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+    ipc::construct_constraint_set(ipc_vertices_2x2, ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, barrier_distance, ipc_constraints, Eigen::MatrixXi(), 
+        0.0, ipc::BroadPhaseMethod::HASH_GRID, 
+        [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            }
+        );
         
-    T current_min_dis = ipc::compute_minimum_distance(ipc_vertices, ipc_edges, ipc_faces, ipc_constraints);
+    T current_min_dis = ipc::compute_minimum_distance(ipc_vertices_2x2, ipc_edges_2x2, ipc_faces, ipc_constraints);
     if (first_step)
         ipc_min_dis = current_min_dis;
     else
@@ -26,6 +38,36 @@ void FEMSolver::updateBarrierInfo(bool first_step)
         T bb_diag = (max_corner - min_corner).norm();
         ipc::update_barrier_stiffness(ipc_min_dis, current_min_dis, max_barrier_weight, barrier_weight, bb_diag);
         ipc_min_dis = current_min_dis;
+    }
+}
+
+void FEMSolver::constructPeriodicContactPatch(const MatrixXT& ipc_vertices_unit, 
+    MatrixXT& _ipc_vertices_2x2, const VectorXT& position)
+{
+    if (pbc_type == PBC_XY)
+    {
+        TV left0 = position.segment<2>(pbc_pairs[0][0][0] * 2);
+        TV right0 = position.segment<2>(pbc_pairs[0][0][1] * 2);
+        TV top0 = position.segment<2>(pbc_pairs[1][0][1] * 2);
+        TV bottom0 = position.segment<2>(pbc_pairs[1][0][0] * 2);
+        TV dx = (right0 - left0);
+        TV dy = (top0 - bottom0);
+
+        int n_unit_vtx = ipc_vertices_unit.rows();
+        _ipc_vertices_2x2.resize(n_unit_vtx * 4, 2);
+        for (int i = 0; i < 4; i++)
+            _ipc_vertices_2x2.block(n_unit_vtx*i, 0, n_unit_vtx, 2) = ipc_vertices_unit;    
+
+        for (int i = 0; i < n_unit_vtx; i++)
+        {
+            _ipc_vertices_2x2.row(n_unit_vtx + i) += dx;
+            _ipc_vertices_2x2.row(n_unit_vtx * 2 + i) += dy;
+            _ipc_vertices_2x2.row(n_unit_vtx * 3 + i) += (dx + dy);
+        } 
+    }
+    else
+    {
+        _ipc_vertices_2x2 = ipc_vertices_unit;
     }
 }
 
@@ -54,6 +96,7 @@ void FEMSolver::computeIPCRestData()
         {
             ipc_vertices.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2);
         }
+
     }
     else
     {
@@ -69,7 +112,6 @@ void FEMSolver::computeIPCRestData()
         
     }
     
-    std::vector<Edge> edges;
     ipc_faces.resize(num_ele, 3);
 
     for (int i = 0; i < num_ele; i++)
@@ -83,82 +125,230 @@ void FEMSolver::computeIPCRestData()
         else
             ipc_faces.row(i) = indices.segment<3>(i * 3);
     }
-    igl::edges(ipc_faces, ipc_edges);
-    // std::vector<std::vector<int>> boundary_vertices;
-    // igl::boundary_loop(ipc_faces, boundary_vertices);
+    // igl::edges(ipc_faces, ipc_edges);
 
-    // int n_bd_edge = 0;
-    // for (auto loop : boundary_vertices)
-    // {
-    //     n_bd_edge += loop.size();
-    // }
+    std::vector<std::vector<int>> boundary_vertices;
+    igl::boundary_loop(ipc_faces, boundary_vertices);
+
+    int n_bd_edge = 0;
+    for (auto loop : boundary_vertices)
+    {
+        n_bd_edge += loop.size();
+    }
     
-    // ipc_edges.resize(n_bd_edge, 2);
-    // int edge_cnt = 0;
-    // for (auto loop : boundary_vertices)
-    // {
-    //     for (int i = 0; i < loop.size(); i++)
-    //         ipc_edges.row(edge_cnt++) = Edge(loop[i], loop[(i+1)%loop.size()]);
-    // }
+    ipc_edges.resize(n_bd_edge, 2);
+    int edge_cnt = 0;
+    for (auto loop : boundary_vertices)
+    {
+        for (int i = 0; i < loop.size(); i++)
+            ipc_edges.row(edge_cnt++) = Edge(loop[i], loop[(i+1)%loop.size()]);
+    }
+
+
+
     ipc_faces.resize(0, 0);
+    is_pbc_vtx.resize(num_ipc_vtx, false);
+
+    is_interior_vtx.resize(num_ipc_vtx, true);
+    if (pbc_type == PBC_XY)
+    {
+        std::vector<int> pbc_vtx;
+        for (int dir = 0; dir < 2; dir++)
+            for (IV& pbc_pair : pbc_pairs[dir])
+            {
+                int idx0 = pbc_pair[0], idx1 = pbc_pair[1];
+                is_pbc_vtx[fine_to_coarse[idx0]] = true; is_pbc_vtx[fine_to_coarse[idx1]] = true;
+                pbc_vtx.push_back(fine_to_coarse[idx0]), pbc_vtx.push_back(fine_to_coarse[idx1]);
+                
+            }
+
+        int n_unit_edge = ipc_edges.rows();
+        std::vector<int> valid_list;
+        for (int i = 0; i < n_unit_edge; i++)
+        {
+            bool first_point_found = is_pbc_vtx[ipc_edges(i, 0)];
+            bool second_point_found = is_pbc_vtx[ipc_edges(i, 1)];
+            if (first_point_found && second_point_found)
+            {
+                continue;
+            }
+            valid_list.push_back(i);
+        }
+        // std::cout << valid_list.size() << std::endl;
+        Eigen::MatrixXi ipc_edge_valid(valid_list.size(), 2);
+        for (int i = 0; i < valid_list.size(); i++)
+        {
+            ipc_edge_valid.row(i) = ipc_edges.row(valid_list[i]);
+            is_interior_vtx[ipc_edge_valid(i, 0)] = false || is_pbc_vtx[ipc_edge_valid(i, 0)];
+            is_interior_vtx[ipc_edge_valid(i, 1)] = false || is_pbc_vtx[ipc_edge_valid(i, 1)];
+        }
+        ipc_edges = ipc_edge_valid;
+
+
+        int n_unit_vtx = ipc_vertices.rows();
+
+        Eigen::MatrixXi offset(ipc_edges.rows(), 2);
+        offset.setConstant(n_unit_vtx);
+
+        ipc_edges_2x2.resize(ipc_edges.rows() * 4, 2);
+        for (int i = 0; i < 4; i++)
+            ipc_edges_2x2.block(ipc_edges.rows() * i, 0, ipc_edges.rows(), 2) = ipc_edges + i * offset;
+        
+        jacobian.resize(n_unit_vtx * 4 * 2, n_unit_vtx * 2); 
+        std::vector<Entry> jacobian_entries;
+        for (int i = 0; i < n_unit_vtx*2; i++)
+        {
+            jacobian_entries.push_back(Entry(i, i, 1.0));
+            jacobian_entries.push_back(Entry(n_unit_vtx * 2 + i, i, 1.0));
+            jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 2 + i, i, 1.0));
+            jacobian_entries.push_back(Entry(n_unit_vtx * 3 * 2 + i, i, 1.0));
+        }
+
+        int dof_left = fine_to_coarse[pbc_pairs[0][0][0]];
+        int dof_right = fine_to_coarse[pbc_pairs[0][0][1]];
+        int dof_top = fine_to_coarse[pbc_pairs[1][0][1]];
+        int dof_bottom = fine_to_coarse[pbc_pairs[1][0][0]];
+        
+        for (int i = 0; i < n_unit_vtx; i++)
+        {
+            for (int d = 0; d < 2; d++)
+            {
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 + i * 2 + d, dof_left * 2 + d, -1.0));
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 + i * 2 + d, dof_right * 2 + d, 1.0));
+
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 2 + i * 2 + d, dof_bottom * 2 + d, -1.0));
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 2 + i * 2 + d, dof_top * 2 + d, 1.0));
+
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 3 + i * 2 + d, dof_left * 2 + d, -1.0));
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 3 + i * 2 + d, dof_right * 2 + d, 1.0));
+
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 3 + i * 2 + d, dof_bottom * 2 + d, -1.0));
+                jacobian_entries.push_back(Entry(n_unit_vtx * 2 * 3 + i * 2 + d, dof_top * 2 + d, 1.0));
+            }
+        }
+        jacobian.setFromTriplets(jacobian_entries.begin(), jacobian_entries.end());
+    }
+    else
+    {
+        ipc_edges_2x2 = ipc_edges;
+        for (int i = 0; i < ipc_edges.rows(); i++)
+        {
+            is_interior_vtx[ipc_edges(i, 0)] = false;
+            is_interior_vtx[ipc_edges(i, 1)] = false;
+        }
+        jacobian.resize(num_ipc_vtx * 2, num_ipc_vtx * 2); 
+        jacobian.setIdentity();
+    }
+
+    constructPeriodicContactPatch(ipc_vertices, ipc_vertices_2x2, deformed);
+
+
+    VectorXT ipc_vertices_flat(ipc_vertices.rows() * 2),
+         ipc_vertices_2x2_flat(ipc_vertices_2x2.rows() * 2);
+    for (int i = 0; i < ipc_vertices.rows(); i++)
+    {
+        ipc_vertices_flat.segment<2>(i * 2) = ipc_vertices.row(i);
+    }
+    for (int i = 0; i < ipc_vertices_2x2.rows(); i++)
+    {
+        ipc_vertices_2x2_flat.segment<2>(i * 2) = ipc_vertices_2x2.row(i);
+    }
     
-    
-    // for (int i = 0; i < ipc_edges.rows(); i++)
+    VectorXT prediction = jacobian * ipc_vertices_flat;
+    T error = (prediction - ipc_vertices_2x2_flat).norm();
+    if (error > 1e-8)
+    {
+        std::cout << "prediction error: " << (prediction - ipc_vertices_2x2_flat).norm() << std::endl;
+        std::cout << __FILE__ << std::endl;
+        // std::exit(0);
+    }
+    // std::ofstream out("contact_full.obj");
+    // for (int i = 0; i < prediction.rows() / 2; i++)
     // {
-    //     Edge edge = ipc_edges.row(i);
-    //     TV vi = ipc_vertices.row(edge[0]), vj = ipc_vertices.row(edge[1]);
-    //     if (verbose)
-    //     {
-    //         if ((vi - vj).norm() < barrier_distance)
-    //             std::cout << "edge " << edge.transpose() << " has length < " << barrier_distance << std::endl;
-    //     }
+    //     out << "v " << prediction.segment<2>(i * 2).transpose() << " 0.0" << std::endl;
     // }
+    // out.close();
+    
     if (verbose)
-        std::cout << "ipc has ixn in rest state: " << ipc::has_intersections(ipc_vertices, ipc_edges, ipc_faces) << std::endl;
+        std::cout << "ipc has ixn in rest state: " 
+            << ipc::has_intersections(ipc_vertices_2x2, ipc_edges_2x2, ipc_faces, 
+            [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            }) 
+            << std::endl;
     
     TV min_corner, max_corner;
     computeBoundingBox(min_corner, max_corner);
     T bb_diag = (max_corner - min_corner).norm();
     
-    VectorXT dedx(num_nodes * 2), dbdx(num_nodes * 2);
+    VectorXT dedx(reduced_dof.rows()), dbdx(deformed.rows());
     dedx.setZero(); dbdx.setZero();
     barrier_weight = 1.0;
     addIPCForceEntries(dbdx); dbdx *= -1.0;
-    // std::cout << dbdx.norm() << std::endl;
-    computeResidual(u, dedx); dedx *= -1.0; dedx -= dbdx;
-    // std::cout << dedx.norm() << std::endl;
+    
+    computeResidual(u, dedx); dedx *= -1.0; dedx -= jac_full2reduced * dbdx;
     
     barrier_weight = ipc::initial_barrier_stiffness(bb_diag, barrier_distance, 1.0, dedx, dbdx, max_barrier_weight);
     if (verbose)
         std::cout << "barrier weight " <<  barrier_weight << " max_barrier_weight " << max_barrier_weight << std::endl;
     
+    // std::ofstream out("ipc_vertices.obj");
+    // for (int i = 0; i < ipc_vertices.rows(); i++)
+    //     out << "v " << ipc_vertices.row(i) << " 0.0" << std::endl;
+    // for (int i = 0; i < ipc_edges.rows(); i++)
+    //     out << "l " << ipc_edges(i, 0) + 1 << " " << ipc_edges(i, 1) + 1 << std::endl;
+    // out.close();
 }
 
 T FEMSolver::computeCollisionFreeStepsize(const VectorXT& _u, const VectorXT& du)
 {
+
+    VectorXT u_full = jac_full2reduced * _u;
+    VectorXT du_full = jac_full2reduced * du;
 
     Eigen::MatrixXd current_position = ipc_vertices, 
         next_step_position = ipc_vertices;
         
     for (int i = 0; i < num_ipc_vtx; i++)
     {
-        current_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + _u.segment<2>(coarse_to_fine[i] * 2);
-        next_step_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + _u.segment<2>(coarse_to_fine[i] * 2) + du.segment<2>(coarse_to_fine[i] * 2);
+        current_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + u_full.segment<2>(coarse_to_fine[i] * 2);
+        next_step_position.row(i) = undeformed.segment<2>(coarse_to_fine[i] * 2) + u_full.segment<2>(coarse_to_fine[i] * 2) + du_full.segment<2>(coarse_to_fine[i] * 2);
     }
-    return ipc::compute_collision_free_stepsize(current_position, 
-            next_step_position, ipc_edges, ipc_faces, ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7);
+
+    MatrixXT ipc_vertices_2x2_current, ipc_vertices_2x2_next_step;
+    constructPeriodicContactPatch(current_position, ipc_vertices_2x2_current, undeformed + u_full);
+    constructPeriodicContactPatch(next_step_position, ipc_vertices_2x2_next_step, undeformed + u_full + du_full);
+
+    return ipc::compute_collision_free_stepsize(ipc_vertices_2x2_current, 
+            ipc_vertices_2x2_next_step, ipc_edges_2x2, ipc_faces, 
+            ipc::BroadPhaseMethod::HASH_GRID, 1e-6, 1e7,
+            [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            });
 }
+
+
 
 void FEMSolver::updateIPCVertices(const VectorXT& _u)
 {
-    VectorXT projected = _u;
+    VectorXT projected = jac_full2reduced * _u;
     iterateDirichletDoF([&](int offset, T target)
     {
         projected[offset] = target;
     });
     deformed = undeformed + projected;
     for (int i = 0; i < num_ipc_vtx; i++)
-        ipc_vertices.row(i) = deformed.segment<2>(coarse_to_fine[i] * dim);
+        ipc_vertices.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
+    
+    constructPeriodicContactPatch(ipc_vertices, ipc_vertices_2x2, deformed);
 }
 
 void FEMSolver::addIPCEnergy(T& energy)
@@ -171,12 +361,26 @@ void FEMSolver::addIPCEnergy(T& energy)
         ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
-    ipc::Constraints ipc_constraints;
-    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+    MatrixXT ipc_vertices_2x2_deformed;
+    constructPeriodicContactPatch(ipc_vertices_deformed, ipc_vertices_2x2_deformed, deformed);
 
-    contact_energy = 1 * barrier_weight * ipc::compute_barrier_potential(ipc_vertices_deformed, 
-    ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
+    ipc::Constraints ipc_constraints;
+    // ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+    //     ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+    ipc::construct_constraint_set(ipc_vertices_2x2, ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, barrier_distance, ipc_constraints, Eigen::MatrixXi(), 
+        0.0, ipc::BroadPhaseMethod::HASH_GRID, 
+        [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            }
+        );
+
+    contact_energy = barrier_weight * ipc::compute_barrier_potential(ipc_vertices_2x2_deformed, 
+    ipc_edges_2x2, ipc_faces, ipc_constraints, barrier_distance);
 
     energy += contact_energy;
 
@@ -190,30 +394,30 @@ void FEMSolver::addIPCForceEntries(VectorXT& residual)
         ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
-    ipc::Constraints ipc_constraints;
-    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
-    // std::cout << ipc_constraints.num_constraints() << std::endl;
-    // for (int i = 0; i < ipc_constraints.vv_constraints.size(); i++)
-    // {
-    //     std::vector<long> idx = ipc_constraints.vv_constraints[i].vertex_indices(ipc_edges, ipc_faces);
-    //     {
-    //         for (int j = 0; j < idx.size(); j++)
-    //         {
-    //             std::cout << idx[j] << " ";
-    //         }
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // std::cout << ipc_constraints.vv_constraints.size() << std::endl;
-    // std::cout << ipc_constraints.ev_constraints.size() << std::endl;
-    // std::cout << ipc_constraints.ee_constraints.size() << std::endl;
-    // std::cout << ipc_constraints.fv_constraints.size() << std::endl;
-    // std::cout << ipc_constraints.pv_constraints.size() << std::endl;
-    // std::exit(0);
+    // ipc::Constraints ipc_constraints;
+    // ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+    //     ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
 
-    VectorXT contact_gradient = 1 * barrier_weight * ipc::compute_barrier_potential_gradient(ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, ipc_constraints, barrier_distance);
+    MatrixXT ipc_vertices_2x2_deformed;
+    constructPeriodicContactPatch(ipc_vertices_deformed, ipc_vertices_2x2_deformed, deformed);
+
+    ipc::Constraints ipc_constraints;
+    ipc::construct_constraint_set(ipc_vertices_2x2, ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, barrier_distance, ipc_constraints, Eigen::MatrixXi(), 
+        0.0, ipc::BroadPhaseMethod::HASH_GRID, 
+        [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            }
+        );
+
+    VectorXT contact_gradient = barrier_weight * 
+        ipc::compute_barrier_potential_gradient(ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, ipc_constraints, barrier_distance).transpose() * jacobian;
+
     for (int i = 0; i < num_ipc_vtx; i++)
     {
         residual.segment<2>(coarse_to_fine[i] * 2) -= contact_gradient.segment<2>(i * 2);
@@ -229,14 +433,31 @@ void FEMSolver::addIPCHessianEntries(std::vector<Entry>& entries,bool project_PD
         ipc_vertices_deformed.row(i) = deformed.segment<2>(coarse_to_fine[i] * 2);
     }
 
+    // ipc::Constraints ipc_constraints;
+    // ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
+    //     ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+
+    MatrixXT ipc_vertices_2x2_deformed;
+    constructPeriodicContactPatch(ipc_vertices_deformed, ipc_vertices_2x2_deformed, deformed);
+
     ipc::Constraints ipc_constraints;
-    ipc::construct_constraint_set(ipc_vertices, ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, barrier_distance, ipc_constraints);
+    ipc::construct_constraint_set(ipc_vertices_2x2, ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, barrier_distance, ipc_constraints, Eigen::MatrixXi(), 
+        0.0, ipc::BroadPhaseMethod::HASH_GRID, 
+        [&](size_t vtx0, size_t vtx1)
+            {
+                if (is_interior_vtx[vtx0%num_ipc_vtx]
+                    || is_interior_vtx[vtx1%num_ipc_vtx])
+                    return false;
+                return true; 
+            }
+        );
 
-    StiffnessMatrix contact_hessian = 1 * barrier_weight *  ipc::compute_barrier_potential_hessian(ipc_vertices_deformed, 
-        ipc_edges, ipc_faces, ipc_constraints, barrier_distance, project_PD);
+    MatrixXT contact_hessian = barrier_weight *  
+            jacobian.transpose() * ipc::compute_barrier_potential_hessian(ipc_vertices_2x2_deformed, 
+        ipc_edges_2x2, ipc_faces, ipc_constraints, barrier_distance, project_PD) * jacobian;
 
-    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian);
+    std::vector<Entry> contact_entries = entriesFromSparseMatrix(contact_hessian.sparseView());
     for (Entry& entry : contact_entries)
     {
         int node_i = std::floor(entry.row() / 2);

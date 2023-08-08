@@ -318,7 +318,7 @@ int main(int argc, char** argv)
 
         // save3DMesh();
         // testNeuralConstitutiveModel();
-        inverseDesign();
+        // inverseDesign();
         // renderScene();
         // run3DSim();
         // tiling.generateNHHomogenousData("/home/yueli/Documents/ETH/SandwichStructure/Homo/");
@@ -331,7 +331,7 @@ int main(int argc, char** argv)
         // fem_solver.pbc_translation_file = "/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure_translation.txt";
         // tiling.initializeSimulationDataFromFiles("/home/yueli/Documents/ETH/SandwichStructure/Server/0/structure.vtk", PBC_XY);
         // tiling.sampleFixedTilingParamsAlongStrain("/home/yueli/Documents/ETH/SandwichStructure/SampleStrain/");
-        // runSimApp();
+        runSimApp();
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 1, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 67, 100);
         // tiling.generateStrainStressSimulationData("/home/yueli/Documents/ETH/WuKong/Projects/Tiling2D/paper_data/", 50, 100);
