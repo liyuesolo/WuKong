@@ -288,10 +288,9 @@ Tessellation::getNodeWrapper(Node &node, NodePosition &nodePos) {
 
         v1 = c.segment(i1 * dims, dims);
         v2 = c.segment(i2 * dims, dims);
+
         getStandardNode(v0, v1, v2, nodePos.pos);
-
         getStandardNodeGradient(v0, v1, v2, nodePos.grad);
-
         getStandardNodeHessian(v0, v1, v2, nodePos.hess);
     } else if (i1 < n_vtx && i2 >= n_vtx && bdry->edges[i2 - n_vtx].btype == 0) {
         // Boundary intersection node with n2 a straight boundary segment.
@@ -300,10 +299,9 @@ Tessellation::getNodeWrapper(Node &node, NodePosition &nodePos) {
         v1 = c.segment(i1 * dims, dims);
         b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
         b1 = bdry->v.segment<2>(bdry->edges[i2 - n_vtx].nextEdge * 2);
+
         getBoundaryNode(v0, v1, b0, b1, nodePos.pos);
-
         getBoundaryNodeGradient(v0, v1, b0, b1, nodePos.grad);
-
         getBoundaryNodeHessian(v0, v1, b0, b1, nodePos.hess);
     } else if (i1 < n_vtx && i2 >= n_vtx && bdry->edges[i2 - n_vtx].btype == 1) {
         // Boundary intersection node with n2 an arc boundary segment.
@@ -313,8 +311,8 @@ Tessellation::getNodeWrapper(Node &node, NodePosition &nodePos) {
         b0 = bdry->v.segment<2>((i2 - n_vtx) * 2);
         b1 = bdry->v.segment<2>(bdry->edges[i2 - n_vtx].nextEdge * 2);
         r = bdry->q(bdry->edges[i2 - n_vtx].q_idx);
-        getArcBoundaryNode(v0, v1, b0, b1, r, bezier_flag, nodePos.pos);
 
+        getArcBoundaryNode(v0, v1, b0, b1, r, bezier_flag, nodePos.pos);
         getArcBoundaryNodeGradient(v0, v1, b0, b1, r, bezier_flag, nodePos.grad);
 
 //        double eps = 1e-7;
@@ -437,8 +435,8 @@ Tessellation::getNodeWrapper(Node &node, NodePosition &nodePos) {
         b1 = bdry->v.segment<2>(bdry->edges[i2 - n_vtx].nextEdge * 2);
         q0 = bdry->q(bdry->edges[i2 - n_vtx].q_idx);
         q1 = bdry->q(bdry->edges[bdry->edges[i2 - n_vtx].nextEdge].q_idx);
-        getBezierBoundaryNode(v0, v1, b0, b1, q0, q1, bezier_flag, nodePos.pos);
 
+        getBezierBoundaryNode(v0, v1, b0, b1, q0, q1, bezier_flag, nodePos.pos);
         getBezierBoundaryNodeGradient(v0, v1, b0, b1, q0, q1, bezier_flag, nodePos.grad);
 
 //        double eps = 1e-7;
@@ -837,75 +835,86 @@ void Tessellation::addFunctionHessian(const CellFunction &function, MatrixXT &he
         // Boundary corner vertices and nonexistent curve parameters
         if (hess.rows() == 0) continue;
 
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                if (face(i) >= n_cells || face(j) >= n_cells) {
-                    continue;
+        if (x_nodes[ii].type == NodeType::LSQ) {
+            Node node = x_nodes[ii];
+            for (int i = 0; i < node.gen_nc; i++) {
+                for (int j = 0; j < node.gen_nc; j++) {
+                    if (node.gen[i] >= n_cells || node.gen[j] >= n_cells) continue;
+                    sum_f_cc.block(node.gen[i] * dims, node.gen[j] * dims, dims, dims) +=
+                            partial_x(ii) * hess.block(i * dims, j * dims, dims, dims);
                 }
-                sum_f_cc.block(face(i) * dims, face(j) * dims, dims, dims) +=
-                        partial_x(ii) * hess.block(i * dims, j * dims, dims, dims);
             }
-        }
-
-        int n_sites = c.rows() / dims;
-        // Boundary edge vertices
-        if (face(2) >= n_sites) {
-            int ib0 = (face(2) - n_sites) * 2;
-            int ib1 = bdry->edges[face(2) - n_sites].nextEdge * 2;
-
-            int hess_ib0 = 2 * dims + 0;
-            int hess_ib1 = 2 * dims + (bdry->edges[face(2) - n_sites].btype == 2 ? 3 : 2);
-            for (int i = 0; i < 2; i++) {
-                if (face(i) >= n_cells) continue;
-
-                sum_f_cv.block(face(i) * dims, ib0, dims, 2) +=
-                        partial_x(ii) * hess.block(i * dims, hess_ib0, dims, 2);
-                sum_f_cv.block(face(i) * dims, ib1, dims, 2) +=
-                        partial_x(ii) * hess.block(i * dims, hess_ib1, dims, 2);
+        } else {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (face(i) >= n_cells || face(j) >= n_cells) {
+                        continue;
+                    }
+                    sum_f_cc.block(face(i) * dims, face(j) * dims, dims, dims) +=
+                            partial_x(ii) * hess.block(i * dims, j * dims, dims, dims);
+                }
             }
 
-            sum_f_vv.block(ib0, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib0, 2, 2);
-            sum_f_vv.block(ib0, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib1, 2, 2);
-            sum_f_vv.block(ib1, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib0, 2, 2);
-            sum_f_vv.block(ib1, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib1, 2, 2);
+            int n_sites = c.rows() / dims;
+            // Boundary edge vertices
+            if (face(2) >= n_sites) {
+                int ib0 = (face(2) - n_sites) * 2;
+                int ib1 = bdry->edges[face(2) - n_sites].nextEdge * 2;
 
-            if (bdry->q.rows() > 0) {
-                if (bdry->edges[face(2) - n_sites].btype == 1) {
-                    int iq = bdry->edges[face(2) - n_sites].q_idx;
+                int hess_ib0 = 2 * dims + 0;
+                int hess_ib1 = 2 * dims + (bdry->edges[face(2) - n_sites].btype == 2 ? 3 : 2);
+                for (int i = 0; i < 2; i++) {
+                    if (face(i) >= n_cells) continue;
 
-                    for (int i = 0; i < 2; i++) {
-                        if (face(i) >= n_cells) continue;
+                    sum_f_cv.block(face(i) * dims, ib0, dims, 2) +=
+                            partial_x(ii) * hess.block(i * dims, hess_ib0, dims, 2);
+                    sum_f_cv.block(face(i) * dims, ib1, dims, 2) +=
+                            partial_x(ii) * hess.block(i * dims, hess_ib1, dims, 2);
+                }
 
-                        sum_f_cq.block(face(i) * dims, iq, dims, 1) +=
-                                partial_x(ii) * hess.block(i * dims, 2 * dims + 4, dims, 1);
+                sum_f_vv.block(ib0, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib0, 2, 2);
+                sum_f_vv.block(ib0, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib0, hess_ib1, 2, 2);
+                sum_f_vv.block(ib1, ib0, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib0, 2, 2);
+                sum_f_vv.block(ib1, ib1, 2, 2) += partial_x(ii) * hess.block(hess_ib1, hess_ib1, 2, 2);
+
+                if (bdry->q.rows() > 0) {
+                    if (bdry->edges[face(2) - n_sites].btype == 1) {
+                        int iq = bdry->edges[face(2) - n_sites].q_idx;
+
+                        for (int i = 0; i < 2; i++) {
+                            if (face(i) >= n_cells) continue;
+
+                            sum_f_cq.block(face(i) * dims, iq, dims, 1) +=
+                                    partial_x(ii) * hess.block(i * dims, 2 * dims + 4, dims, 1);
+                        }
+
+                        sum_f_qq.block(iq, iq, 1, 1) += partial_x(ii) * hess.block(2 * dims + 4, 2 * dims + 4, 1, 1);
+
+                        sum_f_vq.block(ib0, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 4, 2, 1);
+                        sum_f_vq.block(ib1, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 4, 2, 1);
+                    } else if (bdry->edges[face(2) - n_sites].btype == 2) {
+                        int iq0 = bdry->edges[face(2) - n_sites].q_idx;
+                        int iq1 = bdry->edges[bdry->edges[face(2) - n_sites].nextEdge].q_idx;
+
+                        for (int i = 0; i < 2; i++) {
+                            if (face(i) >= n_cells) continue;
+
+                            sum_f_cq.block(face(i) * dims, iq0, dims, 1) +=
+                                    partial_x(ii) * hess.block(i * dims, 2 * dims + 2, dims, 1);
+                            sum_f_cq.block(face(i) * dims, iq1, dims, 1) +=
+                                    partial_x(ii) * hess.block(i * dims, 2 * dims + 5, dims, 1);
+                        }
+
+                        sum_f_qq(iq0, iq0) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 2);
+                        sum_f_qq(iq0, iq1) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 5);
+                        sum_f_qq(iq1, iq0) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 2);
+                        sum_f_qq(iq1, iq1) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 5);
+
+                        sum_f_vq.block(ib0, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 2, 2, 1);
+                        sum_f_vq.block(ib1, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 2, 2, 1);
+                        sum_f_vq.block(ib0, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 5, 2, 1);
+                        sum_f_vq.block(ib1, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 5, 2, 1);
                     }
-
-                    sum_f_qq.block(iq, iq, 1, 1) += partial_x(ii) * hess.block(2 * dims + 4, 2 * dims + 4, 1, 1);
-
-                    sum_f_vq.block(ib0, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 4, 2, 1);
-                    sum_f_vq.block(ib1, iq, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 4, 2, 1);
-                } else if (bdry->edges[face(2) - n_sites].btype == 2) {
-                    int iq0 = bdry->edges[face(2) - n_sites].q_idx;
-                    int iq1 = bdry->edges[bdry->edges[face(2) - n_sites].nextEdge].q_idx;
-
-                    for (int i = 0; i < 2; i++) {
-                        if (face(i) >= n_cells) continue;
-
-                        sum_f_cq.block(face(i) * dims, iq0, dims, 1) +=
-                                partial_x(ii) * hess.block(i * dims, 2 * dims + 2, dims, 1);
-                        sum_f_cq.block(face(i) * dims, iq1, dims, 1) +=
-                                partial_x(ii) * hess.block(i * dims, 2 * dims + 5, dims, 1);
-                    }
-
-                    sum_f_qq(iq0, iq0) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 2);
-                    sum_f_qq(iq0, iq1) += partial_x(ii) * hess(2 * dims + 2, 2 * dims + 5);
-                    sum_f_qq(iq1, iq0) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 2);
-                    sum_f_qq(iq1, iq1) += partial_x(ii) * hess(2 * dims + 5, 2 * dims + 5);
-
-                    sum_f_vq.block(ib0, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 2, 2, 1);
-                    sum_f_vq.block(ib1, iq0, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 2, 2, 1);
-                    sum_f_vq.block(ib0, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib0, 2 * dims + 5, 2, 1);
-                    sum_f_vq.block(ib1, iq1, 2, 1) += partial_x(ii) * hess.block(hess_ib1, 2 * dims + 5, 2, 1);
                 }
             }
         }
@@ -1036,6 +1045,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
     MatrixXT dxdv_dense = MatrixXT::Zero(x.rows(), bdry->v.rows());
     MatrixXT dxdq_dense = MatrixXT::Zero(x.rows(), bdry->q.rows());
     d2xdy2.resize(x.rows());
+    x_nodes.resize(x.rows());
     for (int i = 0; i < faces.size(); i++) {
         IV4 face = faces[i];
 
@@ -1051,6 +1061,7 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
 
         for (int j = 0; j < CellFunction::nx; j++) {
             d2xdy2[i * CellFunction::nx + j] = nodePos.hess[j];
+            x_nodes[i * CellFunction::nx + j] = node;
         }
 
         // Assemble global Jacobian matrix dxdc.
@@ -1133,6 +1144,22 @@ void Tessellation::tessellate(const VectorXT &vertices, const VectorXT &params, 
                 }
                 break;
             case LSQ:
+                for (int j = 0; j < node.gen_nc; j++) {
+                    if (node.gen[j] >= n_free) {
+                        continue;
+                    }
+                    dxdc_dense.block(i * CellFunction::nx, node.gen[j] * dims, CellFunction::nx, dims) =
+                            nodePos.grad.block(0, j * dims, CellFunction::nx, dims);
+                }
+                for (int j = 0; j < node.gen_nb; j++) {
+                    dxdv_dense.block(i * CellFunction::nx, (node.gen[node.gen_nc + j] - n_sites) * 2, CellFunction::nx,
+                                     2) =
+                            nodePos.grad.block(0, node.gen_nc * dims + j * 4 + 0, CellFunction::nx, 2);
+                    dxdv_dense.block(i * CellFunction::nx,
+                                     bdry->edges[node.gen[node.gen_nc + j] - n_sites].nextEdge * 2, CellFunction::nx,
+                                     2) =
+                            nodePos.grad.block(0, node.gen_nc * dims + j * 4 + 2, CellFunction::nx, 2);
+                }
                 break;
             default:
                 assert(0);

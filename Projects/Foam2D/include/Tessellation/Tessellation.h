@@ -58,7 +58,8 @@ struct Node {
     int bezier_flag = 0;
 
     std::vector<int> gen;
-    std::vector<double> genw;
+    int gen_nc = 0;
+    int gen_nb = 0;
 };
 
 struct NodePosition {
@@ -89,6 +90,7 @@ private:
     Eigen::SparseMatrix<double> dxdv;
     Eigen::SparseMatrix<double> dxdq;
     std::vector<MatrixXT> d2xdy2;
+    std::vector<Node> x_nodes;
 
     // Computes list of indices of neighboring sites, ordered counterclockwise.
     std::vector<std::vector<int>> getNeighbors(const VectorXT &vertices, const VectorXi &dual, int n_cells);
