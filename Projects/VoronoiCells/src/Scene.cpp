@@ -5,6 +5,34 @@
 #include <igl/facet_adjacency_matrix.h>
 #include "../include/IntrinsicSimulation.h"
 
+void IntrinsicSimulation::expandBaseMesh(T increment)
+{
+    TV center = TV::Zero();
+    int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+    {
+        center += extrinsic_vertices.segment<3>(i * 3);
+    }
+    center /= T(n_vtx_extrinsic);
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+    {
+        TV vi = extrinsic_vertices.segment<3>(i * 3);
+        extrinsic_vertices.segment<3>(i * 3) = vi + increment * (vi - center);
+    }
+    geometry->requireVertexPositions();
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+    {
+        geometry->vertexPositions[mesh->vertex(i)] = 
+            gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+            extrinsic_vertices(i * 3 + 1), 
+            extrinsic_vertices(i * 3 + 2)};
+    }
+    geometry->unrequireVertexPositions();
+    geometry->refreshQuantities();
+    retrace = true;
+    traceGeodesics();
+}
+
 void IntrinsicSimulation::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C)
 {
     vectorToIGLMatrix<int, 3>(extrinsic_indices, F);
@@ -155,7 +183,12 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", 
         V, F);
 
-    V(19, 2) += 0.05;
+    V(44, 2) -= 0.01;
+
+    for (int row : {11, 22, 33, 55, 66, 77, 88})
+    {
+        V(row, 2) -= 0.02;
+    }
 
     iglMatrixFatten<T, 3>(V, extrinsic_vertices);
     iglMatrixFatten<int, 3>(F, extrinsic_indices);
@@ -178,16 +211,18 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
 
     // int n_faces = extrinsic_indices.rows()/ 3 / 10;  
     // int n_faces = extrinsic_indices.rows()/ 3;    
-    int n_faces = 2;    
+    int n_faces = 6;    
 
     intrinsic_vertices_barycentric_coords.resize(n_faces * 2);
     
     VectorXT mass_point_Euclidean(n_faces * 3);
     int valid_cnt = 0;
     // 1, 5 is a discontinuity
-    for (int face_idx : {3, 12})
+    // for (int face_idx : {67, 27, 91, 131, 42, 82})
+    for (int face_idx : {102, 119, 22, 39, 42, 59})
+    // for (int face_idx : {3, 5})
     {
-        T alpha = 0.2, beta = 0.5;
+        T alpha = 1.0/3.0, beta = 1.0/3.0;
         TV vi = extrinsic_vertices.segment<3>(extrinsic_indices[face_idx * 3 + 0] * 3);
         TV vj = extrinsic_vertices.segment<3>(extrinsic_indices[face_idx * 3 + 1] * 3);
         TV vk = extrinsic_vertices.segment<3>(extrinsic_indices[face_idx * 3 + 2] * 3);
@@ -211,7 +246,7 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
 
     std::cout << "add mass point" << std::endl;
     std::cout << "#dof : " << undeformed.rows() << " #points " << undeformed.rows() / 2 << std::endl;
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 8; i++)
     {
         dirichlet_data[i] = 0.0;
     }
@@ -219,8 +254,15 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
 
     MatrixXi igl_tri, igl_edges;
 
-    igl_edges.resize(1, 2);
+    igl_edges.resize(7, 2);
     igl_edges.row(0) = Eigen::RowVector2i(0, 1);
+    igl_edges.row(1) = Eigen::RowVector2i(2, 3);
+    igl_edges.row(2) = Eigen::RowVector2i(4, 5);
+    igl_edges.row(3) = Eigen::RowVector2i(0, 4);
+    igl_edges.row(4) = Eigen::RowVector2i(4, 2);
+    igl_edges.row(5) = Eigen::RowVector2i(1, 5);
+    igl_edges.row(6) = Eigen::RowVector2i(5, 3);
+
 
     all_intrinsic_edges.resize(0);
 
@@ -264,13 +306,36 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
     }
 
     ref_dis = ref_lengths.sum() / ref_lengths.rows();
-    ref_dis *= 0.4;
+    ref_dis *= 0.1;
 
     current_length = rest_length;
     for (int i = 0; i < n_springs; i++)
     {
         edge_map[spring_edges[i]] = i;
         edge_map[Edge(spring_edges[i][1], spring_edges[i][0])] = i;
+    }
+
+    add_area_term = false;
+    add_geo_elasticity = false;
+    add_volume = false;
+
+    two_way_coupling = true;
+
+    if (two_way_coupling)
+    {
+        int n_dof = undeformed.rows();
+        shell_dof_start = n_dof;
+        undeformed.conservativeResize(n_dof + extrinsic_vertices.rows());
+        undeformed.segment(n_dof, extrinsic_vertices.rows()) = extrinsic_vertices;
+        deformed = undeformed;
+        u.resize(undeformed.rows()); u.setZero();
+        delta_u.resize(undeformed.rows()); delta_u.setZero();
+        faces = extrinsic_indices;
+        computeRestShape();
+        buildHingeStructure();
+
+        E_shell = 1e4;
+        updateShellLameParameters();
     }
 
     computeAllTriangleArea(rest_area);
@@ -294,6 +359,17 @@ void IntrinsicSimulation::initializeSceneCheckingSmoothness()
             std::cout << "vtx "<< i << " K: " << ki << std::endl;
     }
     geometry->unrequireVertexGaussianCurvatures();
+
+    if (two_way_coupling)
+        for (int idx : {0, 9, 90, 99})
+        {
+            for (int d = 0; d < 3; d++)
+            {
+                dirichlet_data[idx * 3 + d + shell_dof_start] = 0.0;
+            }
+        }
+    
+    use_t_wrapper = true;
 }
 
 void IntrinsicSimulation::initializeMassSpringDebugScene()
@@ -480,8 +556,7 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
     }
     
     if (two_way_coupling)
-    {
-        
+    {       
         faces = extrinsic_indices;
         computeRestShape();
         buildHingeStructure();
@@ -493,7 +568,6 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
         {
             dirichlet_data[shell_dof_start + d] = 0.0;
         }
-        
     }
 
     all_intrinsic_edges.resize(0);
@@ -518,7 +592,8 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
         std::vector<IxnData> ixn_data;
         computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
         // computeExactGeodesicEdgeFlip(vA, vB, geo_dis, path, ixn_data, true);
-        rest_length[i] = 0.0 * geo_dis;
+        // rest_length[i] = 0.0 * geo_dis;
+        rest_length[i] = geo_dis;
         ref_lengths[i] = geo_dis;
         for(int j = 0; j < path.size() - 1; j++)
         {
@@ -562,7 +637,7 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
     // add_geo_elasticity = false;
     if (add_geo_elasticity)
     {
-        E = 1e1;
+        E = 1e2;
         updateLameParameters();
         computeGeodesicTriangleRestShape();
         
@@ -585,7 +660,7 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
 void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 {
     use_Newton = true;
-    two_way_coupling = true;
+    two_way_coupling = false;
     
     MatrixXT V; MatrixXi F;
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", 
@@ -601,6 +676,8 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/single_tet.obj", 
     //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/torus.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/torus_dense.obj", 
     //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/ellipsoid.obj", 
     //     V, F);
@@ -664,6 +741,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 
     gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
     std::vector<SurfacePoint> samples = poissonSampler.sample(5.0);
+    // std::vector<SurfacePoint> samples = poissonSampler.sample(2.0);
     // std::vector<SurfacePoint> samples = poissonSampler.sample();
     intrinsic_vertices_barycentric_coords.resize(samples.size() * 2);
     mass_point_Euclidean.resize(samples.size() * 3);
@@ -676,7 +754,6 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         mass_surface_points.push_back(std::make_pair(pt, pt.face));
         cnt++;
     }
-
 
 
     mass_surface_points_undeformed = mass_surface_points;
@@ -735,10 +812,13 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
         delta_u.resize(undeformed.rows()); delta_u.setZero();
     }    
     add_area_term = false;
-    add_geo_elasticity = true;
+    
+    add_geo_elasticity = false;
     add_volume = true && two_way_coupling;
     initializeNetworkData(edges);
-    verbose = true;
+    verbose = false;
+
+    we = 0.01;
 
 //     if (two_way_coupling)
 //     {

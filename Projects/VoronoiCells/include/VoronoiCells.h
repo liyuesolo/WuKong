@@ -18,6 +18,17 @@
 #include "VecMatDef.h"
 #include "Util.h"
 
+#include "geometrycentral/surface/edge_length_geometry.h"
+#include "geometrycentral/surface/manifold_surface_mesh.h"
+#include "geometrycentral/surface/mesh_graph_algorithms.h"
+#include "geometrycentral/surface/surface_mesh_factories.h"
+#include "geometrycentral/surface/polygon_soup_mesh.h"
+#include "geometrycentral/surface/vertex_position_geometry.h"
+#include "geometrycentral/surface/poisson_disk_sampler.h"
+
+namespace gcs = geometrycentral::surface;
+namespace gc = geometrycentral;
+
 class VoronoiCells
 {
 public:
@@ -34,7 +45,21 @@ public:
     using Face = Vector<int, 3>;
     using Edge = Vector<int, 2>;
 
+    using gcEdge = geometrycentral::surface::Edge;
+    using gcFace = geometrycentral::surface::Face;
+    using gcVertex = geometrycentral::surface::Vertex;
+    using Vector3 = geometrycentral::Vector3;
+    using SurfacePoint = geometrycentral::surface::SurfacePoint;
+
     
+    VectorXT extrinsic_vertices;
+    VectorXi extrinsic_indices;
+
+    bool use_debug_face_color = false;
+    MatrixXT face_color;
+
+    std::unique_ptr<gcs::ManifoldSurfaceMesh> mesh;
+    std::unique_ptr<gcs::VertexPositionGeometry> geometry;
 
     MatrixXT surface_vtx;
     MatrixXi surface_indices;
@@ -62,7 +87,10 @@ private:
                                 std::vector<std::pair<TV, TV>>& path_for_viz,
                                 bool generate_path = true);
     
-    
+    TV toTV(const Vector3& vec) const
+    {
+        return TV(vec.x, vec.y, vec.z);
+    }
 public:
     void constructVoronoiDiagram();
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);

@@ -1,11 +1,10 @@
 
 #include <Eigen/CholmodSupport>
 
-
-// #include <Spectra/SymEigsShiftSolver.h>
-// #include <Spectra/MatOp/SparseSymShiftSolve.h>
-// #include <Spectra/SymEigsSolver.h>
-// #include <Spectra/MatOp/SparseSymMatProd.h>
+#include <Spectra/SymEigsShiftSolver.h>
+#include <Spectra/MatOp/SparseSymShiftSolve.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 
 #include "../include/IntrinsicSimulation.h"
 
@@ -94,9 +93,8 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 // std::cout << pt.tEdge << " " << " cross " << (dir0.cross(dir1)).norm() << std::endl;
                 // std::cout << ixn.transpose() << " " << (pt.tEdge * start + (1.0-pt.tEdge) * end).transpose() << std::endl;
                 // std::getchar();
-            }
-            
-            if (is_vtx_point)
+            }            
+            else if (is_vtx_point)
             {
                 // std::cout << "is vertex point" << std::endl;
                 
@@ -126,6 +124,11 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
                 }
                 edge_t = 1.0;
             }
+            else
+            {
+                edge_t = 2.0;
+            }
+            
             ixn_data.push_back(IxnData(start, end, (1.0-edge_t), start_end[0], start_end[1]));
             pt.edge = mesh->edge(pt.edge.getIndex());
             pt.vertex = mesh->vertex(pt.vertex.getIndex());
@@ -594,6 +597,111 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
     
 }
 
+void IntrinsicSimulation::checkHessianPD(bool save_result)
+{
+    int nmodes = 10;
+    int n_dof_sim = deformed.rows();
+    StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    buildSystemMatrix(d2edx2);
+    bool use_Spectra = true;
+
+    // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    solver.analyzePattern(d2edx2); 
+    // std::cout << "analyzePattern" << std::endl;
+    solver.factorize(d2edx2);
+    // std::cout << "factorize" << std::endl;
+    bool indefinite = false;
+    if (solver.info() == Eigen::NumericalIssue)
+    {
+        std::cout << "!!!indefinite matrix!!!" << std::endl;
+        indefinite = true;
+        
+    }
+    
+    if (use_Spectra)
+    {
+        
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(d2edx2);
+        T shift = indefinite ? -1e2 : -1e-4;
+        Spectra::SymEigsShiftSolver<T, 
+        Spectra::LARGEST_MAGN, 
+        Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 
+            eigs(&op, nmodes, 2 * nmodes, shift);
+
+        eigs.init();
+
+        int nconv = eigs.compute();
+
+        if (eigs.info() == Spectra::SUCCESSFUL)
+        {
+            Eigen::MatrixXd eigen_vectors = eigs.eigenvectors().real();
+            Eigen::VectorXd eigen_values = eigs.eigenvalues().real();
+            std::cout << eigen_values.transpose() << std::endl;
+            if (save_result)
+            {
+                std::ofstream out("eigen_vectors.txt");
+                out << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+                for (int i = 0; i < eigen_vectors.cols(); i++)
+                    out << eigen_values[eigen_vectors.cols() - 1 - i] << " ";
+                out << std::endl;
+                for (int i = 0; i < eigen_vectors.rows(); i++)
+                {
+                    // for (int j = 0; j < eigen_vectors.cols(); j++)
+                    for (int j = eigen_vectors.cols() - 1; j >-1 ; j--)
+                        out << eigen_vectors(i, j) << " ";
+                    out << std::endl;
+                }       
+                out << std::endl;
+                out.close();
+            }
+        }
+        else
+        {
+            std::cout << "Eigen decomposition failed" << std::endl;
+        }
+    }
+    else
+    {
+        Eigen::MatrixXd A_dense = d2edx2;
+        Eigen::EigenSolver<Eigen::MatrixXd> eigen_solver;
+        eigen_solver.compute(A_dense, /* computeEigenvectors = */ true);
+        auto eigen_values = eigen_solver.eigenvalues();
+        auto eigen_vectors = eigen_solver.eigenvectors();
+        
+        std::vector<T> ev_all(A_dense.cols());
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            ev_all[i] = eigen_values[i].real();
+        }
+        
+        std::vector<int> indices;
+        for (int i = 0; i < A_dense.cols(); i++)
+        {
+            indices.push_back(i);    
+        }
+        std::sort(indices.begin(), indices.end(), [&ev_all](int a, int b){ return ev_all[a] < ev_all[b]; } );
+        // std::sort(ev_all.begin(), ev_all.end());
+
+        for (int i = 0; i < nmodes; i++)
+            std::cout << ev_all[indices[i]] << std::endl;
+        
+        if (save_result)
+        {
+            std::ofstream out("eigen_vectors.txt");
+            out << nmodes << " " << A_dense.cols() << std::endl;
+            for (int i = 0; i < nmodes; i++)
+                out << ev_all[indices[i]] << " ";
+            out << std::endl;
+            for (int i = 0; i < nmodes; i++)
+            {
+                out << eigen_vectors.col(indices[i]).real().transpose() << std::endl;
+            }
+            out.close();
+        }
+    }
+}
+
 bool IntrinsicSimulation::linearSolveWoodbury(StiffnessMatrix& K, const MatrixXT& UV,
         const VectorXT& residual, VectorXT& du)
 {
@@ -967,12 +1075,38 @@ bool IntrinsicSimulation::advanceOneStep(int step)
     // START_TIMING(lineSearchNewton)
     // dq_norm = lineSearchNewton(u, residual);
     du_norm = lineSearchNewton(residual);
-    // checkHessian();
+    
     // FINISH_TIMING_PRINT(lineSearchNewton)
     FINISH_TIMING_PRINT(NewtonStep)
     if(step == max_newton_iter || du_norm > 1e10 || du_norm < 1e-8)
     {
         // std::cout << "ABNORMAL STOP with |du| " << du_norm << std::endl;
+        std::ofstream out("search_direction.txt");
+        out << std::setprecision(16);
+        out << residual.rows() << std::endl;
+        for (int i = 0; i < residual.rows(); i++)
+            out << residual[i] << " ";
+        out << std::endl;
+        out << spring_edges.size() << std::endl;
+        for (const Edge& edges : spring_edges)
+        {
+            out << edges[0] << " " << edges[1] << std::endl;
+        }
+        out << mass_surface_points.size() << std::endl;
+        for (int i = 0; i < mass_surface_points.size(); i++)
+        {
+            out << toTV(mass_surface_points[i].first.faceCoords).transpose() << std::endl;
+            out << mass_surface_points[i].second.getIndex();
+            out << std::endl;
+        }
+        if (two_way_coupling)
+        {
+            out << deformed.rows() << std::endl;
+            for (int i = 0; i < deformed.rows(); i++)
+                out << deformed[i] << " ";
+            out << std::endl;
+        }
+        out.close();
         return true;
     }
     

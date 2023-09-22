@@ -200,7 +200,6 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     {
         if(viewer.core().is_animating && check_modes)
         {
-            
         }
         return false;
     };
@@ -210,7 +209,6 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         if(viewer.core().is_animating && !check_modes)
         {
             bool finished = true;
-            // bool finished = tiling.solver.staticSolveStep(static_solve_step);
             if (finished)
             {
                 viewer.core().is_animating = false;
@@ -238,6 +236,7 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             viewer.core().is_animating = true;
             // tiling.solver.optimizeIPOPT();
             return true;
+        
         }
     };
     
@@ -254,7 +253,7 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.core().is_animating = false;
 }
 
-void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
+void GeodesicSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
     simulation.generateMeshForRendering(V, F, C);
     
@@ -276,7 +275,7 @@ void MassSpringApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     viewer.data().set_colors(C);
 }
 
-void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
+void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     igl::opengl::glfw::imgui::ImGuiMenu& menu)
 {
     menu.callback_draw_viewer_menu = [&]()
@@ -317,7 +316,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             {
                 in >> edges[i][0] >> edges[i][1];
             }
-            
+            std::cout << "load edges" <<std::endl;
             int n_pts; in >> n_pts;
             simulation.mass_surface_points.resize(n_pts);
             for (int i = 0; i < n_pts; i++)
@@ -329,6 +328,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 simulation.mass_surface_points[i].first = 
                     gcs::SurfacePoint(f, gc::Vector3{bary[0],bary[1], bary[2]});
             }
+            std::cout << "load points" <<std::endl;
             if (simulation.two_way_coupling)
             {
                 simulation.undeformed.conservativeResize(length);
@@ -343,9 +343,10 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 for (int i = 0; i < n_dof; i++)
                     in >> simulation.deformed[i];
             }
+            std::cout << "load mesh" <<std::endl;
             
             in.close();
-            simulation.initializeNetworkData(edges);
+            // simulation.initializeNetworkData(edges);
             
             simulation.updateCurrentState();
             simulation.mass_surface_points_undeformed = simulation.mass_surface_points;
@@ -386,7 +387,12 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     {
         if(viewer.core().is_animating && check_modes)
         {
-            
+            simulation.mass_surface_points = simulation.mass_surface_points_temp;
+            simulation.deformed = simulation.deformed_temp;
+            simulation.delta_u = evectors.col(modes) * std::sin(t);
+            simulation.updateCurrentState();
+            t += 0.1;
+            updateScreen(viewer);
         }
         return false;
     };
@@ -527,7 +533,7 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 simulation.run_diff_test = true;
                 static_solve_step++;
                 temporary_vector.resize(simulation.undeformed.rows());
-                temporary_vector << 0.0260971, -0.0127193, -0.0143727, 0.00148369;
+                temporary_vector <<  -0.0044444,  0.00888878, -0.00444453,  0.00888904;
                 // temporary_vector.setZero();
                 // simulation.computeResidual(temporary_vector); temporary_vector *= -1.0;
                 // T a = temporary_vector[2],
@@ -540,11 +546,11 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
                 // temporary_vector[1] = -a;
                 // std::cout << temporary_vector.transpose() << std::endl;
                 simulation.mass_surface_points = simulation.mass_surface_points_undeformed;
-                simulation.delta_u = (static_solve_step*0.5) * temporary_vector;
+                simulation.delta_u = (static_solve_step) * temporary_vector;
                 simulation.updateCurrentState();
                 // T total_energy = simulation.computeTotalEnergy();
                 T total_energy = simulation.current_length[0];
-                std::cout << "length : " << total_energy << " " << static_solve_step * 0.5 << std::endl;
+                std::cout << "length : " << total_energy << " " << static_solve_step << std::endl;
             }
             updateScreen(viewer);
             return true;
@@ -566,6 +572,26 @@ void MassSpringApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             return true;
         case ' ':
             viewer.core().is_animating = true;
+            return true;
+        case '1':
+            check_modes = true;
+            simulation.mass_surface_points_temp = simulation.mass_surface_points;
+            simulation.deformed_temp = simulation.deformed;
+            simulation.checkHessianPD(true);
+            loadDisplacementVectors("eigen_vectors.txt");
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;            
+            return true;
+        case '2':
+            modes++;
+            modes = (modes + evectors.cols()) % evectors.cols();
+            std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
+            return true;
+        case 'a':
+            viewer.core().is_animating = !viewer.core().is_animating;
+            return true;
+        case '+':
+            simulation.expandBaseMesh(0.05);
+            updateScreen(viewer);
             return true;
         }
     };

@@ -238,9 +238,9 @@ void IntrinsicSimulation::addGeodesicNHHessianEntry(std::vector<Entry>& entries)
             dldw.row(0) = row0; dldw.row(1) = row1; dldw.row(2) = row2;
 
             MatrixXT tensor_term(6, 6); tensor_term.setZero();
-            addHessianMatrixEntry<4>(tensor_term, {index_map[e0[0]], index_map[e0[1]]}, dedl[0] * d2l0dw02);
-            addHessianMatrixEntry<4>(tensor_term, {index_map[e1[0]], index_map[e1[1]]}, dedl[1] * d2l1dw12);
-            addHessianMatrixEntry<4>(tensor_term, {index_map[e2[0]], index_map[e2[1]]}, dedl[2] * d2l2dw22);
+            addHessianMatrixEntry(tensor_term, {index_map[e0[0]], index_map[e0[1]]}, dedl[0] * d2l0dw02);
+            addHessianMatrixEntry(tensor_term, {index_map[e1[0]], index_map[e1[1]]}, dedl[1] * d2l1dw12);
+            addHessianMatrixEntry(tensor_term, {index_map[e2[0]], index_map[e2[1]]}, dedl[2] * d2l2dw22);
 
             
             Matrix<T, 6, 6> hessian; hessian.setZero();

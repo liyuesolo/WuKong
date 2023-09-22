@@ -158,18 +158,40 @@ void IntrinsicSimulation::computeGeodesicLengthGradientCoupled(const Edge& edge,
         for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
         {
             T t = ixn_data_list[edge_idx][1+ixn_id].t;
-
+            T t_hat = t;
+            if (use_t_wrapper)
+                t_hat = wrapper_t<0>(t);
+                // t_hat = wrapper_cubic<0>(t);
             int start_vtx_idx_local = dof_id_map[ixn_data_list[edge_idx][1+ixn_id].start_vtx_idx];
             int end_vtx_idx_local = dof_id_map[ixn_data_list[edge_idx][1+ixn_id].end_vtx_idx];
             
-            dxdv.block(ixn_id*3, start_vtx_idx_local * 3, 3, 3) += Matrix<T, 3, 3>::Identity() * (1.0 - t);
-            dxdv.block(ixn_id*3, end_vtx_idx_local * 3, 3, 3) += Matrix<T, 3, 3>::Identity() * t;
+            dxdv.block(ixn_id*3, start_vtx_idx_local * 3, 3, 3) += Matrix<T, 3, 3>::Identity() * (1.0 - t_hat);
+            dxdv.block(ixn_id*3, end_vtx_idx_local * 3, 3, 3) += Matrix<T, 3, 3>::Identity() * t_hat;
 
             
             // j is the current point
             TV ixn_i = toTV(path[1 + ixn_id-1].interpolate(geometry->vertexPositions));
             TV ixn_j = toTV(path[1 + ixn_id].interpolate(geometry->vertexPositions));
             TV ixn_k = toTV(path[1 + ixn_id+1].interpolate(geometry->vertexPositions));
+
+            // if this is the start and end point of the geodsic curve
+            if (ixn_data[1 + ixn_id-1].t != -1.0) 
+            {
+                ixn_i = ixn_data[1 + ixn_id-1].end * 
+                    wrapper_t<0>(ixn_data[1 + ixn_id-1].t) 
+                + ixn_data[1 + ixn_id-1].start * 
+                (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id-1].t));    
+            }
+            if (ixn_data[1 + ixn_id].t != -1.0)
+            {
+                ixn_j = ixn_data[1 + ixn_id].end * wrapper_t<0>(ixn_data[1 + ixn_id].t) 
+                + ixn_data[1 + ixn_id].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id].t));    
+            }
+            if (ixn_data[1 + ixn_id+1].t != -1.0)
+            {
+                ixn_k = ixn_data[1 + ixn_id+1].end * wrapper_t<0>(ixn_data[1 + ixn_id+1].t) 
+                + ixn_data[1 + ixn_id+1].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id+1].t));    
+            }
 
             dldx.segment<3>(ixn_id*3) += -(ixn_i-ixn_j).normalized() + -(ixn_k-ixn_j).normalized();
         }
@@ -329,24 +351,53 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
         for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
         {
             T t = ixn_data[1+ixn_id].t;
+            
+            T t_hat = t;
+            T d_hat_dt = 1.0;
+            if (use_t_wrapper)
+            {
+                t_hat = wrapper_t<0>(t);
+                d_hat_dt = wrapper_t<1>(t);
+            }
+
             int start_vtx_idx_local = dof_id_map[ixn_data[1+ixn_id].start_vtx_idx];
             int end_vtx_idx_local = dof_id_map[ixn_data[1+ixn_id].end_vtx_idx];
 
             dxdv.block(ixn_id*3, start_vtx_idx_local * 3, 3, 3) 
-                += Matrix<T, 3, 3>::Identity() * (1.0 - t);
+                += Matrix<T, 3, 3>::Identity() * (1.0 - t_hat);
             dxdv.block(ixn_id*3, end_vtx_idx_local * 3, 3, 3) 
-                += Matrix<T, 3, 3>::Identity() * t;
+                += Matrix<T, 3, 3>::Identity() * t_hat;
             
             // j is the current point
             TV ixn_i = toTV(path[1 + ixn_id-1].interpolate(geometry->vertexPositions));
             TV ixn_j = toTV(path[1 + ixn_id].interpolate(geometry->vertexPositions));
             TV ixn_k = toTV(path[1 + ixn_id+1].interpolate(geometry->vertexPositions));
+            
+            // if this is the start and end point of the geodsic curve
+            if (ixn_data[1 + ixn_id-1].t != -1.0) 
+            {
+                ixn_i = ixn_data[1 + ixn_id-1].end * 
+                    wrapper_t<0>(ixn_data[1 + ixn_id-1].t) 
+                + ixn_data[1 + ixn_id-1].start * 
+                (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id-1].t));    
+            }
+            if (ixn_data[1 + ixn_id].t != -1.0)
+            {
+                ixn_j = ixn_data[1 + ixn_id].end * wrapper_t<0>(ixn_data[1 + ixn_id].t) 
+                + ixn_data[1 + ixn_id].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id].t));    
+            }
+            if (ixn_data[1 + ixn_id+1].t != -1.0)
+            {
+                ixn_k = ixn_data[1 + ixn_id+1].end * wrapper_t<0>(ixn_data[1 + ixn_id+1].t) 
+                + ixn_data[1 + ixn_id+1].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id+1].t));    
+            }
+            
 
             dgdx.segment<3>(ixn_id*3) += -(ixn_i-ixn_j).normalized() + -(ixn_k-ixn_j).normalized();
 
             TV x_start = ixn_data[1+ixn_id].start;
             TV x_end = ixn_data[1+ixn_id].end;
-            dxdt.block(ixn_id * 3, ixn_id, 3, 1) = (x_end - x_start);
+            dxdt.block(ixn_id * 3, ixn_id, 3, 1) = (x_end - x_start) * d_hat_dt;
 
             
             TV dgdx_local = dgdx.segment<3>(ixn_id*3);
@@ -366,6 +417,17 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
             TV ixn_i = toTV(path[1 + ixn_id].interpolate(geometry->vertexPositions));
             TV ixn_j = toTV(path[1 + ixn_id+1].interpolate(geometry->vertexPositions));
 
+            if (ixn_data[1 + ixn_id].t != -1.0)
+            {
+                ixn_i = ixn_data[1 + ixn_id].end * wrapper_t<0>(ixn_data[1 + ixn_id].t) 
+                + ixn_data[1 + ixn_id].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id].t));    
+            }
+            if (ixn_data[1 + ixn_id+1].t != -1.0)
+            {
+                ixn_j = ixn_data[1 + ixn_id+1].end * wrapper_t<0>(ixn_data[1 + ixn_id+1].t) 
+                + ixn_data[1 + ixn_id+1].start * (1.0 - wrapper_t<0>(ixn_data[1 + ixn_id+1].t));    
+            }
+
             edgeLengthHessian(ixn_i, ixn_j, hess);
             d2gdx2.block(ixn_id*3, ixn_id * 3, 6, 6) += hess;
         }
@@ -378,9 +440,19 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
         dxdtd2gdx2dxdt = dxdt.transpose() * d2gdx2 * dxdt;
 
         dtdc = dxdtd2gdx2dxdt.colPivHouseholderQr().solve(-dxdtd2gdxdc);
+        // dtdc = (dxdtd2gdx2dxdt.transpose() * dxdtd2gdx2dxdt).colPivHouseholderQr().solve(-dxdtd2gdx2dxdt*dxdtd2gdxdc);
+        
+        // Eigen::SelfAdjointEigenSolver<MatrixXT> eigenSolver(dxdtd2gdx2dxdt);
+        // std::cout << "ev " << std::endl;
+        // std::cout << dxdtd2gdx2dxdt.eigenvalues().real().transpose() << std::endl;
+        // std::cout << "dtdc" << std::endl;
+        // std::cout << dtdc << std::endl;
+        // std::cout << "dtdc" << std::endl;
+        // std::cout << dtdc << std::endl;
+        // std::cout << (dxdtd2gdx2dxdt * dtdc + dxdtd2gdxdc).norm() << std::endl;
+        // std::cout << "-------------" << std::endl;
 
         
-
         // std::cout << dtdv << std::endl;
         
         p2gpc2.block(0, 0, 3, 3) += dl0dx0;
@@ -413,30 +485,14 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
             dcdv.block(3, dof_id_map[tri1[i]] * 3, 3, 3) += Matrix<T, 3, 3>::Identity() * vB.faceCoords[i];
         }
         
-        dtdv = dxdtd2gdx2dxdt.colPivHouseholderQr().solve(
-            -dxdt.transpose() * d2gdxdc * dcdv 
+        MatrixXT b = -dxdt.transpose() * d2gdxdc * dcdv 
             - dgdx_d2xdtdv 
             - dxdt.transpose() * d2gdx2 * dxdt * dtdc * dcdv 
-            - dxdt.transpose() * d2gdx2 * dxdv // 
-            );
-        // check
+            - dxdt.transpose() * d2gdx2 * dxdv;
+        dtdv = dxdtd2gdx2dxdt.colPivHouseholderQr().solve(b);
 
-        for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
-        {
-            T t = ixn_data[ixn_id + 1].t;
-            // for legacy reason t is 0 not 1 here
-            if (t < 1e-8)
-            {
-                dtdv.row(ixn_id).setZero();
-                dtdc.row(ixn_id).setZero();
-            }
-        }
+        // dtdv = (dxdtd2gdx2dxdt.transpose() * dxdtd2gdx2dxdt).colPivHouseholderQr().solve(dxdtd2gdx2dxdt * b);
 
-        // dtdc.setZero(); 
-        // dtdv.setZero();
-        // std::cout << dtdc << std::endl;
-        // std::cout << "-------------" << std::endl;
-        // std::cout << dtdv << std::endl;
         // std::cout << "-------------" << std::endl;
         d2ldq2.block(4, 4, nv, nv) += dcdv.transpose() * p2gpc2 * dcdv;
 

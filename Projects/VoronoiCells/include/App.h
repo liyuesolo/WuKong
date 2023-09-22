@@ -79,7 +79,7 @@ public:
     ~VoronoiApp() {}
 };
 
-class MassSpringApp : public SimulationApp
+class GeodesicSimApp : public SimulationApp
 {
     
 public:
@@ -97,8 +97,8 @@ public:
     VectorXT temporary_vector;
     bool use_temp_vec = false;
 public:
-    MassSpringApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
-    ~MassSpringApp() {}
+    GeodesicSimApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
+    ~GeodesicSimApp() {}
 };
 
 

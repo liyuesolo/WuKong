@@ -115,6 +115,9 @@ public:
     VectorXT delta_u;
     VectorXT u;
 
+    // used to interface to applications
+    VectorXT deformed_temp;
+
     std::vector<int> dirichlet_vertices;
     std::unordered_map<int, T> dirichlet_data;
 
@@ -127,6 +130,10 @@ public:
 
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points;
     std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points_undeformed;
+
+    // used to interface to applications
+    std::vector<std::pair<SurfacePoint, gcFace>> mass_surface_points_temp;
+
     std::vector<Edge> spring_edges;
     std::vector<T> rest_length;
     VectorXT undeformed_length;
@@ -156,6 +163,7 @@ public:
     // geodesic triangle 
     bool add_geo_elasticity = false;
     std::vector<TM2> X_inv_geodesic;
+    bool use_t_wrapper = true;
     
     // volume term
     T wv = 1e3;
@@ -405,6 +413,74 @@ private:
         tri[2] = fi.halfedge().next().next().vertex().getIndex();
     }
 
+    template<int order>
+    T wrapper_t(T t, T eps = 1e-6)
+    {
+        if constexpr (order == 0)
+        {
+            if (t < eps && t >= 0)
+            {
+                return -1.0/std::pow(eps, 2) * std::pow(t, 3) + 2.0 / eps * std::pow(t, 2);
+            }
+            else if (t >= eps && t <= 1.0 - eps)
+            {
+                return t;
+            }
+            else 
+            {
+                return -1.0/std::pow(eps, 2) * std::pow(t-1, 3) - 2.0 / eps * std::pow(t-1.0, 2) + 1.0;
+            }
+        }
+        else if constexpr (order == 1)
+        {
+            if (t < eps && t >= 0)
+            {
+                return -3.0/std::pow(eps, 2) * std::pow(t, 2) + 4.0 / eps * t;
+            }
+            else if (t >= eps && t <= 1.0 - eps)
+            {
+                return 1.0;
+            }
+            else 
+            {
+                return -3.0/std::pow(eps, 2) * std::pow(t-1, 2) - 4.0 / eps * (t-1);
+            }
+        }
+        else if constexpr (order == 2)
+        {
+            if (t < eps && t >= 0)
+            {
+                return -6.0/std::pow(eps, 2) * (t - 1.0) + 4.0 / eps;
+            }
+            else if (t >= eps && t <= 1.0 - eps)
+            {
+                return 0.0;
+            }
+            else 
+            {
+                return -6.0/std::pow(eps, 2) * (t - 1.0) - 4.0 / eps;
+            }
+        }
+        return 0.0;
+    }
+
+    template<int order>
+    T wrapper_cubic(T t)
+    {
+        if constexpr (order == 0)
+        {
+            return -2.0 * std::pow(t, 3) + 3.0 * std::pow(t, 2);
+        }
+        else if constexpr (order == 1)
+        {
+            return -6.0 * std::pow(t, 2) + 6.0 * t;
+        }
+        else if constexpr (order == 2)
+        {
+            return -12.0 * t + 6.0;
+        }
+        return 0.0;
+    }
 
     // ====================== discrete shell ==========================
     void updateLameParameters()
@@ -517,7 +593,7 @@ public:
     bool advanceOneStep(int step);
 
     void updateVisualization(bool all_edges = false);
-    void checkHessian();
+    void checkHessianPD(bool save_result = true);
     void checkInformation();
 
     // EdgeTerms.cpp
@@ -548,6 +624,7 @@ public:
     void checkTotalHessianScale(bool perturb = false);
 
     // Scene.cpp
+    void expandBaseMesh(T increment);
     void initializeNetworkData(const std::vector<Edge>& edges);
     void initializeSceneCheckingSmoothness();
     void initializeMassSpringSceneExactGeodesic();

@@ -18,8 +18,13 @@
 
 void VoronoiCells::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C)
 {
-    V = surface_vtx; F = surface_indices;
-    C.resize(F.rows(), 3); C.col(0).setConstant(0.0); C.col(1).setConstant(0.3); C.col(2).setConstant(1.0);
+    vectorToIGLMatrix<int, 3>(extrinsic_indices, F);
+    int n_vtx_dof = extrinsic_vertices.rows();
+    vectorToIGLMatrix<T, 3>(extrinsic_vertices, V);
+    C.resize(F.rows(), 3);
+    C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
+    if (use_debug_face_color)
+        C = face_color;
 }
 
 void VoronoiCells::constructCentroidalVD(const VectorXi& triangulation,
@@ -352,76 +357,168 @@ void VoronoiCells::constructIntrinsicVoronoiDiagram(const VectorXi& triangulatio
 
 void VoronoiCells::constructVoronoiDiagram()
 {
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", surface_vtx, surface_indices);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/drosophila_real_1.5k_remesh.obj", surface_vtx, surface_indices);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/drosophila_real_124_remesh.obj", surface_vtx, surface_indices);
+    MatrixXT V; MatrixXi F;
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", V, F);
+    MatrixXT N;
+    igl::per_vertex_normals(V, F, N);
+
+    // V.row(10) += 3.0 * N.row(10);
+
+    iglMatrixFatten<T, 3>(V, extrinsic_vertices);
+    iglMatrixFatten<int, 3>(F, extrinsic_indices);
+
+    int n_tri = extrinsic_indices.rows() / 3;
+    std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
+    for (int i = 0; i < n_tri; i++)
+        for (int d = 0; d < 3; d++)
+            mesh_indices_gc[i][d] = extrinsic_indices[i * 3 + d];
+    int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+    std::vector<gc::Vector3> mesh_vertices_gc(n_vtx_extrinsic);
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+        mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+            extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+    
+    auto lvals = gcs::makeManifoldSurfaceMeshAndGeometry(mesh_indices_gc, mesh_vertices_gc);
+    std::tie(mesh, geometry) = std::tuple<std::unique_ptr<gcs::ManifoldSurfaceMesh>,
+                    std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
+                                                             std::move(std::get<1>(lvals))); // geometry
+
+    gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
+    std::vector<SurfacePoint> samples = poissonSampler.sample(4.0);
+    // std::vector<SurfacePoint> samples;
+    // samples.push_back(SurfacePoint(mesh->face(80), gc::Vector3{0.2, 0.8, 0.}));
+    // samples.push_back(SurfacePoint(mesh->face(110), gc::Vector3{1,0,0}));
 
 
-    // sample one point per face
-    int n_faces = surface_indices.rows();
-    n_sites = n_faces;
+    n_sites = samples.size();
     voronoi_sites.resize(n_sites * 3);
-    std::vector<std::pair<int, TV>> barycentric_coords(n_faces);
-    for (int i = 0; i < n_faces; i++)
+    int cnt = 0;
+    for (SurfacePoint& pt : samples)
     {
-        T alpha = 0.2, beta = 0.5, gamma = 0.3;
-        TV vi = surface_vtx.row(surface_indices(i, 0)) * alpha;
-        TV vj = surface_vtx.row(surface_indices(i, 1)) * beta;
-        TV vk = surface_vtx.row(surface_indices(i, 2)) * gamma;
-        voronoi_sites.segment<3>(i * 3) = vi + vj + vk;
-        barycentric_coords[i] = std::make_pair(i, TV(alpha, beta, gamma));
+        pt = pt.inSomeFace();
+        voronoi_sites.segment<3>(cnt * 3) = toTV(pt.interpolate(geometry->vertexPositions));
+        cnt++;
     }
-    VectorXi triangulation;
-    triangulatePointCloud(voronoi_sites, triangulation);
 
-    VectorXT nodal_positions;
-    std::vector<VtxList> cell_connectivity;
-    std::vector<std::pair<TV, TV>> path_for_viz;
+    enum DistanceMetric
+    {
+        Geodesic, Euclidean
+    };
 
-    START_TIMING(VD)
-    constructIntrinsicVoronoiDiagram(triangulation, voronoi_sites, 
-        barycentric_coords, nodal_positions, cell_connectivity, path_for_viz, true);
-    FINISH_TIMING_PRINT(VD)    
+    DistanceMetric metric = Euclidean;
 
-    // std::vector<TV> sites_vector;
-    // for (int i = 0; i < surface_vtx.rows(); i++)
-    //     // if(i % 1 == 0)
-    //     // if (i < 0.5 * surface_vtx.rows())
-    //         sites_vector.push_back(surface_vtx.row(i));
-    // n_sites = sites_vector.size();
-    // voronoi_sites.resize(sites_vector.size() * 3);
-    // for (int i = 0; i < sites_vector.size(); i++)
-    //     voronoi_sites.segment<3>(i * 3) = sites_vector[i];
+    struct FaceData
+    {
+        std::vector<int> site_indices;
+        TV distances;
+        FaceData (const std::vector<int>& _site_indices, 
+            const TV& _distances) : 
+            site_indices(_site_indices), distances(_distances) {}
+        FaceData () : distances(TV::Constant(1e10)) {}
+
+    };
     
-    // VectorXi triangulation;
-    // triangulatePointCloud(voronoi_sites, triangulation);
+    std::vector<FaceData> source_data(n_tri, FaceData());
 
-    // VectorXT nodal_positions;
-    // std::vector<VtxList> cell_connectivity;
-    // std::vector<std::pair<TV, TV>> path_for_viz;
-    
-    // START_TIMING(VD)
-    // constructCentroidalVD(triangulation, voronoi_sites, nodal_positions, cell_connectivity, path_for_viz, true);
-    // FINISH_TIMING_PRINT(VD)
+    auto comp = [&]( std::pair<int, int> a, std::pair<int, int> b ) 
+    { 
+        return source_data[a.first].distances.minCoeff() > source_data[b.first].distances.minCoeff(); 
+    };
+    std::priority_queue<std::pair<int, int>, 
+        std::vector<std::pair<int, int>>, 
+        decltype(comp)> queue(comp);
+    // std::queue<std::pair<int, int>> queue;
 
-    voronoi_edges = path_for_viz;
-    // int n_tri = triangulation.rows() / 3;
-    // MatrixXi igl_faces;
-    // vectorToIGLMatrix<int, 3>(triangulation, igl_faces);
-    // MatrixXT igl_vertices;
-    // vectorToIGLMatrix<T, 3>(voronoi_sites, igl_vertices);
-    // std::ofstream out("triangulation_1.5k_edges.txt");
-    // igl::edges(igl_faces, igl_edges);
-    // int n_edges = igl_edges.rows();
-    // out << n_edges << std::endl;
-    // for (int i = 0; i < n_edges; i++)
-    // {
-    //     out << igl_edges(i, 0) << " " << igl_edges(i, 1) << std::endl;
-    // }
-    // out.close();
+    int sample_cnt = 0;
+    for (SurfacePoint& pt : samples)
+    {
+        if (pt.type == gcs::SurfacePointType::Vertex)
+        {
+            std::cout<<"vertex"<<std::endl;
+            auto he = pt.vertex.halfedge();
+            do
+            {
+                queue.push(std::make_pair(he.face().getIndex(), sample_cnt));
+                auto next_he = he.twin().next();
+                he = next_he;
+            } while (he != pt.vertex.halfedge());
+            
+        }
+        else if (pt.type == gcs::SurfacePointType::Edge)
+        {
+            std::cout<<"edge"<<std::endl;
+            auto he = pt.edge.halfedge();
+            queue.push(std::make_pair(he.face().getIndex(), sample_cnt));
+            queue.push(std::make_pair(he.twin().face().getIndex(), sample_cnt));    
+        }
+        else if (pt.type == gcs::SurfacePointType::Face)
+        {
+            int face_idx = pt.face.getIndex();
+            queue.push(std::make_pair(face_idx, sample_cnt));    
+        }
+        else
+        {
+            std::cout << "point type error " << __FILE__ << std::endl;
+            std::exit(0);
+        }
+        sample_cnt++;
+    }
 
-    // surface_vtx = igl_vertices;
-    // surface_indices = igl_faces;
-    // constructVoronoiDiagram(voronoi_sites.segment<3>(0), triangulation.segment<3>(0), 
-    //     voronoi_cell_vertices, voronoi_cells);
+    while (queue.size())
+    {
+        std::pair<int, int> data_top = queue.top();
+        queue.pop();
+
+        int face_idx = data_top.first;
+        int site_idx = data_top.second;
+
+        SurfacePoint pt = samples[site_idx];
+        TV site_location = toTV(pt.interpolate(geometry->vertexPositions));
+        TV v0 = toTV(geometry->vertexPositions[mesh->face(face_idx).halfedge().vertex()]);
+        TV v1 = toTV(geometry->vertexPositions[mesh->face(face_idx).halfedge().next().vertex()]);
+        TV v2 = toTV(geometry->vertexPositions[mesh->face(face_idx).halfedge().next().next().vertex()]);
+        TV current_distance;
+        current_distance[0] = (site_location - v0).norm();
+        current_distance[1] = (site_location - v1).norm();
+        current_distance[2] = (site_location - v2).norm();
+        // std::cout << "site " << site_idx << " pos " << site_location.transpose() << std::endl;
+        // std::cout << "face " << face_idx << " dis " << current_distance.transpose() << " " << source_data[face_idx].distances.transpose() << std::endl;
+        bool updated = false;
+        for (int d = 0; d < 3; d++)
+        {
+            if (current_distance[d] < source_data[face_idx].distances[d])
+            {
+                source_data[face_idx].distances[d] = current_distance[d];
+                updated = true;
+            }
+        }
+        // std::cout << "update " << updated << std::endl;
+        // std::getchar();
+        if (updated)
+        {
+            source_data[face_idx].site_indices.push_back(site_idx);
+            for (auto face : mesh->face(face_idx).adjacentFaces())
+            {
+                queue.push(std::make_pair(face.getIndex(), site_idx));
+            }
+        }
+        
+    }
+
+    face_color.resize(n_tri, 3);
+    for (int i = 0; i < n_tri; i++)
+    {
+        if (source_data[i].site_indices.size() == 0)
+            face_color.row(i) = TV(1, 1 , 1);
+        else if (source_data[i].site_indices.size() == 1)
+            face_color.row(i) = TV(0, 1, 0);
+        else if (source_data[i].site_indices.size() == 2)
+            face_color.row(i) = TV(1, 0, 0);
+        else if (source_data[i].site_indices.size() == 3)
+            face_color.row(i) = TV(1, 1, 0);
+        else if (source_data[i].site_indices.size() == 4)
+            face_color.row(i) = TV(0, 1, 1);
+    }
+    use_debug_face_color = true;
+        
 }
