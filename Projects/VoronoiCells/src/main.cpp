@@ -91,7 +91,8 @@ int main(int argc, char** argv)
     else
     {
         VoronoiCells voronoi_cells;
-        voronoi_cells.constructVoronoiDiagram();
+        // voronoi_cells.constructVoronoiDiagram(false);
+        
         VoronoiApp app(voronoi_cells);
         igl::opengl::glfw::Viewer viewer;
         igl::opengl::glfw::imgui::ImGuiMenu menu;

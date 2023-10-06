@@ -1,6 +1,7 @@
 #include <igl/boundary_loop.h>
 #include <igl/edge_lengths.h>
 #include <igl/project.h>
+#include <igl/unproject_onto_mesh.h>
 #include <igl/unproject_on_plane.h>
 #include "../include/App.h"
 
@@ -140,13 +141,13 @@ void VoronoiApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     T reference_length = L.rowwise().sum().sum() / (F.rows() * 3);
 
     TV point_color(1.0, 0.0, 0.0);
-    appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.02 * reference_length, point_color, V, F, C);
+    appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.025 * reference_length, point_color, V, F, C);
 
     TV site_vtx_color(0.0, 0.0, 0.0);
-    appendSpheresToPositions(voronoi_cells.voronoi_cell_vertices, 0.02 * reference_length, site_vtx_color, V, F, C);
+    appendSpheresToPositions(voronoi_cells.voronoi_cell_vertices, 0.05 * reference_length, site_vtx_color, V, F, C);
     
     std::vector<TV3> colors(voronoi_cells.voronoi_edges.size(), TV3(1.0,0.3,0.0));
-    appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.01 * reference_length, V, F, C);
+    appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.02 * reference_length, V, F, C);
 
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -158,28 +159,52 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
 {
     menu.callback_draw_viewer_menu = [&]()
     {
-        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::CollapsingHeader("Settings", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            // if (ImGui::Checkbox("ShowStrain", &show_PKstress))
-            // {
-            //     updateScreen(viewer);
-            // }
+            if (ImGui::Checkbox("geodesic", &geodesic))
+            {
+                updateScreen(viewer);
+            }
+            if (ImGui::Checkbox("exact", &exact))
+            {
+                updateScreen(viewer);
+            }
         }
-        
+        if (ImGui::Button("Generate", ImVec2(-1,0)))
+        {
+            if (geodesic)
+                voronoi_cells.metric = Geodesic;
+            else
+                voronoi_cells.metric = Euclidean;
+            voronoi_cells.samples.clear();
+            voronoi_cells.source_data.clear();
+            voronoi_cells.voronoi_edges.clear();
+            voronoi_cells.voronoi_cells.clear();
+            voronoi_cells.constructVoronoiDiagram(exact, false);
+
+            updateScreen(viewer);
+        }
         if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
         {
-            // tiling.solver.staticSolve();
+            
             updateScreen(viewer);
         }
         
         if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
-            // tiling.solver.reset();
             static_solve_step = 0;
             updateScreen(viewer);
         }
-        
-        
+        if (ImGui::Button("Save", ImVec2(-1,0)))
+        {
+            voronoi_cells.saveVoronoiDiagram();
+            updateScreen(viewer);
+        }
+        if (ImGui::Button("Reload", ImVec2(-1,0)))
+        {
+            voronoi_cells.constructVoronoiDiagram(true);
+            updateScreen(viewer);
+        }
         if (ImGui::Button("Render", ImVec2(-1,0)))
         {
             int w = viewer.core().viewport(2), h = viewer.core().viewport(3);
@@ -194,7 +219,26 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             igl::writeOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/current_mesh.obj", V, F);
         }
         
-    };    
+    }; 
+
+    
+    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
+    {
+        int fid;
+        Eigen::Vector3f bc;
+        // Cast a ray in the view direction starting from the mouse position
+        double x = viewer.current_mouse_x;
+        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        if(igl::unproject_onto_mesh(Eigen::Vector2f(x,y), viewer.core().view,
+            viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
+        {
+            // paint hit red
+            voronoi_cells.saveFacePrism(fid);
+            std::cout << "hit face " << fid << std::endl;
+            return true;
+        }
+        return false;
+    };
 
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
     {

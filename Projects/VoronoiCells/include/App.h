@@ -73,7 +73,8 @@ public:
     virtual void updateScreen(igl::opengl::glfw::Viewer& viewer);
     virtual void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
-
+    bool geodesic = true;
+    bool exact = false;
 
     VoronoiApp(VoronoiCells& cells) : voronoi_cells(cells) {}
     ~VoronoiApp() {}
@@ -96,6 +97,7 @@ public:
 
     VectorXT temporary_vector;
     bool use_temp_vec = false;
+    
 public:
     GeodesicSimApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
     ~GeodesicSimApp() {}
