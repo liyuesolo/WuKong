@@ -1,6 +1,11 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <Eigen/Geometry>
+#include <Eigen/Core>
+#include <Eigen/Sparse>
+#include <Eigen/Dense>
+
 #include "VecMatDef.h"
 
 
@@ -26,5 +31,11 @@ void iglMatrixFatten(const Matrix<_type, Eigen::Dynamic, Eigen::Dynamic>& mat,
 }
 
 void triangulatePointCloud(const Eigen::VectorXd& points, Eigen::VectorXi& triangle_indices);
+
+T computeTriangleArea(const Eigen::Vector3d& v0, 
+    const Eigen::Vector3d& v1, const Eigen::Vector3d& v2, bool signed_area = false);
+
+Eigen::Vector3d computeBarycentricCoordinates(const Eigen::Vector3d& point, 
+    const Eigen::Vector3d& v0, const Eigen::Vector3d& v1, const Eigen::Vector3d& v2);
 
 #endif

@@ -29,26 +29,6 @@
 namespace gcs = geometrycentral::surface;
 namespace gc = geometrycentral;
 
-// #include <CGAL/Surface_mesh.h>
-// #include <CGAL/convex_hull_2.h>
-// #include <CGAL/convex_hull_3.h>
-// #include <CGAL/boost/graph/convert_nef_polyhedron_to_polygon_mesh.h>
-// #include <CGAL/Exact_integer.h>
-// #include <CGAL/Extended_homogeneous.h>
-// #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
-// #include <CGAL/Polyhedron_3.h>
-// #include <CGAL/Nef_polyhedron_3.h>
-// #include <CGAL/IO/Nef_polyhedron_iostream_3.h>
-// #include <CGAL/Aff_transformation_3.h>
-// typedef CGAL::Exact_predicates_exact_constructions_kernel inexact_Kernel;
-// typedef CGAL::Polyhedron_3<inexact_Kernel>  Polyhedron;
-// typedef CGAL::Polygon_2<inexact_Kernel> Polygon_2;
-// typedef CGAL::Nef_polyhedron_3<inexact_Kernel>  Nef_polyhedron;
-// typedef inexact_Kernel::Point_3 Point_3;
-// typedef inexact_Kernel::Point_2 Point_2;
-// typedef inexact_Kernel::Vector_3 Vector_3;
-// typedef inexact_Kernel::Plane_3 Plane_3;
-// typedef CGAL::Aff_transformation_3<inexact_Kernel> Aff_transformation_3;
 
 enum DistanceMetric
 {
@@ -66,7 +46,9 @@ public:
     using TV = Vector<T, 3>;
     using TV2 = Vector<T, 2>;
     using IV = Vector<int, 3>;
+    using IV2 = Vector<int, 2>;
     using TM = Matrix<T, 3, 3>;
+    using TM2 = Matrix<T, 2, 2>;
     using StiffnessMatrix = Eigen::SparseMatrix<T>;
     using Entry = Eigen::Triplet<T>;
     using Face = Vector<int, 3>;
@@ -77,6 +59,19 @@ public:
     using gcVertex = geometrycentral::surface::Vertex;
     using Vector3 = geometrycentral::Vector3;
     using SurfacePoint = geometrycentral::surface::SurfacePoint;
+
+    struct IxnData
+    {
+        TV start, end;
+        T t;
+        int start_vtx_idx, end_vtx_idx;
+        IxnData(const TV& _start, const TV& _end, T _t, int idx0, int idx1) 
+            : start(_start), end(_end), t(_t), start_vtx_idx(idx0),
+            end_vtx_idx(idx1) {};
+        IxnData(const TV& _start, const TV& _end, T _t) 
+            : start(_start), end(_end), t(_t), start_vtx_idx(-1),
+            end_vtx_idx(-1) {};
+    };
 
     struct FaceData
     {
@@ -123,10 +118,31 @@ private:
     }
     void loadGeometry();
     void updateFaceColor();
+    
+    void edgeLengthHessian(const TV& v0, const TV& v1, Matrix<T, 6, 6>& hess)
+    {
+        TV dir = (v1-v0).normalized();
+        hess.setZero();
+        hess.block(0, 0, 3, 3) = (TM::Identity() - dir * dir.transpose())/(v1 - v0).norm();
+        hess.block(3, 3, 3, 3) = hess.block(0, 0, 3, 3);
+        hess.block(0, 3, 3, 3) = -hess.block(0, 0, 3, 3);
+        hess.block(3, 0, 3, 3) = -hess.block(0, 0, 3, 3);
+    }
 public:
+    T computeDistanceMatchingEnergy(const std::vector<int>& site_indices, 
+        SurfacePoint& xi_current);
+    T computeDistanceMatchingGradient(const std::vector<int>& site_indices, 
+        SurfacePoint& xi_current, TV2& grad, T& energy);
+    void computeDistanceMatchingHessian(const std::vector<int>& site_indices, 
+        SurfacePoint& xi_current, TM2& hess);
+    T computeDistanceMatchingEnergyGradientHessian(const std::vector<int>& site_indices, 
+        SurfacePoint& xi_current, TM2& hess, TV2& grad, T& energy);
+    void updateSurfacePoint(SurfacePoint& xi_current, const TV2& search_direction);
+
+    void optimizeForExactVD(std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data);
     void intersectPrisms(std::vector<SurfacePoint>& samples,
             std::vector<FaceData>& source_data, 
-            std::vector<std::pair<TV, TV>>& edges);
+            std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data);
     void intersectPrism(std::vector<SurfacePoint>& samples,
             std::vector<FaceData>& source_data, 
             std::vector<std::pair<TV, TV>>& edges, int face_idx);
@@ -137,8 +153,10 @@ public:
     void saveFacePrism(int face_idx);
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
 
-    T computeGeodesicDistance(const SurfacePoint& a, const SurfacePoint& b);
-
+    void computeGeodesicDistance(const SurfacePoint& a, const SurfacePoint& b,
+        T& dis, std::vector<SurfacePoint>& path, 
+        std::vector<IxnData>& ixn_data, bool trace_path = false);
+    
     
     VoronoiCells() {}
     ~VoronoiCells() {}
