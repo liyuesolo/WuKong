@@ -592,8 +592,8 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
         std::vector<IxnData> ixn_data;
         computeExactGeodesic(vA, vB, geo_dis, path, ixn_data, true);
         // computeExactGeodesicEdgeFlip(vA, vB, geo_dis, path, ixn_data, true);
-        // rest_length[i] = 0.0 * geo_dis;
-        rest_length[i] = geo_dis;
+        rest_length[i] = 0.0 * geo_dis;
+        // rest_length[i] = geo_dis;
         ref_lengths[i] = geo_dis;
         for(int j = 0; j < path.size() - 1; j++)
         {
@@ -660,7 +660,7 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
 void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 {
     use_Newton = true;
-    two_way_coupling = false;
+    two_way_coupling = true;
     
     MatrixXT V; MatrixXi F;
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", 
@@ -789,7 +789,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 
     MatrixXT igl_vertices;
     vectorToIGLMatrix<T, 3>(mass_point_Euclidean, igl_vertices);
-    igl::writeOBJ("triangulation.obj", igl_vertices, igl_tri);
+    // igl::writeOBJ("triangulation.obj", igl_vertices, igl_tri);
 
     triangles.resize(igl_tri.rows());
     for (int i = 0; i < igl_tri.rows(); i++)
@@ -818,7 +818,7 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     initializeNetworkData(edges);
     verbose = false;
 
-    we = 0.01;
+    we = 1.0;
 
 //     if (two_way_coupling)
 //     {

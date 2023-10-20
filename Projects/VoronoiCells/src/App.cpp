@@ -143,11 +143,11 @@ void VoronoiApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     TV point_color(1.0, 0.0, 0.0);
     appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.025 * reference_length, point_color, V, F, C);
 
-    TV site_vtx_color(0.0, 0.0, 0.0);
-    appendSpheresToPositions(voronoi_cells.voronoi_cell_vertices, 0.05 * reference_length, site_vtx_color, V, F, C);
+    // TV site_vtx_color(0.0, 0.0, 0.0);
+    // appendSpheresToPositions(voronoi_cells.voronoi_cell_vertices, 0.05 * reference_length, site_vtx_color, V, F, C);
     
     std::vector<TV3> colors(voronoi_cells.voronoi_edges.size(), TV3(1.0,0.3,0.0));
-    appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.02 * reference_length, V, F, C);
+    appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.005 * reference_length, V, F, C);
 
     viewer.data().clear();
     viewer.data().set_mesh(V, F);
@@ -163,11 +163,29 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         {
             if (ImGui::Checkbox("geodesic", &geodesic))
             {
-                updateScreen(viewer);
+                update_geodesic = true;
             }
             if (ImGui::Checkbox("exact", &exact))
             {
-                updateScreen(viewer);
+                update_exact = true;
+            }
+            if (ImGui::Checkbox("Perimeter", &perimeter))
+            {
+                if (perimeter)
+                    voronoi_cells.objective = Perimeter;
+                voronoi_cells.add_peri = perimeter;
+                update_perimeter = true;
+            }
+            if (ImGui::Checkbox("Centroidal", &CGVD))
+            {
+                if (CGVD)
+                    voronoi_cells.objective = Centroidal;
+                voronoi_cells.add_centroid = CGVD;
+                update_CGVD = true;
+            }
+            if (ImGui::Checkbox("Regularizer", &reg))
+            {
+                voronoi_cells.add_reg = reg;
             }
         }
         if (ImGui::Button("Generate", ImVec2(-1,0)))
@@ -180,19 +198,33 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             voronoi_cells.source_data.clear();
             voronoi_cells.voronoi_edges.clear();
             voronoi_cells.voronoi_cells.clear();
+            voronoi_cells.loadGeometry();
             voronoi_cells.constructVoronoiDiagram(exact, false);
-
+            update_CGVD = false;
+            update_exact = false;
+            update_geodesic = false;
             updateScreen(viewer);
         }
-        if (ImGui::Button("StaticSolve", ImVec2(-1,0)))
+        if (ImGui::Button("Compute", ImVec2(-1,0)))
         {
-            
+            if (update_geodesic)
+                voronoi_cells.constructVoronoiDiagram(exact, false);
+            if (update_exact)
+                voronoi_cells.optimizeForExactVD();
+            if (update_CGVD)
+                voronoi_cells.optimizeForCentroidalVD();
+            if (update_perimeter)
+                voronoi_cells.perimeterMinimizationVD();
+            update_CGVD = false;
+            update_exact = false;
+            update_geodesic = false;
+            update_perimeter = false;
             updateScreen(viewer);
         }
-        
-        if (ImGui::Button("Reset", ImVec2(-1,0)))
+        if (ImGui::Button("Resample", ImVec2(-1,0)))
         {
-            static_solve_step = 0;
+            voronoi_cells.resample(1.0);
+            voronoi_cells.constructVoronoiDiagram(exact, false);
             updateScreen(viewer);
         }
         if (ImGui::Button("Save", ImVec2(-1,0)))
@@ -200,9 +232,10 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             voronoi_cells.saveVoronoiDiagram();
             updateScreen(viewer);
         }
-        if (ImGui::Button("Reload", ImVec2(-1,0)))
+        if (ImGui::Button("Reset", ImVec2(-1,0)))
         {
-            voronoi_cells.constructVoronoiDiagram(true);
+            voronoi_cells.reset();
+            voronoi_cells.constructVoronoiDiagram(exact, false);
             updateScreen(viewer);
         }
         if (ImGui::Button("Render", ImVec2(-1,0)))
@@ -216,7 +249,7 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
-            igl::writeOBJ("/home/yueli/Documents/ETH/WuKong/build/Projects/Tiling2D/current_mesh.obj", V, F);
+            igl::writeOBJ("./current_mesh.obj", V, F);
         }
         
     }; 
@@ -224,6 +257,7 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer& viewer, int, int)->bool
     {
+        return false;
         int fid;
         Eigen::Vector3f bc;
         // Cast a ray in the view direction starting from the mouse position
@@ -239,20 +273,12 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         return false;
     };
-
-    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &) -> bool
-    {
-        if(viewer.core().is_animating && check_modes)
-        {
-        }
-        return false;
-    };
-
+    
     viewer.callback_post_draw = [&](igl::opengl::glfw::Viewer &) -> bool
     {
         if(viewer.core().is_animating && !check_modes)
         {
-            bool finished = true;
+            bool finished = voronoi_cells.advanceOneStep(static_solve_step);
             if (finished)
             {
                 viewer.core().is_animating = false;
@@ -273,15 +299,17 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         default: 
             return false;
         case 's':
-            // tiling.solver.staticSolveStep(static_solve_step++);
+            voronoi_cells.advanceOneStep(static_solve_step++);
             updateScreen(viewer);
             return true;
         case ' ':
-            viewer.core().is_animating = true;
-            // tiling.solver.optimizeIPOPT();
+            viewer.core().is_animating = !viewer.core().is_animating;
             return true;
-        
+        case 'd':
+            voronoi_cells.diffTestScale();
+            return true;
         }
+        return true;
     };
     
     updateScreen(viewer);

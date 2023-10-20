@@ -75,6 +75,15 @@ public:
         igl::opengl::glfw::imgui::ImGuiMenu& menu);
     bool geodesic = true;
     bool exact = false;
+    bool CGVD = false;
+    bool reg = false;
+    bool perimeter = false;
+
+    bool update_geodesic = false;
+    bool update_exact = false;
+    bool update_CGVD = false;
+    bool update_perimeter = false;
+
 
     VoronoiApp(VoronoiCells& cells) : voronoi_cells(cells) {}
     ~VoronoiApp() {}

@@ -35,6 +35,11 @@ enum DistanceMetric
     Geodesic, Euclidean
 };
 
+enum Objective
+{
+    Perimeter, Centroidal, Both
+};
+
 class VoronoiCells
 {
 public:
@@ -99,24 +104,46 @@ public:
 
     int n_sites;
     VectorXT voronoi_sites;
-    VectorXT voronoi_cell_vertices;
+    // VectorXT voronoi_cell_vertices;
 
     std::vector<SurfacePoint> samples;
+    std::vector<SurfacePoint> samples_rest;
     std::vector<FaceData> source_data;
+    std::vector<std::pair<SurfacePoint, std::vector<int>>> unique_ixn_points;
+    std::vector<Edge> valid_VD_edges;
 
     std::vector<VtxList> voronoi_cells;
     std::vector<std::pair<TV, TV>> voronoi_edges;
 
     DistanceMetric metric = Euclidean;    
+    Objective objective = Perimeter;
+
+    std::unordered_map<int, T> dirichlet_data;
+
+    bool verbose = false;
+    int max_newton_iter = 100;
+    int ls_max = 12;
+    T newton_tol = 1e-6;
+    
+    T w_reg = 1.0;
+    T w_centroid = 1.0;
+    T w_peri = 1.0;
+    bool add_reg = false;
+    bool add_centroid = false;
+    bool add_peri = false;
 
 private:
-    // void triangulatePointCloud(const VectorXT& points, VectorXi& triangle_indices);
+    template <class OP>
+    void iterateDirichletDoF(const OP& f) {
+        for (auto dirichlet: dirichlet_data){
+            f(dirichlet.first, dirichlet.second);
+        } 
+    }
     
     TV toTV(const Vector3& vec) const
     {
         return TV(vec.x, vec.y, vec.z);
     }
-    void loadGeometry();
     void updateFaceColor();
     
     void edgeLengthHessian(const TV& v0, const TV& v1, Matrix<T, 6, 6>& hess)
@@ -128,7 +155,111 @@ private:
         hess.block(0, 3, 3, 3) = -hess.block(0, 0, 3, 3);
         hess.block(3, 0, 3, 3) = -hess.block(0, 0, 3, 3);
     }
+
+    template<int dim = 2>
+    void addForceEntry(VectorXT& residual, 
+        const std::vector<int>& vtx_idx, 
+        const VectorXT& gradient, int shift = 0)
+    {
+        for (int i = 0; i < vtx_idx.size(); i++)
+            residual.template segment<dim>(vtx_idx[i] * dim + shift) += gradient.template segment<dim>(i * dim);
+    }
+
+    template<int dim_row=2, int dim_col=2>
+    void addHessianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx, 
+        const MatrixXT& hessian, 
+        int shift_row = 0, int shift_col=0)
+    {
+        
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx.size(); j++)
+            {
+                int dof_j = vtx_idx[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
+                        triplets.push_back(
+                            Entry(
+                                dof_i * dim_row + k + shift_row, 
+                                dof_j * dim_col + l + shift_col, 
+                                hessian(i * dim_row + k, j * dim_col + l)
+                            ));                
+            }
+        }
+    }
+
+    template<int dim_row=2, int dim_col=2>
+    void addJacobianEntry(
+        std::vector<Entry>& triplets,
+        const std::vector<int>& vtx_idx,
+        const std::vector<int>& vtx_idx2, 
+        const MatrixXT& jacobian, 
+        int shift_row = 0, int shift_col=0)
+    {
+        
+        for (int i = 0; i < vtx_idx.size(); i++)
+        {
+            int dof_i = vtx_idx[i];
+            for (int j = 0; j < vtx_idx2.size(); j++)
+            {
+                int dof_j = vtx_idx2[j];
+                for (int k = 0; k < dim_row; k++)
+                    for (int l = 0; l < dim_col; l++)
+                        triplets.push_back(
+                            Entry(
+                                dof_i * dim_row + k + shift_row, 
+                                dof_j * dim_col + l + shift_col, 
+                                jacobian(i * dim_row + k, j * dim_col + l)
+                            ));                
+            }
+        }
+    }
+
+    void projectDirichletDoFMatrix(StiffnessMatrix& A, const std::unordered_map<int, T>& data)
+    {
+        for (auto iter : data)
+        {
+            A.row(iter.first) *= 0.0;
+            A.col(iter.first) *= 0.0;
+            A.coeffRef(iter.first, iter.first) = 1.0;
+        }
+    }
+
+
 public:
+    void loadGeometry();
+    void resample(int resolution = 1.0);
+    void reset();
+
+    bool advanceOneStep(int step);
+    T computeTotalEnergy();
+    T computeResidual(VectorXT& residual);
+    void buildSystemMatrix(StiffnessMatrix& K);
+    T lineSearchNewton(const VectorXT& residual);
+
+    T addRegEnergy(T w);
+    void addRegForceEntries(VectorXT& grad, T w);
+    void addRegHessianEntries(std::vector<Entry>& entries, T w);
+
+    // Objectives.cpp
+    T computeCentroidalVDEnergy(T w = 1.0);
+    T computeCentroidalVDGradient(VectorXT& grad, T& energy, T w = 1.0);
+    T computeCentroidalVDHessian(StiffnessMatrix& hess, VectorXT& grad, T& energy, T w = 1.0);
+    
+    void addCentroidalVDForceEntries(VectorXT& grad, T w = 1.0);
+    void addCentroidalVDHessianEntries(std::vector<Entry>& entries, T w);
+
+    T computePerimeterMinimizationEnergy(T w = 1.0);
+    T computePerimeterMinimizationGradient(VectorXT& grad, T& energy, T w = 1.0);
+    T computePerimeterMinimizationHessian(StiffnessMatrix& hess, VectorXT& grad, T& energy, T w = 1.0);
+    
+    void addPerimeterMinimizationForceEntries(VectorXT& grad, T w = 1.0);
+    void addPerimeterMinimizationHessianEntries(std::vector<Entry>& entries, T w);
+
+
     T computeDistanceMatchingEnergy(const std::vector<int>& site_indices, 
         SurfacePoint& xi_current);
     T computeDistanceMatchingGradient(const std::vector<int>& site_indices, 
@@ -137,15 +268,22 @@ public:
         SurfacePoint& xi_current, TM2& hess);
     T computeDistanceMatchingEnergyGradientHessian(const std::vector<int>& site_indices, 
         SurfacePoint& xi_current, TM2& hess, TV2& grad, T& energy);
+
+
+    // Voronoi.cpp      
+    bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);  
     void updateSurfacePoint(SurfacePoint& xi_current, const TV2& search_direction);
 
-    void optimizeForExactVD(std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data);
+    void optimizeForExactVD();
+    void optimizeForCentroidalVD();
+    void diffTestScale();
+    void perimeterMinimizationVD();
     void intersectPrisms(std::vector<SurfacePoint>& samples,
-            std::vector<FaceData>& source_data, 
-            std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data);
+        const std::vector<FaceData>& source_data, 
+        std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data);
     void intersectPrism(std::vector<SurfacePoint>& samples,
-            std::vector<FaceData>& source_data, 
-            std::vector<std::pair<TV, TV>>& edges, int face_idx);
+        std::vector<FaceData>& source_data, 
+        std::vector<std::pair<TV, TV>>& edges, int face_idx);
     void propogateDistanceField(std::vector<SurfacePoint>& samples,
         std::vector<FaceData>& source_data);
     void constructVoronoiDiagram(bool exact = false, bool load_from_file = false);
@@ -157,6 +295,21 @@ public:
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, bool trace_path = false);
     
+    // VoronoiDerivatives.cpp
+    T computeGeodesicLengthAndGradient(const SurfacePoint& vA,
+        const SurfacePoint& vB, Vector<T, 4>& dldw);
+    T computeGeodesicLengthAndGradientAndHessian(const SurfacePoint& vA,
+        const SurfacePoint& vB, Vector<T, 4>& dldw, Matrix<T, 4, 4>& d2ldw2);
+    T computeGeodesicLengthAndGradientEdgePoint(const SurfacePoint& vA,
+        const SurfacePoint& vB, Vector<T, 3>& dldw);
+    void computeGeodesicLengthGradient(const SurfacePoint& vA,
+        const SurfacePoint& vB, Vector<T, 4>& dldw);
+    void computeGeodesicLengthGradientEdgePoint(const gcs::Halfedge& he, 
+        const SurfacePoint& vA, const SurfacePoint& vB, Vector<T, 3>& dldw);
+    bool computeDxDs(const SurfacePoint& x, 
+        const std::vector<int>& site_indices, 
+        MatrixXT& dx_tilde_ds, bool reduced = false);
+
     
     VoronoiCells() {}
     ~VoronoiCells() {}

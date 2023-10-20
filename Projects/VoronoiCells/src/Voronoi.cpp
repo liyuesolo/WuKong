@@ -1,3 +1,5 @@
+#include <mutex>
+#include <Eigen/CholmodSupport>
 #include <igl/readOBJ.h>
 #include <igl/edges.h>
 #include <igl/per_vertex_normals.h>
@@ -20,6 +22,9 @@
 #include "geometrycentral/surface/vertex_position_geometry.h"
 #include "geometrycentral/utilities/timing.h"
 #include "geometrycentral/surface/exact_geodesics.h"
+
+#include "../../../Solver/MMASolver.h"
+#include "../../../Solver/GCMMASolver.h"
 
 #include "../include/Util.h"
 
@@ -198,7 +203,8 @@ void VoronoiCells::propogateDistanceField(std::vector<SurfacePoint>& samples,
     // START_TIMING(MMPallNodes)
     if (metric == Geodesic)
     {
-        tbb::parallel_for(0, n_samples, [&](int i)
+        std::mutex m;
+        tbb::parallel_for(0, n_samples, [&](int sample_idx)
         {
             int n_tri = extrinsic_indices.rows() / 3;
             std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
@@ -222,8 +228,19 @@ void VoronoiCells::propogateDistanceField(std::vector<SurfacePoint>& samples,
                                                                     std::move(std::get<1>(lvals))); // geometry
             
             gcs::GeodesicAlgorithmExact mmp(*sub_mesh, *sub_geometry);
-            mmp.propagate(samples[i]);
-            dis_to_sources[i] = mmp.getDistanceFunction();
+            SurfacePoint sample_i(sub_mesh->face(samples[sample_idx].face.getIndex()), 
+                samples[sample_idx].faceCoords);
+            
+            mmp.propagate(sample_i.inSomeFace());
+            gcs::VertexData<T> distance_sub = mmp.getDistanceFunction();
+            m.lock();
+            gcs::VertexData<T> distances(*mesh);
+            for (gcVertex v : mesh->vertices()) 
+            {
+                distances[v] = distance_sub[sub_mesh->vertex(v.getIndex())];
+            }
+            dis_to_sources[sample_idx] = distances;
+            m.unlock();
         });
     }
     // FINISH_TIMING_PRINT(MMPallNodes)
@@ -291,26 +308,13 @@ void VoronoiCells::propogateDistanceField(std::vector<SurfacePoint>& samples,
             current_distance[0] = dis_to_sources[site_idx][mesh->face(face_idx).halfedge().vertex()];
             current_distance[1] = dis_to_sources[site_idx][mesh->face(face_idx).halfedge().next().vertex()];
             current_distance[2] = dis_to_sources[site_idx][mesh->face(face_idx).halfedge().next().next().vertex()];
-            // std::vector<IxnData> ixn_data;
-            // std::vector<SurfacePoint> path; 
-            // SurfacePoint vtx0 = SurfacePoint(mesh->face(face_idx).halfedge().vertex()).inSomeFace();
-            // SurfacePoint vtx1 = SurfacePoint(mesh->face(face_idx).halfedge().next().vertex()).inSomeFace();
-            // SurfacePoint vtx2 = SurfacePoint(mesh->face(face_idx).halfedge().next().next().vertex()).inSomeFace();
-            // std::vector<SurfacePoint> vertices = {vtx0, vtx1, vtx2};
-            // tbb::parallel_for(0, 3, [&](int i)
-            // {
-            //     computeGeodesicDistance(pt, vertices[i], 
-            //         current_distance[i], path, ixn_data, false);
-            // });
-            
         }
         else
         {
             std::cout << "Unknown metric!!!! set to Euclidean" << std::endl;
             metric = Euclidean;
         }
-        // std::cout << "site " << site_idx << " pos " << site_location.transpose() << std::endl;
-        // std::cout << "face " << face_idx << " dis " << current_distance.transpose() << " " << source_data[face_idx].distances.transpose() << std::endl;
+        
         bool updated = true;
         
         for (int i = 0; i < source_data[face_idx].site_indices.size(); i++)
@@ -343,15 +347,13 @@ void VoronoiCells::propogateDistanceField(std::vector<SurfacePoint>& samples,
 }
 
 void VoronoiCells::intersectPrisms(std::vector<SurfacePoint>& samples,
-            std::vector<FaceData>& source_data, 
-            std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data)
+    const std::vector<FaceData>& source_data, 
+    std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data)
 {
     // return;
     T max_h = 1.0;
-    T EPSILON = 1e-12;
-
-
-
+    T EPSILON = 1e-14;
+    ixn_data.clear();
     // check if pt is the same as v0, v1, v2
     auto check_if_existing_projection = [&](const TV2& v0, 
         const TV2& v1, const TV2& v2, const TV2& pt) -> bool
@@ -364,8 +366,7 @@ void VoronoiCells::intersectPrisms(std::vector<SurfacePoint>& samples,
             return true;
         return false;
     };
-    // std::vector<std::vector<std::pair<TV, TV>>> edges_thread(source_data.size(), 
-    //     std::vector<std::pair<TV, TV>>());
+    
     std::vector<std::vector<std::pair<SurfacePoint, std::vector<int>>>> ixn_data_thread(source_data.size(),
         std::vector<std::pair<SurfacePoint, std::vector<int>>>());
 
@@ -390,7 +391,6 @@ void VoronoiCells::intersectPrisms(std::vector<SurfacePoint>& samples,
         TV v1 = toTV(geometry->vertexPositions[mesh->face(face_idx).halfedge().next().vertex()]);
         TV v2 = toTV(geometry->vertexPositions[mesh->face(face_idx).halfedge().next().next().vertex()]);
         // std::cout << "geometry done" << std::endl;
-
 
         // rigidly transform to center
         TV trans = (v0 + v1 + v2) / 3.0;
@@ -970,11 +970,34 @@ void VoronoiCells::saveVoronoiDiagram()
     out.close();
 }
 
+void VoronoiCells::reset()
+{
+    voronoi_sites.resize(0);
+    valid_VD_edges.clear();
+    source_data.clear();
+    unique_ixn_points.clear();
+    samples = samples_rest;
+    n_sites = samples.size();
+}
+
+void VoronoiCells::resample(int resolution)
+{
+    samples.clear();
+    voronoi_sites.resize(0);
+    valid_VD_edges.clear();
+    source_data.clear();
+    unique_ixn_points.clear();
+    gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
+    samples = poissonSampler.sample(resolution);
+    n_sites = samples.size();
+    samples_rest = samples;
+}
+
 void VoronoiCells::loadGeometry()
 {
     MatrixXT V; MatrixXi F;
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", V, F);
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", V, F);
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", V, F);
     MatrixXT N;
     igl::per_vertex_normals(V, F, N);
 
@@ -998,401 +1021,13 @@ void VoronoiCells::loadGeometry()
                     std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
                                                              std::move(std::get<1>(lvals))); // geometry
 
-    
+    gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
+    samples = poissonSampler.sample(1.0);
+    n_sites = samples.size();
+    samples_rest = samples;
 }
 
-T VoronoiCells::computeDistanceMatchingEnergy(const std::vector<int>& site_indices, 
-    SurfacePoint& xi_current)
-{
-    T energy = 0.0;
-    TV current = toTV(xi_current.interpolate(geometry->vertexPositions));
-    TV site0_location = toTV(samples[site_indices[0]].interpolate(geometry->vertexPositions));
-    T dis_to_site0;
-    std::vector<IxnData> ixn_data_site;
-    std::vector<SurfacePoint> path; 
-    if (metric == Euclidean)
-        dis_to_site0 = (current - site0_location).norm();
-    else
-        computeGeodesicDistance(samples[site_indices[0]], xi_current, 
-            dis_to_site0, path, ixn_data_site, false);
-    
-    for (int j = 1; j < site_indices.size(); j++)
-    {
-        int site_idx = site_indices[j];
-        
-        TV site_location = toTV(samples[site_indices[j]].interpolate(geometry->vertexPositions));
-        T dis_to_site;
-        if (metric == Euclidean)
-            dis_to_site = (current - site_location).norm();
-        else
-            computeGeodesicDistance(samples[site_idx], xi_current, dis_to_site,
-                path, ixn_data_site, false);
-        energy += 0.5 * std::pow(dis_to_site - dis_to_site0, 2);
-    }
-    return energy;
-}
 
-T VoronoiCells::computeDistanceMatchingGradient(const std::vector<int>& site_indices, 
-    SurfacePoint& xi_current, TV2& grad, T& energy)
-{
-    grad = TV2::Zero();
-    energy = 0.0;
-    TV current = toTV(xi_current.interpolate(geometry->vertexPositions));
-    TV site0_location = toTV(samples[site_indices[0]].interpolate(geometry->vertexPositions));
-    TV v0 = toTV(geometry->vertexPositions[xi_current.face.halfedge().vertex()]);
-    TV v1 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().vertex()]);
-    TV v2 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().next().vertex()]);
-
-    // std::cout << "face# " << fi.getIndex() << " xi " << current.transpose() << std::endl;
-    TV bary = toTV(xi_current.faceCoords);
-    TV pt = v0 * bary[0] + v1 * bary[1] + v2 * bary[2];
-    // std::cout << pt.transpose() << " " << current.transpose() << std::endl;
-    // std::getchar();
-
-    // std::cout << v0.transpose() << " " << v1.transpose() << " " << v2.transpose() << std::endl;
-    T dis_to_site0;
-    Matrix<T, 3, 2> dxdw; 
-    dxdw.col(0) = v0 - v2;
-    dxdw.col(1) = v1 - v2;
-    
-    TV dldx0;
-    if (metric == Euclidean)
-    {
-        dis_to_site0 = (current - site0_location).norm();
-        dldx0 = (current - site0_location).normalized();
-    }
-    else
-    {
-        std::vector<IxnData> ixn_data_site;
-        std::vector<SurfacePoint> path;
-        computeGeodesicDistance(samples[site_indices[0]], xi_current, dis_to_site0, path, 
-            ixn_data_site, true);
-        int length = path.size();
-        
-        TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-        TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-        if (length == 2)
-        {
-            dldx0 = (vtx1 - vtx0).normalized();
-        }
-        else
-        {
-            TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-            dldx0 = -(ixn1 - vtx1).normalized();
-        }
-    }
-    
-    for (int j = 1; j < site_indices.size(); j++)
-    {
-        int site_idx = site_indices[j];
-        TV site_location = toTV(samples[site_indices[j]].interpolate(geometry->vertexPositions));
-        T dis_to_site;
-        TV dldxj;
-        if (metric == Euclidean)
-        {
-            dis_to_site = (current - site_location).norm();
-            dldxj = (current - site_location).normalized();
-        }
-        else
-        {
-            std::vector<IxnData> ixn_data_site;
-            std::vector<SurfacePoint> path; 
-
-            computeGeodesicDistance(samples[site_idx], xi_current, dis_to_site,
-                path, ixn_data_site, true);
-
-            int length = path.size();
-        
-            TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-            TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-            if (length == 2)
-            {
-                dldxj = (vtx1 - vtx0).normalized();
-            }
-            else
-            {
-                TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-                dldxj = -(ixn1 - vtx1).normalized();
-            }
-        }
-        
-        // std::cout << site0_location.transpose() << " " << site_location.transpose() << std::endl;
-        // std::cout << "dis_to_site0 " << dis_to_site0 << " dis_to_site " << dis_to_site << std::endl;
-        energy += 0.5 * std::pow(dis_to_site - dis_to_site0, 2); 
-
-        T dOdl = (dis_to_site - dis_to_site0); 
-        
-        grad += dOdl * -dxdw.transpose() * dldx0;
-        grad += dOdl * dxdw.transpose() * dldxj;
-    }
-    return grad.norm();
-}
-
-void VoronoiCells::computeDistanceMatchingHessian(const std::vector<int>& site_indices, 
-        SurfacePoint& xi_current, TM2& hess)
-{
-    hess = TM2::Zero();
-    
-    TV current = toTV(xi_current.interpolate(geometry->vertexPositions));
-    TV site0_location = toTV(samples[site_indices[0]].interpolate(geometry->vertexPositions));
-    TV v0 = toTV(geometry->vertexPositions[xi_current.face.halfedge().vertex()]);
-    TV v1 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().vertex()]);
-    TV v2 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().next().vertex()]);
-
-    T dis_to_site0;
-    Matrix<T, 3, 2> dxdw; 
-    dxdw.col(0) = v0 - v2;
-    dxdw.col(1) = v1 - v2;
-    
-    TV dldx0;
-    TM d2ldx02;
-    if (metric == Euclidean)
-    {
-        dis_to_site0 = (current - site0_location).norm();
-        dldx0 = (current - site0_location).normalized();
-        d2ldx02 = (TM::Identity() - dldx0 * dldx0.transpose()) / dis_to_site0;
-    }
-    else
-    {
-        std::vector<IxnData> ixn_data_site;
-        std::vector<SurfacePoint> path;
-        computeGeodesicDistance(samples[site_indices[0]], xi_current, dis_to_site0, path, 
-            ixn_data_site, true);
-        int length = path.size();
-        
-        TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-        TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-        if (length == 2)
-        {
-            dldx0 = (vtx1 - vtx0).normalized();
-            d2ldx02 = (TM::Identity() - dldx0 * dldx0.transpose()) / dis_to_site0;
-        }
-        else
-        {
-            TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-            dldx0 = -(ixn1 - vtx1).normalized();
-        }
-    }
-    
-    for (int j = 1; j < site_indices.size(); j++)
-    {
-        int site_idx = site_indices[j];
-        TV site_location = toTV(samples[site_indices[j]].interpolate(geometry->vertexPositions));
-        T dis_to_site;
-        TV dldxj;
-        TM d2ldxj2;
-        if (metric == Euclidean)
-        {
-            dis_to_site = (current - site_location).norm();
-            dldxj = (current - site_location).normalized();
-            d2ldxj2 = (TM::Identity() - dldxj * dldxj.transpose()) / dis_to_site;
-        }
-        else
-        {
-            std::vector<IxnData> ixn_data_site;
-            std::vector<SurfacePoint> path; 
-
-            computeGeodesicDistance(samples[site_idx], xi_current, dis_to_site,
-                path, ixn_data_site, true);
-
-            int length = path.size();
-        
-            TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-            TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-            if (length == 2)
-            {
-                dldxj = (vtx1 - vtx0).normalized();
-            }
-            else
-            {
-                TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-                dldxj = -(ixn1 - vtx1).normalized();
-
-                int ixn_dof = (length - 2) * 3;
-                MatrixXT dfdc(ixn_dof, 3); dfdc.setZero();
-                MatrixXT dfdx(ixn_dof, ixn_dof); dfdx.setZero();
-                MatrixXT dxdt(ixn_dof, length-2); dxdt.setZero();
-                MatrixXT d2gdcdx(ixn_dof, 3); d2gdcdx.setZero();
-
-                for (int ixn_id = 0; ixn_id < length - 3; ixn_id++)
-                {
-                    // std::cout << "inside" << std::endl;
-                    Matrix<T, 6, 6> hess;
-                    TV ixn_i = toTV(path[1 + ixn_id].interpolate(geometry->vertexPositions));
-                    TV ixn_j = toTV(path[1 + ixn_id+1].interpolate(geometry->vertexPositions));
-
-                    edgeLengthHessian(ixn_i, ixn_j, hess);
-                    dfdx.block(ixn_id*3, ixn_id * 3, 6, 6) += hess;
-                }
-                for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
-                {
-                    TV x_start = ixn_data_site[1+ixn_id].start;
-                    TV x_end = ixn_data_site[1+ixn_id].end;
-                    dxdt.block(ixn_id * 3, ixn_id, 3, 1) = (x_end - x_start);
-                }
-                TM dlndxn = (TM::Identity() - dldxj * dldxj.transpose()) / (ixn1 - vtx1).norm();
-                dfdx.block(ixn_dof-3, ixn_dof-3, 3, 3) += dlndxn;
-                dfdc.block(ixn_dof-3, 0, 3, 3) += -dlndxn;
-                d2gdcdx.block(ixn_dof-3, 0, 3, 3) += -dlndxn;
-
-                MatrixXT dxdtd2gdxdc = dxdt.transpose() * d2gdcdx;
-                MatrixXT dxdtd2gdx2dxdt = dxdt.transpose() * dfdx * dxdt;
-                MatrixXT dtdc = dxdtd2gdx2dxdt.colPivHouseholderQr().solve(-dxdtd2gdxdc);
-
-
-                TM d2gdc2 = dlndxn;
-
-                d2ldxj2 = d2gdc2 + d2gdcdx.transpose() * dxdt * dtdc;
-            }
-        }
-        
-        // std::cout << site0_location.transpose() << " " << site_location.transpose() << std::endl;
-        // std::cout << "dis_to_site0 " << dis_to_site0 << " dis_to_site " << dis_to_site << std::endl;
-
-        T dOdl = (dis_to_site - dis_to_site0); 
-        TV2 dldw = dxdw.transpose() * (dldxj - dldx0);
-
-        // grad += dOdl * dldw
-        // hess += dOdl * d2ldw2 + dldw^T d2Odl2 * dldw 
-        hess += dldw * dldw.transpose();
-    }
-    
-}
-
-T VoronoiCells::computeDistanceMatchingEnergyGradientHessian(const std::vector<int>& site_indices, 
-        SurfacePoint& xi_current, TM2& hess, TV2& grad, T& energy)
-{
-    hess = TM2::Zero();
-    grad = TV2::Zero();
-    energy = 0.0;
-
-    TV current = toTV(xi_current.interpolate(geometry->vertexPositions));
-    TV site0_location = toTV(samples[site_indices[0]].interpolate(geometry->vertexPositions));
-    TV v0 = toTV(geometry->vertexPositions[xi_current.face.halfedge().vertex()]);
-    TV v1 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().vertex()]);
-    TV v2 = toTV(geometry->vertexPositions[xi_current.face.halfedge().next().next().vertex()]);
-
-    T dis_to_site0;
-    Matrix<T, 3, 2> dxdw; 
-    dxdw.col(0) = v0 - v2;
-    dxdw.col(1) = v1 - v2;
-    
-    TV dldx0;
-    TM d2ldx02;
-    if (metric == Euclidean)
-    {
-        dis_to_site0 = (current - site0_location).norm();
-        dldx0 = (current - site0_location).normalized();
-        d2ldx02 = (TM::Identity() - dldx0 * dldx0.transpose()) / dis_to_site0;
-    }
-    else
-    {
-        std::vector<IxnData> ixn_data_site;
-        std::vector<SurfacePoint> path;
-        computeGeodesicDistance(samples[site_indices[0]], xi_current, dis_to_site0, path, 
-            ixn_data_site, true);
-        int length = path.size();
-        
-        TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-        TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-        if (length == 2)
-        {
-            dldx0 = (vtx1 - vtx0).normalized();
-            d2ldx02 = (TM::Identity() - dldx0 * dldx0.transpose()) / dis_to_site0;
-        }
-        else
-        {
-            TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-            dldx0 = -(ixn1 - vtx1).normalized();
-        }
-    }
-    
-    for (int j = 1; j < site_indices.size(); j++)
-    {
-        int site_idx = site_indices[j];
-        TV site_location = toTV(samples[site_indices[j]].interpolate(geometry->vertexPositions));
-        T dis_to_site;
-        TV dldxj;
-        TM d2ldxj2;
-        if (metric == Euclidean)
-        {
-            dis_to_site = (current - site_location).norm();
-            dldxj = (current - site_location).normalized();
-            d2ldxj2 = (TM::Identity() - dldxj * dldxj.transpose()) / dis_to_site;
-        }
-        else
-        {
-            std::vector<IxnData> ixn_data_site;
-            std::vector<SurfacePoint> path; 
-
-            computeGeodesicDistance(samples[site_idx], xi_current, dis_to_site,
-                path, ixn_data_site, true);
-
-            int length = path.size();
-        
-            TV vtx0 = toTV(path[0].interpolate(geometry->vertexPositions));
-            TV vtx1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
-            if (length == 2)
-            {
-                dldxj = (vtx1 - vtx0).normalized();
-            }
-            else
-            {
-                TV ixn1 = toTV(path[length - 2].interpolate(geometry->vertexPositions));
-                dldxj = -(ixn1 - vtx1).normalized();
-
-                int ixn_dof = (length - 2) * 3;
-                MatrixXT dfdc(ixn_dof, 3); dfdc.setZero();
-                MatrixXT dfdx(ixn_dof, ixn_dof); dfdx.setZero();
-                MatrixXT dxdt(ixn_dof, length-2); dxdt.setZero();
-                MatrixXT d2gdcdx(ixn_dof, 3); d2gdcdx.setZero();
-
-                for (int ixn_id = 0; ixn_id < length - 3; ixn_id++)
-                {
-                    // std::cout << "inside" << std::endl;
-                    Matrix<T, 6, 6> hess;
-                    TV ixn_i = toTV(path[1 + ixn_id].interpolate(geometry->vertexPositions));
-                    TV ixn_j = toTV(path[1 + ixn_id+1].interpolate(geometry->vertexPositions));
-
-                    edgeLengthHessian(ixn_i, ixn_j, hess);
-                    dfdx.block(ixn_id*3, ixn_id * 3, 6, 6) += hess;
-                }
-                for (int ixn_id = 0; ixn_id < length - 2; ixn_id++)
-                {
-                    TV x_start = ixn_data_site[1+ixn_id].start;
-                    TV x_end = ixn_data_site[1+ixn_id].end;
-                    dxdt.block(ixn_id * 3, ixn_id, 3, 1) = (x_end - x_start);
-                }
-                TM dlndxn = (TM::Identity() - dldxj * dldxj.transpose()) / (ixn1 - vtx1).norm();
-                dfdx.block(ixn_dof-3, ixn_dof-3, 3, 3) += dlndxn;
-                dfdc.block(ixn_dof-3, 0, 3, 3) += -dlndxn;
-                d2gdcdx.block(ixn_dof-3, 0, 3, 3) += -dlndxn;
-
-                MatrixXT dxdtd2gdxdc = dxdt.transpose() * d2gdcdx;
-                MatrixXT dxdtd2gdx2dxdt = dxdt.transpose() * dfdx * dxdt;
-                MatrixXT dtdc = dxdtd2gdx2dxdt.colPivHouseholderQr().solve(-dxdtd2gdxdc);
-
-
-                TM d2gdc2 = dlndxn;
-
-                d2ldxj2 = d2gdc2 + d2gdcdx.transpose() * dxdt * dtdc;
-            }
-        }
-        
-        // std::cout << site0_location.transpose() << " " << site_location.transpose() << std::endl;
-        // std::cout << "dis_to_site0 " << dis_to_site0 << " dis_to_site " << dis_to_site << std::endl;
-
-        T dOdl = (dis_to_site - dis_to_site0); 
-        TV2 dldw = dxdw.transpose() * (dldxj - dldx0);
-
-        energy += 0.5 * std::pow(dis_to_site - dis_to_site0, 2); 
-        
-        grad += dOdl * -dxdw.transpose() * dldx0;
-        grad += dOdl * dxdw.transpose() * dldxj;
-        hess += dldw * dldw.transpose();
-    }
-    return grad.norm();
-}
 
 void VoronoiCells::updateSurfacePoint(SurfacePoint& xi_current, const TV2& search_direction)
 {
@@ -1435,9 +1070,12 @@ void VoronoiCells::updateSurfacePoint(SurfacePoint& xi_current, const TV2& searc
     }
 }
 
-void VoronoiCells::optimizeForExactVD(std::vector<std::pair<SurfacePoint, std::vector<int>>>& ixn_data)
+void VoronoiCells::optimizeForExactVD()
 {
-    int n_ixn = ixn_data.size();
+    START_TIMING(ExactVoronoi)
+    
+    int n_ixn = unique_ixn_points.size();
+    
 
 #ifdef PARALLEL
     tbb::parallel_for(0, n_ixn, [&](int i)
@@ -1446,8 +1084,13 @@ void VoronoiCells::optimizeForExactVD(std::vector<std::pair<SurfacePoint, std::v
 #endif
     {
         
-        SurfacePoint xi = ixn_data[i].first.inSomeFace();
-        std::vector<int> site_indices = ixn_data[i].second;
+        SurfacePoint& xi = unique_ixn_points[i].first;
+        // std::cout << toTV(xi.interpolate(geometry->vertexPositions)).transpose() << std::endl;
+        // updateSurfacePoint(xi, TV2(0.5, 0.1));
+        // std::cout << toTV(xi.interpolate(geometry->vertexPositions)).transpose() << std::endl;
+        // std::cout << toTV(unique_ixn_points[i].first.interpolate(geometry->vertexPositions)).transpose() << std::endl;
+        // return;
+        std::vector<int> site_indices = unique_ixn_points[i].second;
     
 
         auto fdCheckGradient = [&]()
@@ -1562,16 +1205,362 @@ void VoronoiCells::optimizeForExactVD(std::vector<std::pair<SurfacePoint, std::v
 #ifdef PARALLEL
     );
 #endif
+    
+    voronoi_edges.resize(0);
+    for (int i = 0; i < valid_VD_edges.size(); i++)
+    {
+        int idx0 = valid_VD_edges[i][0];
+        int idx1 = valid_VD_edges[i][1];
+        TV v0 = toTV(unique_ixn_points[idx0].first.interpolate(geometry->vertexPositions));
+        TV v1 = toTV(unique_ixn_points[idx1].first.interpolate(geometry->vertexPositions));
+        voronoi_edges.push_back(std::make_pair(v0, v1));
+    }   
+    FINISH_TIMING_PRINT(ExactVoronoi)
+}
+
+bool VoronoiCells::linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du)
+{
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    // Eigen::CholmodSupernodalLLT<StiffnessMatrix> solver;
+    
+    T alpha = 1e-6;
+    StiffnessMatrix H(K.rows(), K.cols());
+    H.setIdentity(); H.diagonal().array() = 1e-10;
+    K += H;
+    solver.analyzePattern(K);
+    // T time_analyze = t.elapsed_sec();
+    // std::cout << "\t analyzePattern takes " << time_analyze << "s" << std::endl;
+    
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+
+    for (int i = 0; i < 50; i++)
+    {
+        solver.factorize(K);
+        // std::cout << "factorize" << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            K.diagonal().array() += alpha;
+            alpha *= 10;
+            indefinite_count_reg_cnt++;
+            continue;
+        }
+
+        du = solver.solve(residual);
+        
+        T dot_dx_g = du.normalized().dot(residual.normalized());
+
+        int num_negative_eigen_values = 0;
+        int num_zero_eigen_value = 0;
+
+        bool positive_definte = num_negative_eigen_values == 0;
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        if (!search_dir_correct_sign)
+        {   
+            invalid_search_dir_cnt++;
+        }
+        
+        // bool solve_success = true;
+        // bool solve_success = (K * du - residual).norm() / residual.norm() < 1e-6;
+        bool solve_success = du.norm() < 1e3;
+        
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+        if (positive_definte && search_dir_correct_sign && solve_success)
+        {
+            
+            // if (verbose)
+            {
+                std::cout << "\t===== Linear Solve ===== " << std::endl;
+                std::cout << "\tnnz: " << K.nonZeros() << std::endl;
+                // std::cout << "\t takes " << t.elapsed_sec() << "s" << std::endl;
+                std::cout << "\t# regularization step " << i 
+                    << " indefinite " << indefinite_count_reg_cnt 
+                    << " invalid search dir " << invalid_search_dir_cnt
+                    << " invalid solve " << invalid_residual_cnt << std::endl;
+                std::cout << "\tdot(search, -gradient) " << dot_dx_g << std::endl;
+                std::cout << "\t======================== " << std::endl;
+            }
+            return true;
+        }
+        else
+        {
+            K.diagonal().array() += alpha;
+            alpha *= 10;
+        }
+    }
+    return false;
+}
+
+void VoronoiCells::perimeterMinimizationVD()
+{
+    START_TIMING(PerimeterMinimization)
+
+    T E0;
+    int max_iter = 400;
+    int iter = 0;
+    T tol = 1e-6;
+    int ls_max = 12;
+    dirichlet_data[0] = 0.0;
+    dirichlet_data[1] = 0.0;
+
+    // MMASolver mma(samples.size() * 2, 0);
+    // mma.SetAsymptotes(0.2, 0.65, 1.05);
+
+    GCMMASolver gcmma(samples.size() * 2, 0);
+
+    for (int iter = 0; iter < max_iter; iter++)
+    {
+        VectorXT grad;
+        T O = 0.0;
+        T g_norm = computePerimeterMinimizationGradient(grad, O);
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            grad[offset] = 0;
+        });
+        if (iter == 0) E0 = O;
+        std::cout << "[MMA] iter " << iter << " |g|: " << g_norm << " obj: " << O << " obj0: " << E0 << std::endl;
+        
+        if (g_norm < tol)
+            break;
+
+        VectorXT current(samples.size() * 2);
+        for (size_t i = 0; i < samples.size(); i++)
+        {
+            TV bary = toTV(samples[i].faceCoords);
+            current.segment<2>(i * 2) = TV2(bary[0], bary[1]);
+        }
+        VectorXT min_p = current.array() - 0.4;
+        VectorXT max_p = current.array() + 0.4;
+        VectorXT updated = current;
+        // mma.UpdateEigen(updated, grad, VectorXT(), VectorXT(), min_p, max_p);
+
+        gcmma.OuterUpdate(updated.data(), current.data(), O, grad.data(), 
+            VectorXT().data(), VectorXT().data(), min_p.data(), max_p.data());
+        std::vector<SurfacePoint> samples_current = samples;
+
+        tbb::parallel_for(0, (int)samples.size(), [&](int i)
+        {
+            TV2 dx = updated.segment<2>(i * 2) - current.segment<2>(i * 2);
+            updateSurfacePoint(samples[i], dx);
+        });
+        constructVoronoiDiagram(true);
+        T O_new = computePerimeterMinimizationEnergy();
+
+        
+        bool conserv = O_new < O;
+        for(int inneriter=0; !conserv && inneriter < 15; ++inneriter)
+        {
+            samples = samples_current;
+            gcmma.InnerUpdate(updated.data(), O_new, VectorXT().data(), current.data(),
+             O, grad.data(), VectorXT().data(), VectorXT().data(), min_p.data(), max_p.data());
+            tbb::parallel_for(0, (int)samples.size(), [&](int i)
+            {
+                TV2 dx = updated.segment<2>(i * 2) - current.segment<2>(i * 2);
+                updateSurfacePoint(samples[i], dx);
+            });
+            constructVoronoiDiagram(true);
+            O_new = computePerimeterMinimizationEnergy();
+            conserv = O_new < O;
+        }
+    }
+    voronoi_edges.resize(0);
+    for (int i = 0; i < valid_VD_edges.size(); i++)
+    {
+        int idx0 = valid_VD_edges[i][0];
+        int idx1 = valid_VD_edges[i][1];
+        TV v0 = toTV(unique_ixn_points[idx0].first.interpolate(geometry->vertexPositions));
+        TV v1 = toTV(unique_ixn_points[idx1].first.interpolate(geometry->vertexPositions));
+        voronoi_edges.push_back(std::make_pair(v0, v1));
+    }   
+    FINISH_TIMING_PRINT(PerimeterMinimization)
+}
+
+void VoronoiCells::optimizeForCentroidalVD()
+{
+    auto diffTestFD = [&]()
+    {
+        VectorXT grad;
+        T E0;
+        T g_norm = computeCentroidalVDGradient(grad, E0);    
+        std::vector<SurfacePoint> samples_current = samples;
+        T eps = 1e-6;
+        int n_dof = samples.size() * 2;
+        for(int dof_i = 0; dof_i < n_dof; dof_i++)
+        {
+            int sample_idx = std::floor(dof_i / 2.0);
+            int sample_dim = dof_i % 2;
+            samples = samples_current;
+            TV2 dx = TV2::Zero();
+            dx[sample_dim] += eps;
+            updateSurfacePoint(samples[sample_idx], dx);
+            constructVoronoiDiagram(true);
+            T E1 = computeCentroidalVDEnergy();
+            samples = samples_current;
+            dx[sample_dim] -= 2.0 * eps;
+            updateSurfacePoint(samples[sample_idx], dx);
+            constructVoronoiDiagram(true);
+            E0 = computeCentroidalVDEnergy();
+            T fd = (E1 - E0) / (2.0 * eps);
+            std::cout << "FD " << fd << " symbolic " << grad[dof_i] << std::endl;
+            std::getchar();
+            samples = samples_current;
+        }
+        samples = samples_current;
+    };
+    // diffTestScale();
+    // diffTestFD();
+    // return;
+    START_TIMING(Centroidal)
+    
+    
+    T E0;
+    int max_iter = 400;
+    int iter = 0;
+    T tol = 1e-6;
+    int ls_max = 12;
+    dirichlet_data[0] = 0.0;
+    dirichlet_data[1] = 0.0;
+
+    // MMASolver mma(samples.size() * 2, 0);
+    // mma.SetAsymptotes(0.2, 0.65, 1.05);
+
+    GCMMASolver gcmma(samples.size() * 2, 0);
+
+    for (int iter = 0; iter < max_iter; iter++)
+    {
+        VectorXT grad;
+        T O = 0.0;
+        T g_norm = computeCentroidalVDGradient(grad, O);
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            grad[offset] = 0;
+        });
+        if (iter == 0) E0 = O;
+        std::cout << "[MMA] iter " << iter << " |g|: " << g_norm << " obj: " << O << " obj0: " << E0 << std::endl;
+        
+        if (g_norm < tol)
+            break;
+
+        VectorXT current(samples.size() * 2);
+        for (size_t i = 0; i < samples.size(); i++)
+        {
+            TV bary = toTV(samples[i].faceCoords);
+            current.segment<2>(i * 2) = TV2(bary[0], bary[1]);
+        }
+        VectorXT min_p = current.array() - 0.4;
+        VectorXT max_p = current.array() + 0.4;
+        VectorXT updated = current;
+        // mma.UpdateEigen(updated, grad, VectorXT(), VectorXT(), min_p, max_p);
+
+        gcmma.OuterUpdate(updated.data(), current.data(), O, grad.data(), 
+            VectorXT().data(), VectorXT().data(), min_p.data(), max_p.data());
+        std::vector<SurfacePoint> samples_current = samples;
+
+        tbb::parallel_for(0, (int)samples.size(), [&](int i)
+        {
+            TV2 dx = updated.segment<2>(i * 2) - current.segment<2>(i * 2);
+            updateSurfacePoint(samples[i], dx);
+        });
+        constructVoronoiDiagram(true);
+        T O_new = computeCentroidalVDEnergy();
+
+        
+        bool conserv = O_new < O;
+        for(int inneriter=0; !conserv && inneriter < 15; ++inneriter)
+        {
+            samples = samples_current;
+            gcmma.InnerUpdate(updated.data(), O_new, VectorXT().data(), current.data(),
+             O, grad.data(), VectorXT().data(), VectorXT().data(), min_p.data(), max_p.data());
+            tbb::parallel_for(0, (int)samples.size(), [&](int i)
+            {
+                TV2 dx = updated.segment<2>(i * 2) - current.segment<2>(i * 2);
+                updateSurfacePoint(samples[i], dx);
+            });
+            constructVoronoiDiagram(true);
+            O_new = computeCentroidalVDEnergy();
+            conserv = O_new < O;
+        }
+    }
+    // while (true)
+    // {
+    //     iter ++;
+    //     if (iter > max_iter)
+    //         break;
+    //     VectorXT grad;
+    //     StiffnessMatrix hess;
+    //     T g_norm = computePerimeterMinimizationHessian(hess, grad, E0);
+    //     // T g_norm = computePerimeterMinimizationGradient(grad, E0);
+    //     VectorXT search_direction = -grad;
+    //     iterateDirichletDoF([&](int offset, T target)
+    //     {
+    //         grad[offset] = 0;
+    //     });
+    //     if (g_norm > 1e10)
+    //         break;
+    //     linearSolve(hess, -grad, search_direction);
+    //     std::cout << "iter# " << iter << " |g|: " << g_norm << " obj: " << E0 << " |du| " << search_direction.norm() << std::endl;
+    //     if (g_norm < tol)
+    //     {
+    //         // std::cout << "|g|: " << g_norm << " obj: " << E0 << std::endl;
+    //         break;
+    //     }
+    //     T alpha = 1.0;
+    //     std::vector<SurfacePoint> samples_current = samples;
+    //     // search_direction.setConstant(0.1);
+    //     for (int ls = 0; ls < ls_max; ls++)
+    //     {
+    //         samples = samples_current;
+    //         tbb::parallel_for(0, (int)samples.size(), [&](int i)
+    //         {
+    //             updateSurfacePoint(samples[i], alpha * search_direction.segment<2>(i * 2));
+    //         });
+            
+    //         constructVoronoiDiagram(true);
+    //         T E1 = computePerimeterMinimizationEnergy();
+    //         std::cout << "E0 " << E0 << " E1 " << E1 << std::endl;
+    //         // break;
+            
+    //         if (E1 < E0)
+    //             break;
+    //         alpha *= 0.5;
+    //         if (ls == ls_max - 1)
+    //         {
+    //             samples = samples_current;
+    //             tbb::parallel_for(0, (int)samples.size(), [&](int i)
+    //             {
+    //                 updateSurfacePoint(samples[i], search_direction.segment<2>(i * 2));
+    //             });
+                
+    //             constructVoronoiDiagram(true);
+    //         }
+    //     }
+        
+    // }
+    voronoi_edges.resize(0);
+    for (int i = 0; i < valid_VD_edges.size(); i++)
+    {
+        int idx0 = valid_VD_edges[i][0];
+        int idx1 = valid_VD_edges[i][1];
+        TV v0 = toTV(unique_ixn_points[idx0].first.interpolate(geometry->vertexPositions));
+        TV v1 = toTV(unique_ixn_points[idx1].first.interpolate(geometry->vertexPositions));
+        voronoi_edges.push_back(std::make_pair(v0, v1));
+    }   
+    FINISH_TIMING_PRINT(Centroidal)
 }
 
 void VoronoiCells::constructVoronoiDiagram(bool exact, bool load_from_file)
 {
-    loadGeometry();
-    gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
-    samples = poissonSampler.sample(1.0);
+    voronoi_sites.resize(0);
+    valid_VD_edges.clear();
+    voronoi_edges.clear();
+    source_data.clear();
+    unique_ixn_points.clear();
     int n_tri = mesh->nFaces();
-    std::cout << "# sites " << samples.size() << std::endl;
-    std::cout << "# faces " << n_tri << std::endl;
+    // std::cout << "# sites " << samples.size() << std::endl;
+    // std::cout << "# faces " << n_tri << std::endl;
     if (load_from_file)
     {
         std::ifstream in("samples.txt");
@@ -1609,30 +1598,41 @@ void VoronoiCells::constructVoronoiDiagram(bool exact, bool load_from_file)
     FINISH_TIMING_PRINT(PrismCutting)
     
     // remove duplication
-    std::vector<SurfacePoint> unique_ixn_points;
-    std::vector<IV2> unique_edges;
+    
+    
+    std::vector<int> duplicate_to_unique(ixn_data.size());
+    unique_ixn_points.resize(0);
+    for (int i = 0; i < ixn_data.size(); i++)
+    {
+        auto it = std::find(unique_ixn_points.begin(), unique_ixn_points.end(), ixn_data[i]);
+        if (it == unique_ixn_points.end())
+        {
+            unique_ixn_points.push_back(ixn_data[i]);
+            duplicate_to_unique[i] = unique_ixn_points.size() - 1;
+        }
+        else
+        {
+            int pos = std::distance(unique_ixn_points.begin(), it);
+            duplicate_to_unique[i] = pos;
+        }
+    }
 
     
+    
+    for (int i = 0; i < ixn_data.size(); i+=2)
+    {
+        int idx0 = duplicate_to_unique[i];
+        int idx1 = duplicate_to_unique[i+1];
+        valid_VD_edges.push_back(Edge(idx0, idx1));
+        TV v0 = toTV(unique_ixn_points[idx0].first.interpolate(geometry->vertexPositions));
+        TV v1 = toTV(unique_ixn_points[idx1].first.interpolate(geometry->vertexPositions));
+        voronoi_edges.push_back(std::make_pair(v0, v1));
+    }
 
     if (exact)
     {
-        START_TIMING(ExactVoronoi)
-        optimizeForExactVD(ixn_data);
-        FINISH_TIMING_PRINT(ExactVoronoi)
+        optimizeForExactVD();   
     }
-
-    // voronoi_edges = edges;
-
-    for (int i = 0; i < ixn_data.size(); i+=2)
-    {
-
-        TV v0 = toTV(ixn_data[i].first.interpolate(geometry->vertexPositions));
-        TV v1 = toTV(ixn_data[i+1].first.interpolate(geometry->vertexPositions));
-        // std::cout << v0.transpose() << " " << v1.transpose() << std::endl;
-        voronoi_edges.push_back(std::make_pair(v0, v1));
-    }
-    
-    
     
     use_debug_face_color = false;
     if (use_debug_face_color)
@@ -1672,3 +1672,4 @@ void VoronoiCells::saveFacePrism(int face_idx)
     std::vector<std::pair<TV, TV>> edges;
     intersectPrism(samples, source_data, edges, face_idx);
 }
+
