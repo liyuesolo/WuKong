@@ -55,6 +55,9 @@ public:
 
     virtual void appendSpheresToPositions(const VectorXT& position, T radius, const TV& color,
         Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
+    
+    virtual void appendSpheresToPositions(const VectorXT& position, T radius, const std::vector<TV>& colors,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C);
 
     virtual void appendCylindersToEdges(const std::vector<std::pair<TV3, TV3>>& edge_pairs, 
         const std::vector<TV3>& color, T radius,
@@ -79,11 +82,16 @@ public:
     bool reg = false;
     bool perimeter = false;
 
+    bool triangulate = false;
+
     bool update_geodesic = false;
     bool update_exact = false;
     bool update_CGVD = false;
     bool update_perimeter = false;
 
+    bool compute_dual = false;
+    bool save_idt = false;
+    bool save_sites = false;
 
     VoronoiApp(VoronoiCells& cells) : voronoi_cells(cells) {}
     ~VoronoiApp() {}
@@ -96,7 +104,7 @@ public:
     virtual void updateScreen(igl::opengl::glfw::Viewer& viewer);
     virtual void setViewer(igl::opengl::glfw::Viewer& viewer,
         igl::opengl::glfw::imgui::ImGuiMenu& menu) override;
-
+    
     IntrinsicSimulation& simulation;
     bool all_edges = false;
     int selected = -1;
@@ -107,7 +115,13 @@ public:
     VectorXT temporary_vector;
     bool use_temp_vec = false;
     
+    bool save_sites = false;
+    bool save_mesh = false;
+    bool save_curve = false;
+    bool save_all = false;
+
 public:
+    void saveMesh(const std::string& folder);
     GeodesicSimApp(IntrinsicSimulation& _simulation) : simulation(_simulation) {}
     ~GeodesicSimApp() {}
 };

@@ -81,12 +81,12 @@ void SimulationApp::appendSpheresToPositions(const VectorXT& position, T radius,
     
     v_sphere = v_sphere * radius;
 
-    int n_vtx_prev = V.rows();
-    int n_face_prev = F.rows();
+    int n_vtx_prev = _V.rows();
+    int n_face_prev = _F.rows();
 
-    V.conservativeResize(V.rows() + v_sphere.rows() * n_pt, 3);
-    F.conservativeResize(F.rows() + f_sphere.rows() * n_pt, 3);
-    C.conservativeResize(C.rows() + f_sphere.rows() * n_pt, 3);
+    _V.conservativeResize(_V.rows() + v_sphere.rows() * n_pt, 3);
+    _F.conservativeResize(_F.rows() + f_sphere.rows() * n_pt, 3);
+    _C.conservativeResize(_C.rows() + f_sphere.rows() * n_pt, 3);
 
     tbb::parallel_for(0, n_pt, [&](int i)
     {
@@ -110,9 +110,61 @@ void SimulationApp::appendSpheresToPositions(const VectorXT& position, T radius,
             c_sphere_i.row(row_idx) = color;
         });
 
-        V.block(offset_v, 0, v_sphere.rows(), 3) = v_sphere_i;
-        F.block(offset_f, 0, f_sphere.rows(), 3) = f_sphere_i;
-        C.block(offset_f, 0, f_sphere.rows(), 3) = c_sphere_i;
+        _V.block(offset_v, 0, v_sphere.rows(), 3) = v_sphere_i;
+        _F.block(offset_f, 0, f_sphere.rows(), 3) = f_sphere_i;
+        _C.block(offset_f, 0, f_sphere.rows(), 3) = c_sphere_i;
+    });
+}
+
+
+void SimulationApp::appendSpheresToPositions(const VectorXT& position, T radius, const std::vector<TV>& colors,
+        Eigen::MatrixXd& _V, Eigen::MatrixXi& _F, Eigen::MatrixXd& _C)
+{
+    if (!position.rows())
+        return;
+    int n_pt = position.rows() / 3;
+
+    Eigen::MatrixXd v_sphere;
+    Eigen::MatrixXi f_sphere;
+
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/DigitalFabrics/Data/sphere162.obj", v_sphere, f_sphere);
+    
+    Eigen::MatrixXd c_sphere(f_sphere.rows(), f_sphere.cols());
+    
+    v_sphere = v_sphere * radius;
+
+    int n_vtx_prev = _V.rows();
+    int n_face_prev = _F.rows();
+
+    _V.conservativeResize(_V.rows() + v_sphere.rows() * n_pt, 3);
+    _F.conservativeResize(_F.rows() + f_sphere.rows() * n_pt, 3);
+    _C.conservativeResize(_C.rows() + f_sphere.rows() * n_pt, 3);
+
+    tbb::parallel_for(0, n_pt, [&](int i)
+    {
+        Eigen::MatrixXd v_sphere_i = v_sphere;
+        Eigen::MatrixXi f_sphere_i = f_sphere;
+        Eigen::MatrixXd c_sphere_i = c_sphere;
+
+        tbb::parallel_for(0, (int)v_sphere.rows(), [&](int row_idx){
+            v_sphere_i.row(row_idx) += position.segment<3>(i * 3);
+        });
+
+
+        int offset_v = n_vtx_prev + i * v_sphere.rows();
+        int offset_f = n_face_prev + i * f_sphere.rows();
+
+        tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+            f_sphere_i.row(row_idx) += Eigen::Vector3i(offset_v, offset_v, offset_v);
+        });
+
+        tbb::parallel_for(0, (int)f_sphere.rows(), [&](int row_idx){
+            c_sphere_i.row(row_idx) = colors[i];
+        });
+
+        _V.block(offset_v, 0, v_sphere.rows(), 3) = v_sphere_i;
+        _F.block(offset_f, 0, f_sphere.rows(), 3) = f_sphere_i;
+        _C.block(offset_f, 0, f_sphere.rows(), 3) = c_sphere_i;
     });
 }
 
@@ -134,24 +186,73 @@ void SimulationApp::loadDisplacementVectors(const std::string& filename)
 
 void VoronoiApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
+    viewer.data().clear();
     voronoi_cells.generateMeshForRendering(V, F, C);
+    int n_face_base = F.rows();
 
-    MatrixXT L;
-    igl::edge_lengths(V, F, L);
-    T reference_length = L.rowwise().sum().sum() / (F.rows() * 3);
+    if (V.rows())
+    {
+        // MatrixXi mesh_edges;
+        // igl::edges(F, mesh_edges);
+        // viewer.data().lines.resize(mesh_edges.rows(), 9);
+        // for (int i = 0; i < mesh_edges.rows(); i++)
+        // {
+        //     viewer.data().lines.row(i).segment<3>(0) = V.row(mesh_edges(i, 0));
+        //     viewer.data().lines.row(i).segment<3>(3) = V.row(mesh_edges(i, 1));
+        //     viewer.data().lines.row(i).segment<3>(6) = TV::Zero();
+        // }
+        // viewer.data().line_width = 3.5;
+    }
+
+    T reference_length = 0.1;
+    if (V.rows())
+    {
+        TV min_corner = V.colwise().minCoeff();
+        TV max_corner = V.colwise().maxCoeff();
+        T bb_diag = (max_corner - min_corner).norm();
+        reference_length = 0.1 * bb_diag;
+    }
+    
 
     TV point_color(1.0, 0.0, 0.0);
-    appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.025 * reference_length, point_color, V, F, C);
+    std::vector<TV> point_colors;
+    if (voronoi_cells.n_sites)
+    {
+        point_colors.resize(voronoi_cells.n_sites, point_color);
+        // point_colors[0] = TV(0,1,0);
+        // point_colors[1] = TV(0,1,0);
+        // point_colors[2] = TV(0,1,0);
+        appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.01 * reference_length, point_colors, V, F, C);
+    }
+    // appendSpheresToPositions(voronoi_cells.voronoi_sites, 0.025 * reference_length, point_color, V, F, C);
 
     // TV site_vtx_color(0.0, 0.0, 0.0);
     // appendSpheresToPositions(voronoi_cells.voronoi_cell_vertices, 0.05 * reference_length, site_vtx_color, V, F, C);
     
-    std::vector<TV3> colors(voronoi_cells.voronoi_edges.size(), TV3(1.0,0.3,0.0));
-    appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.005 * reference_length, V, F, C);
+    if (compute_dual)
+    {
+        std::vector<std::pair<TV, TV>> idt_edges;
+        std::vector<IV> idt_indices;
+        voronoi_cells.computeDualIDT(idt_edges, idt_indices);
+        std::vector<TV3> colors(idt_edges.size(), TV3(1.0,0.3,0.0));
+        appendCylindersToEdges(idt_edges, colors, 0.008 * reference_length, V, F, C);
+    }
+    else
+    {
+        std::vector<TV3> colors(voronoi_cells.voronoi_edges.size(), TV3(1.0,0.3,0.0));
+        appendCylindersToEdges(voronoi_cells.voronoi_edges, colors, 0.008 * reference_length, V, F, C);
+    }
 
-    viewer.data().clear();
+    
     viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);
+    if (C.rows())
+    {
+        MatrixXT white = C; white.setOnes();
+        viewer.data().F_material_ambient.block(0, 0, n_face_base, 3).array() += 0.2;
+        // viewer.data().F_material_diffuse.block(0, 0, n_face_base, 3).array() += 0.2;
+        // viewer.data().F_material_specular.block(0, 0, n_face_base, 3).array() += 0.2;
+    }
 }
 
 void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
@@ -186,8 +287,29 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             if (ImGui::Checkbox("Regularizer", &reg))
             {
                 voronoi_cells.add_reg = reg;
+                voronoi_cells.w_reg = 1e-6;
+            }
+            
+        }
+        if (ImGui::CollapsingHeader("Save Data", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("save_IDT", &save_idt))
+            {
+
+            }
+            if (ImGui::Checkbox("save_sites", &save_sites))
+            {
+                
             }
         }
+        if (ImGui::CollapsingHeader("Visualization", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("compute_dual", &compute_dual))
+            {
+                updateScreen(viewer);
+            }
+        }
+        
         if (ImGui::Button("Generate", ImVec2(-1,0)))
         {
             if (geodesic)
@@ -229,7 +351,19 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         }
         if (ImGui::Button("Save", ImVec2(-1,0)))
         {
-            voronoi_cells.saveVoronoiDiagram();
+            if (save_sites)
+                voronoi_cells.saveVoronoiDiagram();
+            if (save_idt)
+            {
+                std::vector<std::pair<TV, TV>> idt_edges;
+                std::vector<IV> idt_indices;
+                voronoi_cells.computeDualIDT(idt_edges, idt_indices);
+                std::ofstream out("idt_triangulation.txt");
+                out << idt_indices.size() << std::endl;
+                for (const IV& tri : idt_indices)
+                    out << tri[0] << " " << tri[1] << " " << tri[2] << " " << std::endl;
+                out.close();
+            }
             updateScreen(viewer);
         }
         if (ImGui::Button("Reset", ImVec2(-1,0)))
@@ -319,19 +453,33 @@ void VoronoiApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().point_size = 25.0;
 
     viewer.core().align_camera_center(V);
-    // viewer.core().toggle(viewer.data().show_lines);
+    viewer.core().toggle(viewer.data().show_lines);
     viewer.core().animation_max_fps = 24.;
-    // key_down(viewer,'0',0);
     viewer.core().is_animating = false;
 }
 
 void GeodesicSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
 {
+    viewer.data().clear();
     simulation.generateMeshForRendering(V, F, C);
-    
+    int n_face_base = F.rows();
+    // std::cout << viewer.data().lines.rows() << " " << viewer.data().lines.cols() << std::endl;
+    MatrixXi mesh_edges;
+    igl::edges(F, mesh_edges);
+    viewer.data().lines.resize(mesh_edges.rows(), 9);
+    for (int i = 0; i < mesh_edges.rows(); i++)
+    {
+        viewer.data().lines.row(i).segment<3>(0) = V.row(mesh_edges(i, 0));
+        viewer.data().lines.row(i).segment<3>(3) = V.row(mesh_edges(i, 1));
+        viewer.data().lines.row(i).segment<3>(6) = TV::Zero();
+    }
+    // viewer.data().show_lines = true;
+    viewer.data().line_width = 3.5;
+    // std::cout << viewer.data().lines.rows() << " " << viewer.data().lines.cols() << std::endl;
+
     simulation.updateVisualization(all_edges);
 
-    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(0.95,103.0/255.0,0.0/255.0));
+    std::vector<TV3> colors(simulation.all_intrinsic_edges.size(), TV3(1.0, 0.3, 0.0));
     appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.03 * simulation.ref_dis, V, F, C);
     
     VectorXT sites;
@@ -342,9 +490,48 @@ void GeodesicSimApp::updateScreen(igl::opengl::glfw::Viewer& viewer)
     simulation.getMarkerPointsPosition(markers);
     appendSpheresToPositions(markers, simulation.ref_dis * 0.07, TV(1.0, 0.0, 0.0), V, F, C);
 
-    viewer.data().clear();
     viewer.data().set_mesh(V, F);
     viewer.data().set_colors(C);
+    if (C.rows())
+    {
+        MatrixXT white = C; white.setOnes();
+        viewer.data().F_material_ambient.block(0, 0, n_face_base, 3).array() += 0.2;
+        // viewer.data().F_material_diffuse.block(0, 0, n_face_base, 3).array() += 0.2;
+        // viewer.data().F_material_specular.block(0, 0, n_face_base, 3).array() += 0.2;
+    }
+    
+}
+
+void GeodesicSimApp::saveMesh(const std::string& folder)
+{
+    if (save_sites)
+    {
+        VectorXT sites;
+        simulation.getAllPointsPosition(sites);
+        MatrixXT vertices, colors;
+        MatrixXi faces;
+        appendSpheresToPositions(sites, simulation.ref_dis * 0.05, TV::Ones(), vertices, faces, colors);
+        igl::writeOBJ(folder + "/sites.obj", vertices, faces);
+    }
+    if (save_mesh)
+    {
+        
+        MatrixXT vertices, colors;
+        MatrixXi faces;
+        simulation.generateMeshForRendering(vertices, faces, colors);
+        igl::writeOBJ(folder + "/surface_mesh.obj", vertices, faces);
+    }
+    if (save_curve)
+    {
+        MatrixXT vertices, _colors;
+        MatrixXi faces;
+        std::vector<TV> colors(simulation.all_intrinsic_edges.size(), TV3(0.95,103.0/255.0,0.0/255.0));
+        appendCylindersToEdges(simulation.all_intrinsic_edges, colors, 0.03 * simulation.ref_dis, vertices, faces, _colors);
+        
+        igl::writeOBJ(folder + "/path.obj", vertices, faces);
+    }
+    if (save_all)
+        igl::writeOBJ(folder + "/current_mesh.obj", V, F);
 }
 
 void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
@@ -363,7 +550,43 @@ void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
         {
             if (ImGui::Checkbox("TwoWayCoupling", &simulation.two_way_coupling))
             {
-                updateScreen(viewer);
+                
+            }
+            if (ImGui::Checkbox("PseudoCTensor", &simulation.add_geo_elasticity))
+            {
+                
+            }
+            if (ImGui::Checkbox("PseudoArea", &simulation.add_area_term))
+            {
+                
+            }
+            if (ImGui::Checkbox("Eclidean", &simulation.Euclidean))
+            {
+                
+            }
+            if (ImGui::Checkbox("mollifier", &simulation.use_t_wrapper))
+            {
+                
+            }
+        }
+
+        if (ImGui::CollapsingHeader("SaveStates", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Checkbox("CurveNetwork", &save_curve))
+            {
+                
+            }
+            if (ImGui::Checkbox("EmbeddedMesh", &save_mesh))
+            {
+                
+            }
+            if (ImGui::Checkbox("Sites", &save_sites))
+            {
+                
+            }
+            if (ImGui::Checkbox("All", &save_all))
+            {
+                
             }
         }
         
@@ -447,10 +670,10 @@ void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             A.setConstant(255);
             igl::png::writePNG(R,G,B,A, "./current_window.png");
         }
-        
         if (ImGui::Button("SaveMesh", ImVec2(-1,0)))
         {
-            igl::writeOBJ("current_mesh.obj", V, F);
+            // igl::writeOBJ("current_mesh.obj", V, F);
+            saveMesh("./");
         }
         
     };    
@@ -643,7 +866,7 @@ void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             updateScreen(viewer);
             return true;
         case ' ':
-            viewer.core().is_animating = true;
+            viewer.core().is_animating = !viewer.core().is_animating;
             return true;
         case '1':
             check_modes = true;
@@ -673,10 +896,11 @@ void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
     viewer.data().set_face_based(true);
     viewer.data().shininess = 1.0;
     viewer.data().point_size = 25.0;
+    
 
     viewer.core().align_camera_center(V);
+    viewer.data().show_lines = false;
     // viewer.core().toggle(viewer.data().show_lines);
     viewer.core().animation_max_fps = 24.;
-    // key_down(viewer,'0',0);
     viewer.core().is_animating = false;
 }

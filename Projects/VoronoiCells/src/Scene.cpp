@@ -42,7 +42,8 @@ void IntrinsicSimulation::generateMeshForRendering(MatrixXT& V, MatrixXi& F, Mat
     else
         vectorToIGLMatrix<T, 3>(extrinsic_vertices, V);
     C.resize(F.rows(), 3);
-    C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
+    C.col(0).setConstant(28.0/255.0); C.col(1).setConstant(99.0/255.0); C.col(2).setConstant(227.0/255.0);
+    // C.col(0).setConstant(103.0/255.0); C.col(1).setConstant(200.0/255.0); C.col(2).setConstant(255.0/255.0);
 }
 
 void IntrinsicSimulation::initializeTriangleDebugScene()
@@ -660,7 +661,7 @@ void IntrinsicSimulation::initializeNetworkData(const std::vector<Edge>& edges)
 void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 {
     use_Newton = true;
-    two_way_coupling = true;
+    two_way_coupling = false;
     
     MatrixXT V; MatrixXi F;
     igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere642.obj", 
@@ -685,9 +686,17 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/bumpy-cube-simplified.obj", 
     //     V, F);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/bunny.obj", 
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/spot_triangulated.obj", 
     //     V, F);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/ellipsoid_outward_bump.obj", 
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/fertility.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/rocker_arm_simplified.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/gyroidpuzzle.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/donut_duck.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/cactus_simplified.obj", 
     //     V, F);
     
     MatrixXT N;
@@ -718,42 +727,114 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
 
     intrinsic_vertices_barycentric_coords.resize(n_faces * 2);
     
+    std::vector<TV> mass_point_vec;
+    std::vector<TV2> bary_vec;
+
     VectorXT mass_point_Euclidean(n_faces * 3);
+
+    bool load_sites = false;
+    bool use_Poisson_sampler = true;
+
     int valid_cnt = 0;
-    
-    // for (int i = 0; i < n_faces; i++)
-    // {
-    //     // T alpha = 0.2, beta = 0.5;
-    //     T alpha = 0.9, beta = 2.0 * IRREGULAR_EPSILON;
-    //     // T alpha = 0.1, beta = 10.0 * IRREGULAR_EPSILON;
-    //     TV vi = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 0] * 3);
-    //     TV vj = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 1] * 3);
-    //     TV vk = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 2] * 3);
-    //     TV current = vi * alpha + vj * beta + vk * (1.0 - alpha - beta);
-    //     mass_point_Euclidean.segment<3>(i * 3) =  current;
-    //     intrinsic_vertices_barycentric_coords.segment<2>(i * 2) = TV2(alpha, beta);
-    //     gcs::Face f = mesh->face(i);
-    //     SurfacePoint new_pt(f, Vector3{alpha, beta, 1.0 - alpha - beta});
-    //     new_pt = new_pt.inSomeFace();
-    //     mass_surface_points.push_back(std::make_pair(new_pt, f));
-    // }
+    std::vector<Edge> edges;
+    if (load_sites)
+    {
+        std::vector<SurfacePoint> samples;
+        std::ifstream in("samples_rocket_arm.txt");
+        int n_samples; in >> n_samples;
+        samples.resize(n_samples);
+        for (int i = 0; i < n_samples; i++)
+        {
+            int face_idx;
+            T wx, wy, wz;
+            in >> face_idx >> wx >> wy >> wz;
+            samples[i] = SurfacePoint(mesh->face(face_idx), Vector3{wx, wy, wz});
+        }
+        in.close();
+        in.open("idt_triangulation_rocket_arm.txt");
+        int n_tri; in >> n_tri;
+        MatrixXi idt_tri(n_tri, 3);
+
+        for (int i = 0; i < n_tri; i++)
+        {
+            int a, b, c;
+            in >> a >> b >> c;
+            triangles.push_back(IV(a, b, c));
+            idt_tri.row(i) = IV(a, b, c);
+        }
+        in.close();
+
+        MatrixXi idt_edges;
+        igl::edges(idt_tri, idt_edges);
+        for (int i = 0; i < idt_edges.rows(); i++)
+        {
+            edges.push_back(idt_edges.row(i));
+        }
+        
+        
+        for (SurfacePoint& pt : samples)
+        {
+            // pt.faceCoords = Vector3{0.9, 0.05, 1.0 - 0.9 - 0.05};
+            pt = pt.inSomeFace();
+            mass_point_vec.push_back(toTV(pt.interpolate(geometry->vertexPositions)));
+            bary_vec.push_back(TV2(pt.faceCoords.x, pt.faceCoords.y));
+            mass_surface_points.push_back(std::make_pair(pt, pt.face));
+        }
+    }
+    else
+    {
+        if (use_Poisson_sampler)
+        {
+            gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
+            std::vector<SurfacePoint> samples = poissonSampler.sample(5.0);
+            // std::vector<SurfacePoint> samples = poissonSampler.sample(1.0);
+            // std::vector<SurfacePoint> samples = poissonSampler.sample(0.8);
+            // intrinsic_vertices_barycentric_coords.resize(samples.size() * 2);
+            // mass_point_Euclidean.resize(samples.size() * 3);
+            int cnt = 0;
+            for (SurfacePoint& pt : samples)
+            {
+                pt.faceCoords = Vector3{0.9, 0.05, 1.0 - 0.9 - 0.05};
+                pt = pt.inSomeFace();
+                // mass_point_Euclidean.segment<3>(cnt * 3) = toTV(pt.interpolate(geometry->vertexPositions));
+                mass_point_vec.push_back(toTV(pt.interpolate(geometry->vertexPositions)));
+                bary_vec.push_back(TV2(pt.faceCoords.x, pt.faceCoords.y));
+                // intrinsic_vertices_barycentric_coords.segment<2>(cnt * 2) = TV2(pt.faceCoords.x, pt.faceCoords.y);
+                mass_surface_points.push_back(std::make_pair(pt, pt.face));
+                cnt++;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < n_faces; i += 1)
+            {
+                // T alpha = 0.2, beta = 0.5;
+                // T alpha = 0.99, beta = 1.0 * IRREGULAR_EPSILON;
+                T alpha = 0.3, beta = 0.3;
+                TV vi = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 0] * 3);
+                TV vj = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 1] * 3);
+                TV vk = extrinsic_vertices.segment<3>(extrinsic_indices[i * 3 + 2] * 3);
+                TV current = vi * alpha + vj * beta + vk * (1.0 - alpha - beta);
+                // mass_point_Euclidean.segment<3>(i * 3) =  current;
+                mass_point_vec.push_back(current);
+                bary_vec.push_back(TV2(alpha, beta));
+                // intrinsic_vertices_barycentric_coords.segment<2>(i * 2) = TV2(alpha, beta);
+                gcs::Face f = mesh->face(i);
+                SurfacePoint new_pt(f, Vector3{alpha, beta, 1.0 - alpha - beta});
+                new_pt = new_pt.inSomeFace();
+                mass_surface_points.push_back(std::make_pair(new_pt, f));
+            }
+        }
+    }
+
     
 
-    gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
-    std::vector<SurfacePoint> samples = poissonSampler.sample(5.0);
-    // std::vector<SurfacePoint> samples = poissonSampler.sample(2.0);
-    // std::vector<SurfacePoint> samples = poissonSampler.sample();
-    intrinsic_vertices_barycentric_coords.resize(samples.size() * 2);
-    mass_point_Euclidean.resize(samples.size() * 3);
-    int cnt = 0;
-    for (SurfacePoint& pt : samples)
-    {
-        pt = pt.inSomeFace();
-        mass_point_Euclidean.segment<3>(cnt * 3) = toTV(pt.interpolate(geometry->vertexPositions));
-        intrinsic_vertices_barycentric_coords.segment<2>(cnt * 2) = TV2(pt.faceCoords.x, pt.faceCoords.y);
-        mass_surface_points.push_back(std::make_pair(pt, pt.face));
-        cnt++;
-    }
+    mass_point_Euclidean.resize(mass_point_vec.size() * 3);
+    for (int i = 0; i < mass_point_vec.size(); i++)
+        mass_point_Euclidean.segment<3>(i * 3) = mass_point_vec[i];
+    intrinsic_vertices_barycentric_coords.resize(bary_vec.size() * 2);
+    for (int i = 0; i < bary_vec.size(); i++)
+        intrinsic_vertices_barycentric_coords.segment<2>(i * 2) = bary_vec[i];
 
 
     mass_surface_points_undeformed = mass_surface_points;
@@ -765,7 +846,10 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     std::cout << "add mass point" << std::endl;
     std::cout << "#dof : " << undeformed.rows() << " #points " << undeformed.rows() / 2 << std::endl;
 
-    dirichlet_vertices = {4, 3, 6};
+    // dirichlet_vertices = {4, 3, 6};
+
+    dirichlet_vertices = {0};
+
     // std::vector<int> dirichlet_vertices = {0};
     
     for (int idx : dirichlet_vertices)
@@ -779,27 +863,31 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
     //     dirichlet_data[i] = 0.0;
     // }
    
+    if (!load_sites)
+    {
+        VectorXi triangulation;
+        triangulatePointCloud(mass_point_Euclidean, triangulation);
+
+        MatrixXi igl_tri, igl_edges;
+        vectorToIGLMatrix<int, 3>(triangulation, igl_tri);
+        igl::edges(igl_tri, igl_edges);
+
+        MatrixXT igl_vertices;
+        vectorToIGLMatrix<T, 3>(mass_point_Euclidean, igl_vertices);
+        
+        // // igl::writeOBJ("triangulation.obj", igl_vertices, igl_tri);
+
+        triangles.resize(igl_tri.rows());
+        for (int i = 0; i < igl_tri.rows(); i++)
+            triangles[i] = igl_tri.row(i);
+        std::cout << "#triangles " << igl_tri.rows() << std::endl;
+        // formEdgesFromConnection(F, igl_edges);
+        
+        for (int i = 0; i < igl_edges.rows(); i++)
+            edges.push_back(igl_edges.row(i));
+    }
     
-    VectorXi triangulation;
-    triangulatePointCloud(mass_point_Euclidean, triangulation);
 
-    MatrixXi igl_tri, igl_edges;
-    vectorToIGLMatrix<int, 3>(triangulation, igl_tri);
-    igl::edges(igl_tri, igl_edges);
-
-    MatrixXT igl_vertices;
-    vectorToIGLMatrix<T, 3>(mass_point_Euclidean, igl_vertices);
-    // igl::writeOBJ("triangulation.obj", igl_vertices, igl_tri);
-
-    triangles.resize(igl_tri.rows());
-    for (int i = 0; i < igl_tri.rows(); i++)
-        triangles[i] = igl_tri.row(i);
-
-    std::cout << "#triangles " << igl_tri.rows() << std::endl;
-    // formEdgesFromConnection(F, igl_edges);
-    std::vector<Edge> edges;
-    for (int i = 0; i < igl_edges.rows(); i++)
-        edges.push_back(igl_edges.row(i));
 
     if (two_way_coupling)
     {

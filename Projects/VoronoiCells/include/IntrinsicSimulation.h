@@ -160,6 +160,8 @@ public:
     VectorXT undeformed_area;
     std::unordered_map<Edge, int, VectorHash<2>> edge_map;
 
+    bool Euclidean = false;
+
     // geodesic triangle 
     bool add_geo_elasticity = false;
     std::vector<TM2> X_inv_geodesic;

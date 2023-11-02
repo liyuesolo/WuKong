@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     bool with_viewer = true;
     bool render_seq = false;
     bool run_sim = true;
-    bool intrinsic_sim = false;
+    bool intrinsic_sim = true;
     if (intrinsic_sim)
     {
         IntrinsicSimulation intrinsic_simulation;

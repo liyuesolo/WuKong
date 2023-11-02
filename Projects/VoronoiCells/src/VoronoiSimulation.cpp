@@ -3,7 +3,7 @@ bool VoronoiCells::advanceOneStep(int step)
 {
     T tol = 1e-6;
     int ls_max = 12;
-    max_newton_iter = 500;
+    // max_newton_iter = 500;
     if (step == 0)
     {
         dirichlet_data[0] = 0.0;
@@ -70,11 +70,11 @@ void VoronoiCells::buildSystemMatrix(StiffnessMatrix& K)
     std::vector<Entry> entries;
 
     if (add_peri)
-        addCentroidalVDHessianEntries(entries, w_centroid);
+        addPerimeterMinimizationHessianEntries(entries, w_peri);
     if (add_centroid)
         addCentroidalVDHessianEntries(entries, w_centroid);
     if (add_reg)
-        addRegHessianEntries(entries, w_reg);
+        addRegHessianEntries(entries, w_reg);   
     int n_dof = samples.size() * 2;
     K.resize(n_dof, n_dof);
     

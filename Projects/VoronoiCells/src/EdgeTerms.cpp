@@ -6,17 +6,36 @@ void IntrinsicSimulation::addEdgeLengthEnergy(T w, T& energy)
     if (retrace)
         traceGeodesics();
     VectorXT energies = VectorXT::Zero(spring_edges.size());
-	for(int i = 0; i < spring_edges.size(); i++)
+    if (Euclidean)
     {
-        Edge eij = spring_edges[i];
-        T l0 = rest_length[i];
-        SurfacePoint vA = mass_surface_points[eij[0]].first;
-        SurfacePoint vB = mass_surface_points[eij[1]].first;
-        std::vector<SurfacePoint> path = paths[i];
-        // std::cout << path.size() << std::endl;
-        T geo_dis = current_length[i];
-        energies[i] = w * (geo_dis - l0) * (geo_dis-l0);
+        for(int i = 0; i < spring_edges.size(); i++)
+        {
+            Edge eij = spring_edges[i];
+            T l0 = rest_length[i];
+            SurfacePoint vA = mass_surface_points[eij[0]].first;
+            SurfacePoint vB = mass_surface_points[eij[1]].first;
+            TV xa = toTV(vA.interpolate(geometry->vertexPositions));
+            TV xb = toTV(vB.interpolate(geometry->vertexPositions));
+            T geo_dis = (xb - xa).norm();
+            energies[i] = w * (geo_dis - l0) * (geo_dis-l0);
+        }
     }
+    else
+    {
+        for(int i = 0; i < spring_edges.size(); i++)
+        {
+            Edge eij = spring_edges[i];
+            T l0 = rest_length[i];
+            SurfacePoint vA = mass_surface_points[eij[0]].first;
+            SurfacePoint vB = mass_surface_points[eij[1]].first;
+            std::vector<SurfacePoint> path = paths[i];
+            // std::cout << path.size() << std::endl;
+            T geo_dis = current_length[i];
+            energies[i] = w * (geo_dis - l0) * (geo_dis-l0);
+        }
+    }
+	
+    // energies /= T(spring_edges.size());
     energy += energies.sum();
 }
 
@@ -29,8 +48,14 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
     for (const auto& eij : spring_edges)
     {
         T l = current_length[cnt];
-        std::vector<SurfacePoint> path = paths[cnt];
-        
+        if (Euclidean)
+        {
+            SurfacePoint vA = mass_surface_points[eij[0]].first;
+            SurfacePoint vB = mass_surface_points[eij[1]].first;
+            TV xa = toTV(vA.interpolate(geometry->vertexPositions));
+            TV xb = toTV(vB.interpolate(geometry->vertexPositions));
+            l = (xb - xa).norm();
+        }
         T l0 = rest_length[cnt];
         T coeff = 2.0 * w * (l - l0);
 
@@ -39,6 +64,7 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
             VectorXT dldq;
             std::vector<int> dof_indices;
             computeGeodesicLengthGradientCoupled(eij, dldq, dof_indices);
+            // dldq /= T(spring_edges.size());
             addForceEntry(residual, {eij[0], eij[1]}, -dldq.segment<4>(0) * coeff);
             
             addForceEntry<3>(residual, dof_indices, 
@@ -48,6 +74,7 @@ void IntrinsicSimulation::addEdgeLengthForceEntries(T w, VectorXT& residual)
         {
             Vector<T, 4> dldw;
             computeGeodesicLengthGradient(eij, dldw);
+            // dldw /= T(spring_edges.size());
             addForceEntry(residual, {eij[0], eij[1]}, -dldw * coeff);
         }
         
@@ -66,7 +93,14 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
     for (const auto& eij : spring_edges)
     {
         T l = current_length[cnt];
-        
+        if (Euclidean)
+        {
+            SurfacePoint vA = mass_surface_points[eij[0]].first;
+            SurfacePoint vB = mass_surface_points[eij[1]].first;
+            TV xa = toTV(vA.interpolate(geometry->vertexPositions));
+            TV xb = toTV(vB.interpolate(geometry->vertexPositions));
+            l = (xb - xa).norm();
+        }
         T l0 = rest_length[cnt];
 
         if (two_way_coupling)
@@ -74,7 +108,7 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
             VectorXT dldq; MatrixXT d2ldq2;
             std::vector<int> dof_indices;
             computeGeodesicLengthGradientAndHessianCoupled(eij, dldq, d2ldq2, dof_indices);            
-
+            // d2ldq2 /= T(spring_edges.size());
             MatrixXT hessian = 
                 2.0 * w * (dldq * dldq.transpose() + (l - l0) * d2ldq2);
             
@@ -98,6 +132,7 @@ void IntrinsicSimulation::addEdgeLengthHessianEntries(T w, std::vector<Entry>& e
         {
             Vector<T, 4> dldw; Matrix<T, 4, 4> d2ldw2;
             computeGeodesicLengthGradientAndHessian(eij, dldw, d2ldw2);
+            // d2ldw2 /= T(spring_edges.size());
             Matrix<T, 4, 4> hessian = 
                 2.0 * w * (dldw * dldw.transpose() + (l - l0) * d2ldw2);
             addHessianEntry(entries, {eij[0], eij[1]}, hessian);

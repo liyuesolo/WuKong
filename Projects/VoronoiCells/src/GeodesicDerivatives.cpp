@@ -142,7 +142,7 @@ void IntrinsicSimulation::computeGeodesicLengthGradientCoupled(const Edge& edge,
     MatrixXT dxdv(nx, nv); dxdv.setZero();
     VectorXT dldx(nx); dldx.setZero();
     TV dldc0, dldc1;
-    if (length == 2)
+    if (length == 2 || Euclidean)
     {
         dldc0 = -(v1 - v0).normalized();   
         dldc1 = -dldc0;
@@ -317,10 +317,10 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessianCoupled(const E
     if (hasSmallSegment(path))
     {
         std::cout << "has small segment" << std::endl;
-        // std::getchar();
+        std::getchar();
     }
 
-    if (length == 2)
+    if (length == 2 || Euclidean)
     {
         dgdc0 = -(v1 - v0).normalized();   
         dgdc1 = -dgdc0;
@@ -604,7 +604,7 @@ void IntrinsicSimulation::computeGeodesicLengthGradient(const Edge& edge, Vector
     TV v21 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().vertex()]);
     TV v22 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().next().vertex()]);
     
-    if (length == 2)
+    if (length == 2 || Euclidean)
     {
         dldx0 = -(v1 - v0).normalized();   
         dldx1 = -dldx0;
@@ -663,13 +663,21 @@ void IntrinsicSimulation::computeGeodesicLengthHessian(const Edge& edge, Matrix<
     TV v0 = toTV(path[0].interpolate(geometry->vertexPositions));
     TV v1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
 
-    TV v10 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().vertex()]);
-    TV v11 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().vertex()]);
-    TV v12 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().next().vertex()]);
+    // TV v10 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().vertex()]);
+    // TV v11 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().vertex()]);
+    // TV v12 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().next().vertex()]);
 
-    TV v20 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().vertex()]);
-    TV v21 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().vertex()]);
-    TV v22 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().next().vertex()]);
+    // TV v20 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().vertex()]);
+    // TV v21 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().vertex()]);
+    // TV v22 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().next().vertex()]);
+
+    TV v10 = toTV(geometry->vertexPositions[vA.face.halfedge().vertex()]);
+    TV v11 = toTV(geometry->vertexPositions[vA.face.halfedge().next().vertex()]);
+    TV v12 = toTV(geometry->vertexPositions[vA.face.halfedge().next().next().vertex()]);
+
+    TV v20 = toTV(geometry->vertexPositions[vB.face.halfedge().vertex()]);
+    TV v21 = toTV(geometry->vertexPositions[vB.face.halfedge().next().vertex()]);
+    TV v22 = toTV(geometry->vertexPositions[vB.face.halfedge().next().next().vertex()]);
 
     Matrix<T, 3, 2> dx0dw0;
     dx0dw0.col(0) = v10 - v12;
@@ -693,7 +701,7 @@ void IntrinsicSimulation::computeGeodesicLengthHessian(const Edge& edge, Matrix<
     
     Matrix<T, 6, 6> d2ldx2; d2ldx2.setZero();
 
-    if (length == 2)
+    if (length == 2 || Euclidean)
     {
         dldx0 = -(v1 - v0).normalized();
         dldx1 = -dldx0;
@@ -793,8 +801,8 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessian(const Edge& ed
     Vector<T, 4>& dldw, Matrix<T, 4, 4>& d2ldw2)
 {
     int edge_idx = edge_map[edge];
-    SurfacePoint vA = mass_surface_points[edge[0]].first;
-    SurfacePoint vB = mass_surface_points[edge[1]].first;
+    SurfacePoint vA = mass_surface_points[edge[0]].first.inSomeFace();
+    SurfacePoint vB = mass_surface_points[edge[1]].first.inSomeFace();
 
     // std::cout << "va barycentric " << vA.faceCoords << std::endl;
     // std::cout << "vb barycentric " << vB.faceCoords << std::endl;
@@ -808,13 +816,21 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessian(const Edge& ed
     TV v0 = toTV(path[0].interpolate(geometry->vertexPositions));
     TV v1 = toTV(path[length - 1].interpolate(geometry->vertexPositions));
 
-    TV v10 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().vertex()]);
-    TV v11 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().vertex()]);
-    TV v12 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().next().vertex()]);
+    // TV v10 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().vertex()]);
+    // TV v11 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().vertex()]);
+    // TV v12 = toTV(geometry->vertexPositions[mass_surface_points[edge[0]].second.halfedge().next().next().vertex()]);
 
-    TV v20 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().vertex()]);
-    TV v21 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().vertex()]);
-    TV v22 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().next().vertex()]);
+    // TV v20 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().vertex()]);
+    // TV v21 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().vertex()]);
+    // TV v22 = toTV(geometry->vertexPositions[mass_surface_points[edge[1]].second.halfedge().next().next().vertex()]);
+
+    TV v10 = toTV(geometry->vertexPositions[vA.face.halfedge().vertex()]);
+    TV v11 = toTV(geometry->vertexPositions[vA.face.halfedge().next().vertex()]);
+    TV v12 = toTV(geometry->vertexPositions[vA.face.halfedge().next().next().vertex()]);
+
+    TV v20 = toTV(geometry->vertexPositions[vB.face.halfedge().vertex()]);
+    TV v21 = toTV(geometry->vertexPositions[vB.face.halfedge().next().vertex()]);
+    TV v22 = toTV(geometry->vertexPositions[vB.face.halfedge().next().next().vertex()]);
 
     Matrix<T, 3, 2> dx0dw0;
     dx0dw0.col(0) = v10 - v12;
@@ -838,7 +854,7 @@ void IntrinsicSimulation::computeGeodesicLengthGradientAndHessian(const Edge& ed
     
     Matrix<T, 6, 6> d2ldx2; d2ldx2.setZero();
 
-    if (length == 2)
+    if (length == 2 || Euclidean)
     {
         dldx0 = -(v1 - v0).normalized();
         dldx1 = -dldx0;

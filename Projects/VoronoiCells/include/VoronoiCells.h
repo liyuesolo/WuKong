@@ -102,9 +102,9 @@ public:
     MatrixXT surface_vtx;
     MatrixXi surface_indices;
 
-    int n_sites;
+    int n_sites = 0;
     VectorXT voronoi_sites;
-    // VectorXT voronoi_cell_vertices;
+    
 
     std::vector<SurfacePoint> samples;
     std::vector<SurfacePoint> samples_rest;
@@ -114,6 +114,7 @@ public:
 
     std::vector<VtxList> voronoi_cells;
     std::vector<std::pair<TV, TV>> voronoi_edges;
+    int n_voronoi_edges = 0;
 
     DistanceMetric metric = Euclidean;    
     Objective objective = Perimeter;
@@ -121,16 +122,18 @@ public:
     std::unordered_map<int, T> dirichlet_data;
 
     bool verbose = false;
-    int max_newton_iter = 100;
+    int max_newton_iter = 3000;
     int ls_max = 12;
     T newton_tol = 1e-6;
     
-    T w_reg = 1.0;
+    T w_reg = 1e-6;
     T w_centroid = 1.0;
     T w_peri = 1.0;
     bool add_reg = false;
     bool add_centroid = false;
     bool add_peri = false;
+
+    VectorXT cell_weights;
 
 private:
     template <class OP>
@@ -228,7 +231,7 @@ private:
         }
     }
 
-
+    void computeSurfacePointdxds(const SurfacePoint& pt, Matrix<T, 3, 2>& dxdw);
 public:
     void loadGeometry();
     void resample(int resolution = 1.0);
@@ -271,6 +274,8 @@ public:
 
 
     // Voronoi.cpp      
+    void computeDualIDT(std::vector<std::pair<TV, TV>>& idt_edge_vertices,
+        std::vector<IV>& idt_indices);
     bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);  
     void updateSurfacePoint(SurfacePoint& xi_current, const TV2& search_direction);
 
@@ -290,6 +295,7 @@ public:
     void saveVoronoiDiagram();
     void saveFacePrism(int face_idx);
     void generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& C);
+
 
     void computeGeodesicDistance(const SurfacePoint& a, const SurfacePoint& b,
         T& dis, std::vector<SurfacePoint>& path, 

@@ -36,7 +36,8 @@ void VoronoiCells::generateMeshForRendering(MatrixXT& V, MatrixXi& F, MatrixXT& 
     int n_vtx_dof = extrinsic_vertices.rows();
     vectorToIGLMatrix<T, 3>(extrinsic_vertices, V);
     C.resize(F.rows(), 3);
-    C.col(0).setZero(); C.col(1).setConstant(0.3); C.col(2).setOnes();
+    // C.col(0).setConstant(0.0); C.col(1).setConstant(0.3); C.col(2).setConstant(1.0);
+    C.col(0).setConstant(28.0/255.0); C.col(1).setConstant(99.0/255.0); C.col(2).setConstant(227.0/255.0);
     if (use_debug_face_color)
         C = face_color;
 }
@@ -996,8 +997,36 @@ void VoronoiCells::resample(int resolution)
 void VoronoiCells::loadGeometry()
 {
     MatrixXT V; MatrixXi F;
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/torus.obj", V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", V, F);
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/rocker_arm_simplified.obj", 
+    //     V, F);
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/fertility.obj", 
+        V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/3holes_simplified.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/cactus_simplified.obj", 
+    //     V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/spot_triangulated.obj", 
+    //     V, F);
+    
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+    
+    TV center = 0.5 * (min_corner + max_corner);
+
+    T bb_diag = (max_corner - min_corner).norm();
+
+    T scale = 1.5 / bb_diag;
+
+    for (int i = 0; i < V.rows(); i++)
+    {
+        V.row(i) -= center;
+        V.row(i) *= scale;
+    }
+    
+
     MatrixXT N;
     igl::per_vertex_normals(V, F, N);
 
@@ -1022,8 +1051,26 @@ void VoronoiCells::loadGeometry()
                                                              std::move(std::get<1>(lvals))); // geometry
 
     gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
-    samples = poissonSampler.sample(1.0);
+    // minimum distance between samples, expressed as a multiple of the mean edge length    
+    // samples = poissonSampler.sample(2.0);
+    
+    // tbb::parallel_for(0, (int)samples.size(), [&](int i)
+    // {
+    //     TV2 dx(0.1, 0.1);
+    //     updateSurfacePoint(samples[i], dx);
+    // });
+
+    for (auto face : mesh->faces())
+    {
+        samples.push_back(SurfacePoint(face, Vector3{0.7, 0.2, 0.1}));
+    }
+    
+
+
     n_sites = samples.size();
+    cell_weights.resize(n_sites);
+    cell_weights.setConstant(1.0);
+    // cell_weights.segment<3>(0).setConstant(0.001);
     samples_rest = samples;
 }
 
@@ -1673,3 +1720,54 @@ void VoronoiCells::saveFacePrism(int face_idx)
     intersectPrism(samples, source_data, edges, face_idx);
 }
 
+void VoronoiCells::computeSurfacePointdxds(const SurfacePoint& pt, Matrix<T, 3, 2>& dxdw)
+{
+    TV v0 = toTV(geometry->vertexPositions[pt.face.halfedge().vertex()]);
+    TV v1 = toTV(geometry->vertexPositions[pt.face.halfedge().next().vertex()]);
+    TV v2 = toTV(geometry->vertexPositions[pt.face.halfedge().next().next().vertex()]);
+
+    dxdw.col(0) = v0 - v2;
+    dxdw.col(1) = v1 - v2;
+}
+
+
+void VoronoiCells::computeDualIDT(std::vector<std::pair<TV, TV>>& idt_edge_vertices,
+        std::vector<IV>& idt_indices)
+{
+    idt_indices.resize(0);
+    for (auto ixn : unique_ixn_points)
+    {
+        if (ixn.second.size() == 3)
+        {
+            idt_indices.push_back(IV(ixn.second[0], ixn.second[1], ixn.second[2]));
+        }
+    }
+    MatrixXi idt_faces(idt_indices.size(), 3);
+    for (int i = 0; i < idt_indices.size(); i++)
+        idt_faces.row(i) = idt_indices[i];
+    
+    MatrixXi idt_edges;
+    igl::edges(idt_faces, idt_edges);
+    int n_idt_edges = idt_edges.rows();
+    std::vector<std::vector<std::pair<TV, TV>>> edges_thread(n_idt_edges, std::vector<std::pair<TV, TV>>());
+    tbb::parallel_for(0, n_idt_edges, [&](int i)
+    {
+        T geo_dis; std::vector<SurfacePoint> path;
+        std::vector<IxnData> ixn_data;
+        computeGeodesicDistance(samples[idt_edges(i, 0)], samples[idt_edges(i, 1)], 
+            geo_dis, path, ixn_data, true);
+        for(int j = 0; j < path.size() - 1; j++)
+        {
+            edges_thread[i].push_back(std::make_pair(
+                toTV(path[j].interpolate(geometry->vertexPositions)),
+                toTV(path[j+1].interpolate(geometry->vertexPositions))
+            ));
+        }
+    });
+    for (int i = 0; i < n_idt_edges; i++)
+    {
+        idt_edge_vertices.insert(idt_edge_vertices.end(), 
+            edges_thread[i].begin(), edges_thread[i].end());
+    }
+    
+}

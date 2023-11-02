@@ -13,6 +13,14 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         T& dis, std::vector<SurfacePoint>& path, 
         std::vector<IxnData>& ixn_data, bool trace_path)
 {
+    // if (Euclidean)
+    // {
+    //     TV xa = toTV(va.interpolate(geometry->vertexPositions));
+    //     TV xb = toTV(vb.interpolate(geometry->vertexPositions));
+    //     path.resize(2); path[0] = va; path[1] = vb;
+    //     dis = (xb - xa).norm();
+    //     return;
+    // }
     ixn_data.clear();
     int n_tri = extrinsic_indices.rows() / 3;
     std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
@@ -141,12 +149,48 @@ void IntrinsicSimulation::computeExactGeodesic(const SurfacePoint& va, const Sur
         TV ixn0 = toTV(path[1].interpolate(geometry->vertexPositions));
         TV ixn1 = toTV(path[path.size() - 2].interpolate(geometry->vertexPositions));
         
+        // bool erase = true;
+        // while (erase)
+        // {
+        //     if (path.size() > 2)
+        //     {
+        //         if ((v0 - ixn0).norm() < 1e-6)
+        //         {
+        //             path.erase(path.begin() + 1);
+        //             erase = true;
+        //         }
+        //         else
+        //         {
+        //             erase = false;
+        //         }
+        //         if ((v1 - ixn1).norm() < 1e-6)
+        //         {
+        //             path.erase(path.end() - 2);
+        //             erase = true;
+        //         }
+        //         else
+        //         {
+        //             erase = false;
+        //         }
+        //     }
+        //     else
+        //     {
+        //         erase = false;
+        //     }
+        // }
         if (path.size() > 2)
+        {
             if ((v0 - ixn0).norm() < 1e-6)
+            {
                 path.erase(path.begin() + 1);
+                
+            }
         if (path.size() > 2)
             if ((v1 - ixn1).norm() < 1e-6)
+            {
                 path.erase(path.end() - 2);
+            }
+        }
         
     }
     else
@@ -555,8 +599,8 @@ void IntrinsicSimulation::updateCurrentState(bool trace)
         Vector3 start_bc = mass_surface_points[i].first.faceCoords;
         Vector3 trace_vec{delta_u[i*2+0],delta_u[i*2+1],0.0-delta_u[i*2+0]-delta_u[i*2+1]};
         
-        if (trace_vec.norm() < 1e-10)
-            continue;
+        // if (trace_vec.norm() < 1e-10)
+        //     continue;
 
         gcs::TraceOptions options; 
         options.includePath = true;
@@ -1177,36 +1221,36 @@ T IntrinsicSimulation::lineSearchNewton(const VectorXT& residual)
                         std::cout << "-----line search max----- cnt > 15 switch to gradient" << std::endl;
                     else
                         std::cout << "-----line search max----- cnt > 15 along gradient [BUG ALERT]" << std::endl;
-                    std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
-                    std::ofstream out("search_direction.txt");
-                    out << std::setprecision(16);
-                    out << direction.rows() << std::endl;
-                    for (int i = 0; i < direction.rows(); i++)
-                        out << direction[i] << " ";
-                    out << std::endl;
-                    out << spring_edges.size() << std::endl;
-                    for (const Edge& edges : spring_edges)
-                    {
-                        out << edges[0] << " " << edges[1] << std::endl;
-                    }
-                    out << std::endl;
-                    out << mass_surface_points.size() << std::endl;
-                    for (int i = 0; i < mass_surface_points.size(); i++)
-                    {
-                        out << toTV(current_state[i].first.faceCoords).transpose() << std::endl;
-                        out << current_state[i].second.getIndex();
-                        out << std::endl;
-                    }
-                    if (two_way_coupling)
-                    {
-                        out << deformed.rows() << std::endl;
-                        for (int i = 0; i < current_state_x.rows(); i++)
-                            out << current_state_x[i] << " ";
-                        out << std::endl;
-                    }
-                    out.close();
+                    // std::cout << "\t[LS INFO] total energy: " << E1 << " #ls " << cnt << " |du| " << delta_u.norm() << std::endl;
+                    // std::ofstream out("search_direction.txt");
+                    // out << std::setprecision(16);
+                    // out << direction.rows() << std::endl;
+                    // for (int i = 0; i < direction.rows(); i++)
+                    //     out << direction[i] << " ";
+                    // out << std::endl;
+                    // out << spring_edges.size() << std::endl;
+                    // for (const Edge& edges : spring_edges)
+                    // {
+                    //     out << edges[0] << " " << edges[1] << std::endl;
+                    // }
+                    // out << std::endl;
+                    // out << mass_surface_points.size() << std::endl;
+                    // for (int i = 0; i < mass_surface_points.size(); i++)
+                    // {
+                    //     out << toTV(current_state[i].first.faceCoords).transpose() << std::endl;
+                    //     out << current_state[i].second.getIndex();
+                    //     out << std::endl;
+                    // }
+                    // if (two_way_coupling)
+                    // {
+                    //     out << deformed.rows() << std::endl;
+                    //     for (int i = 0; i < current_state_x.rows(); i++)
+                    //         out << current_state_x[i] << " ";
+                    //     out << std::endl;
+                    // }
+                    // out.close();
                     
-                    std::exit(0);
+                    // std::exit(0);
                     if (!using_gradient && use_Newton)
                     {
                         mass_surface_points = current_state;

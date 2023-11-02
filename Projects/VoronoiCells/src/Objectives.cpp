@@ -2,16 +2,44 @@
 
 T VoronoiCells::addRegEnergy(T w)
 {
-    return 0.0;
+    T energy = 0.0;
+    for (int i = 0; i < samples.size(); i++)
+    {
+        TV si = toTV(samples[i].interpolate(geometry->vertexPositions));
+        TV Si = toTV(samples_rest[i].interpolate(geometry->vertexPositions));
+        energy += 0.5 * (si - Si).squaredNorm();
+    }
+    return energy * w;
 }
 void VoronoiCells::addRegForceEntries(VectorXT& grad, T w)
 {
-
+    
+    for (int i = 0; i < samples.size(); i++)
+    {
+        TV si = toTV(samples[i].interpolate(geometry->vertexPositions));
+        TV Si = toTV(samples_rest[i].interpolate(geometry->vertexPositions));
+        TV dOdx = w * (si - Si);
+        Matrix<T, 3, 2> dxdw;
+        computeSurfacePointdxds(samples[i], dxdw);
+        TV2 dOds = dOdx.transpose() * dxdw;
+        addForceEntry<2>(grad, {i}, -dOds);
+    }
+    
 }
 
 void VoronoiCells::addRegHessianEntries(std::vector<Entry>& entries, T w)
 {
-
+    for (int i = 0; i < samples.size(); i++)
+    {
+        TV si = toTV(samples[i].interpolate(geometry->vertexPositions));
+        TV Si = toTV(samples_rest[i].interpolate(geometry->vertexPositions));
+        TV dOdx = (si - Si);
+        Matrix<T, 3, 2> dxdw;
+        computeSurfacePointdxds(samples[i], dxdw);
+        TV2 dOds = dOdx.transpose() * dxdw;
+        TM2 d2Ods2 = w * dOds * dOds.transpose();
+        addHessianEntry<2, 2>(entries, {i}, d2Ods2);
+    }
 }
 
 void VoronoiCells::diffTestScale()
@@ -102,7 +130,7 @@ T VoronoiCells::computeCentroidalVDEnergy(T w)
             std::vector<SurfacePoint> path;
             T dis;
             computeGeodesicDistance(xi, si, dis, path, ixn_data_site, false);
-            energies[i] += 0.5 * w * dis * dis;
+            energies[i] += 0.5 * w * dis * dis * cell_weights[idx];
         }   
         
     }
@@ -139,8 +167,8 @@ T VoronoiCells::computeCentroidalVDGradient(VectorXT& grad, T& energy, T w)
             SurfacePoint si = samples[idx];
             Vector<T, 4> dldw;
             T dis = computeGeodesicLengthAndGradient(xi, si, dldw);
-            energies[ixn_idx] += 0.5 * dis * dis;
-            T dOdl = dis;
+            energies[ixn_idx] += 0.5 * dis * dis * cell_weights[idx];
+            T dOdl = dis * cell_weights[idx];
             TV2 pOpx = dldw.segment<2>(0);
             TV2 pOps = dldw.segment<2>(2);
 
@@ -196,7 +224,7 @@ void VoronoiCells::addCentroidalVDForceEntries(VectorXT& grad, T w)
             Vector<T, 4> dldw;
             T dis = computeGeodesicLengthAndGradient(xi, si, dldw);
             
-            T dOdl = dis;
+            T dOdl = dis * cell_weights[idx];
             TV2 pOpx = dldw.segment<2>(0);
             TV2 pOps = dldw.segment<2>(2);
 
@@ -258,7 +286,7 @@ void VoronoiCells::addCentroidalVDHessianEntries(std::vector<Entry>& entries, T 
             Matrix<T, 4, 4> d2ldw2;
             T dis = computeGeodesicLengthAndGradientAndHessian(xi, si, dldw, d2ldw2);
             
-            T dOdl = dis;
+            T dOdl = dis * cell_weights[idx];
             TV2 pOpx = dldw.segment<2>(0);
             TV2 pOps = dldw.segment<2>(2);
 
@@ -270,8 +298,8 @@ void VoronoiCells::addCentroidalVDHessianEntries(std::vector<Entry>& entries, T 
 
 
             d2Odx2 += dis * d2ldw2.block(2, 2, 2, 2);
-            d2Ods2.block(i * 2, i * 2, 2, 2) += dis * d2ldw2.block(0, 0, 2, 2);
-            d2Odxds.block(0, i * 2, 2, 2) += dis * d2ldw2.block(0, 2, 2, 2);
+            d2Ods2.block(i * 2, i * 2, 2, 2) += dis * d2ldw2.block(0, 0, 2, 2) * cell_weights[idx];
+            d2Odxds.block(0, i * 2, 2, 2) += dis * d2ldw2.block(0, 2, 2, 2) * cell_weights[idx];
             
             // x is function of all s
             for (int j = 0; j < site_indices.size(); j++)
@@ -530,11 +558,13 @@ void VoronoiCells::addPerimeterMinimizationHessianEntries(std::vector<Entry>& en
         VectorXT dOds_site1 = dOdx1.transpose() * dx1_ds;
         
         
-        // TM d2Odx2 = (TM::Identity() - (v1 - v0).normalized() * (v1 - v0).normalized().transpose()) / (v1 - v0).norm();
-        MatrixXT d2x0ds2 = dx0_ds.transpose() * dx0_ds;
-        MatrixXT d2x1ds2 = dx1_ds.transpose() * dx1_ds;
+        TM d2Odx2 = (TM::Identity() - (v1 - v0).normalized() * (v1 - v0).normalized().transpose()) / (v1 - v0).norm();
 
-        MatrixXT d2Odxds = -dx1_ds.transpose() * dx0_ds;
+
+        MatrixXT d2x0ds2 = dx0_ds.transpose() * (d2Odx2 + TM::Identity()) * dx0_ds;
+        MatrixXT d2x1ds2 = dx1_ds.transpose() * (d2Odx2 + TM::Identity()) * dx1_ds;
+
+        
 
         addHessianEntry<2, 2>(entries, x0_sites, w * d2x0ds2);
         addHessianEntry<2, 2>(entries, x1_sites, w * d2x1ds2);
