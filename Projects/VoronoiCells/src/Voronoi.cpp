@@ -999,11 +999,11 @@ void VoronoiCells::loadGeometry()
     MatrixXT V; MatrixXi F;
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/torus.obj", V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", V, F);
-    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", V, F);
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/sphere.obj", V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/rocker_arm_simplified.obj", 
     //     V, F);
-    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/fertility.obj", 
-        V, F);
+    // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/fertility.obj", 
+    //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/3holes_simplified.obj", 
     //     V, F);
     // igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/cactus_simplified.obj", 
@@ -1052,7 +1052,7 @@ void VoronoiCells::loadGeometry()
 
     gcs::PoissonDiskSampler poissonSampler(*mesh, *geometry);
     // minimum distance between samples, expressed as a multiple of the mean edge length    
-    // samples = poissonSampler.sample(2.0);
+    samples = poissonSampler.sample(1.0);
     
     // tbb::parallel_for(0, (int)samples.size(), [&](int i)
     // {
@@ -1060,10 +1060,10 @@ void VoronoiCells::loadGeometry()
     //     updateSurfacePoint(samples[i], dx);
     // });
 
-    for (auto face : mesh->faces())
-    {
-        samples.push_back(SurfacePoint(face, Vector3{0.7, 0.2, 0.1}));
-    }
+    // for (auto face : mesh->faces())
+    // {
+    //     samples.push_back(SurfacePoint(face, Vector3{0.7, 0.2, 0.1}));
+    // }
     
 
 
@@ -1651,7 +1651,20 @@ void VoronoiCells::constructVoronoiDiagram(bool exact, bool load_from_file)
     unique_ixn_points.resize(0);
     for (int i = 0; i < ixn_data.size(); i++)
     {
-        auto it = std::find(unique_ixn_points.begin(), unique_ixn_points.end(), ixn_data[i]);
+        TV xi = toTV(ixn_data[i].first.interpolate(geometry->vertexPositions));
+        auto it = std::find_if(unique_ixn_points.begin(), unique_ixn_points.end(), 
+        [&](std::pair<SurfacePoint, std::vector<int>> data)
+        {
+            for (int j = 0; j < unique_ixn_points.size(); j++)
+            {
+                TV xj = toTV(data.first.interpolate(geometry->vertexPositions));
+                if ((xi - xj).norm() < 1e-10)
+                    return true;
+            }
+            return false;
+            
+        });
+        // auto it = std::find(unique_ixn_points.begin(), unique_ixn_points.end(), ixn_data[i]);
         if (it == unique_ixn_points.end())
         {
             unique_ixn_points.push_back(ixn_data[i]);
@@ -1664,7 +1677,16 @@ void VoronoiCells::constructVoronoiDiagram(bool exact, bool load_from_file)
         }
     }
 
-    
+    // std::ofstream out("unique_points.obj");
+    // for (int j = 0; j < unique_ixn_points.size(); j++)
+    // {
+    //     TV xj = toTV(unique_ixn_points[j].first.interpolate(geometry->vertexPositions));
+    //     out << "v " << xj.transpose() << std::endl;    
+    // }
+    // out.close();
+
+    // std::cout << "reduced " << unique_ixn_points.size() << " full " << ixn_data.size() << std::endl;
+    constructVoronoiCellConnectivity();
     
     for (int i = 0; i < ixn_data.size(); i+=2)
     {
@@ -1770,4 +1792,73 @@ void VoronoiCells::computeDualIDT(std::vector<std::pair<TV, TV>>& idt_edge_verti
             edges_thread[i].begin(), edges_thread[i].end());
     }
     
+}
+
+void VoronoiCells::constructVoronoiCellConnectivity()
+{
+    geometry->requireVertexNormals();
+    std::vector<std::unordered_set<int>> cell_vtx_idx_lists(samples.size());
+    for (int i = 0; i < unique_ixn_points.size(); i++)
+    {
+        for (int j = 0; j < unique_ixn_points[i].second.size(); j++)
+        {
+            cell_vtx_idx_lists[unique_ixn_points[i].second[j]].insert(i);
+        }
+    }
+    // std::cout << "construct set" << std::endl;
+    std::vector<VtxList> oriented(cell_vtx_idx_lists.size(), VtxList());
+    for (int i = 0; i < cell_vtx_idx_lists.size(); i++)
+    {
+        auto indices = cell_vtx_idx_lists[i];
+        VtxList cell_i;
+        std::vector<TV> vertices;
+        for (int idx : indices)
+        {
+            cell_i.push_back(idx);
+            TV xi = toTV(unique_ixn_points[idx].first.interpolate(geometry->vertexPositions));
+            vertices.push_back(xi);
+        }
+        TV site_location = toTV(samples[i].interpolate(geometry->vertexPositions));
+        
+        TV x0 = vertices[0];
+        
+        std::sort(cell_i.begin(), cell_i.end(), [&](int a, int b)
+        {
+            TV xi = toTV(unique_ixn_points[a].first.interpolate(geometry->vertexPositions));
+            TV xj = toTV(unique_ixn_points[b].first.interpolate(geometry->vertexPositions));
+            
+            TV E0 = (xi - site_location).normalized();
+            TV E1 = (xj - site_location).normalized();
+            TV ref = (x0 - site_location).normalized();
+            T dot_sign0 = E0.dot(ref);
+            T dot_sign1 = E1.dot(ref);
+            TV cross_sin0 = E0.cross(ref);
+            TV cross_sin1 = E1.cross(ref);
+            // use normal and cross product to check if it's larger than 180 degree
+            TV normal = toTV(samples[i].interpolate(geometry->vertexNormals));
+            T angle_a = cross_sin0.dot(normal) > 0 ? std::acos(dot_sign0) : 2.0 * M_PI - std::acos(dot_sign0);
+            T angle_b = cross_sin1.dot(normal) > 0 ? std::acos(dot_sign1) : 2.0 * M_PI - std::acos(dot_sign1);
+            
+            return angle_a < angle_b;
+        });
+
+        oriented[i] = cell_i;
+        
+        // std::ofstream out("ring.obj");
+        // for (int idx : cell_i)
+        // {
+        //     TV xi = toTV(unique_ixn_points[idx].first.interpolate(geometry->vertexPositions));
+        //     out << "v " << xi.transpose() << std::endl;
+        // }
+        // for (int j = 0; j < cell_i.size(); j++)
+        // {
+        //     out << "l " << j + 1 << " " << (j+1) % cell_i.size() + 1 << std::endl;
+        // }
+        
+        // out.close();
+        // std::getchar();
+        // exit(0);
+    }
+    voronoi_cell_vertices = oriented;
+    geometry->unrequireVertexNormals();
 }

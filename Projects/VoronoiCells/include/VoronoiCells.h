@@ -110,6 +110,7 @@ public:
     std::vector<SurfacePoint> samples_rest;
     std::vector<FaceData> source_data;
     std::vector<std::pair<SurfacePoint, std::vector<int>>> unique_ixn_points;
+    std::vector<VtxList> voronoi_cell_vertices;
     std::vector<Edge> valid_VD_edges;
 
     std::vector<VtxList> voronoi_cells;
@@ -274,6 +275,7 @@ public:
 
 
     // Voronoi.cpp      
+    void constructVoronoiCellConnectivity();
     void computeDualIDT(std::vector<std::pair<TV, TV>>& idt_edge_vertices,
         std::vector<IV>& idt_indices);
     bool linearSolve(StiffnessMatrix& K, const VectorXT& residual, VectorXT& du);  
