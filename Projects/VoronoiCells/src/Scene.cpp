@@ -176,6 +176,68 @@ void IntrinsicSimulation::initializeTriangleDebugScene()
     we = 0;                                   
 }
 
+void IntrinsicSimulation::initializeDiscreteShell()
+{
+    MatrixXT V; MatrixXi F;
+    
+    igl::readOBJ("/home/yueli/Documents/ETH/WuKong/Projects/VoronoiCells/data/grid.obj", 
+        V, F);
+
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+    
+    TV center = 0.5 * (min_corner + max_corner);
+
+    for (int i = 0; i < V.rows(); i++)
+    {
+        V.row(i) -= center;
+    }
+    
+    iglMatrixFatten<T, 3>(V, extrinsic_vertices);
+    iglMatrixFatten<int, 3>(F, extrinsic_indices);
+
+    int n_tri = extrinsic_indices.rows() / 3;
+    std::vector<std::vector<size_t>> mesh_indices_gc(n_tri, std::vector<size_t>(3));
+    for (int i = 0; i < n_tri; i++)
+        for (int d = 0; d < 3; d++)
+            mesh_indices_gc[i][d] = extrinsic_indices[i * 3 + d];
+    int n_vtx_extrinsic = extrinsic_vertices.rows() / 3;
+    std::vector<gc::Vector3> mesh_vertices_gc(n_vtx_extrinsic);
+    for (int i = 0; i < n_vtx_extrinsic; i++)
+        mesh_vertices_gc[i] = gc::Vector3{extrinsic_vertices(i * 3 + 0), 
+            extrinsic_vertices(i * 3 + 1), extrinsic_vertices(i * 3 + 2)};
+    
+    auto lvals = gcs::makeManifoldSurfaceMeshAndGeometry(mesh_indices_gc, mesh_vertices_gc);
+    std::tie(mesh, geometry) = std::tuple<std::unique_ptr<gcs::ManifoldSurfaceMesh>,
+                    std::unique_ptr<gcs::VertexPositionGeometry>>(std::move(std::get<0>(lvals)),  // mesh
+                                                             std::move(std::get<1>(lvals))); // geometry
+
+    two_way_coupling = true;
+
+    if (two_way_coupling)
+    {
+        int n_dof = undeformed.rows();
+        shell_dof_start = n_dof;
+        undeformed.conservativeResize(n_dof + extrinsic_vertices.rows());
+        undeformed.segment(n_dof, extrinsic_vertices.rows()) = extrinsic_vertices;
+        deformed = undeformed;
+        u.resize(undeformed.rows()); u.setZero();
+        delta_u.resize(undeformed.rows()); delta_u.setZero();
+        faces = extrinsic_indices;
+        computeRestShape();
+        buildHingeStructure();
+
+        E_shell = 1e4;
+        updateShellLameParameters();
+    }
+
+    computeAllTriangleArea(rest_area);
+    undeformed_area = rest_area;
+    rest_area.setZero();
+    wa = 0.0;
+    // we = 0;                             
+}
+
 void IntrinsicSimulation::initializeSceneCheckingSmoothness()
 {
     use_Newton = true;
@@ -826,8 +888,6 @@ void IntrinsicSimulation::initializeMassSpringSceneExactGeodesic()
             }
         }
     }
-
-    
 
     mass_point_Euclidean.resize(mass_point_vec.size() * 3);
     for (int i = 0; i < mass_point_vec.size(); i++)

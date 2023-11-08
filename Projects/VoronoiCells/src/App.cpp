@@ -882,6 +882,7 @@ void GeodesicSimApp::setViewer(igl::opengl::glfw::Viewer& viewer,
             std::cout << "modes " << modes << " singular value: " << evalues(modes) << std::endl;
             return true;
         case 'a':
+            simulation.run_diff_test = !simulation.run_diff_test;
             viewer.core().is_animating = !viewer.core().is_animating;
             return true;
         case '+':

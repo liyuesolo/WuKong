@@ -626,6 +626,7 @@ public:
     void checkTotalHessianScale(bool perturb = false);
 
     // Scene.cpp
+    void initializeDiscreteShell();
     void expandBaseMesh(T increment);
     void initializeNetworkData(const std::vector<Edge>& edges);
     void initializeSceneCheckingSmoothness();

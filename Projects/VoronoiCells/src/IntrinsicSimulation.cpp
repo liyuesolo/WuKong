@@ -646,7 +646,9 @@ void IntrinsicSimulation::checkHessianPD(bool save_result)
     int nmodes = 10;
     int n_dof_sim = deformed.rows();
     StiffnessMatrix d2edx2(n_dof_sim, n_dof_sim);
+    run_diff_test = true;
     buildSystemMatrix(d2edx2);
+    run_diff_test = false;
     bool use_Spectra = true;
 
     // Eigen::PardisoLLT<StiffnessMatrix, Eigen::Lower> solver;
@@ -667,7 +669,7 @@ void IntrinsicSimulation::checkHessianPD(bool save_result)
     {
         
         Spectra::SparseSymShiftSolve<T, Eigen::Lower> op(d2edx2);
-        T shift = indefinite ? -1e2 : -1e-4;
+        T shift = -1e-4;
         Spectra::SymEigsShiftSolver<T, 
         Spectra::LARGEST_MAGN, 
         Spectra::SparseSymShiftSolve<T, Eigen::Lower> > 

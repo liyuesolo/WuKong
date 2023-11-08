@@ -33,15 +33,16 @@ int main(int argc, char** argv)
     bool with_viewer = true;
     bool render_seq = false;
     bool run_sim = true;
-    bool intrinsic_sim = false;
+    bool intrinsic_sim = true;
     if (intrinsic_sim)
     {
         IntrinsicSimulation intrinsic_simulation;
         // intrinsic_simulation.initializeMassSpringDebugScene();
         // intrinsic_simulation.initializeTriangleDebugScene();
         // intrinsic_simulation.movePointsPlotEnergy();
-        intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
+        // intrinsic_simulation.initializeMassSpringSceneExactGeodesic();
         // intrinsic_simulation.initializeSceneCheckingSmoothness();
+        intrinsic_simulation.initializeDiscreteShell();
         // intrinsic_simulation.movePointsPlotEnergy();
         if (with_viewer)
         {
