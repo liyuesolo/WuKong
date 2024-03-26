@@ -36,9 +36,9 @@ void FEMSolver<dim>::saveToOBJ(const std::string& filename)
 {
     std::ofstream out(filename);
     for (int i = 0; i < num_nodes; i++)
-        out << "v " << deformed.segment<3>(i * dim).transpose() << std::endl;
+        out << "v " << deformed.segment<3>(i * 3).transpose() << std::endl;
     for (int i = 0; i < num_surface_faces; i++)
-        out << "f " << (surface_indices.segment<3>(i * dim) + IV::Ones()).transpose() << std::endl;
+        out << "f " << (surface_indices.segment<dim>(i * dim) + IV::Ones()).transpose() << std::endl;
     out.close();
 }
 
@@ -57,5 +57,5 @@ void FEMSolver<dim>::computeBBox(const Eigen::MatrixXd& V, TV& bbox_min_corner, 
         }
     }
 }
-// template class FEMSolver<2>;
+template class FEMSolver<2>;
 template class FEMSolver<3>;
